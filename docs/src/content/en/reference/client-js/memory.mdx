@@ -233,6 +233,24 @@ await mastraClient.updateWorkingMemory({
 
 For resource-scoped working memory, you must provide the `resourceId` parameter. It allows the memory to persist across all conversation threads for that user.
 
+#### Merge JSON fields atomically
+
+The default mode replaces the full content. With PostgreSQL resource-scoped working memory, pass `mode: 'merge'` to preserve unrelated fields changed by concurrent merge calls:
+
+```typescript
+await mastraClient.updateWorkingMemory({
+  agentId: 'agent-1',
+  threadId: 'thread-1',
+  resourceId: 'user-123',
+  mode: 'merge',
+  workingMemory: JSON.stringify({ preferredName: 'Fad' }),
+});
+```
+
+Merge mode reads and writes inside one storage transaction. Objects merge recursively, arrays replace, omitted fields stay unchanged, and explicit `null` removes a field. Concurrent changes to the same field follow transaction order. Full replacement calls still replace the record, so use merge mode for every writer that needs to preserve concurrent field edits.
+
+The patch and existing content must be JSON objects. Invalid JSON, thread scope, gateway agents, and adapters without atomic working-memory support reject explicit merge calls. The operation doesn't validate values against the configured working-memory schema; validate domain values before calling it. Schema-based working-memory tools automatically use atomic resource updates when supported.
+
 ### Get Memory Status
 
 Check the status of the memory system:

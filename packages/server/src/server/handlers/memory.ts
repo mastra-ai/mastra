@@ -1764,7 +1764,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   description: 'Updates the working memory state for a thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, requestContext }) => {
+  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, mode, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -1773,6 +1773,9 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       // Gateway agents: working memory not applicable, no-op
       const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && getGatewayClient()) {
+        if (mode === 'merge') {
+          throw new HTTPException(400, { message: 'Atomic working-memory merge is not supported by gateway agents' });
+        }
         return { success: true };
       }
 
@@ -1793,10 +1796,16 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
+      if (mode === 'merge' && !(await memory.supportsAtomicWorkingMemoryUpdates?.())) {
+        throw new HTTPException(400, {
+          message: 'Atomic working-memory merge is not supported by this memory instance',
+        });
+      }
       await memory.updateWorkingMemory({
         threadId: effectiveThreadId!,
         resourceId: effectiveResourceId,
         workingMemory,
+        mode,
         memoryConfig,
       });
       return { success: true };
@@ -1804,6 +1813,22 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       return handleError(error, 'Error updating working memory');
     }
   },
+});
+
+/** A distinct method makes atomic requests fail closed against older servers. */
+export const MERGE_WORKING_MEMORY_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/memory/threads/:threadId/working-memory',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  bodySchema: updateWorkingMemoryBodySchema,
+  responseSchema: updateWorkingMemoryResponseSchema,
+  summary: 'Merge resource working memory',
+  description: 'Atomically merges JSON fields into resource working memory',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: args => UPDATE_WORKING_MEMORY_ROUTE.handler({ ...args, mode: 'merge' }),
 });
 
 export const DELETE_MESSAGES_ROUTE = createRoute({
