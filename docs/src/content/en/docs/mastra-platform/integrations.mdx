@@ -5,6 +5,8 @@ packages:
   - '@mastra/connect'
 ---
 
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
+
 # Integrations
 
 Mastra platform integrations connect your project to third-party providers like Linear, Notion, Slack, and GitHub. You complete a provider's authorization flow once and the platform stores the connection. Your application then consumes those connections through the [`@mastra/connect`](/docs/mastra-platform/connect) package as agent toolsets, chat channels, raw credentials, or sandbox environment variables.
@@ -80,32 +82,32 @@ The default integrations endpoint is `https://integrations.mastra.ai`. Setting `
 
 | Integration ID | Provider |
 | - | - |
-| `anthropic` | Anthropic |
-| `clerk` | Clerk |
-| `discord` | Discord |
-| `fireflies` | Fireflies.ai |
-| `github` | GitHub |
-| `google-analytics` | Google Analytics |
-| `google-calendar` | Google Calendar |
-| `google-docs` | Google Docs |
-| `google-drive` | Google Drive |
-| `google-mail` | Gmail |
-| `google-sheet` | Google Sheets |
-| `hubspot` | HubSpot |
-| `incident-io` | incident.io |
-| `jira` | Jira |
-| `linear` | Linear |
-| `microsoft-teams` | Microsoft Teams |
-| `notion` | Notion |
-| `openai` | OpenAI |
-| `posthog` | PostHog |
-| `resend` | Resend |
-| `slack` | Slack |
-| `snowflake` | Snowflake |
-| `stripe` | Stripe |
-| `supabase` | Supabase |
-| `twitter-v2` | Twitter/X |
-| `workos` | WorkOS |
+| `anthropic` | <ProviderLogo slug="anthropic" mono /> Anthropic |
+| `clerk` | <ProviderLogo slug="clerk" mono /> Clerk |
+| `discord` | <ProviderLogo slug="discord" /> Discord |
+| `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai |
+| `github` | <ProviderLogo slug="github" mono /> GitHub |
+| `google-analytics` | <ProviderLogo slug="google-analytics" /> Google Analytics |
+| `google-calendar` | <ProviderLogo slug="google-calendar" /> Google Calendar |
+| `google-docs` | <ProviderLogo slug="google-docs" /> Google Docs |
+| `google-drive` | <ProviderLogo slug="google-drive" /> Google Drive |
+| `google-mail` | <ProviderLogo slug="gmail" /> Gmail |
+| `google-sheet` | <ProviderLogo slug="google-sheets" /> Google Sheets |
+| `hubspot` | <ProviderLogo slug="hubspot" /> HubSpot |
+| `incident-io` | <ProviderLogo slug="incident" /> incident.io |
+| `jira` | <ProviderLogo slug="jira" /> Jira |
+| `linear` | <ProviderLogo slug="linear" /> Linear |
+| `microsoft-teams` | <ProviderLogo slug="microsoft-teams" /> Microsoft Teams |
+| `notion` | <ProviderLogo slug="notion" mono /> Notion |
+| `openai` | <ProviderLogo slug="openai" mono /> OpenAI |
+| `posthog` | <ProviderLogo slug="posthog" /> PostHog |
+| `resend` | <ProviderLogo slug="resend" mono /> Resend |
+| `slack` | <ProviderLogo slug="slack" /> Slack |
+| `snowflake` | <ProviderLogo slug="snowflake" /> Snowflake |
+| `stripe` | <ProviderLogo slug="stripe" /> Stripe |
+| `supabase` | <ProviderLogo slug="supabase" /> Supabase |
+| `twitter-v2` | <ProviderLogo slug="x" mono /> Twitter/X |
+| `workos` | <ProviderLogo slug="workos" mono /> WorkOS |
 
 Toolsets are generated and versioned with the package: upgrading `@mastra/connect` picks up new providers and tools without API changes.
 
@@ -117,12 +119,12 @@ These integrations serve their tools over the provider's hosted MCP server. The 
 
 | Integration ID | Provider | Provider MCP docs |
 | - | - | - |
-| `airtable-mcp` | Airtable | [Airtable MCP server](https://airtable.com/developers/agents/mcp/getting-started) |
-| `attio-mcp` | Attio | [Attio MCP](https://docs.attio.com/mcp/overview) |
-| `canva-mcp` | Canva | [Canva MCP](https://www.canva.dev/docs/apps/mcp/) |
-| `neon-mcp` | Neon | [Neon MCP server](https://neon.com/docs/ai/neon-mcp-server) |
-| `render-mcp` | Render | [Render MCP server](https://render.com/docs/mcp-server) |
-| `sanity-mcp` | Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
+| `airtable-mcp` | <ProviderLogo slug="airtable" /> Airtable | [Airtable MCP server](https://airtable.com/developers/agents/mcp/getting-started) |
+| `attio-mcp` | <ProviderLogo slug="attio" mono /> Attio | [Attio MCP](https://docs.attio.com/mcp/overview) |
+| `canva-mcp` | <ProviderLogo slug="canva" /> Canva | [Canva MCP](https://www.canva.dev/docs/apps/mcp/) |
+| `neon-mcp` | <ProviderLogo slug="neon" /> Neon | [Neon MCP server](https://neon.com/docs/ai/neon-mcp-server) |
+| `render-mcp` | <ProviderLogo slug="render" mono /> Render | [Render MCP server](https://render.com/docs/mcp-server) |
+| `sanity-mcp` | <ProviderLogo slug="sanity" mono /> Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
 
 MCP tool catalogs can change independently of your deployment, so every discovered MCP tool requires tool approval by default; the server's own annotations cannot lift the requirement. List the tool keys an agent may run unattended in that integration's `autoApproveTools` option.
 
