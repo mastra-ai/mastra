@@ -1551,6 +1551,12 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
+   * `TRUE` on every span of a run that the caller attached under an existing
+   * span with `tracingOptions.nestUnderParent`. The run does not own the
+   * trace, so exporters must not write trace-level fields from its spans.
+   */
+  nestedUnderParent?: boolean;
+  /**
    * Tags for this trace (only present on root spans).
    * Tags are string labels used to categorize and filter traces.
    */
@@ -1977,6 +1983,11 @@ export interface TraceState {
    * When true, output data will be hidden from all spans in this trace.
    */
   hideOutput?: boolean;
+  /**
+   * When true, this run was attached under an existing span with
+   * `tracingOptions.nestUnderParent` and does not own the trace.
+   */
+  nestedUnderParent?: boolean;
 }
 
 /**
@@ -2009,6 +2020,15 @@ export interface TracingOptions {
    * external tracing but is not treated as a parent within Mastra storage.
    */
   parentSpanId?: string;
+  /**
+   * Set to true together with `parentSpanId` to attach this run as a child of
+   * that span inside the existing trace, for example an LLM judge under the
+   * run it scores. Exporters then keep the trace's own name, input, output,
+   * and tags instead of replacing them with this run's. Leave unset when
+   * `parentSpanId` points at a span from your own tracing system: there the
+   * Mastra run is the top of the trace. Ignored without `parentSpanId`.
+   */
+  nestUnderParent?: boolean;
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces

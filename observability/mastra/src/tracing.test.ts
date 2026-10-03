@@ -2004,6 +2004,86 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
+    it('should mark a run nested with nestUnderParent and drop its tags', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'judge',
+        attributes: { agentId: 'judge' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          nestUnderParent: true,
+          tags: ['judge-tag'],
+        },
+      });
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'child-llm',
+        attributes: { model: 'gpt-4' },
+      });
+      childSpan.end();
+      rootSpan.end();
+
+      // Every span of the run is marked, and the run's tags never reach the trace
+      expect(testExporter.events.length).toBeGreaterThan(0);
+      for (const event of testExporter.events) {
+        expect(event.exportedSpan.nestedUnderParent).toBe(true);
+        expect(event.exportedSpan.tags).toBeUndefined();
+      }
+      expect(rootSpan.exportSpan()?.isRootSpan).toBe(true);
+      expect(rootSpan.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
+    });
+
+    it('should ignore nestUnderParent without a parentSpanId', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { nestUnderParent: true, tags: ['root-tag'] },
+      });
+      rootSpan.end();
+
+      const exported = rootSpan.exportSpan();
+      expect(exported?.nestedUnderParent).toBeUndefined();
+      expect(exported?.tags).toEqual(['root-tag']);
+    });
+
+    it('should not mark runs with a parentSpanId as nested by default', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          tags: ['root-tag'],
+        },
+      });
+      rootSpan.end();
+
+      const exported = rootSpan.exportSpan();
+      expect(exported?.nestedUnderParent).toBeUndefined();
+      expect(exported?.tags).toEqual(['root-tag']);
+    });
+
     it('should handle empty tags array', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

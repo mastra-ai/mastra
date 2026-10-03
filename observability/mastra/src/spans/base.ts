@@ -533,6 +533,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Check if input/output should be hidden based on traceState
     const hideInput = this.traceState?.hideInput ?? false;
     const hideOutput = this.traceState?.hideOutput ?? false;
+    const nestedUnderParent = this.traceState?.nestedUnderParent ?? false;
 
     return {
       id: this.id,
@@ -555,8 +556,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.isInternal ? { isInternal: true } : {}),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
-      // Tags are only included for root spans
-      ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
+      ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
+      // Tags are only included for root spans, and a nested run does not own the trace
+      ...(this.isRootSpan && !nestedUnderParent && this.tags?.length ? { tags: this.tags } : {}),
     };
   }
 

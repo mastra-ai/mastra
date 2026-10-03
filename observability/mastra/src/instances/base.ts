@@ -341,6 +341,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityId: cached.entityId,
       entityName: cached.entityName,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
+      traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
@@ -657,8 +658,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;
 
+    // nestUnderParent only means something next to the parent it nests under.
+    // Alone it would hide the trace summary of the only run in the trace.
+    const nestedUnderParent = tracingOptions?.nestUnderParent === true && !!tracingOptions.parentSpanId;
+    if (tracingOptions?.nestUnderParent && !nestedUnderParent) {
+      this.logger.debug('[Observability] Ignoring tracingOptions.nestUnderParent: no parentSpanId was provided');
+    }
+
     // Return undefined if no TraceState properties are needed
-    if (allKeys.length === 0 && !hideInput && !hideOutput) {
+    if (allKeys.length === 0 && !hideInput && !hideOutput && !nestedUnderParent) {
       return undefined;
     }
 
@@ -666,6 +674,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContextKeys: allKeys,
       ...(hideInput !== undefined && { hideInput }),
       ...(hideOutput !== undefined && { hideOutput }),
+      ...(nestedUnderParent && { nestedUnderParent }),
     };
   }
 

@@ -1205,6 +1205,13 @@ interface TracingOptions {
   parentSpanId?: string
 
   /**
+   * Set to true together with parentSpanId to attach this run as a child of
+   * that span inside the existing trace. Exporters then keep the trace's own
+   * name, input, output, and tags. Ignored without parentSpanId.
+   */
+  nestUnderParent?: boolean
+
+  /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
    * Note: Tags are only applied to the root span of a trace.

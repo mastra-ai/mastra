@@ -7,7 +7,7 @@
  */
 
 import { EntityType, SpanType } from './types';
-import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+import type { Span, GetOrCreateSpanOptions, AnySpan, TracingOptions, TracingProperties } from './types';
 
 const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
@@ -172,6 +172,19 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       metadata,
     },
   });
+}
+
+/**
+ * Builds `tracingOptions` that attach the next run as a child of a previous
+ * run, for example an LLM judge under the run it scores. Pass the previous
+ * run's result (or its `traceId` and `spanId`). When that run was not traced,
+ * the given options are returned unchanged.
+ */
+export function nestUnderRun(run: TracingProperties, tracingOptions?: TracingOptions): TracingOptions | undefined {
+  if (!run.traceId || !run.spanId) {
+    return tracingOptions;
+  }
+  return { ...tracingOptions, traceId: run.traceId, parentSpanId: run.spanId, nestUnderParent: true };
 }
 
 /**
