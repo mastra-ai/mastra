@@ -1,6 +1,6 @@
 ---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset shipped in @mastra/connect: provider IDs, connection environment variables, and the full tool list per provider."
+description: "Every generated provider toolset shipped in @mastra/connect: provider IDs and the full tool list per provider."
 packages:
   - "@mastra/connect"
 ---
@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` ships generated toolsets for 26 providers (1014 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` ships generated toolsets for 25 providers (987 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package, so the exact list depends on the installed `@mastra/connect` version; this page reflects the version it shipped with.
 
@@ -41,12 +41,11 @@ MCP providers — Airtable, Attio, Canva, Neon, Render, and Sanity — serve the
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="stripe" /> [Stripe](#stripe) | `stripe` | 62 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
-| <ProviderLogo slug="x" mono /> [Twitter/X](#twitterx) | `twitter-v2` | 27 |
 | <ProviderLogo slug="workos" mono /> [WorkOS](#workos) | `workos` | 40 |
 
 ## Anthropic
 
-Provider ID: `anthropic` · Connection env var: `MASTRA_ANTHROPIC_CONNECTION_ID` · 12 tools
+Provider ID: `anthropic` · 12 tools
 
 | Tool | Description |
 | - | - |
@@ -65,7 +64,7 @@ Provider ID: `anthropic` · Connection env var: `MASTRA_ANTHROPIC_CONNECTION_ID`
 
 ## Clerk
 
-Provider ID: `clerk` · Connection env var: `MASTRA_CLERK_CONNECTION_ID` · 42 tools
+Provider ID: `clerk` · 42 tools
 
 | Tool | Description |
 | - | - |
@@ -114,7 +113,7 @@ Provider ID: `clerk` · Connection env var: `MASTRA_CLERK_CONNECTION_ID` · 42 t
 
 ## Discord
 
-Provider ID: `discord` · Connection env var: `MASTRA_DISCORD_CONNECTION_ID` · 33 tools
+Provider ID: `discord` · 33 tools
 
 | Tool | Description |
 | - | - |
@@ -154,7 +153,7 @@ Provider ID: `discord` · Connection env var: `MASTRA_DISCORD_CONNECTION_ID` · 
 
 ## Fireflies.ai
 
-Provider ID: `fireflies` · Connection env var: `MASTRA_FIREFLIES_CONNECTION_ID` · 27 tools
+Provider ID: `fireflies` · 27 tools
 
 | Tool | Description |
 | - | - |
@@ -188,7 +187,7 @@ Provider ID: `fireflies` · Connection env var: `MASTRA_FIREFLIES_CONNECTION_ID`
 
 ## GitHub
 
-Provider ID: `github` · Connection env var: `MASTRA_GITHUB_CONNECTION_ID` · 46 tools
+Provider ID: `github` · 46 tools
 
 | Tool | Description |
 | - | - |
@@ -241,7 +240,7 @@ Provider ID: `github` · Connection env var: `MASTRA_GITHUB_CONNECTION_ID` · 46
 
 ## Google Analytics
 
-Provider ID: `google-analytics` · Connection env var: `MASTRA_GOOGLE_ANALYTICS_CONNECTION_ID` · 11 tools
+Provider ID: `google-analytics` · 11 tools
 
 | Tool | Description |
 | - | - |
@@ -259,7 +258,7 @@ Provider ID: `google-analytics` · Connection env var: `MASTRA_GOOGLE_ANALYTICS_
 
 ## Google Calendar
 
-Provider ID: `google-calendar` · Connection env var: `MASTRA_GOOGLE_CALENDAR_CONNECTION_ID` · 43 tools
+Provider ID: `google-calendar` · 43 tools
 
 | Tool | Description |
 | - | - |
@@ -309,7 +308,7 @@ Provider ID: `google-calendar` · Connection env var: `MASTRA_GOOGLE_CALENDAR_CO
 
 ## Google Docs
 
-Provider ID: `google-docs` · Connection env var: `MASTRA_GOOGLE_DOCS_CONNECTION_ID` · 37 tools
+Provider ID: `google-docs` · 37 tools
 
 | Tool | Description |
 | - | - |
@@ -353,7 +352,7 @@ Provider ID: `google-docs` · Connection env var: `MASTRA_GOOGLE_DOCS_CONNECTION
 
 ## Google Drive
 
-Provider ID: `google-drive` · Connection env var: `MASTRA_GOOGLE_DRIVE_CONNECTION_ID` · 30 tools
+Provider ID: `google-drive` · 30 tools
 
 | Tool | Description |
 | - | - |
@@ -390,7 +389,7 @@ Provider ID: `google-drive` · Connection env var: `MASTRA_GOOGLE_DRIVE_CONNECTI
 
 ## Gmail
 
-Provider ID: `google-mail` · Connection env var: `MASTRA_GOOGLE_MAIL_CONNECTION_ID` · 52 tools
+Provider ID: `google-mail` · 52 tools
 
 | Tool | Description |
 | - | - |
@@ -449,7 +448,7 @@ Provider ID: `google-mail` · Connection env var: `MASTRA_GOOGLE_MAIL_CONNECTION
 
 ## Google Sheets
 
-Provider ID: `google-sheet` · Connection env var: `MASTRA_GOOGLE_SHEET_CONNECTION_ID` · 18 tools
+Provider ID: `google-sheet` · 18 tools
 
 | Tool | Description |
 | - | - |
@@ -474,7 +473,7 @@ Provider ID: `google-sheet` · Connection env var: `MASTRA_GOOGLE_SHEET_CONNECTI
 
 ## HubSpot
 
-Provider ID: `hubspot` · Connection env var: `MASTRA_HUBSPOT_CONNECTION_ID` · 49 tools
+Provider ID: `hubspot` · 49 tools
 
 | Tool | Description |
 | - | - |
@@ -530,7 +529,7 @@ Provider ID: `hubspot` · Connection env var: `MASTRA_HUBSPOT_CONNECTION_ID` · 
 
 ## incident.io
 
-Provider ID: `incident-io` · Connection env var: `MASTRA_INCIDENT_IO_CONNECTION_ID` · 66 tools
+Provider ID: `incident-io` · 66 tools
 
 | Tool | Description |
 | - | - |
@@ -603,7 +602,7 @@ Provider ID: `incident-io` · Connection env var: `MASTRA_INCIDENT_IO_CONNECTION
 
 ## Jira
 
-Provider ID: `jira` · Connection env var: `MASTRA_JIRA_CONNECTION_ID` · 38 tools
+Provider ID: `jira` · 38 tools
 
 | Tool | Description |
 | - | - |
@@ -648,7 +647,7 @@ Provider ID: `jira` · Connection env var: `MASTRA_JIRA_CONNECTION_ID` · 38 too
 
 ## Linear
 
-Provider ID: `linear` · Connection env var: `MASTRA_LINEAR_CONNECTION_ID` · 46 tools
+Provider ID: `linear` · 46 tools
 
 | Tool | Description |
 | - | - |
@@ -701,7 +700,7 @@ Provider ID: `linear` · Connection env var: `MASTRA_LINEAR_CONNECTION_ID` · 46
 
 ## Microsoft Teams
 
-Provider ID: `microsoft-teams` · Connection env var: `MASTRA_MICROSOFT_TEAMS_CONNECTION_ID` · 25 tools
+Provider ID: `microsoft-teams` · 25 tools
 
 | Tool | Description |
 | - | - |
@@ -733,7 +732,7 @@ Provider ID: `microsoft-teams` · Connection env var: `MASTRA_MICROSOFT_TEAMS_CO
 
 ## Notion
 
-Provider ID: `notion` · Connection env var: `MASTRA_NOTION_CONNECTION_ID` · 44 tools
+Provider ID: `notion` · 44 tools
 
 | Tool | Description |
 | - | - |
@@ -784,7 +783,7 @@ Provider ID: `notion` · Connection env var: `MASTRA_NOTION_CONNECTION_ID` · 44
 
 ## OpenAI
 
-Provider ID: `openai` · Connection env var: `MASTRA_OPENAI_CONNECTION_ID` · 26 tools
+Provider ID: `openai` · 26 tools
 
 | Tool | Description |
 | - | - |
@@ -817,7 +816,7 @@ Provider ID: `openai` · Connection env var: `MASTRA_OPENAI_CONNECTION_ID` · 26
 
 ## PostHog
 
-Provider ID: `posthog` · Connection env var: `MASTRA_POSTHOG_CONNECTION_ID` · 67 tools
+Provider ID: `posthog` · 67 tools
 
 | Tool | Description |
 | - | - |
@@ -891,7 +890,7 @@ Provider ID: `posthog` · Connection env var: `MASTRA_POSTHOG_CONNECTION_ID` · 
 
 ## Resend
 
-Provider ID: `resend` · Connection env var: `MASTRA_RESEND_CONNECTION_ID` · 80 tools
+Provider ID: `resend` · 80 tools
 
 | Tool | Description |
 | - | - |
@@ -978,7 +977,7 @@ Provider ID: `resend` · Connection env var: `MASTRA_RESEND_CONNECTION_ID` · 80
 
 ## Slack
 
-Provider ID: `slack` · Connection env var: `MASTRA_SLACK_CONNECTION_ID` · 51 tools
+Provider ID: `slack` · 51 tools
 
 | Tool | Description |
 | - | - |
@@ -1036,7 +1035,7 @@ Provider ID: `slack` · Connection env var: `MASTRA_SLACK_CONNECTION_ID` · 51 t
 
 ## Snowflake
 
-Provider ID: `snowflake` · Connection env var: `MASTRA_SNOWFLAKE_CONNECTION_ID` · 15 tools
+Provider ID: `snowflake` · 15 tools
 
 | Tool | Description |
 | - | - |
@@ -1058,7 +1057,7 @@ Provider ID: `snowflake` · Connection env var: `MASTRA_SNOWFLAKE_CONNECTION_ID`
 
 ## Stripe
 
-Provider ID: `stripe` · Connection env var: `MASTRA_STRIPE_CONNECTION_ID` · 62 tools
+Provider ID: `stripe` · 62 tools
 
 | Tool | Description |
 | - | - |
@@ -1127,7 +1126,7 @@ Provider ID: `stripe` · Connection env var: `MASTRA_STRIPE_CONNECTION_ID` · 62
 
 ## Supabase
 
-Provider ID: `supabase` · Connection env var: `MASTRA_SUPABASE_CONNECTION_ID` · 27 tools
+Provider ID: `supabase` · 27 tools
 
 | Tool | Description |
 | - | - |
@@ -1159,43 +1158,9 @@ Provider ID: `supabase` · Connection env var: `MASTRA_SUPABASE_CONNECTION_ID` �
 | `supabase_update_table_rows` | Update rows in a Supabase table. |
 | `supabase_upsert_table_row` | Insert or update a row in a Supabase table, merging on conflict. |
 
-## Twitter/X
-
-Provider ID: `twitter-v2` · Connection env var: `MASTRA_TWITTER_V2_CONNECTION_ID` · 27 tools
-
-| Tool | Description |
-| - | - |
-| `twitter_v2_bookmark_tweet` | Bookmark a tweet for an authenticated user. |
-| `twitter_v2_create_liked_tweet` | Create a liked tweet in Twitter/X |
-| `twitter_v2_create_list` | Create a list in Twitter/X |
-| `twitter_v2_create_tweet` | Create a tweet in Twitter/X. |
-| `twitter_v2_delete_liked_tweet` | Remove a liked tweet (unlike) for the authenticated user. |
-| `twitter_v2_delete_list` | Delete a List owned by the authenticated user |
-| `twitter_v2_delete_tweet` | Delete or archive a tweet in Twitter/X |
-| `twitter_v2_follow_user` | Follow a user from the authenticated account. |
-| `twitter_v2_get_liked_tweet` | Retrieve a single liked tweet from Twitter/X by its ID. |
-| `twitter_v2_get_list` | Retrieve a single list from Twitter/X |
-| `twitter_v2_get_mention` | Retrieve a single mention from Twitter/X. |
-| `twitter_v2_get_space` | Retrieve a single space from Twitter/X |
-| `twitter_v2_get_tweet` | Retrieve a single tweet from Twitter/X. |
-| `twitter_v2_get_user` | Retrieve a single user from Twitter/X |
-| `twitter_v2_like_tweet` | Like a tweet |
-| `twitter_v2_list_following` | List the users a specified Twitter/X user is following. |
-| `twitter_v2_list_liked_tweets` | List liked tweets from a specific Twitter/X user |
-| `twitter_v2_list_lists` | List all Lists owned by a specified user from X API |
-| `twitter_v2_list_mentions` | List mentions from Twitter/X for a specified user. |
-| `twitter_v2_list_spaces` | List Spaces from Twitter/X matching a search query |
-| `twitter_v2_list_tweets` | List tweets from a specific Twitter/X user timeline. |
-| `twitter_v2_list_users` | List users from Twitter/X by IDs or usernames |
-| `twitter_v2_remove_bookmark` | Remove a tweet bookmark |
-| `twitter_v2_search_tweets` | Search recent Tweets (last 7 days) on Twitter/X matching a query. |
-| `twitter_v2_unfollow_user` | Unfollow a user from the authenticated account |
-| `twitter_v2_unlike_tweet` | Unlike a Tweet |
-| `twitter_v2_update_list` | Update a list in Twitter/X. |
-
 ## WorkOS
 
-Provider ID: `workos` · Connection env var: `MASTRA_WORKOS_CONNECTION_ID` · 40 tools
+Provider ID: `workos` · 40 tools
 
 | Tool | Description |
 | - | - |

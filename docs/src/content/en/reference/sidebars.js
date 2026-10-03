@@ -205,7 +205,6 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'connect/channels', label: 'channels()' },
         { type: 'doc', id: 'connect/credential', label: 'credential()' },
-        { type: 'doc', id: 'connect/environment', label: 'environment()' },
         { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
         { type: 'doc', id: 'connect/tools', label: 'tools()' },
       ],

@@ -81,8 +81,7 @@ Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
   {
     name: 'connectionId',
     type: 'string',
-    description:
-      'Pin a specific connection ID. Bypasses the MASTRA_<PROVIDER>_CONNECTION_ID env-var fallback and single-active-connection resolution.',
+    description: 'Pin a specific connection ID, bypassing single-active-connection resolution.',
     isOptional: true,
   },
   {
@@ -187,7 +186,7 @@ Tool keys for `allowTools` and `disallowTools` are listed per provider in the [p
 
 For each provider present in the project's connections:
 
-1. An explicit `connectionId` option or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var wins.
+1. An explicit `connectionId` option wins.
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
 

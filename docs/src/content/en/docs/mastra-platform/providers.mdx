@@ -45,7 +45,7 @@ mastra connect remove linear  # unlink a connection from the project
 
 A project can hold several connections to the same provider. At runtime, `@mastra/connect` resolves which connection a tool call uses:
 
-1. An explicit `connectionId` option, or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` environment variable, pins one connection.
+1. An explicit `connectionId` option pins one connection.
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is left unpinned: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns.
 
@@ -72,7 +72,6 @@ When a provider revokes or expires a connection's credentials, the connection en
 | `MASTRA_PROJECT_ID` | Project ID used to list connections |
 | `MASTRA_PLATFORM_REGION` | `us` or `eu`; selects the regional integrations endpoint |
 | `MASTRA_INTEGRATIONS_API_URL` | Explicit integrations service base URL; overrides region resolution |
-| `MASTRA_<PROVIDER>_CONNECTION_ID` | Pins a connection for one provider, for example `MASTRA_LINEAR_CONNECTION_ID`. Punctuation in the provider ID becomes underscores. |
 
 The default integrations endpoint is `https://integrations.mastra.ai`. Setting `MASTRA_PLATFORM_REGION` to `us` or `eu` selects `https://integrations.us.mastra.ai` or `https://integrations.eu.mastra.ai`.
 
@@ -106,7 +105,6 @@ The default integrations endpoint is `https://integrations.mastra.ai`. Setting `
 | `snowflake` | <ProviderLogo slug="snowflake" /> Snowflake |
 | `stripe` | <ProviderLogo slug="stripe" /> Stripe |
 | `supabase` | <ProviderLogo slug="supabase" /> Supabase |
-| `twitter-v2` | <ProviderLogo slug="x" mono /> Twitter/X |
 | `workos` | <ProviderLogo slug="workos" mono /> WorkOS |
 
 Toolsets are generated and versioned with the package: upgrading `@mastra/connect` picks up new providers and tools without API changes.
