@@ -1,5 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { safeUpstreamErrorForLog } from '../../../error/safe-upstream-error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
@@ -333,7 +334,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             if (isUpstreamError) {
               capabilities.logger.error('Upstream LLM API error', {
-                error,
+                error: safeUpstreamErrorForLog(error),
                 runId,
                 ...(provider && { provider }),
                 ...(modelId && { modelId }),
