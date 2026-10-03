@@ -51,6 +51,7 @@ function connection(overrides: Record<string, unknown>) {
     displayName: null,
     connectedByUserId: 'user_1',
     connectedAt: null,
+    createdAt: '2026-09-25T14:41:21.878Z',
     ...overrides,
   };
 }
@@ -134,6 +135,9 @@ describe('connectProviderAction', () => {
       sessionToken: 'session_tok',
       expiresAt: '2099-01-01T00:00:00.000Z',
     });
+    vi.mocked(fetchOrgMembers).mockResolvedValue([
+      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: 'Charlie', lastName: 'Smith' },
+    ]);
   });
 
   afterEach(() => {
@@ -159,6 +163,26 @@ describe('connectProviderAction', () => {
     expect(addConnectionToProject).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_org');
     expect(createProjectConnectSession).not.toHaveBeenCalled();
     expect(output.join('\n')).toContain('(charlie) to My Project');
+  });
+
+  it('renders aligned columns with account, connected by, and date', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_a', accountLabel: 'Mastra', connectedAt: '2026-09-25T12:00:00.000Z' }),
+      connection({ id: 'conn_b', accountLabel: 'charlie@mastra.ai', connectedAt: '2026-10-02T12:00:00.000Z' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('conn_a');
+
+    await connectProviderAction('linear');
+
+    const { options } = vi.mocked(select).mock.calls[0]![0] as { options: { label: string }[] };
+    const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '');
+    const labels = options.map(option => stripAnsi(option.label));
+    expect(labels[0]).toBe('Mastra             connected by Charlie Smith  Sep 25, 2026');
+    expect(labels[1]).toBe('charlie@mastra.ai  connected by Charlie Smith  Oct 2, 2026');
+    expect(labels[2]).toBe('Create a new connection');
+    // The date column starts at the same offset in every connection row.
+    expect(labels[0]!.indexOf('Sep 25')).toBe(labels[1]!.indexOf('Oct 2'));
   });
 
   it('goes straight to the create flow when no org connections exist', async () => {

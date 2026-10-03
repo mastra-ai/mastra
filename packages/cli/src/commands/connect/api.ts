@@ -57,6 +57,7 @@ export interface ProjectConnection {
   displayName: string | null;
   connectedByUserId: string;
   connectedAt: string | null;
+  createdAt: string;
 }
 
 export interface OrgMember {

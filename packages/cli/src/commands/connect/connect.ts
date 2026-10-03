@@ -56,6 +56,43 @@ function memberName(member: OrgMember | undefined): string | undefined {
   return name || member.email;
 }
 
+function formatConnectionDate(connection: ProjectConnection): string {
+  const value = connection.connectedAt ?? connection.createdAt;
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Aligned select rows for picking one connection among several: account
+ * label, who connected it, and when. Padding keeps the columns lined up in
+ * clack's select renderer.
+ */
+function connectionChoices(
+  connections: ProjectConnection[],
+  memberByUserId: Map<string, OrgMember>,
+): { value: string; label: string }[] {
+  const rows = connections.map(connection => ({
+    value: connection.id,
+    account: connection.displayName || connection.accountLabel || '(no label)',
+    by: `connected by ${memberName(memberByUserId.get(connection.connectedByUserId)) ?? 'a teammate'}`,
+    date: formatConnectionDate(connection),
+  }));
+  const accountWidth = Math.max(...rows.map(row => row.account.length));
+  const byWidth = Math.max(...rows.map(row => row.by.length));
+  return rows.map(row => ({
+    value: row.value,
+    label: `${row.account.padEnd(accountWidth)}  ${pc.dim(`${row.by.padEnd(byWidth)}  ${row.date}`.trimEnd())}`,
+  }));
+}
+
+/** Org member lookup for attributing connections to whoever connected them. */
+async function fetchMemberMap(ctx: ConnectContext): Promise<Map<string, OrgMember>> {
+  const members = await fetchOrgMembers(ctx.token, ctx.orgId).catch(() => [] as OrgMember[]);
+  return new Map(members.map(member => [member.userId, member]));
+}
+
 // ---- mastra connect list ----
 
 export async function listProvidersAction(options?: { project?: string }): Promise<void> {
@@ -69,8 +106,7 @@ export async function listProvidersAction(options?: { project?: string }): Promi
   // them ("connected by Jane Doe"), which needs the org member list.
   let memberByUserId = new Map<string, OrgMember>();
   if (connections.some(connection => !connection.displayName && !connection.accountLabel)) {
-    const members = await fetchOrgMembers(ctx.token, ctx.orgId).catch(() => [] as OrgMember[]);
-    memberByUserId = new Map(members.map(member => [member.userId, member]));
+    memberByUserId = await fetchMemberMap(ctx);
   }
 
   const byIntegration = new Map<string, ProjectConnection[]>();
@@ -154,23 +190,13 @@ export async function connectProviderAction(
     const reusable = orgConnections.filter(row => row.status === 'active' && !attachedIds.has(row.id));
 
     if (reusable.length > 0) {
-      let memberByUserId = new Map<string, OrgMember>();
-      if (reusable.some(row => !row.displayName && !row.accountLabel)) {
-        const members = await fetchOrgMembers(ctx.token, ctx.orgId).catch(() => [] as OrgMember[]);
-        memberByUserId = new Map(members.map(member => [member.userId, member]));
-      }
+      const memberByUserId = await fetchMemberMap(ctx);
 
       const CREATE_NEW = '__create_new__';
       const choice = await p.select({
         message: `Your organization already has ${reusable.length === 1 ? 'a' : String(reusable.length)} ${integration.displayName} connection${reusable.length === 1 ? '' : 's'}. Use an existing one?`,
         options: [
-          ...reusable.map(row => ({
-            value: row.id,
-            label:
-              row.displayName ||
-              row.accountLabel ||
-              `connected by ${memberName(memberByUserId.get(row.connectedByUserId)) ?? 'a teammate'}`,
-          })),
+          ...connectionChoices(reusable, memberByUserId),
           { value: CREATE_NEW, label: 'Create a new connection' },
         ],
       });
@@ -352,12 +378,10 @@ export async function removeConnectionAction(
 
   let targets = connections;
   if (connections.length > 1 && isInteractive() && !options?.yes) {
+    const memberByUserId = await fetchMemberMap(ctx);
     const choice = await p.select({
       message: `${provider} has ${connections.length} connections. Which one should be removed?`,
-      options: [
-        ...connections.map(connection => ({ value: connection.id, label: connectionLabel(connection) })),
-        { value: 'all', label: 'All connections' },
-      ],
+      options: [...connectionChoices(connections, memberByUserId), { value: 'all', label: 'All connections' }],
     });
     if (p.isCancel(choice)) return;
     if (choice !== 'all') {
