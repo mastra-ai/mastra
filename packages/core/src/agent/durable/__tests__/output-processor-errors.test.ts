@@ -92,6 +92,103 @@ describe('durable output processor errors', () => {
     15_000,
   );
 
+  it('regular engine settles when an output processor throws on step-finish', async () => {
+    const agent = new Agent({
+      id: 'output-processor-error-regular-step-finish',
+      name: 'Output Processor Error Regular Step Finish',
+      instructions: 'You are a test agent.',
+      model: createModel(['hello']) as LanguageModelV2,
+      outputProcessors: [
+        {
+          id: 'throwing-processor',
+          name: 'Throwing processor',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'step-finish') {
+              throw new Error('threw on step-finish');
+            }
+            return part;
+          },
+        },
+      ],
+    });
+
+    const output = await agent.stream('Say hello');
+    let streamError: unknown;
+    try {
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
+    } catch (error) {
+      streamError = error;
+    }
+
+    expect(streamError).toBeInstanceOf(Error);
+    expect((streamError as Error).message).toContain('threw on step-finish');
+    await expect(output.text).rejects.toThrow('threw on step-finish');
+    await expect(output.finishReason).rejects.toThrow('threw on step-finish');
+  });
+
+  it.each([
+    ['durable', 'start'],
+    ['evented', 'start'],
+    ['durable', 'step-start'],
+    ['evented', 'step-start'],
+    ['durable', 'step-finish'],
+    ['evented', 'step-finish'],
+    ['durable', 'finish'],
+    ['evented', 'finish'],
+  ] as const)(
+    '%s engine settles when an output processor throws on %s',
+    async (engine, chunkType) => {
+      const pubsub = new EventEmitterPubSub();
+      pubsubs.push(pubsub);
+      const agent = new Agent({
+        id: `output-processor-error-${engine}-${chunkType}`,
+        name: `Output Processor Error ${engine} ${chunkType}`,
+        instructions: 'You are a test agent.',
+        model: createModel(['hello']) as LanguageModelV2,
+        outputProcessors: [
+          {
+            id: 'throwing-processor',
+            name: 'Throwing processor',
+            processOutputStream: async ({ part }) => {
+              if (part.type === chunkType) {
+                throw new Error(`threw on ${chunkType}`);
+              }
+              return part;
+            },
+          },
+        ],
+      });
+      const outputAgent =
+        engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+
+      new Mastra({
+        agents: { [agent.id]: outputAgent as any },
+        storage: new InMemoryStore(),
+        pubsub,
+        logger: false,
+      });
+
+      const { output, cleanup } = await outputAgent.stream('Say hello');
+      let streamError: unknown;
+      try {
+        for await (const _chunk of output.fullStream) {
+          // drain
+        }
+      } catch (error) {
+        streamError = error;
+      }
+
+      expect(streamError).toBeInstanceOf(Error);
+      expect((streamError as Error).message).toContain(`threw on ${chunkType}`);
+      await expect(output.text).rejects.toThrow(`threw on ${chunkType}`);
+      await expect(output.finishReason).rejects.toThrow(`threw on ${chunkType}`);
+      cleanup();
+    },
+    15_000,
+  );
+
   it.each(['durable', 'evented'] as const)(
     '%s engine stops publishing when an output processor blocks a chunk',
     async engine => {
