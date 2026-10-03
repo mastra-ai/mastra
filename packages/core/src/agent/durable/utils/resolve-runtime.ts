@@ -472,7 +472,8 @@ export async function rebuildRunToolsFromMastra(options: {
 
     return { tools, workspace, memory, saveQueueManager, requestContext: resolveRequestContext };
   } catch (error) {
-    if (error instanceof MastraError && error.id === 'DURABLE_AGENT_TOOLSETS_UNAVAILABLE') throw error;
+    // Falling back would silently drop call-time toolsets, so surface the failure.
+    if ((execOptions?.toolsetToolNames?.length ?? 0) > 0) throw error;
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;
   }

@@ -73,6 +73,16 @@ describe('cross-process toolsets', () => {
     expect(globalRunRegistry.has(RUN_ID)).toBe(false);
   });
 
+  it('propagates rebuild failures when toolset names are present', async () => {
+    const mastra = setup();
+    const agent = mastra.getAgentById('toolsets-agent');
+    agent.getToolsForExecution = async () => {
+      throw new Error('rebuild boom');
+    };
+    await expect(rebuild(mastra, { extra: { shout } })).rejects.toThrow('rebuild boom');
+    await expect(rebuild(mastra, undefined)).resolves.toBeUndefined();
+  });
+
   it('does not throw when toolset tools are also registered on the agent', async () => {
     const rebuilt = await rebuild(setup(), { extra: { echo } });
     expect(rebuilt?.tools.echo).toBeDefined();
