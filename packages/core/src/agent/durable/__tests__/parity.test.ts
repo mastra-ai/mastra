@@ -112,6 +112,8 @@ describe('Agent ↔ DurableAgent parity', () => {
     // 'per-call tool injection survives in-process resume' describe block.
     // A true cross-process resume falls back to the agent's static tools
     // because per-call tools carry closures and cannot be JSON-serialized.
+    // Cross-process toolsets cannot be rebuilt; the worker now fails loudly
+    // instead (see utils/toolsets-xproc.test.ts).
     it.todo('preserves toolsets across resume (cross-process; gated on a future serialization story)');
     it.todo('preserves clientTools across resume (cross-process; gated on a future serialization story)');
   });
