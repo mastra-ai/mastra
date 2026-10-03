@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` ships generated toolsets for 25 providers (987 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` ships generated toolsets for 24 providers (925 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package, so the exact list depends on the installed `@mastra/connect` version; this page reflects the version it shipped with.
 
@@ -39,7 +39,6 @@ MCP providers — Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
 | <ProviderLogo slug="slack" /> [Slack](#slack) | `slack` | 51 |
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
-| <ProviderLogo slug="stripe" /> [Stripe](#stripe) | `stripe` | 62 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
 | <ProviderLogo slug="workos" mono /> [WorkOS](#workos) | `workos` | 40 |
 
@@ -1054,75 +1053,6 @@ Provider ID: `snowflake` · 15 tools
 | `snowflake_list_users` | List Snowflake users with login, email, role, and auth details. |
 | `snowflake_list_views` | List views in a Snowflake schema. |
 | `snowflake_list_warehouses` | List Snowflake warehouses with size, state, and resource usage. |
-
-## Stripe
-
-Provider ID: `stripe` · 62 tools
-
-| Tool | Description |
-| - | - |
-| `stripe_cancel_payment_intent` | Cancel a Stripe PaymentIntent. |
-| `stripe_capture_payment_intent` | Capture an uncaptured Stripe PaymentIntent. |
-| `stripe_create_checkout_session` | Create a checkout session in Stripe. |
-| `stripe_create_credit_note` | Create a credit note in Stripe to adjust or refund a finalized invoice. |
-| `stripe_create_customer` | Create a customer in Stripe. |
-| `stripe_create_invoice` | Create an invoice in Stripe |
-| `stripe_create_invoice_item` | Create an invoice item in Stripe. |
-| `stripe_create_payment_intent` | Create a payment intent in Stripe. |
-| `stripe_create_payment_method` | Create a payment method in Stripe. |
-| `stripe_create_price` | Create a price in Stripe. |
-| `stripe_create_product` | Create a product in Stripe. |
-| `stripe_create_refund` | Create a refund in Stripe. |
-| `stripe_create_setup_intent` | Create a setup intent in Stripe. |
-| `stripe_create_subscription` | Create a subscription in Stripe. |
-| `stripe_delete_customer` | Delete or archive a customer in Stripe. |
-| `stripe_delete_invoice` | Delete or archive a invoice in Stripe. |
-| `stripe_delete_invoice_item` | Delete an invoice item from Stripe. |
-| `stripe_delete_payment_intent` | Cancel a Stripe PaymentIntent. |
-| `stripe_delete_price` | Archive a price in Stripe. |
-| `stripe_delete_product` | Delete or archive a product in Stripe. |
-| `stripe_delete_setup_intent` | Delete or archive a setup intent in Stripe. |
-| `stripe_delete_subscription` | Delete or archive a subscription in Stripe. |
-| `stripe_finalize_invoice` | Finalize a draft Stripe invoice. |
-| `stripe_get_account_info` | Retrieve the Stripe account information for the connected account, including name, country, currency, and enabled capabilities. |
-| `stripe_get_checkout_session` | Retrieve a single checkout session from Stripe. |
-| `stripe_get_credit_note` | Retrieve a single credit note from Stripe. |
-| `stripe_get_customer` | Retrieve a single customer from Stripe. |
-| `stripe_get_invoice` | Retrieve a single invoice from Stripe. |
-| `stripe_get_invoice_item` | Retrieve a single invoice item from Stripe. |
-| `stripe_get_payment_intent` | Retrieve a single payment intent from Stripe. |
-| `stripe_get_payment_method` | Retrieve a single payment method from Stripe. |
-| `stripe_get_price` | Retrieve a single price from Stripe. |
-| `stripe_get_product` | Retrieve a single product from Stripe. |
-| `stripe_get_refund` | Retrieve a single refund from Stripe. |
-| `stripe_get_setup_intent` | Retrieve a single setup intent from Stripe. |
-| `stripe_get_subscription` | Retrieve a single subscription from Stripe. |
-| `stripe_list_checkout_sessions` | List checkout sessions from Stripe. |
-| `stripe_list_coupons` | List coupons from Stripe. |
-| `stripe_list_credit_notes` | List credit notes from Stripe. |
-| `stripe_list_customers` | List customers from Stripe. |
-| `stripe_list_disputes` | List disputes from Stripe. |
-| `stripe_list_invoice_items` | List invoice items from Stripe. |
-| `stripe_list_invoices` | List invoices from Stripe. |
-| `stripe_list_payment_intents` | List payment intents from Stripe. |
-| `stripe_list_payment_methods` | List payment methods from Stripe. |
-| `stripe_list_prices` | List prices from Stripe. |
-| `stripe_list_products` | List products from Stripe. |
-| `stripe_list_refunds` | List refunds from Stripe. |
-| `stripe_list_setup_intents` | List setup intents from Stripe. |
-| `stripe_list_subscriptions` | List subscriptions from Stripe. |
-| `stripe_retrieve_balance` | Retrieve the current account balance from Stripe, broken down by available and pending funds per currency. |
-| `stripe_update_customer` | Update a customer in Stripe. |
-| `stripe_update_invoice` | Update an invoice in Stripe. |
-| `stripe_update_invoice_item` | Update an invoice item in Stripe. |
-| `stripe_update_payment_intent` | Update a payment intent in Stripe. |
-| `stripe_update_price` | Update a price in Stripe. |
-| `stripe_update_product` | Update a product in Stripe |
-| `stripe_update_refund` | Update a refund in Stripe. |
-| `stripe_update_setup_intent` | Update a setup intent in Stripe. |
-| `stripe_update_subscription` | Update a subscription in Stripe. |
-| `stripe_void_credit_note` | Void a Stripe credit note. |
-| `stripe_void_invoice` | Void a Stripe invoice. |
 
 ## Supabase
 
