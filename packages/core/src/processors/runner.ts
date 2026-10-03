@@ -11,6 +11,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import { bindModelAttempt, getModelAttempt } from '../loop/shared/model-attempt';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
@@ -897,6 +898,18 @@ export class ProcessorRunner {
       return { part, blocked: false };
     }
 
+    const modelAttempt = getModelAttempt(part);
+    abortSignal ??= modelAttempt?.controller.signal;
+    if (modelAttempt?.discarded) return { part: null, blocked: false };
+    const trackState = (state: ProcessorState<OUTPUT>) => {
+      modelAttempt?.trackParts(state.streamParts);
+      const deferred = state.customState[REPROCESS_PART_KEY];
+      modelAttempt?.addDiscardCleanup(state, () => {
+        if (deferred === undefined) delete state.customState[REPROCESS_PART_KEY];
+        else state.customState[REPROCESS_PART_KEY] = deferred;
+      });
+    };
+
     try {
       let processedPart: ChunkType<OUTPUT> | null | undefined = part;
       const isFinishChunk = part.type === 'finish';
@@ -915,6 +928,7 @@ export class ProcessorRunner {
           }
 
           // Track input chunk (before processor transformation)
+          trackState(state);
           state.addInputPart(processedPart);
 
           if (processorOrWorkflow.__processOutputStream === false) {
@@ -943,9 +957,15 @@ export class ProcessorRunner {
             if ('part' in result) {
               processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
             }
+            if (modelAttempt?.discarded) return { part: null, blocked: false };
+            if (processedPart && modelAttempt) {
+              if (!modelAttempt.observe(processedPart)) return { part: null, blocked: false };
+              bindModelAttempt(processedPart, modelAttempt);
+            }
             // Track output chunk (after processor transformation or passthrough)
             state.addOutputPart(processedPart);
           } catch (error) {
+            if (modelAttempt?.discarded) return { part: null, blocked: false };
             if (error instanceof TripWire) {
               return {
                 part: null,
@@ -977,6 +997,7 @@ export class ProcessorRunner {
             }
 
             // Track input chunk (before processor transformation)
+            trackState(state);
             state.addInputPart(processedPart);
 
             // Timed in a finally so a tripwire or error still reports the time spent so far.
@@ -1002,11 +1023,17 @@ export class ProcessorRunner {
               state.hookDurationMs += performance.now() - hookStart;
             }
 
+            if (modelAttempt?.discarded) return { part: null, blocked: false };
+            if (result && modelAttempt) {
+              if (!modelAttempt.observe(result)) return { part: null, blocked: false };
+              bindModelAttempt(result, modelAttempt);
+            }
             // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
             state.addOutputPart(processedPart);
           }
         } catch (error) {
+          if (modelAttempt?.discarded) return { part: null, blocked: false };
           if (error instanceof TripWire) {
             // Error span for trip-wire abort so it shows as ERROR in traces
             const state = processorStates.get(processor.id);

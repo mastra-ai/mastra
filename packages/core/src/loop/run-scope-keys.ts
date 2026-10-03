@@ -23,6 +23,7 @@ import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { StreamTransportRef } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { Workspace } from '../workspace/workspace';
+import type { ModelAttempt, TranscriptStep } from './shared/model-attempt';
 import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 
 // --- Identity / clock injectors --------------------------------------------
@@ -67,7 +68,11 @@ export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTask
 
 export const DRAIN_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]>('loop:drainPendingSignals');
+export const SUBSCRIBE_PENDING_SIGNALS_KEY =
+  createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
+export const MODEL_ATTEMPT_KEY = createRunScopeKey<ModelAttempt | undefined>('loop:modelAttempt');
+export const TRANSCRIPT_STEPS_KEY = createRunScopeKey<(TranscriptStep | null | undefined)[]>('loop:transcriptSteps');
 
 // --- Tool payload transform ------------------------------------------------
 

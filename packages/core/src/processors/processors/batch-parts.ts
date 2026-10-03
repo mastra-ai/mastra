@@ -1,3 +1,4 @@
+import { getModelAttempt } from '../../loop/shared/model-attempt';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
@@ -53,7 +54,22 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     abort: (reason?: string) => never;
     writer?: { custom: (data: ChunkType) => Promise<void> };
   }): Promise<ChunkType | null> {
-    const { part, state, writer } = args;
+    const { part, state, writer, streamParts } = args;
+    const modelAttempt = getModelAttempt(streamParts);
+    modelAttempt?.addDiscardCleanup(state, () => {
+      state.batch = state.batch?.filter((buffered: ChunkType) => getModelAttempt(buffered) !== modelAttempt) ?? [];
+      if (state.pendingNonText && getModelAttempt(state.pendingNonText) === modelAttempt) {
+        delete state.pendingNonText;
+      }
+      if (state[REPROCESS_PART_KEY] && getModelAttempt(state[REPROCESS_PART_KEY]) === modelAttempt) {
+        delete state[REPROCESS_PART_KEY];
+      }
+      if (!state.batch.length) {
+        clearTimeout(state.timeoutId);
+        state.timeoutId = undefined;
+        state.timeoutTriggered = false;
+      }
+    });
 
     // Initialize state if not present
     if (!state.batch) {
