@@ -371,7 +371,7 @@ function printConnected(ctx: ConnectContext, integration: IntegrationCatalogEntr
   console.info(`\n${pc.green('✓')} Connected ${pc.bold(integration.displayName)}${account} to ${ctx.projectName}.`);
   console.info(
     pc.dim(
-      `\nYour agents pick it up through @mastra/connect:\n\n  import { connect } from '@mastra/connect';\n\n  const tools = connect({\n    projectId: process.env.MASTRA_PROJECT_ID,\n    integrations: ['${integration.id}'],\n  });\n`,
+      `\nYour agents pick it up through @mastra/connect:\n\n  import { tools } from '@mastra/connect';\n\n  const agentTools = tools({\n    projectId: process.env.MASTRA_PROJECT_ID,\n    integrations: ['${integration.id}'],\n  });\n`,
     ),
   );
 }

@@ -49,9 +49,9 @@ $ mastra connect remove linear
 Connected providers become available to agents through `@mastra/connect`'s toolset resolver:
 
 ```ts
-import { connect } from '@mastra/connect';
+import { tools } from '@mastra/connect';
 
-const tools = connect({
+const agentTools = tools({
   projectId: process.env.MASTRA_PROJECT_ID,
   integrations: ['linear'],
 });
