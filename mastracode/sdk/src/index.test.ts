@@ -209,7 +209,7 @@ vi.mock('./utils/project.js', () => ({
   detectProject: vi.fn((cwd?: string) => ({
     mode: 'none',
     rootPath: cwd ?? process.cwd(),
-    resourceId: `mock-resource-${cwd ?? process.cwd()}`.replaceAll(/[/\\]/g, '-'),
+    resourceId: `mock-resource-${cwd ?? process.cwd()}`,
     packageManager: 'pnpm',
     hasGit: false,
     contextFiles: [],

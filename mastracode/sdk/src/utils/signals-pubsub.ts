@@ -13,6 +13,7 @@ const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
 const LEASE_SOCKET_NAME = '.leases.sock';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
+const RESERVED_SOCKET_NAME = /^agent_thread-(?:peer|owner)-discovery(?:_|$)/;
 const MAX_PATH_SEGMENT_LENGTH = 128;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
@@ -58,20 +59,12 @@ function isSafePathSegment(value: string): boolean {
   return true;
 }
 
-function requireSafePathSegment(value: string): string {
-  if (!isSafePathSegment(value)) {
-    throw new Error(
-      `Cannot route a signals pubsub path whose resourceId ${JSON.stringify(value)} is not a safe directory name`,
-    );
-  }
-  return value;
-}
-
 /** The resource a thread key (`<resourceId>\0<threadId>`) belongs to. */
 function resourceOfThreadKey(key: string): string | undefined {
   const separatorIdx = key.indexOf(THREAD_KEY_SEPARATOR);
   if (separatorIdx <= 0) return undefined;
-  return requireSafePathSegment(key.slice(0, separatorIdx));
+  const resourceId = key.slice(0, separatorIdx);
+  return isSafePathSegment(resourceId) ? resourceId : undefined;
 }
 
 /** Decodes `agent.thread-stream.<encoded resourceId\0threadId>[...]`. */
@@ -98,8 +91,9 @@ export function notificationDispatchLeaseKey(resourceId: string): string {
  * and a resource's notification dispatch lease.
  */
 function resourceOfLeaseKey(key: string): string | undefined {
-  if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX) && !key.includes(THREAD_KEY_SEPARATOR)) {
-    return requireSafePathSegment(key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length));
+  if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX)) {
+    const resourceId = key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length);
+    return isSafePathSegment(resourceId) ? resourceId : undefined;
   }
   return resourceOfThreadKey(
     key.startsWith(THREAD_CLAIM_LEASE_PREFIX) ? key.slice(THREAD_CLAIM_LEASE_PREFIX.length) : key,
@@ -114,9 +108,15 @@ function isPeerDiscoveryTopic(topic: string): boolean {
   return topic === PEER_DISCOVERY_TOPIC || topic.startsWith(`${PEER_DISCOVERY_TOPIC}.`);
 }
 
-/** Whether a name can be a file in a directory: no separators or control characters, not `.`/`..`. */
+/**
+ * Whether a threadId can be the base name of a thread's socket file: no
+ * separators or control characters, not `.`/`..`, and not a name another
+ * socket in the same directory already uses (the lease socket, and the
+ * sanitized peer/owner discovery topics and their reply topics).
+ */
 function isSafeFileName(value: string): boolean {
   if (!value || value === '.' || value === '..' || `${value}.sock` === LEASE_SOCKET_NAME) return false;
+  if (RESERVED_SOCKET_NAME.test(value)) return false;
   for (const char of value) {
     const code = char.charCodeAt(0);
     if (char === '/' || char === '\\' || code < 0x20 || code === 0x7f) return false;
@@ -196,7 +196,7 @@ class SignalsPubSub extends PubSub {
 
   constructor(resourceId: string, options: SignalsPubSubOptions = {}) {
     super();
-    this.#resourceId = requireSafePathSegment(resourceId);
+    this.#resourceId = resourceId;
     this.#rootDir = options.rootDir ?? socketRootFromEnv();
     this.#sharedPeerDiscovery = Boolean(options.sharedAgentDiscovery) && this.#canShareDiscovery();
     // Created eagerly, as before, so this resource's lease socket exists from the start.
@@ -286,9 +286,9 @@ class SignalsPubSub extends PubSub {
   }
 
   #canShareDiscovery(): boolean {
-    if (this.#resourceId !== SHARED_SCOPE_DIR) return true;
+    if (isSafePathSegment(this.#resourceId) && this.#resourceId !== SHARED_SCOPE_DIR) return true;
     console.warn(
-      `Cross-project agent discovery is disabled: resource id ${JSON.stringify(this.#resourceId)} is reserved for shared discovery, so other projects could not reach this instance.`,
+      `Cross-project agent discovery is disabled: resource id ${JSON.stringify(this.#resourceId)} cannot be used as a directory name, so other projects could not reach this instance.`,
     );
     return false;
   }
@@ -378,11 +378,10 @@ class SignalsPubSub extends PubSub {
   }
 
   #leasesFor(resourceId: string): UnixSocketPubSub {
-    const safeResourceId = requireSafePathSegment(resourceId);
-    let socket = this.#leaseSockets.get(safeResourceId);
+    let socket = this.#leaseSockets.get(resourceId);
     if (!socket) {
-      socket = new UnixSocketPubSub(join(this.#rootDir, safeResourceId, LEASE_SOCKET_NAME));
-      this.#leaseSockets.set(safeResourceId, socket);
+      socket = new UnixSocketPubSub(join(this.#rootDir, resourceId, LEASE_SOCKET_NAME));
+      this.#leaseSockets.set(resourceId, socket);
     }
     return socket;
   }
@@ -464,7 +463,7 @@ class SignalsPubSub extends PubSub {
     if (decodeThreadTopic(topic) !== undefined && !isSafeFileName(key)) {
       throw new Error('Cannot route an agent thread topic whose threadId is not a safe file name');
     }
-    const dir = join(this.#rootDir, requireSafePathSegment(scope));
+    const dir = join(this.#rootDir, scope);
     await mkdir(dir, { recursive: true });
     const candidate = join(dir, `${key}.sock`);
     // macOS sun_path limit is 104 bytes; Linux is 108. Use 104 as the
