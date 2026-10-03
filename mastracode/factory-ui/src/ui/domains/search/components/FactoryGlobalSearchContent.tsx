@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
+import { itemStageLabel } from '../../factory/boardStages';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -132,21 +133,27 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
-                const { owner } = boardCardState({ decision: effectByItem.get(target.item.id) });
+                const item = target.item;
+                const board = item.board === 'review' ? reviewBoard : workBoard;
+                const movingTo = board.evaluatingStages.get(item.id);
+                const { owner } = boardCardState({
+                  decision: effectByItem.get(item.id),
+                  moving:
+                    movingTo === undefined ? undefined : { stage: movingTo, label: itemStageLabel(item, movingTo) },
+                });
                 if (!canStartRun(owner.kind)) {
                   closeSearch();
                   toast.error(BUSY_CARD_MOVE_REFUSAL);
                   return;
                 }
-                const [move] = cardMoves(target.item, 'intake');
+                const [move] = cardMoves(item, 'intake');
                 if (move) {
                   closeSearch();
-                  const board = target.item.board === 'review' ? reviewBoard : workBoard;
-                  board.move(target.item.id, move.stage);
+                  board.move(item.id, move.stage);
                   return;
                 }
                 void runs
-                  .openOrCreateSession(target.item)
+                  .openOrCreateSession(item)
                   .then(result => {
                     if (result !== 'repository-selection-required') closeSearch();
                   })

@@ -761,6 +761,40 @@ describe('Global search', () => {
     expect(requests.transitions).toEqual([]);
   });
 
+  it('refuses a second move of a card whose first move from search is still in flight', async () => {
+    const requests = stubSearchApi();
+    let releaseTransition = () => {};
+    const transitionGate = new Promise<void>(resolve => {
+      releaseTransition = resolve;
+    });
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
+        async ({ params }) => {
+          requests.transitions.push({ itemId: String(params.itemId), body: {} });
+          await transitionGate;
+          return HttpResponse.json({ result: { status: 'rejected', reason: 'Released by the test.' } });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderSearchRoute();
+    const pickCard = async () => {
+      await openFromSidebar();
+      await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+      await user.click(await screen.findByText('Bump the command palette dependencies'));
+    };
+
+    await pickCard();
+    await waitFor(() => expect(requests.transitions).toHaveLength(1));
+    await pickCard();
+
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+    expect(requests.transitions).toHaveLength(1);
+    releaseTransition();
+    await waitForMutationsIdle(client);
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();
