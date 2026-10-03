@@ -1575,13 +1575,11 @@ export abstract class MastraBrowser extends MastraBase {
   // ---------------------------------------------------------------------------
 
   /**
-   * Optionally returns a `prepareStep` hook for this browser.
-   *
-   * When provided, the Agent uses this as the default `prepareStep` for every
-   * `generate` / `stream` call, mirroring how `getTools()` and
-   * `getInputProcessors()` auto-wire the rest of the browser's surface.
-   * The user's own `prepareStep` (per-call or in `defaultOptions`) takes
-   * precedence.
+   * Optionally returns a `prepareStep` hook for this browser. When provided,
+   * the Agent auto-registers it via `Agent.registerPrepareStep` so it composes
+   * with any other registered hook and with the user's own
+   * `defaultOptions.prepareStep` on every `generate` / `stream` call. The
+   * user's hook runs last so it can override any field a member hook produced.
    *
    * @returns A `prepareStep` function, or `undefined` if the browser does not
    *   need per-step preparation.

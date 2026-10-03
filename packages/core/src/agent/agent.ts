@@ -43,6 +43,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import type { PrepareStepFunction } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -718,6 +719,8 @@ export class Agent<
   #errorProcessorDefaults?: boolean;
   #browser?: MastraBrowser;
   #hasExplicitBrowser = false;
+  #unregisterBrowserPrepareStep?: () => void;
+  #prepareStepHooks: PrepareStepFunction[] = [];
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
@@ -939,6 +942,7 @@ export class Agent<
       }
       this.#browser = config.browser;
       this.#hasExplicitBrowser = true;
+      this.#rewireBrowserPrepareStep();
     }
 
     if (config.workspace) {
@@ -1506,6 +1510,83 @@ export class Agent<
     // Mark as explicit so workspace browser doesn't overwrite
     // Setting to undefined is also explicit (disabling browser tools)
     this.#hasExplicitBrowser = true;
+    this.#rewireBrowserPrepareStep();
+  }
+
+  /**
+   * Register a `prepareStep` hook on this agent. The returned function
+   * unregisters the hook when called.
+   *
+   * Attached subsystems (browser, future integrations) and user code can use
+   * this to contribute a per-step hook that the agent composes with every
+   * other registered hook and with the user's own `defaultOptions.prepareStep`
+   * (if any). Hooks run in registration order; each hook sees the args as
+   * modified by previous hooks, and their partial results are merged into one
+   * final `ProcessInputStepResult`. For `tools`, later hooks' entries are
+   * merged into earlier hooks' entries (last-write wins per tool name). For
+   * every other field (model, toolChoice, activeTools, workspace, messages),
+   * the last hook that returns the field wins.
+   *
+   * The user's `defaultOptions.prepareStep` is treated as the final hook, so
+   * it sees the merged view and its return takes precedence per field.
+   *
+   * @returns A function that unregisters this hook.
+   */
+  registerPrepareStep(hook: PrepareStepFunction): () => void {
+    this.#prepareStepHooks.push(hook);
+    return () => {
+      const idx = this.#prepareStepHooks.indexOf(hook);
+      if (idx >= 0) this.#prepareStepHooks.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Re-wire the browser-contributed prepareStep hook. Called whenever the
+   * agent's browser changes (constructor, `setBrowser`). Unregisters the
+   * previous browser's hook (if any) and registers the new one (if any).
+   */
+  #rewireBrowserPrepareStep(): void {
+    this.#unregisterBrowserPrepareStep?.();
+    this.#unregisterBrowserPrepareStep = undefined;
+    const hook = this.#browser?.getPrepareStep?.();
+    if (hook) this.#unregisterBrowserPrepareStep = this.registerPrepareStep(hook);
+  }
+
+  /**
+   * Compose every registered prepareStep hook into a single function. Returns
+   * `undefined` if nothing is registered. Includes the user's own
+   * `defaultOptions.prepareStep` as the final hook (so its return wins).
+   */
+  #composePrepareStep(userHook: PrepareStepFunction | undefined): PrepareStepFunction | undefined {
+    const hooks = userHook ? [...this.#prepareStepHooks, userHook] : [...this.#prepareStepHooks];
+    if (hooks.length === 0) return undefined;
+    if (hooks.length === 1) return hooks[0];
+    return async args => {
+      let effectiveArgs = args;
+      const merged: Record<string, unknown> = {};
+      let anyResult = false;
+      for (const hook of hooks) {
+        const result = await hook(effectiveArgs);
+        if (!result) continue;
+        anyResult = true;
+        // `tools` is cumulative across hooks so multiple contributors can add
+        // without wiping each other; later hooks win on same-named tools.
+        if (result.tools) {
+          merged.tools = { ...(merged.tools as Record<string, unknown> | undefined), ...result.tools };
+        }
+        for (const [key, value] of Object.entries(result)) {
+          if (key === 'tools') continue;
+          if (value !== undefined) merged[key] = value;
+        }
+        // Let the next hook see the composite view so far.
+        effectiveArgs = {
+          ...effectiveArgs,
+          ...result,
+          ...(merged.tools ? { tools: merged.tools } : {}),
+        } as typeof effectiveArgs;
+      }
+      return anyResult ? (merged as unknown as Awaited<ReturnType<PrepareStepFunction>>) : undefined;
+    };
   }
 
   /**
@@ -3179,16 +3260,18 @@ export class Agent<
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | AgentExecutionOptions<TOutput>
     | Promise<AgentExecutionOptions<TOutput>> {
-    // Browsers can expose a prepareStep (e.g. WebMCP page tools). Treat it as a
-    // default: user-provided prepareStep (per-call or in defaultOptions) wins.
-    const withBrowserPrepareStep = <T extends AgentExecutionOptions<TOutput>>(options: T): T => {
-      const browserPrepareStep = this.#browser?.getPrepareStep?.();
-      if (!browserPrepareStep || options.prepareStep) return options;
-      return { ...options, prepareStep: browserPrepareStep };
+    // Agent members (browser today, future integrations) register prepareStep
+    // hooks via `registerPrepareStep`. Compose them with the user's own
+    // `defaultOptions.prepareStep` into a single hook. The user's hook runs
+    // last so it can override any field a member hook produced.
+    const withPrepareStepHooks = <T extends AgentExecutionOptions<TOutput>>(options: T): T => {
+      const composed = this.#composePrepareStep(options.prepareStep as PrepareStepFunction | undefined);
+      if (!composed) return options;
+      return { ...options, prepareStep: composed };
     };
 
     if (typeof this.#defaultOptions !== 'function') {
-      return withBrowserPrepareStep(this.#defaultOptions);
+      return withPrepareStepHooks(this.#defaultOptions);
     }
 
     const result = this.#defaultOptions({
@@ -3211,7 +3294,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return withBrowserPrepareStep(options);
+      return withPrepareStepHooks(options);
     });
   }
 

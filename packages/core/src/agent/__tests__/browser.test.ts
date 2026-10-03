@@ -262,10 +262,10 @@ describe('Agent browser integration', () => {
       expect(browser.getSessionId('thread-456')).toBe('browser-123:thread-456');
     });
 
-    describe('getPrepareStep auto-injection', () => {
-      it('uses the browser prepareStep as the default when the user has none', async () => {
+    describe('prepareStep hook registration', () => {
+      it('registers the browser prepareStep as a default hook when the user has none', async () => {
         const browser = createMockBrowser();
-        const browserPrepareStep = vi.fn().mockReturnValue({ tools: {} });
+        const browserPrepareStep = vi.fn().mockResolvedValue({ tools: { browser_tool: {} } });
         (browser as any).getPrepareStep = () => browserPrepareStep;
 
         const agent = new Agent({
@@ -277,18 +277,23 @@ describe('Agent browser integration', () => {
         });
 
         const defaults = await agent.getDefaultOptions();
-        expect(defaults.prepareStep).toBe(browserPrepareStep);
+        // Composed hook is wrapped, not literally the browser's function —
+        // invoking it should delegate to the browser hook.
+        expect(defaults.prepareStep).toBeDefined();
+        const result = await defaults.prepareStep!({ stepNumber: 0, tools: {} } as any);
+        expect(browserPrepareStep).toHaveBeenCalled();
+        expect(result).toEqual({ tools: { browser_tool: {} } });
       });
 
-      it('keeps the user prepareStep when defaultOptions already sets one', async () => {
+      it('composes member and user hooks, letting the user hook win per field', async () => {
         const browser = createMockBrowser();
-        const browserPrepareStep = vi.fn();
+        const browserPrepareStep = vi.fn().mockResolvedValue({ tools: { browser_tool: {} } });
         (browser as any).getPrepareStep = () => browserPrepareStep;
 
-        const userPrepareStep = vi.fn();
+        const userPrepareStep = vi.fn().mockResolvedValue({ tools: { user_tool: {} }, maxSteps: 5 });
         const agent = new Agent({
-          id: 'user-prepare-step-wins' as const,
-          name: 'user-prepare-step-wins',
+          id: 'compose-member-user' as const,
+          name: 'compose-member-user',
           instructions: 'test',
           model: createMockModel(),
           browser,
@@ -296,16 +301,24 @@ describe('Agent browser integration', () => {
         });
 
         const defaults = await agent.getDefaultOptions();
-        expect(defaults.prepareStep).toBe(userPrepareStep);
-        expect(browserPrepareStep).not.toHaveBeenCalled();
+        const result = (await defaults.prepareStep!({ stepNumber: 0, tools: {} } as any)) as {
+          tools?: Record<string, unknown>;
+          maxSteps?: number;
+        };
+        expect(browserPrepareStep).toHaveBeenCalled();
+        expect(userPrepareStep).toHaveBeenCalled();
+        // Tools accumulate; both member and user tools present.
+        expect(result.tools).toEqual({ browser_tool: {}, user_tool: {} });
+        // Non-tool fields: user hook wins (ran last).
+        expect(result.maxSteps).toBe(5);
       });
 
-      it('leaves prepareStep undefined when the browser does not expose one', async () => {
+      it('leaves prepareStep undefined when nothing is registered', async () => {
         const browser = createMockBrowser();
-        // No getPrepareStep method defined
+        // No getPrepareStep method defined, no user hook.
         const agent = new Agent({
-          id: 'no-browser-prepare-step' as const,
-          name: 'no-browser-prepare-step',
+          id: 'no-prepare-step' as const,
+          name: 'no-prepare-step',
           instructions: 'test',
           model: createMockModel(),
           browser,
@@ -333,7 +346,7 @@ describe('Agent browser integration', () => {
 
       it('merges with dynamic defaultOptions resolved from a function', async () => {
         const browser = createMockBrowser();
-        const browserPrepareStep = vi.fn();
+        const browserPrepareStep = vi.fn().mockResolvedValue({ tools: { x: {} } });
         (browser as any).getPrepareStep = () => browserPrepareStep;
 
         const agent = new Agent({
@@ -346,8 +359,63 @@ describe('Agent browser integration', () => {
         });
 
         const defaults = await agent.getDefaultOptions();
-        expect(defaults.prepareStep).toBe(browserPrepareStep);
+        expect(defaults.prepareStep).toBeDefined();
+        const result = await defaults.prepareStep!({ stepNumber: 0, tools: {} } as any);
+        expect(result).toEqual({ tools: { x: {} } });
         expect(defaults.maxSteps).toBe(3);
+      });
+
+      it('runs ad-hoc hooks registered via Agent.registerPrepareStep alongside the browser hook', async () => {
+        const browser = createMockBrowser();
+        const browserPrepareStep = vi.fn().mockResolvedValue({ tools: { browser_tool: {} } });
+        (browser as any).getPrepareStep = () => browserPrepareStep;
+
+        const agent = new Agent({
+          id: 'ad-hoc-prepare-step' as const,
+          name: 'ad-hoc-prepare-step',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+        });
+
+        const extraHook = vi.fn().mockResolvedValue({ tools: { extra_tool: {} } });
+        const unregister = agent.registerPrepareStep(extraHook);
+        const defaults = await agent.getDefaultOptions();
+        const result = (await defaults.prepareStep!({ stepNumber: 0, tools: {} } as any)) as {
+          tools?: Record<string, unknown>;
+        };
+        expect(result.tools).toEqual({ browser_tool: {}, extra_tool: {} });
+
+        // Unregistering removes the ad-hoc hook from future composition.
+        unregister();
+        const defaults2 = await agent.getDefaultOptions();
+        const result2 = await defaults2.prepareStep!({ stepNumber: 0, tools: {} } as any);
+        expect(result2).toEqual({ tools: { browser_tool: {} } });
+      });
+
+      it('re-wires the browser hook when setBrowser swaps the browser', async () => {
+        const browserA = createMockBrowser();
+        const hookA = vi.fn().mockResolvedValue({ tools: { from_a: {} } });
+        (browserA as any).getPrepareStep = () => hookA;
+
+        const agent = new Agent({
+          id: 'rewire-set-browser' as const,
+          name: 'rewire-set-browser',
+          instructions: 'test',
+          model: createMockModel(),
+          browser: browserA,
+        });
+
+        const browserB = createMockBrowser();
+        const hookB = vi.fn().mockResolvedValue({ tools: { from_b: {} } });
+        (browserB as any).getPrepareStep = () => hookB;
+        agent.setBrowser(browserB);
+
+        const defaults = await agent.getDefaultOptions();
+        const result = await defaults.prepareStep!({ stepNumber: 0, tools: {} } as any);
+        expect(hookA).not.toHaveBeenCalled();
+        expect(hookB).toHaveBeenCalled();
+        expect(result).toEqual({ tools: { from_b: {} } });
       });
     });
 
