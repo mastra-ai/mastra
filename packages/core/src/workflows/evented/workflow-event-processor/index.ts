@@ -1567,8 +1567,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Mark the resumed step running and keep its resume data next to the
         // suspendPayload, so restart() after a crash mid-resume can re-enter
         // the step with the same resume data instead of re-suspending it
-        // (#25365). Only a still-suspended record is claimed: a redelivered
-        // resume after the step finished must not rewind it.
+        // (#25365). Only a still-suspended record is claimed, so a redelivered
+        // resume after the step finished usually leaves it alone. Like the
+        // guard above, read-then-write narrows the race window rather than
+        // closing it — closing it needs an expectedStatus compare-and-set on
+        // `updateWorkflowResults` across all storage adapters.
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         const storedResult = (snapshot?.context as any)?.[leafId];
         if (storedResult?.status === 'suspended') {
