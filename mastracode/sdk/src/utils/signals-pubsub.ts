@@ -13,7 +13,7 @@ const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
 const LEASE_SOCKET_NAME = '.leases.sock';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
-const RESERVED_SOCKET_NAME = /^agent_thread-(?:peer|owner)-discovery(?:_|$)/;
+const RESERVED_SOCKET_NAME = /^agent_thread-(?:peer|owner)-discovery(?:_|$)/i;
 const MAX_PATH_SEGMENT_LENGTH = 128;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
@@ -112,10 +112,11 @@ function isPeerDiscoveryTopic(topic: string): boolean {
  * Whether a threadId can be the base name of a thread's socket file: no
  * separators or control characters, not `.`/`..`, and not a name another
  * socket in the same directory already uses (the lease socket, and the
- * sanitized peer/owner discovery topics and their reply topics).
+ * sanitized peer/owner discovery topics and their reply topics), compared
+ * case-insensitively because default macOS and Windows filesystems are.
  */
 function isSafeFileName(value: string): boolean {
-  if (!value || value === '.' || value === '..' || `${value}.sock` === LEASE_SOCKET_NAME) return false;
+  if (!value || value === '.' || value === '..' || `${value}.sock`.toLowerCase() === LEASE_SOCKET_NAME) return false;
   if (RESERVED_SOCKET_NAME.test(value)) return false;
   for (const char of value) {
     const code = char.charCodeAt(0);

@@ -671,6 +671,8 @@ describe('SignalsPubSub', () => {
 
       for (const threadId of [
         '.leases',
+        '.Leases',
+        'Agent_Thread-Peer-Discovery',
         'agent_thread-peer-discovery',
         'agent_thread-owner-discovery',
         `agent_thread-peer-discovery_${requestId}`,
