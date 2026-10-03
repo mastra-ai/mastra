@@ -305,8 +305,8 @@ export function parseReflectorOutput(
   sourceObservations?: string,
   extractors: readonly Extractor<any>[] = [],
 ): ReflectorResult {
-  // Check for degenerate repetition before parsing
-  if (detectDegenerateRepetition(output)) {
+  // Long lines are truncated before storage, so check repetition on sanitized text.
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return {
       observations: '',
       degenerate: true,
