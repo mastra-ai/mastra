@@ -1,0 +1,158 @@
+---
+title: 'Connect | Mastra platform'
+description: 'Get started with @mastra/connect: give an agent live toolsets backed by Mastra platform connections, plus channels, raw credentials, and sandbox environments.'
+packages:
+  - '@mastra/connect'
+---
+
+# Connect
+
+`@mastra/connect` turns the [integrations](/docs/mastra-platform/integrations) attached to a Mastra platform project into things your application can use directly:
+
+- [`tools()`](/reference/connect/tools): a live toolset resolver for agents.
+- [`channels()`](/reference/connect/channels): chat channel providers (Slack, Telegram, Discord) for `Mastra({ channels })`.
+- [`environment()`](/reference/connect/environment): credentials materialized as sandbox environment variables.
+- [`credential()`](/reference/connect/credential): the raw credential for a connection, for custom SDK or MCP use.
+
+This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Integrations](/docs/mastra-platform/integrations).
+
+## Prerequisites
+
+- A Mastra platform project with at least one provider connected from the project's Integrations tab.
+- A platform access token for that project.
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/connect
+```
+
+## Configure the environment
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-token
+MASTRA_PROJECT_ID=your-project-id
+```
+
+Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/integrations#environment-variables).
+
+## Give an agent connected tools
+
+[`tools()`](/reference/connect/tools) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools` and Mastra calls it on every generate/stream:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You manage our workspaces.',
+  model: 'openai/gpt-5-mini',
+  tools: tools(),
+})
+```
+
+With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so connecting a new provider in the dashboard makes its tools available to the running server without a restart.
+
+Ask the agent to do something with a connected provider:
+
+```typescript
+const response = await opsAgent.generate('Summarize my open Linear issues.')
+```
+
+The agent sees tools like `linear_list_issues` and `linear_create_issue`; each call is proxied through the platform with the connection's credentials injected server-side.
+
+## Limit what an agent can touch
+
+The `integrations` option is an allowlist. The string-array shorthand enables providers with no overrides:
+
+```typescript
+const opsTools = tools({
+  integrations: ['linear', 'github'],
+})
+```
+
+Use the object form for per-integration control. `allowTools` and `disallowTools` are mutually exclusive per integration, and unknown integration IDs or tool names throw at startup so configuration errors surface early:
+
+```typescript
+const opsTools = tools({
+  integrations: {
+    linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
+    github: { disallowTools: ['github_delete_repository'] },
+    slack: { disabled: true },
+  },
+})
+```
+
+## Resolve toolsets on demand
+
+Call the resolver directly when you want the current tool record, for example for the `toolsets` option at generate time:
+
+```typescript
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+const toolsets = await connected()
+
+const response = await agent.generate('Summarize my open issues.', { toolsets })
+```
+
+The resolver also exposes `invalidate()`, `refresh()`, and `disconnect()`. Call `refresh()` to pick up a connection you just attached without waiting for the TTL.
+
+## Add chat channels
+
+For channel-capable providers, [`channels()`](/reference/connect/channels) resolves the same project connections into `ChannelProvider` instances and plugs into `Mastra({ channels })`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels(),
+})
+```
+
+`channels()` is async: provider instances are constructed up front so their webhook and OAuth routes mount at `Mastra` construction. Slack, Telegram, and Discord are supported, backed by `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`. See the [`channels()` reference](/reference/connect/channels).
+
+## Authenticate a sandbox
+
+Agents that shell out to CLIs inside a sandbox can reuse project connections as environment credentials with [`environment()`](/reference/connect/environment):
+
+```typescript
+import { environment } from '@mastra/connect'
+
+const { env, onStart } = await environment()
+
+const sandbox = new E2BSandbox({
+  env, // GH_TOKEN, GITHUB_TOKEN, …
+  onStart, // wires the git credential helper
+})
+```
+
+GitHub is the first supported provider: its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN`, so `gh` and `git` HTTPS operations authenticate as the connected user.
+
+## Custom interactions with `credential()`
+
+For use cases the toolsets don't cover, such as driving a provider SDK directly, [`credential()`](/reference/connect/credential) fetches the raw credential for a connection:
+
+```typescript
+import { credential } from '@mastra/connect'
+
+const cred = await credential('c_yourconnectionid')
+
+if (cred.type === 'oauth2') {
+  startSdkSession(cred.accessToken)
+} else {
+  startSdkSession(cred.apiKey)
+}
+```
+
+Handle returned credentials carefully. They grant direct access to the provider account and bypass the proxy's guardrails.
+
+## Next steps
+
+- [Integrations: platform setup and configuration](/docs/mastra-platform/integrations)
+- [`tools()` reference](/reference/connect/tools)
+- [Provider toolsets reference](/reference/connect/providers)

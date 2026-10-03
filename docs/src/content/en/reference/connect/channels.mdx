@@ -1,0 +1,126 @@
+---
+title: 'Reference: channels() | Connect'
+description: "API reference for channels() in @mastra/connect: a live channel-provider resolver over a project's platform connections for Slack, Telegram, and Discord."
+packages:
+  - '@mastra/connect'
+---
+
+# channels()
+
+Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable integration (Slack, Telegram, Discord) are constructed once, up front and credential-less, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { channels } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  channels: await channels(),
+})
+```
+
+Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
+
+The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly when you want to configure a channel outside the platform connection flow.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ChannelsOptions',
+    description: 'Optional discovery and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ChannelsOptions',
+        parameters: [
+          {
+            name: 'projectId',
+            type: 'string',
+            description: 'Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID.',
+            isOptional: true,
+          },
+          {
+            name: 'integrations',
+            type: 'ChannelsIntegrationOverrides',
+            description:
+              'Per-integration overrides keyed by integration ID (slack, telegram, discord). See Integration options below.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description:
+              'Platform client overrides (accessToken, orgId, baseUrl, fetch). See ConnectClientOptions in tools().',
+            isOptional: true,
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description:
+              'How long a resolved snapshot stays fresh, in milliseconds. Default 30000. 0 revalidates on every resolution.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### Integration options
+
+Each value in `integrations` is a `ChannelsIntegrationOptions`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'connectionId',
+    type: 'string',
+    description: 'Pin a specific connection ID, bypassing single-active-connection resolution.',
+    isOptional: true,
+  },
+  {
+    name: 'disabled',
+    type: 'boolean',
+    description: 'Exclude this channel entirely. No instance is constructed and no routes are mounted.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, unknown>',
+    description:
+      'Provider-specific options forwarded to the channel provider constructor, for example Discord applicationId and publicKey. Credential fields (botToken, refreshToken) and framework-managed fields (baseUrl, encryptionKey) are reserved: the credential always comes from the platform connection, and reserved fields are rejected at the type level and stripped at runtime with a warning.',
+    isOptional: true,
+  },
+]}
+/>
+
+## The resolver
+
+The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
+
+- **Callable**: returns the current `Record<string, ChannelProvider>` of integrations with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap.
+- `getRoutes()`: the union of API routes for every non-disabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their integration has an active connection.
+- `invalidate()`: drops the cached snapshot; the next resolution fetches fresh.
+- `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
+- `disconnect()`: clears the cached snapshot.
+
+Integrations without an active connection don't appear in the resolved map; their routes stay mounted and begin working once a connection is attached.
+
+Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed integration ID) reject at call time, while per-integration problems (provider construction failure, `needs_reauth`, ambiguity, credential sync failure) are downgraded to warn-and-skip.
+
+## Errors
+
+Throws `MastraConnectError` with a `code` property:
+
+| Code | When |
+| - | - |
+| `missing_project_id` | No project ID configured |
+| `missing_access_token` | No platform token configured |
+| `invalid_options` | Malformed integration ID or invalid `ttlMs` |
+| `no_active_connection` | A channel needed its credential while its integration has no active connection |
+| `unauthorized` | The platform rejected the token (401/403) |
+| `platform_error` | Any other platform request failure |
