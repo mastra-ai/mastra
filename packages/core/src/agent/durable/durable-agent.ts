@@ -2301,6 +2301,7 @@ export class DurableAgent<
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      processorStates: registryEntry.processorStates,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -2752,6 +2753,7 @@ export class DurableAgent<
       closeOnSuspend,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
+      processorStates: entry.processorStates,
       requestContext: resolvedOptions.requestContext,
       // Caller option wins, then the flag persisted at prepare time. Only fall
       // back to resolvedOptions (which merges agent defaultOptions) last, so a
@@ -3372,6 +3374,7 @@ export class DurableAgent<
       closeOnSuspend: true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      processorStates: registryEntry.processorStates,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -3859,6 +3862,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      processorStates: this.#runRegistry.get(runId)?.processorStates,
       returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),

@@ -25,14 +25,8 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
-import type {
-  SpanType,
-  AIModelGenerationSpan,
-  ExportedSpan,
-  IModelSpanTracker,
-  AnySpan,
-} from '../../../../observability';
-import { EntityType, createObservabilityContext } from '../../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -546,7 +540,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
             // and passed through each iteration. This ensures all steps are children of the same span.
+            const registryEntry = globalRunRegistry.get(runId);
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            const processorAgentSpanData = registryEntry?.resumeAgentSpanData ?? inputData.agentSpanData;
+            const processorAgentSpan =
+              registryEntry?.resumeAgentSpan ??
+              registryEntry?.agentSpan ??
+              (processorAgentSpanData && observability
+                ? observability.rebuildSpan(processorAgentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
+                : undefined);
+            const processorObservabilityContext = processorAgentSpan
+              ? createObservabilityContext({ currentSpan: processorAgentSpan })
+              : undefined;
 
             // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
             // after a resume the registry override points steps at the resumed generation.
@@ -577,7 +582,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 : undefined;
 
-            const registryEntry = globalRunRegistry.get(runId);
             const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
             const baseInputProcessors = registryEntry?.inputProcessors ?? resolvedInputProcessors ?? [];
             // Use `llmRequestInputProcessors` (uncombined) because combined
@@ -1627,9 +1631,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       await processAndEmitChunk(clientChunk, {
                         runner: getToolResultRunner(),
                         processorStates: registryEntry.processorStates,
-                        observabilityContext: createObservabilityContext(
-                          modelSpanTracker?.getTracingContext() ?? tracingContext,
-                        ),
+                        observabilityContext: processorObservabilityContext,
                         requestContext,
                         messageList,
                         streamWriter: outputStreamWriter,

@@ -4,7 +4,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
-import type { OutputProcessorOrWorkflow } from '../../processors';
+import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
@@ -141,6 +141,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Processor state map shared with the durable workflow's producer-side processing. */
+  processorStates?: Map<string, ProcessorState>;
   /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
@@ -206,6 +208,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    processorStates,
     returnScorerData,
     requestContext,
     tracingContext,
@@ -715,6 +718,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      processorStates,
       returnScorerData,
       requestContext,
       tracingContext,
