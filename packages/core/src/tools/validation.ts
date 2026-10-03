@@ -588,6 +588,8 @@ export function validateToolInput<T = unknown>(
     currentInput = normalizedStripped;
   }
 
+  let aliasIssues: typeof validation.issues | undefined;
+
   // Step 6: Retry with common prompt alias normalization (GitHub #14154)
   // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
   // using "prompt" to "query", "message", or "input" after repeated sub-agent
@@ -609,6 +611,7 @@ export function validateToolInput<T = unknown>(
         if ('value' in coercedPromptValidation) {
           return { data: coercedPromptValidation.value };
         }
+        aliasIssues = coercedPromptValidation.issues;
       }
     }
   }
@@ -617,8 +620,9 @@ export function validateToolInput<T = unknown>(
   // path-stripped retry's issues: first-pass issues include nulls on optional
   // fields that stripping already resolved, hiding the real failure (GitHub #24539).
   // Otherwise the retry stripped every null (including valid .nullable() values),
-  // so the first-pass issues are the accurate ones.
-  const finalIssues = failingNullPaths.size > 0 ? retryValidation.issues : validation.issues;
+  // so the first-pass issues are the accurate ones. A failed prompt-alias retry
+  // builds on all prior corrections, so its issues take precedence.
+  const finalIssues = aliasIssues ?? (failingNullPaths.size > 0 ? retryValidation.issues : validation.issues);
   const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');

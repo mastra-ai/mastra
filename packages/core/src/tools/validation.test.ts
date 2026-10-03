@@ -2554,4 +2554,13 @@ describe('validateToolInput - combined fallback corrections (GitHub #25825)', ()
     expect(result.error?.message).not.toContain('- args');
     expect(result.error?.message).not.toContain('- note');
   });
+
+  it('reports remaining issues after a failed prompt alias retry', () => {
+    const schema = z.object({ prompt: z.string(), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { query: 'hi', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- prompt');
+    expect(result.error?.message).not.toContain('- note');
+  });
 });
