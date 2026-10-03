@@ -205,6 +205,7 @@ export const { createWorkflow, createStep } = init({
 
 - Workflow ids must be static string literals. The build-time transformer reads the literal value to derive Temporal workflow export names.
 - Activities are generated automatically from `createStep()` handlers. Don't pass them in `Worker.create({ activities })`.
+- Lifecycle hooks (`onStart`, `onFinish`, `onError`) run in the process that calls `start()` or `startAsync()`, not on the Temporal worker. `onStart` runs before the run is sent to Temporal, and an error thrown from it rejects the call. With `startAsync()`, `onFinish` and `onError` run in the background once the Temporal run completes, so they don't fire if that process exits first.
 
 ## Related
 
