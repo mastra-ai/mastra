@@ -92,7 +92,7 @@ export function BoardContent({
     }
     const card = cardForDrop(payload);
     if (!card) return;
-    repositoryChoice.choose(
+    void repositoryChoice.choose(
       card.source,
       card.metadata,
       stage,
@@ -180,7 +180,8 @@ export function BoardContent({
       sort,
       currentUserId,
     );
-  const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
+  const workItemsByStage = new Map(stages.map(stage => [stage.id, workItemsForStage(stage.id)]));
+  const boardWorkItems = [...workItemsByStage.values()].flat();
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
     stages,
@@ -212,7 +213,7 @@ export function BoardContent({
 
   const stageViews = stages.map(stage => {
     const loading = loadingStages.has(stage.id);
-    const stageWorkItems = workItemsForStage(stage.id);
+    const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
     const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
     const composerOpen = composer.stage === stage.id;
@@ -296,7 +297,7 @@ export function BoardContent({
                 onRetryDecision={decisions.retry}
                 onCreateSession={() => void runs.openOrCreateSession(item)}
                 onMove={toStage =>
-                  repositoryChoice.choose(
+                  void repositoryChoice.choose(
                     item.source,
                     item.metadata,
                     toStage,

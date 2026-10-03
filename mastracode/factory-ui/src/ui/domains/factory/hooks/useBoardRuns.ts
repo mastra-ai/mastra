@@ -3,10 +3,9 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
-import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useCardRepositorySlug } from './useCardRepositorySlug';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
-import { cardLinearProjectId, cardRepositorySlug } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -20,7 +19,7 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
-  const intakeConfig = useIntakeConfigQuery();
+  const repositorySlugFor = useCardRepositorySlug();
   const navigate = useNavigate();
   const [repositorySelection, setRepositorySelection] = useState<{
     item: WorkItem;
@@ -65,15 +64,6 @@ export function useBoardRuns({
     return item;
   };
 
-  const repositoryForItem = async (item: WorkItem) => {
-    const projectId = cardLinearProjectId(item.source, item.metadata);
-    if (projectId && !intakeConfig.data) {
-      const refreshedConfig = await intakeConfig.refetch();
-      return cardRepositorySlug(item.source, item.metadata, refreshedConfig.data);
-    }
-    return cardRepositorySlug(item.source, item.metadata, intakeConfig.data);
-  };
-
   const openOrCreateSession = async (item: WorkItem) => {
     if (!beginPreparingItem(item.id, PREPARING_SESSION_LABEL)) return;
     try {
@@ -85,7 +75,7 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed);
-      const targetSlug = await repositoryForItem(refreshed);
+      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
       const hasLinkedTarget = repositories.some(repository => repository.slug === targetSlug);
       if (!targetSlug && repositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
