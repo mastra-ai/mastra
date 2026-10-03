@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -119,6 +120,44 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
 
       expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate.source).toContain('tokenx');
+    });
+  });
+
+  describe('runWithModelContext', () => {
+    it('reuses one AsyncLocalStorage across instances so per-request counters do not register new ones', async () => {
+      const runSpy = vi.spyOn(AsyncLocalStorage.prototype, 'run');
+      try {
+        for (let i = 0; i < 25; i++) {
+          await new TokenCounter().runWithModelContext('openai/gpt-4o', async () => {});
+        }
+
+        expect(runSpy).toHaveBeenCalledTimes(25);
+        expect(new Set(runSpy.mock.contexts).size).toBe(1);
+      } finally {
+        runSpy.mockRestore();
+      }
+    });
+
+    it('scopes model context per instance across awaits and nesting', async () => {
+      const a = new TokenCounter({ model: 'anthropic/claude-sonnet-4-5' });
+      const b = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+
+      await a.runWithModelContext('openai/gpt-4o', async () => {
+        await Promise.resolve();
+        expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+        expect(contextOf(b)).toBeUndefined();
+
+        await b.runWithModelContext({ provider: 'google', modelId: 'gemini-2.5-flash' }, async () => {
+          await Promise.resolve();
+          expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+          expect(contextOf(b)).toEqual({ provider: 'google', modelId: 'gemini-2.5-flash' });
+        });
+
+        expect(contextOf(b)).toBeUndefined();
+      });
+
+      expect(contextOf(a)).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4-5' });
     });
   });
 
