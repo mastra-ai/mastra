@@ -19,7 +19,7 @@ const root = process.argv[2];
 const providersDir = join(root, 'packages/connect/src/providers');
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['twitter-v2']);
+const EXCLUDE = new Set(['stripe', 'twitter-v2']);
 
 const DISPLAY = {
   anthropic: 'Anthropic',
@@ -44,7 +44,6 @@ const DISPLAY = {
   resend: 'Resend',
   slack: 'Slack',
   snowflake: 'Snowflake',
-  stripe: 'Stripe',
   supabase: 'Supabase',
   workos: 'WorkOS',
 };
@@ -72,7 +71,6 @@ const LOGOS = {
   resend: { slug: 'resend', mono: true },
   slack: { slug: 'slack' },
   snowflake: { slug: 'snowflake' },
-  stripe: { slug: 'stripe' },
   supabase: { slug: 'supabase' },
   workos: { slug: 'workos', mono: true },
 };
