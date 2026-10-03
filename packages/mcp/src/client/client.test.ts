@@ -864,21 +864,35 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     });
   });
 
-  it('should accept boolean input schemas without throwing and preserve false', async () => {
+  it('should skip tools with a boolean root input schema and keep valid siblings usable', async () => {
     const sdkClient = (client as any).client as Client;
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
+        // A boolean root is valid JSON Schema (2020-12) but not a valid MCP tool
+        // input schema: the provider-facing schema it would become carries no
+        // `type: "object"`, which is one of the shapes that make a strict
+        // provider reject the entire tools array instead of one tool.
         { name: 'always_valid', inputSchema: true as any },
         { name: 'always_invalid', inputSchema: false as any },
+        {
+          name: 'valid_sibling',
+          inputSchema: { type: 'object' as const, properties: { coin: { type: 'string' as const } } },
+        },
       ],
     });
+    const warnSpy = vi.spyOn((client as any).logger, 'warn');
 
     const tools = await client.tools();
 
-    expect(tools.always_valid).toBeDefined();
-    expect(tools.always_invalid).toBeDefined();
-    const storedSchema = tools.always_invalid.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
-    expect(storedSchema).toEqual({ not: {} });
+    expect(Object.keys(tools)).toEqual(['valid_sibling']);
+    expect(tools.valid_sibling).toBeDefined();
+    const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+    expect(warnMessages).toContain(
+      'Skipping MCP tool "always_valid" from server "output-schema-test-client": invalid input schema (must be an object schema)',
+    );
+    expect(warnMessages).toContain(
+      'Skipping MCP tool "always_invalid" from server "output-schema-test-client": invalid input schema (must be an object schema)',
+    );
   });
 
   it('should preserve recursive $ref input schemas when creating tools', async () => {

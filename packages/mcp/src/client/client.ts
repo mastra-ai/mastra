@@ -165,11 +165,6 @@ const SUPPORTED_DIALECTS = new Set([
  * faithfully, so tool calls are not rejected before they run.
  */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
-  // Boolean schemas are valid (2020-12) and must be preserved verbatim —
-  // spreading `false` would produce an unconstrained object schema. The guard
-  // must run before the dialect logic below, which would spread `false` into
-  // an unconstrained object schema via the `{ ...schema, $schema }` branch.
-  if (typeof schema === 'boolean') return schema;
   if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
   if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
   return toJsonSchema2020(schema) ?? schema;
@@ -1307,7 +1302,13 @@ export class InternalMastraMCPClient extends MastraBase {
     if (depth > MAX_JSON_SCHEMA_DEPTH) {
       return `exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
     }
-    if (typeof schema === 'boolean') return null; // `true`/`false` are valid JSON Schema (2020-12)
+    // A boolean subschema is valid JSON Schema (2020-12) and stays valid where it
+    // appears nested (`unevaluatedProperties: false`, a tuple's boolean
+    // `additionalItems`). Only the root is rejected: MCP requires a tool input
+    // schema to have an object root, and the provider-facing schema a boolean
+    // becomes carries no `type: "object"`, which is one of the shapes that make a
+    // provider reject the whole tools array rather than a single tool.
+    if (typeof schema === 'boolean') return depth === 0 ? 'must be an object schema' : null;
     if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
       return 'expected a schema object';
     }
@@ -1462,29 +1463,11 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    // Boolean schemas are valid JSON Schema (2020-12); `in` would throw on them.
-    const rawSchema = (
-      typeof inputSchema === 'boolean' ? inputSchema : 'jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema
-    ) as JSONSchema7;
-
-    const schema = typeof rawSchema === 'boolean' ? rawSchema : this.normalizeMisplacedRequired(rawSchema);
-
+    // Only reachable with an object schema: buildToolFromListEntry skips a tool
+    // whose input schema has a boolean root before it gets here.
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    const schema = this.normalizeMisplacedRequired(rawSchema);
     const dialectSchema = withDefaultDialect(schema);
-    // toStandardSchema cannot represent boolean schemas; wrap them directly —
-    // `true` accepts everything, `false` rejects everything (JSON Schema 2020-12).
-    if (typeof dialectSchema === 'boolean') {
-      return {
-        '~standard': {
-          version: 1,
-          vendor: 'mastra-mcp-client',
-          jsonSchema: {
-            input: () => (dialectSchema ? {} : { not: {} }),
-            output: () => (dialectSchema ? {} : { not: {} }),
-          },
-          validate: (value: unknown) => (dialectSchema ? { value } : { issues: [{ message: 'schema rejects all values (false)' }] }),
-        },
-      };
-    }
     const standardSchema = toStandardSchema(dialectSchema);
     const complexityError = getJsonSchemaComplexityError(dialectSchema);
     if (!complexityError) return standardSchema;
@@ -1616,6 +1599,8 @@ export class InternalMastraMCPClient extends MastraBase {
       // Validate before building so one malformed schema cannot poison the
       // whole tools array at the provider. The malformed tool is skipped with
       // a warning naming the server and the tool; valid siblings stay usable.
+      // A boolean root is unwrapped without `in` (which throws on it) and then
+      // rejected by the shape check, deliberately rather than by that throw.
       const rawInputSchema = (
         typeof tool.inputSchema === 'boolean' ? tool.inputSchema : 'jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema
       ) as JSONSchema7;
