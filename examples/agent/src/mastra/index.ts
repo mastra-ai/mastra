@@ -238,6 +238,8 @@ export const mastra = new Mastra({
     auth: serverAuth ?? mastraAuth,
     rbac: serverRbac ?? rbacProvider,
     fga: serverFga ?? fgaProvider,
+    // Attachments travel as base64 in the request body: 20 MB leaves room for the 10 MB FileUploadProcessor limit.
+    bodySizeLimit: 20 * 1024 * 1024,
   },
   studio: studioAuth
     ? {

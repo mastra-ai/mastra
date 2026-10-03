@@ -356,9 +356,9 @@ const AgentComposer = ({
     },
     [],
   );
-  const [preparationError, setPreparationError] = useState<string>();
+  const [submitError, setSubmitError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, restore, isAddingAttachments } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
@@ -384,8 +384,23 @@ const AgentComposer = ({
       return;
     preparing.current = true;
     const currentLifetime = lifetime.current;
-    const submittedIds = new Set(attachments.map(attachment => attachment.id));
-    setPreparationError(undefined);
+    const submittedAttachments = attachments;
+    const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
+    // A message the server never received goes back in the composer, next to anything typed since.
+    const restoreSubmission = () => {
+      if (lifetime.current !== currentLifetime) return;
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: previous.text || text,
+          attachments: [...submittedAttachments, ...previous.attachments],
+        }));
+      else {
+        setThreadInput(previous => previous || text);
+        restore(submittedAttachments);
+      }
+      setSubmitError('Your message could not be sent. Your draft has been restored.');
+    };
+    setSubmitError(undefined);
     try {
       const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
       if (lifetime.current !== currentLifetime) return;
@@ -400,10 +415,12 @@ const AgentComposer = ({
         clear();
       }
       setSendPulseKey(k => k + 1);
-      send({ message: text, attachments: coreUserMessages });
+      void Promise.resolve(send({ message: text, attachments: coreUserMessages })).then(delivered => {
+        if (delivered === false) restoreSubmission();
+      });
     } catch {
       if (lifetime.current === currentLifetime)
-        setPreparationError('Attachments could not be prepared. Your draft has been kept.');
+        setSubmitError('Attachments could not be prepared. Your draft has been kept.');
     } finally {
       preparing.current = false;
     }
@@ -414,9 +431,9 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
-      {(preparationError || draftStatus?.error) && (
+      {(submitError || draftStatus?.error) && (
         <p role="alert" className="text-ui-sm">
-          {preparationError || draftStatus?.error}
+          {submitError || draftStatus?.error}
         </p>
       )}
       {draftStatus?.restoring && (

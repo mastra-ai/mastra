@@ -35,7 +35,8 @@ export interface RunningContextValue {
 }
 
 export interface SendContextValue {
-  send: (args: ChatSendArgs) => void;
+  /** Resolves to `false` when the message never reached the server, so the composer can put it back. */
+  send: (args: ChatSendArgs) => void | Promise<boolean>;
 }
 
 export interface TasksContextValue {

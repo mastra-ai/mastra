@@ -1,0 +1,334 @@
+---
+title: "Reference: FileUploadProcessor | Processors"
+description: "The FileUploadProcessor uploads files from user messages to a workspace sandbox and gives the model the sandbox path instead of the file content."
+packages:
+  - "@mastra/core"
+---
+
+# FileUploadProcessor
+
+The `FileUploadProcessor` uploads files attached to user messages to a [workspace sandbox](/reference/workspace/sandbox) and replaces each file with a text reference to its path. The model receives the path and never the file content. The agent works on the file with its sandbox tools.
+
+A file that matches the configured filters never reaches the model. When the processor can't upload it, the processor stops the turn instead of letting the file through.
+
+The processor requires an agent with [memory](/docs/memory/overview) and a thread. The replaced message is what gets stored, which is why the same file isn't uploaded again on the next turn.
+
+## Usage example
+
+Pass the same workspace to the agent and to the processor:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { FileUploadProcessor } from '@mastra/core/processors'
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+})
+
+export const agent = new Agent({
+  id: 'file-agent',
+  name: 'file-agent',
+  instructions: 'Work on the files the user uploads to the sandbox.',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  memory: new Memory(),
+  workspace,
+  inputProcessors: [
+    new FileUploadProcessor({
+      workspace,
+      mimeTypes: ['application/pdf', 'image/*'],
+      extensions: ['csv', 'xlsx'],
+    }),
+  ],
+})
+```
+
+Set a size limit per file with `maxFileSize`. The function returns a number of bytes:
+
+```typescript
+import { FileUploadProcessor } from '@mastra/core/processors'
+
+const megabyte = 1024 * 1024
+
+const fileUpload = new FileUploadProcessor({
+  workspace,
+  maxFileSize: ({ mimeType }) => (mimeType.startsWith('image/') ? 5 * megabyte : 25 * megabyte),
+})
+```
+
+Read the reason when the processor stops a turn. The tripwire metadata is typed as `unknown`, so cast it to `FileUploadTripwireMetadata`:
+
+```typescript
+import { FILE_UPLOAD_ERROR_CODES } from '@mastra/core/processors'
+import type { FileUploadTripwireMetadata } from '@mastra/core/processors'
+
+const result = await agent.generate(messages, {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+})
+
+if (result.tripwire?.processorId === 'file-upload') {
+  const { code, fileName } = result.tripwire.metadata as FileUploadTripwireMetadata
+
+  if (code === FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE) {
+    console.error(`${fileName} is too large`)
+  }
+}
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      "Workspace whose sandbox receives the files. Pass the agent's workspace. The constructor throws when the workspace has no sandbox configured.",
+    isOptional: false,
+  },
+  {
+    name: 'mimeTypes',
+    type: 'string[]',
+    description:
+      "MIME types to upload. Matching ignores case and MIME parameters, so 'text/plain; charset=utf-8' matches 'text/plain'. Use 'image/*' to match a whole type.",
+    isOptional: true,
+  },
+  {
+    name: 'extensions',
+    type: 'string[]',
+    description:
+      "File extensions to upload, with or without the leading dot. Matching ignores case. The extension is read from the file name, so a file without a name can't match an extension.",
+    isOptional: true,
+  },
+  {
+    name: 'excludeMimeTypes',
+    type: 'string[]',
+    description:
+      'MIME types to never upload, written like `mimeTypes`. A file of an excluded type reaches the model, even when it matches `mimeTypes` or `extensions`.',
+    isOptional: true,
+  },
+  {
+    name: 'maxFileSize',
+    type: '(file: { fileName?: string; mimeType: string; extension?: string }) => number',
+    description:
+      'Returns the largest accepted size in bytes for a file. `fileName` and `extension` are undefined for a file sent without a name. The function must return a non-negative number; anything else stops the turn.',
+    isOptional: true,
+    defaultValue: '10 MB for every file',
+  },
+]}
+/>
+
+## Instance properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'file-upload'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'File Upload'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: ProcessInputArgs) => Promise<MessageList>',
+    description:
+      'Runs once per call. Checks memory and the sandbox, then uploads the files of the new messages. Handles `agent.generate()`, `agent.stream()`, and a signal that wakes an idle agent.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Runs before each model call. Uploads the files of a signal delivered to a run that is already active.',
+    isOptional: false,
+  },
+  {
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => void',
+    description:
+      'Runs on the final prompt. Stops the turn when a matching file sent by the user is still in it, whatever path the file took to get there.',
+    isOptional: false,
+  },
+]}
+/>
+
+## File selection
+
+A file is uploaded when its MIME type is in `mimeTypes` or its extension is in `extensions`. When you set neither option, every file is uploaded.
+
+A file that doesn't match is left untouched and reaches the model as usual.
+
+Use `excludeMimeTypes` to keep some types out of the sandbox. An excluded file is never uploaded, whatever the other two options say. Set it alone to upload every file except the types the model reads itself:
+
+```typescript
+import { FileUploadProcessor } from '@mastra/core/processors'
+
+const fileUpload = new FileUploadProcessor({
+  workspace,
+  excludeMimeTypes: ['image/*', 'application/pdf'],
+})
+```
+
+The processor only looks at messages added during the current request, with the `user` or `signal` role. It never changes messages recalled from memory, and it ignores files produced by the assistant.
+
+Files can arrive in any of these forms:
+
+| Source | Behavior |
+| - | - |
+| Inline data: binary, base64, or a data URL | Decoded and uploaded |
+| `http` or `https` URL | Downloaded by the server that runs the agent, then uploaded |
+| Any other reference, such as a `gs://` URL or a provider file ID | Stops the turn with `UNSUPPORTED_FILE_SOURCE` |
+
+## Upload location
+
+Files are written to `uploads/<thread>/<uuid>.<extension>`, relative to the sandbox working directory. Each thread has its own directory, so threads that share a sandbox don't mix their files.
+
+The path keeps nothing of the original name but its extension. A path that looks like the name invites the model to retype one from the other, and to ask the sandbox for a file that doesn't exist. The name stays available in the note and in the message metadata.
+
+| Name sent | Path written |
+| - | - |
+| `report Q3 (final).pdf` | `uploads/<thread>/<uuid>.pdf` |
+| `résumé.PDF` | `uploads/<thread>/<uuid>.pdf` |
+| `../../etc/passwd` | `uploads/<thread>/<uuid>` |
+| No name, `image/png` | `uploads/<thread>/<uuid>.png` |
+
+A file sent without a name takes its extension from its MIME type when the type is a common one.
+
+The thread ID is rewritten so the directory is safe in a shell command. Accents are removed, and every character outside `A-Z`, `a-z`, `0-9`, `.`, `_`, and `-` becomes `_`. Path separators and `..` are replaced too, so a file always stays inside `uploads/`.
+
+The processor writes with the sandbox `writeFiles` method when the sandbox has one, in a single call for all the files of a turn. Otherwise it writes with `executeCommand`, sending each file as base64 in chunks. This path needs `sh`, `base64`, `printf`, and `mkdir` in the sandbox.
+
+## Message content after upload
+
+The file part is replaced, at the same position in the message, by a text part:
+
+```text
+[File uploaded to the sandbox]
+path: uploads/thread-1/3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f.pdf
+name: report.pdf
+type: application/pdf
+size: 1258291 bytes
+```
+
+The processor also records each upload in the message metadata. The metadata is stored with the message and isn't sent to the model, so a client can render the attachment without parsing the text:
+
+```typescript
+message.content.metadata.fileUploads
+// [{ name: 'report.pdf', path: 'uploads/thread-1/<uuid>.pdf', mimeType: 'application/pdf', size: 1258291 }]
+```
+
+`name` is omitted for a file sent without a name.
+
+## Error behavior
+
+The constructor throws a `MastraError` with the ID `FILE_UPLOAD_PROCESSOR_NO_SANDBOX` when `workspace` is missing or has no sandbox configured. `error.details.code` is `NO_SANDBOX`.
+
+Every other failure stops the turn by calling `abort()` with `retry: false`. The model isn't called. `agent.generate()` resolves with `result.tripwire` set instead of rejecting, and `agent.stream()` emits a `tripwire` chunk.
+
+The tripwire metadata has this shape:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'processorId',
+    type: "'file-upload'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'code',
+    type: 'FileUploadErrorCode',
+    description: 'One of the values of `FILE_UPLOAD_ERROR_CODES`.',
+    isOptional: false,
+  },
+  {
+    name: 'fileName',
+    type: 'string',
+    description: 'Name of the file that caused the stop, when a file did and it has a name.',
+    isOptional: true,
+  },
+  {
+    name: 'mimeType',
+    type: 'string',
+    description: 'MIME type of that file.',
+    isOptional: true,
+  },
+  {
+    name: 'size',
+    type: 'number',
+    description: 'Size of the file in bytes. Set with `FILE_TOO_LARGE`.',
+    isOptional: true,
+  },
+  {
+    name: 'maxFileSize',
+    type: 'number',
+    description: 'Limit the file was checked against, in bytes. Set with `FILE_TOO_LARGE`.',
+    isOptional: true,
+  },
+  {
+    name: 'cause',
+    type: 'string',
+    description: 'Message of the underlying error, or the invalid value returned by `maxFileSize`.',
+    isOptional: true,
+  },
+  {
+    name: 'orphanPaths',
+    type: 'string[]',
+    description:
+      'Sandbox paths that may still exist because cleanup after a failed upload did not succeed. Set with `UPLOAD_FAILED`.',
+    isOptional: true,
+  },
+]}
+/>
+
+`FILE_UPLOAD_ERROR_CODES` lists every code:
+
+| Code | When it happens |
+| - | - |
+| `MEMORY_REQUIRED` | The agent has no memory, the call has no thread, or memory is read-only |
+| `NO_SANDBOX` | The workspace resolved no sandbox for the request, or resolving it failed |
+| `NO_WRITE_CAPABILITY` | The sandbox has neither `writeFiles` nor `executeCommand` |
+| `INVALID_MAX_FILE_SIZE` | `maxFileSize` threw, or returned something other than a non-negative number |
+| `UNSUPPORTED_FILE_SOURCE` | A matching file is neither inline data nor an `http` or `https` URL |
+| `INVALID_FILE_DATA` | The inline data of a matching file can't be decoded |
+| `FILE_DOWNLOAD_FAILED` | A matching file sent as a URL can't be downloaded |
+| `FILE_TOO_LARGE` | A matching file is larger than its limit |
+| `UPLOAD_FAILED` | Writing to the sandbox failed |
+| `FILE_NOT_UPLOADED` | A matching file is still in the prompt right before the model call |
+
+`MEMORY_REQUIRED`, `NO_SANDBOX`, and `NO_WRITE_CAPABILITY` are checked at the start of every call, including calls without a file. A setup problem shows on the first call instead of the first upload.
+
+All the files of a turn are checked before the first write. One file that fails stops the whole turn, and nothing is uploaded.
+
+When a write fails, the processor removes the files it wrote during the turn with `rm -f` before it stops the turn. If the removal fails, or the sandbox can't run commands, `orphanPaths` lists the paths that may remain.
+
+Before it stops a turn, the processor replaces every matching file of that turn with a `[File not uploaded]` note. A stopped turn can still be stored, for example on a durable agent, and this keeps raw files out of the thread.
+
+## Files sent with signals
+
+The processor handles files sent with `agent.sendMessage()` and `agent.sendSignal()`:
+
+- A signal that wakes an idle agent is processed like the input of `agent.stream()`.
+- A signal delivered to an active run is processed before the next model call of that run.
+
+## Limitations
+
+- **Stored messages with a raw file.** A message stored without going through the processor keeps its file. This happens with a signal sent with the `persist` behavior, and with threads created before you added the processor. The processor doesn't change stored messages, so each turn on that thread stops with `FILE_NOT_UPLOADED` until the message is removed.
+- **Durable agents and early signals.** On a durable agent, a signal that arrives before the first model call of a run isn't uploaded. The turn stops with `FILE_NOT_UPLOADED`.
+- **Relative paths with `writeFiles`.** Each sandbox provider resolves the relative `uploads/` path itself. Check that your provider resolves it against the directory where commands run.
+- **Downloads.** A file sent as a URL is downloaded in full before its size is checked.
+- **Images in the prompt.** Mastra detects the type of an image from its content when it builds the prompt. An image sent with another MIME type can be detected there and stop the turn with `FILE_NOT_UPLOADED`.
+- **Processor workflows.** The check on the final prompt doesn't run when the processor is nested in a processor workflow.
+
+## Related
+
+- [Processors](/docs/agents/processors)
+- [Sandbox](/reference/workspace/sandbox)
+- [Workspace class](/reference/workspace/workspace-class)

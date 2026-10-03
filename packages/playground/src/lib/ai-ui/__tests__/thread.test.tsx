@@ -927,6 +927,37 @@ describe('Thread', () => {
     });
   });
 
+  describe('when the server rejects the message', () => {
+    it('puts the text and the attachment back in the composer', async () => {
+      let requests = 0;
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          requests++;
+          return HttpResponse.json({ error: 'Request body too large' }, { status: 413 });
+        }),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+      const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!picker) throw new Error('File picker is missing');
+      fireEvent.change(picker, { target: { files: [new File([new Uint8Array([80, 75, 3, 4])], 'leads.xlsx')] } });
+      await screen.findByRole('button', { name: 'Remove leads.xlsx' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requests).toBeGreaterThan(0));
+
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+      expect(textarea.value).toBe('Read my spreadsheet');
+      expect(screen.getByRole('button', { name: 'Remove leads.xlsx' })).toBeTruthy();
+    }, 10_000);
+  });
+
   describe('when a text attachment is added by URL', () => {
     it('links to the original URL instead of offering an empty file preview', async () => {
       const url = 'https://files.example.com/leads.csv';

@@ -106,6 +106,16 @@ export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type Skil
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {
+  FileUploadProcessor,
+  FILE_UPLOAD_ERROR_CODES,
+  type FileUploadErrorCode,
+  type FileUploadMaxFileSize,
+  type FileUploadMaxFileSizeArgs,
+  type FileUploadProcessorOptions,
+  type FileUploadRecord,
+  type FileUploadTripwireMetadata,
+} from './file-upload';
+export {
   ResponseCache,
   DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
   RESPONSE_CACHE_CONTEXT_KEY,
