@@ -53,32 +53,53 @@ interface SessionEntry extends AcpSessionRuntime {
 
 const TERMINAL_LOGIN_METHOD_ID = 'mastracode-login';
 const BROWSER_LOGIN_PROVIDER_IDS = ['openai-codex', 'kimi-for-coding', 'xai'];
+const TERMINAL_LOGIN_PROVIDER_IDS = ['anthropic', 'github-copilot'];
+
+function terminalLogin(id: string, name: string, description: string, loginArgs: string[]): AuthMethod {
+  return {
+    id,
+    name,
+    description,
+    type: 'terminal',
+    args: loginArgs,
+    _meta: {
+      'terminal-auth': {
+        command: process.execPath,
+        args: [...process.argv.slice(1, 2), ...loginArgs],
+        label: name,
+      },
+    },
+  };
+}
 
 function listAuthMethods({ auth, _meta }: InitializeRequest['clientCapabilities'] = {}): AuthMethod[] {
-  const methods: AuthMethod[] = getOAuthProviders()
+  const providers = getOAuthProviders();
+  const methods: AuthMethod[] = providers
     .filter(provider => BROWSER_LOGIN_PROVIDER_IDS.includes(provider.id))
     .map(provider => ({
       id: provider.id,
       name: `Log in with ${provider.name}`,
       description: 'Opens your browser to sign in',
     }));
-  if (auth?.terminal || _meta?.['terminal-auth'] === true) {
-    methods.push({
-      id: TERMINAL_LOGIN_METHOD_ID,
-      name: 'Log in with Mastra Code',
-      description: 'Sign in to another provider or add an API key in a terminal',
-      type: 'terminal',
-      args: ['login'],
-      _meta: {
-        'terminal-auth': {
-          command: process.execPath,
-          args: [...process.argv.slice(1, 2), 'login'],
-          label: 'Mastra Code Login',
-        },
-      },
-    });
-  }
-  return methods;
+  if (!auth?.terminal && _meta?.['terminal-auth'] !== true) return methods;
+  return [
+    ...methods,
+    ...providers
+      .filter(provider => TERMINAL_LOGIN_PROVIDER_IDS.includes(provider.id))
+      .map(provider =>
+        terminalLogin(provider.id, `Log in with ${provider.name}`, 'Sign in from a terminal', [
+          'login',
+          '--provider',
+          provider.id,
+        ]),
+      ),
+    terminalLogin(
+      TERMINAL_LOGIN_METHOD_ID,
+      'Log in with Mastra Code',
+      'Sign in to another provider or add an API key from a terminal',
+      ['login'],
+    ),
+  ];
 }
 
 function hasUsableModel(available: { id: string; hasApiKey: boolean }[], currentModelId: string): boolean {
@@ -156,7 +177,7 @@ export class MastraCodeAcpAgent implements Agent {
   }
 
   async authenticate({ methodId }: AuthenticateRequest): Promise<void> {
-    if (methodId === TERMINAL_LOGIN_METHOD_ID) return;
+    if (methodId === TERMINAL_LOGIN_METHOD_ID || TERMINAL_LOGIN_PROVIDER_IDS.includes(methodId)) return;
     if (!BROWSER_LOGIN_PROVIDER_IDS.includes(methodId)) {
       throw RequestError.invalidParams(undefined, `Unknown authentication method: ${methodId}`);
     }

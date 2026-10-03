@@ -6,4 +6,7 @@ Added `mastracode login` to sign in to a provider or save an API key from the te
 
 ```bash
 mastracode login
+mastracode login --provider anthropic
 ```
+
+Pass `--provider` to skip the menu and go straight to that provider's sign-in.

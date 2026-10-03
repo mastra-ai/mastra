@@ -136,8 +136,12 @@ describe('ACP JSON-RPC conversation', () => {
   it.each([
     ['without terminal support', {}, []],
     ['when terminal auth is turned off', { auth: { terminal: false } }, []],
-    ['with terminal auth', { auth: { terminal: true } }, ['mastracode-login']],
-    ['with the legacy terminal-auth flag', { _meta: { 'terminal-auth': true } }, ['mastracode-login']],
+    ['with terminal auth', { auth: { terminal: true } }, ['anthropic', 'github-copilot', 'mastracode-login']],
+    [
+      'with the legacy terminal-auth flag',
+      { _meta: { 'terminal-auth': true } },
+      ['anthropic', 'github-copilot', 'mastracode-login'],
+    ],
   ])(
     'offers browser sign-in, and terminal login only to clients that can run it, %s',
     async (_case, clientCapabilities, terminal) => {
@@ -148,22 +152,20 @@ describe('ACP JSON-RPC conversation', () => {
     },
   );
 
-  it('launches the login command for terminal login', async () => {
+  it.each([
+    ['anthropic', ['login', '--provider', 'anthropic']],
+    ['github-copilot', ['login', '--provider', 'github-copilot']],
+    ['mastracode-login', ['login']],
+  ])('launches the login command for the %s terminal method', async (methodId, args) => {
     const { client } = await connect();
     const { authMethods } = await client.initialize({
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: { auth: { terminal: true } },
     });
-    expect(authMethods?.at(-1)).toMatchObject({
+    expect(authMethods?.find(method => method.id === methodId)).toMatchObject({
       type: 'terminal',
-      args: ['login'],
-      _meta: {
-        'terminal-auth': {
-          command: process.execPath,
-          args: [...process.argv.slice(1, 2), 'login'],
-          label: 'Mastra Code Login',
-        },
-      },
+      args,
+      _meta: { 'terminal-auth': { command: process.execPath, args: [...process.argv.slice(1, 2), ...args] } },
     });
   });
 
@@ -213,12 +215,14 @@ describe('ACP JSON-RPC conversation', () => {
     expect(seedProviderOMDefault).not.toHaveBeenCalled();
   });
 
-  it('accepts terminal login without running a flow and rejects unknown methods', async () => {
+  it('accepts terminal logins without running a flow and rejects unknown methods', async () => {
     const login = vi.spyOn(AuthStorage.prototype, 'login');
     const { client } = await connect();
     await client.authenticate({ methodId: 'mastracode-login' });
+    await client.authenticate({ methodId: 'anthropic' });
+    await client.authenticate({ methodId: 'github-copilot' });
     expect(login).not.toHaveBeenCalled();
-    await expect(client.authenticate({ methodId: 'anthropic' })).rejects.toMatchObject({
+    await expect(client.authenticate({ methodId: 'nope' })).rejects.toMatchObject({
       message: expect.stringContaining('Unknown authentication method'),
     });
   });

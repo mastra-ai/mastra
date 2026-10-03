@@ -18,6 +18,7 @@ function run(
   login?: (providerId: string, callbacks: OAuthLoginCallbacks) => Promise<void>,
   isTTY = false,
   typedKey?: string,
+  args: string[] = [],
 ) {
   const input = Object.assign(new PassThrough(), { isTTY });
   const piped = answers.map(answer => `${answer}\n`).join('');
@@ -37,6 +38,7 @@ function run(
   };
   const openUrl = vi.fn();
   const exitCode = runLoginCommand({
+    args,
     input,
     output,
     authStorage: authStorage as unknown as AuthStorage,
@@ -101,6 +103,26 @@ describe('runLoginCommand', () => {
     await expect(exitCode).resolves.toBe(1);
     expect(output()).toContain('Sign-in failed: Input ended before sign-in finished');
     expect(authStorage.setStoredApiKey).not.toHaveBeenCalled();
+  });
+
+  it.each([[['--provider', 'github-copilot']], [['--provider=github-copilot']]])(
+    'signs in to the provider named by %j without showing the menu',
+    async args => {
+      const { exitCode, authStorage, output } = run([], undefined, false, undefined, args);
+      await expect(exitCode).resolves.toBe(0);
+      expect(authStorage.login).toHaveBeenCalledWith('github-copilot', expect.anything());
+      expect(output()).not.toContain('Choose an option');
+    },
+  );
+
+  it.each([
+    ['an unknown provider', ['--provider', 'nope'], 'Unknown provider: nope. Use one of: anthropic'],
+    ['an unknown flag', ['--nope'], "Unknown option '--nope'"],
+  ])('rejects %s without signing in', async (_case, args, message) => {
+    const { exitCode, authStorage, output } = run([], undefined, false, undefined, args);
+    await expect(exitCode).resolves.toBe(1);
+    expect(output()).toContain(message);
+    expect(authStorage.login).not.toHaveBeenCalled();
   });
 
   it('reports a failed sign-in without seeding the memory model', async () => {

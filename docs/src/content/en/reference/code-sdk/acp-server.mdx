@@ -40,7 +40,11 @@ After initialization, the client calls `session/new` with an absolute `cwd` and 
 | `openai-codex` | Agent | Opens the browser to sign in with a ChatGPT Plus or Pro subscription. |
 | `kimi-for-coding` | Agent | Opens the browser to approve a Kimi For Coding device sign-in. |
 | `xai` | Agent | Opens the browser to approve an xAI device sign-in. |
-| `mastracode-login` | Terminal | Runs `mastracode login` in a terminal to sign in to any provider or save an API key. Offered only to clients that advertise terminal authentication. |
+| `anthropic` | Terminal | Runs `mastracode login --provider anthropic` to sign in with a Claude Pro or Max subscription. |
+| `github-copilot` | Terminal | Runs `mastracode login --provider github-copilot` to sign in with GitHub Copilot. |
+| `mastracode-login` | Terminal | Runs `mastracode login` to choose any provider or save an API key. |
+
+Terminal methods are offered only to clients that advertise terminal authentication.
 
 For agent methods, `authenticate` runs the sign-in inside the server process and returns after the credentials are saved. If a provider needs typed input, such as a code to paste, the request fails and asks you to run `mastracode login` in a terminal.
 

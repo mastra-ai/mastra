@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 import type { Readable } from 'node:stream';
+import { parseArgs } from 'node:util';
 import { AuthStorage, getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import type { OAuthProviderInterface } from '@mastra/code-sdk/auth/types';
 import { seedProviderOMDefault } from '@mastra/code-sdk/onboarding/om-settings';
@@ -10,6 +11,7 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 type Ask = (prompt: string) => Promise<string>;
 
 interface LoginCommandOptions {
+  args?: string[];
   input?: Readable & { isTTY?: boolean };
   output?: NodeJS.WritableStream;
   authStorage?: AuthStorage;
@@ -71,6 +73,7 @@ async function addApiKey(
 }
 
 export async function runLoginCommand({
+  args = [],
   input = process.stdin,
   output = process.stdout,
   authStorage = new AuthStorage(),
@@ -93,8 +96,18 @@ export async function runLoginCommand({
     return line.value;
   };
   try {
-    say('Sign in to Mastra Code');
     const providers = getOAuthProviders();
+    const { values } = parseArgs({ args, options: { provider: { type: 'string' } } });
+    if (values.provider !== undefined) {
+      const provider = providers.find(({ id }) => id === values.provider);
+      if (!provider) {
+        const ids = providers.map(({ id }) => id).join(', ');
+        throw new Error(`Unknown provider: ${values.provider}. Use one of: ${ids}`);
+      }
+      await signIn(ask, provider, authStorage, openUrl, say);
+      return 0;
+    }
+    say('Sign in to Mastra Code');
     const index = await choose(ask, [...providers.map(provider => provider.name), 'Add an API key'], say);
     if (index === undefined) throw new Error('No option selected');
     const provider = providers[index];
