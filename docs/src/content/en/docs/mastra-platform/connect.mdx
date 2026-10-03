@@ -18,8 +18,8 @@ This page walks through the first agent. Platform-side setup — connecting prov
 
 ## Prerequisites
 
-- A Mastra platform project.
-- A platform access token for that project.
+- A Mastra project with a Mastra platform project to attach connections to.
+- The [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
 
 ## Install
 
@@ -27,7 +27,22 @@ This page walks through the first agent. Platform-side setup — connecting prov
 npm install @mastra/connect
 ```
 
+## Connect a provider
+
+Use [`mastra connect`](/reference/cli/mastra) to see the provider catalog and run an authorization flow:
+
+```bash
+mastra connect list
+mastra connect add linear
+```
+
+OAuth providers like Linear open a consent screen in your browser, and the CLI waits until the connection is active; API-key providers prompt for credentials in the terminal. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`.
+
+Providers can also be connected from the project's Integrations tab in the dashboard. [Integrations](/docs/mastra-platform/integrations#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
+
 ## Configure the environment
+
+At runtime, `@mastra/connect` authenticates to the platform with an access token. Create one with `mastra auth tokens create` and put it alongside the project ID in your app's environment:
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=your-token
@@ -35,16 +50,6 @@ MASTRA_PROJECT_ID=your-project-id
 ```
 
 Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/integrations#environment-variables).
-
-## Connect a provider
-
-Connect at least one provider to the project, either from the project's Integrations tab in the dashboard or with the [`mastra connect`](/reference/cli/mastra) CLI command:
-
-```bash
-mastra connect add linear
-```
-
-OAuth providers open a consent screen in your browser; API-key providers prompt for credentials in the terminal. Use `mastra connect list` to see which providers are connected. [Integrations](/docs/mastra-platform/integrations#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
 
 ## Give an agent connected tools
 
@@ -62,7 +67,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so connecting a new provider — from the dashboard or with `mastra connect add` — makes its tools available to the running server without a restart.
+With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so running `mastra connect add` (or connecting from the dashboard) makes the new provider's tools available to the running server without a restart.
 
 Ask the agent to do something with a connected provider:
 
