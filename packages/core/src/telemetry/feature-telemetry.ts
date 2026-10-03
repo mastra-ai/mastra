@@ -79,13 +79,20 @@ export function trackFeatureUsage(name: string, metadata?: Record<string, unknow
       return;
     }
 
-    const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    const { projectId, projectId2, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    // Metadata is spread first so it can never override telemetry-controlled
+    // fields. project_id2 is stripped explicitly: unlike the always-set fields
+    // below, it is only emitted when an identifier actually resolved, so a
+    // caller-supplied value would otherwise leak through in the omitted case.
+    const safeMetadata = { ...metadata };
+    delete safeMetadata.project_id2;
     captureTelemetryEvent(FEATURE_USAGE_EVENT, distinctId, {
+      ...safeMetadata,
       feature_name: name,
       project_id: projectId,
+      ...(projectId2 ? { project_id2: projectId2 } : {}),
       command,
       node_env: nodeEnv,
-      ...metadata,
     });
   } catch {
     // Feature telemetry must never affect server startup or runtime behavior.
