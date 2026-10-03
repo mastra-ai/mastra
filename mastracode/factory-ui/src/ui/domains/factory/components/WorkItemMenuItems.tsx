@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router';
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
-import { canMoveTo } from '../boardCardState';
+import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
@@ -81,7 +81,8 @@ export function WorkItemMenuItems({
   // one of those would advance it as a side effect. Dismissing a stale
   // suggestion stays, since that starts nothing.
   const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
-  const canStartRun = owner.kind === 'free';
+  const runsBlocked = !canStartRun(owner.kind);
+  const yourRequestInFlight = owner.kind === 'you';
   const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
   return (
     <>
@@ -96,15 +97,15 @@ export function WorkItemMenuItems({
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {!awaitsTriage && moves.map(move => moveItem(move, onMove, !canStartRun))}
+      {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
       {suggestion !== undefined && !awaitsTriage && (
-        <DropdownMenu.Item disabled={!canStartRun} onClick={() => onApproveProposal(suggestion.id)}>
+        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestion.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestion.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
       )}
       {suggestion !== undefined && (
-        <DropdownMenu.Item onClick={() => onDismissProposal(suggestion.id)}>
+        <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestion.id)}>
           <CircleSlash aria-hidden />
           <span>Dismiss suggested run</span>
         </DropdownMenu.Item>
@@ -132,7 +133,7 @@ export function WorkItemMenuItems({
             <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
           </DropdownMenu.Item>
         ))}
-      <DropdownMenu.Item onClick={onRemove}>
+      <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
         <Trash2 aria-hidden />
         <span>Remove</span>
       </DropdownMenu.Item>

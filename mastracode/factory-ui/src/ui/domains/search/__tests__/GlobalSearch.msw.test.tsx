@@ -700,6 +700,45 @@ describe('Global search', () => {
     expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
   });
 
+  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
+    const requests = stubSearchApi();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-queued-review',
+              evaluationId: 'evaluation-queued-review',
+              workItemId: 'work-item-unstarted-review',
+              type: 'invokeSkill',
+              status: 'pending',
+              attempts: 0,
+              failureOccurrence: 0,
+              source: null,
+              failureCode: null,
+              canRetry: true,
+              lastError: null,
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderSearchRoute();
+    await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.click(await screen.findByText('Bump the command palette dependencies'));
+
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+    expect(requests.transitions).toEqual([]);
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();

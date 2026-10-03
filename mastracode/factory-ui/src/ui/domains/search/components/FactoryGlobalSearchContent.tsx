@@ -11,10 +11,12 @@ import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
+import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
@@ -61,6 +63,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     onFailure: message => toast.error(message),
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
+  const { effectByItem } = useItemDecisions(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
@@ -133,6 +136,11 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
                   closeSearch();
+                  const { owner } = boardCardState({ decision: effectByItem.get(target.item.id) });
+                  if (!canStartRun(owner.kind)) {
+                    toast.error(BUSY_CARD_MOVE_REFUSAL);
+                    return;
+                  }
                   const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;

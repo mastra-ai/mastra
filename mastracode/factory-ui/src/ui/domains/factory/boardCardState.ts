@@ -73,13 +73,16 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
 
 export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
 
+export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
+  return ownerKind === 'free';
+}
+
 export function canMoveTo(
   ownerKind: BoardCardOwner['kind'],
   phaseKind: InstalledPhaseInfo['kind'] | undefined,
 ): boolean {
-  if (ownerKind === 'free') return true;
   if (ownerKind === 'you') return false;
-  return !phaseMayStartRun(phaseKind);
+  return canStartRun(ownerKind) || !phaseMayStartRun(phaseKind);
 }
 
 function phaseMayStartRun(phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {

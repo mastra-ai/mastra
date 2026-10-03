@@ -109,14 +109,15 @@ describe('custom-board card menu', () => {
 
 describe('held card menu', () => {
   const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
-  const choices = ['Accept and plan', 'Accept and build', 'Close'];
+  const proposal = { id: 'd-1', role: 'plan' } as NonNullable<WorkItemMenuProps['proposal']>;
+  const choices = ['Accept and plan', 'Accept and build', 'Close', 'Dismiss suggested run', 'Remove'];
 
   it.each<[string, BoardCardOwner, boolean[]]>([
-    ['a parked session', { kind: 'session', status: 'ready' }, [true, true, false]],
-    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false]],
-    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true]],
-  ])('keeps Close open unless your own request is in flight: %s', async (_, owner, disabled) => {
-    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner });
+    ['a parked session', { kind: 'session', status: 'ready' }, [true, true, false, false, false]],
+    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false, false, false]],
+    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true, true]],
+  ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
+    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner, proposal });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(
       choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),
