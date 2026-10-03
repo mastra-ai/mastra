@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import type { ClientSession, Db } from 'mongodb';
+import type { ClientSession, Db, TransactionOptions } from 'mongodb';
 import packageJson from '../../../package.json';
 import type { DatabaseConfig } from '../types';
 import type { ConnectorHandler } from './base';
@@ -128,7 +128,7 @@ export class MongoDBConnector {
    * standalone server (or custom handler) it degrades to running `fn` directly
    * with an undefined session — best-effort sequential, no atomicity.
    */
-  async withTransaction<T>(fn: (session?: ClientSession) => Promise<T>): Promise<T> {
+  async withTransaction<T>(fn: (session?: ClientSession) => Promise<T>, options?: TransactionOptions): Promise<T> {
     const supported = await this.supportsTransactions();
     if (!supported || !this.#client) {
       return fn(undefined);
@@ -138,7 +138,7 @@ export class MongoDBConnector {
       let result!: T;
       await session.withTransaction(async () => {
         result = await fn(session);
-      });
+      }, options);
       return result;
     } finally {
       await session.endSession();

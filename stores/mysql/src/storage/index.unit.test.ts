@@ -454,6 +454,30 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
+  it('preserves the snapshot error when the snapshot transaction rollback fails', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+    const { connection } = poolInstances[poolInstances.length - 1];
+    const snapshotError = new Error('import failed');
+    const rollbackError = new Error('rollback failed');
+    connection.rollback.mockRejectedValueOnce(rollbackError);
+
+    const thrown = await datasets
+      .withSnapshotTransaction(async () => {
+        throw snapshotError;
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({
+      message: 'Transaction and rollback both failed',
+      errors: [snapshotError, rollbackError],
+    });
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+
+    await store.close();
+  });
+
   it('preserves the transaction error when the purge barrier rollback fails', async () => {
     const store = newStore();
     const experiments = (await store.getStore('experiments')) as any;
