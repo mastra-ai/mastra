@@ -5,7 +5,7 @@ NEVER add a changeset for `@internal/playground` (private, bundled into `mastra`
 
 Required skills (NON-OPTIONAL):
 
-- `react-best-practices` before writing/modifying ANY React code.
+- `code-best-practices` before writing/modifying ANY React code.
 - `playground-msw-tests` before adding/modifying any tests.
 
 Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
