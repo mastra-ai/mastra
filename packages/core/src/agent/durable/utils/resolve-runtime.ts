@@ -1,4 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
@@ -438,6 +439,20 @@ export async function rebuildRunToolsFromMastra(options: {
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
     });
 
+    const missingToolsetTools = (execOptions?.toolsetToolNames ?? []).filter(name => !(name in tools));
+    if (missingToolsetTools.length > 0) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_TOOLSETS_UNAVAILABLE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Call-time toolsets tool(s) ${missingToolsetTools.map(n => `"${n}"`).join(', ')} are not available ` +
+          `to durable agent "${agentId}" in this worker process. Toolset tools contain server-side code that ` +
+          `cannot be serialized across processes; register them on the agent (statically or via requestContext) instead.`,
+        details: { agentId, runId, missingTools: missingToolsetTools.join(',') },
+      });
+    }
+
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
     const saveQueueManager = makeSaveQueueManager(memory, mastra);
@@ -457,6 +472,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     return { tools, workspace, memory, saveQueueManager, requestContext: resolveRequestContext };
   } catch (error) {
+    if (error instanceof MastraError && error.id === 'DURABLE_AGENT_TOOLSETS_UNAVAILABLE') throw error;
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;
   }
