@@ -946,7 +946,7 @@ describe('ClickHouse advanced trace query', () => {
     await expect(queryTraces({ query } as unknown as ClickHouseClient, plan(), 1)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryExecutionError>>({
         code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-        message: 'The trace query exceeded its execution timeout',
+        message: 'The query exceeded its execution timeout',
       }),
     );
   });
