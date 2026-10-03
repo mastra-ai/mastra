@@ -392,8 +392,53 @@ describe('ClickHouse advanced trace query', () => {
       trace_query_6: 'assistant',
       trace_query_7: 'tool',
       trace_query_8: 'parentMessageId',
-      trace_query_9: 101,
+      // `candidates` re-applies the same predicate after the window seed.
+      trace_query_9: key,
+      trace_query_14: 'parentMessageId',
+      trace_query_15: 101,
     });
+  });
+
+  it('pushes root-row conjuncts into the window seed and keeps relation conjuncts after the dedupe', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: 'triage' } },
+            { spans: { some: { op: 'exists', path: 'error' } } },
+          ],
+        },
+      }),
+    );
+
+    const seed = compiled.query.slice(
+      compiled.query.indexOf('SELECT traceId\n        FROM mastra_trace_roots r'),
+      compiled.query.indexOf('ORDER BY dedupeKey'),
+    );
+    expect(seed).toContain('AND (ifNull(r.entityName = {trace_query_3:String}, 0))');
+    expect(seed).not.toContain('current_spans');
+    expect(compiled.query).toMatch(
+      /candidates AS \(\s+SELECT [\s\S]+FROM root_scope r\s+WHERE \(ifNull\(r\.entityName = \{trace_query_\d+:String\}, 0\)\) AND \(EXISTS/,
+    );
+  });
+
+  it('does not push a disjunction that reads related spans into the window seed', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'or',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: 'triage' } },
+            { spans: { some: { op: 'exists', path: 'error' } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).toMatch(
+      /FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:[^}]+\}\s+AND startedAt < \{trace_query_2:[^}]+\}\s+\)/,
+    );
   });
 
   it('scopes root_scope and related CTEs to the tenant with named parameters', () => {
@@ -412,6 +457,13 @@ describe('ClickHouse advanced trace query', () => {
     expect(rootStart).toBeGreaterThan(-1);
     expect(scoresStart).toBeGreaterThan(rootStart);
     const rootScope = compiled.query.slice(rootStart, scoresStart);
+    // The range prefilter is a root scan too, so it carries the tenant conditions.
+    const prefilterStart = compiled.query.indexOf('WHERE traceId IN (');
+    expect(prefilterStart).toBeGreaterThan(-1);
+    expect(prefilterStart).toBeLessThan(rootStart);
+    const prefilter = compiled.query.slice(prefilterStart, rootStart);
+    expect(prefilter).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
+    expect(prefilter).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
@@ -446,6 +498,10 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
+    // The time range narrows the dedupe input instead of filtering the whole deduped table.
+    expect(compiled.query).toMatch(
+      /FROM mastra_trace_roots\s+WHERE traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
+    );
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
   });
 
@@ -464,7 +520,8 @@ describe('ClickHouse advanced trace query', () => {
     ).query;
 
     for (const query of [traceOnly, spanOnly, scoreOnly, repeated]) {
-      expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+      // One deduped reconstruction plus its time-range prefilter.
+      expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
     }
     expect(traceOnly).not.toContain('mastra_span_events');
     expect(traceOnly).not.toContain('mastra_score_events');
@@ -693,7 +750,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query.match(/current_spans AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_scores AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
-    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
     expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
     expect(compiled.query).toContain('eligible_roots AS');
     expect(compiled.query).toContain('SELECT *\n    FROM root_scope r');

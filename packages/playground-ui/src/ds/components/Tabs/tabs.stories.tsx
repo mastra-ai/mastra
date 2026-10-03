@@ -23,7 +23,7 @@ type TabIndicatorStyle = CSSProperties & {
 };
 
 const accentIndicatorStyle: TabIndicatorStyle = {
-  '--tab-indicator-color': 'var(--accent5)',
+  '--tab-indicator-color': 'var(--info-indicator)',
 };
 
 export const Recommended: Story = {
@@ -52,8 +52,8 @@ type ContainedStory = StoryObj<ContainedArgs>;
 
 const extraTabs = ['Deployments', 'Logs', 'Metrics', 'Scorers', 'Datasets', 'Integrations'];
 
-export const Contained: ContainedStory = {
-  args: { frame: 'stroke', moreTabs: false, closableTabs: false, attention: false },
+export const InsetFrame: ContainedStory = {
+  args: { moreTabs: false, closableTabs: false, attention: false },
   argTypes: {
     moreTabs: { name: 'More tabs', control: 'boolean' },
     closableTabs: { name: 'Closable tabs', control: 'boolean' },
@@ -62,11 +62,10 @@ export const Contained: ContainedStory = {
   parameters: {
     layout: 'fullscreen',
   },
-  render: ({ frame, moreTabs, closableTabs, attention }) => (
+  render: ({ moreTabs, closableTabs, attention }) => (
     <ContainedExample
       key={`${moreTabs}-${closableTabs}`}
       attention={attention}
-      frame={frame}
       moreTabs={moreTabs}
       closableTabs={closableTabs}
     />
@@ -74,11 +73,10 @@ export const Contained: ContainedStory = {
 };
 
 function ContainedExample({
-  frame,
   moreTabs,
   closableTabs,
   attention,
-}: Pick<ContainedArgs, 'frame' | 'moreTabs' | 'closableTabs' | 'attention'>) {
+}: Pick<ContainedArgs, 'moreTabs' | 'closableTabs' | 'attention'>) {
   const [closedTabs, setClosedTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState('activity');
   const visibleTabs = ['activity', 'traces', 'settings', ...(moreTabs ? extraTabs : [])].filter(
@@ -99,7 +97,7 @@ function ContainedExample({
   return (
     <main className="min-h-screen bg-sidebar p-4 sm:p-10">
       <div className="mx-auto w-full max-w-5xl">
-        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame={frame}>
+        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame="inset">
           <TabList>
             {visibleTabs.includes('activity') && (
               <Tab value="activity" onClose={closeHandler('activity')}>
@@ -167,11 +165,6 @@ function ContainedExample({
     </main>
   );
 }
-
-export const InsetFrame: ContainedStory = {
-  ...Contained,
-  args: { frame: 'inset', moreTabs: false, closableTabs: false, attention: false },
-};
 
 export const LegacyLineFallback: Story = {
   render: () => (

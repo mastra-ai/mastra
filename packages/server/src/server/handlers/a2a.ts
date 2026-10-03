@@ -238,7 +238,9 @@ function toV1Task(
           extensions: artifact.extensions,
         }))
       : undefined,
-    history: task.history?.slice(historyLength === undefined ? 0 : -historyLength).map(toV1Message),
+    history: (historyLength === 0 ? [] : task.history?.slice(historyLength === undefined ? 0 : -historyLength))?.map(
+      toV1Message,
+    ),
     metadata: task.metadata,
   };
 }
@@ -801,10 +803,12 @@ async function waitForClaimedResume({
   taskStore,
   agentId,
   taskId,
+  signal,
 }: {
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
+  signal?: AbortSignal;
 }): Promise<Task> {
   let snapshot = taskStore.loadWithVersion({ agentId, taskId });
   if (!snapshot) {
@@ -816,6 +820,7 @@ async function waitForClaimedResume({
       agentId,
       taskId,
       afterVersion: snapshot.version,
+      signal,
     });
   }
 
@@ -1628,11 +1633,23 @@ export async function* handleMessageStream({
   }
   resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
+  if (existingTask?.status.state === 'working' && getSuspendedRunId(existingTask)) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId, signal: abortSignal });
+    yield createSuccessResponse(requestId, task);
+    return;
+  }
+
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
   // The claim transitions the task to `working` synchronously so concurrent
   // follow-ups cannot double-resume the same run.
+  const wasInterrupted = isInterruptedTaskState(existingTask?.status.state);
   const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
+  if (wasInterrupted && !resume) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId, signal: abortSignal });
+    yield createSuccessResponse(requestId, task);
+    return;
+  }
 
   const {
     pushNotificationStore: resolvedPushNotificationStore,

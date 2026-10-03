@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
@@ -6,7 +7,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import DatasetsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
-import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

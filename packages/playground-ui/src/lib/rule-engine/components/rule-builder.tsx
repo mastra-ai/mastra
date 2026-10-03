@@ -7,6 +7,7 @@ import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -59,7 +60,9 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       {/* Non-root group header */}
       {!isRoot && (
         <div className="flex items-center justify-between border-b border-dashed border-border py-1.5 pr-4 pl-3">
-          <span className="text-meta text-muted-foreground">Group</span>
+          <Txt as="span" variant="meta" tone="muted">
+            Group
+          </Txt>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
@@ -78,8 +81,8 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 className={cn(
                   'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
                   group.operator === 'OR'
-                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
-                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
+                    ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
+                    : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >
                 {group.operator.toLowerCase()}

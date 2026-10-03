@@ -8,6 +8,7 @@ import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
+import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { ChunkFrom } from '../../stream/types';
 import type {
@@ -38,13 +39,22 @@ import type {
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
-  if (!raw) {
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-  }
-  const inputTokens = (raw.inputTokens as number) ?? (raw.promptTokens as number) ?? 0;
-  const outputTokens = (raw.outputTokens as number) ?? (raw.completionTokens as number) ?? 0;
-  const totalTokens = (raw.totalTokens as number) ?? inputTokens + outputTokens;
-  return { inputTokens, outputTokens, totalTokens };
+  const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
+  const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
+  const totalTokens =
+    (raw?.totalTokens as number | undefined) ??
+    (inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined);
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    reasoningTokens: raw?.reasoningTokens as number | undefined,
+    cachedInputTokens: raw?.cachedInputTokens as number | undefined,
+    cacheCreationInputTokens: raw?.cacheCreationInputTokens as number | undefined,
+    cacheCreationInputTokens5m: raw?.cacheCreationInputTokens5m as number | undefined,
+    cacheCreationInputTokens1h: raw?.cacheCreationInputTokens1h as number | undefined,
+  };
 }
 
 /**
@@ -70,11 +80,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based).
+   * Start replay from this index (0-based), or live-tail from new events only.
    * If undefined, uses full replay (subscribeWithReplay).
-   * If specified, uses efficient indexed replay (subscribeFromOffset).
+   * A numeric offset uses efficient indexed replay when supported.
    */
-  offset?: number;
+  offset?: number | 'latest';
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -160,6 +170,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -351,7 +363,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const handleEvent = async (event: Event) => {
-    if (!controller) return;
+    // After a terminal event the stream is closed and its callbacks have fired.
+    // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
+    // must not fire onFinish/onError again.
+    if (!controller || terminated) return;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
@@ -364,6 +379,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
           if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
+          if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
           // Track error chunks for onError callback
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
@@ -394,29 +410,65 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           const data = streamEvent.data as AgentFinishEventData;
-          // Enqueue finish chunk and close stream even if callback throws
-          const finishChunk = {
-            type: 'finish' as const,
+          const finishReason = data.stepResult?.reason;
+
+          if (finishReason === 'abort') {
+            safeEnqueue(controller, {
+              type: 'abort',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {},
+            } as ChunkType<OUTPUT>);
+          }
+          safeEnqueue(controller, {
+            type: 'finish',
+            runId,
+            from: ChunkFrom.AGENT,
             payload: {
               output: data.output,
               stepResult: data.stepResult,
             },
-          } as ChunkType<OUTPUT>;
-          safeEnqueue(controller, finishChunk);
+          } as ChunkType<OUTPUT>);
           safeClose(controller);
           markTerminated();
 
-          // Build rich onFinish payload from finish event data.
-          // The pubsub FINISH event carries output.text, output.steps, and
-          // stepResult — enough to reconstruct the fields scenario tests expect
-          // (text, steps, toolResults, finishReason, usage).
-          if (onFinish) {
+          // Terminal callbacks are driven by pubsub delivery because nobody may
+          // consume the stream (for example, resume() with a delay-only wait).
+          if (finishReason === 'abort') {
+            try {
+              await onAbort?.({
+                steps: (data.output?.steps ?? []) as unknown[],
+                text: (data.output?.text ?? '') as string,
+              });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
+            }
+          } else if (finishReason === 'error') {
+            try {
+              const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
+              // Preserve the producer's stack, name, and provider fields so the failure stays attributable and classifiable.
+              if (lastErrorStack) error.stack = lastErrorStack;
+              if (lastErrorName) error.name = lastErrorName;
+              if (lastErrorCause && typeof lastErrorCause === 'object') {
+                for (const [key, value] of Object.entries(lastErrorCause)) {
+                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
+                    (error as unknown as Record<string, unknown>)[key] = value;
+                  }
+                }
+              }
+              await onError?.({ error });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
+            }
+          } else if (onFinish) {
             try {
               const steps = (data.output?.steps ?? []) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               await onFinish({
-                text: data.output?.text ?? '',
+                // Every step's streamed text, retried attempts included — matches the main loop,
+                // whose onFinish text is everything the run streamed.
+                text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
                 steps,
                 toolResults: allToolResults,
                 toolCalls: allToolCalls,
@@ -428,7 +480,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 sources: [],
                 reasoning: [],
                 content: [],
-                finishReason: data.stepResult?.reason ?? 'stop',
+                finishReason: finishReason ?? 'stop',
                 usage: normalizeUsage(data.output?.usage),
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
@@ -439,37 +491,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
-            }
-          }
-
-          // When the finish reason is 'abort', also fire onAbort so
-          // consumers see it — the abort was handled gracefully (clean
-          // return from llm-execution) rather than crashing the workflow,
-          // so the separate ABORT event never fires.
-          if (onAbort && (data.stepResult?.reason as string) === 'abort') {
-            try {
-              await onAbort({
-                steps: (data.output?.steps ?? []) as unknown[],
-                text: (data.output?.text ?? '') as string,
-              });
-            } catch (callbackError) {
-              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
-            }
-          }
-
-          // When the finish reason is 'error', also fire onError so
-          // consumers see it — the error was handled gracefully (bail
-          // response) rather than crashing the workflow, so the ERROR
-          // event never fires.
-          if (onError && data.stepResult?.reason === 'error') {
-            try {
-              const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
-              // Preserve the producer's stack and name so the failure stays attributable and classifiable.
-              if (lastErrorStack) error.stack = lastErrorStack;
-              if (lastErrorName) error.name = lastErrorName;
-              await onError({ error });
-            } catch (callbackError) {
-              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
             }
           }
 
@@ -533,6 +554,29 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.ABORT: {
           const data = streamEvent.data as AgentAbortEventData;
+          safeEnqueue(controller, {
+            type: 'abort',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {},
+          } as ChunkType<OUTPUT>);
+          const finishData: AgentFinishEventData = {
+            output: {
+              text: data.text,
+              steps: data.steps,
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            },
+            stepResult: { reason: 'abort', warnings: [], isContinued: false },
+          };
+          safeEnqueue(controller, {
+            type: 'finish',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              output: finishData.output,
+              stepResult: finishData.stepResult,
+            },
+          } as ChunkType<OUTPUT>);
           // Mark terminal BEFORE awaiting onAbort, for the same reason as the
           // closeOnSuspend path above — a slow callback must not let the re-armed
           // watchdog fire against an already-aborted run.
@@ -572,9 +616,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Every delivery has to be acked, including the events this consumer filters
   // out, or a durable backend (Redis consumer groups) keeps them pending for the
-  // life of the subscription. The EventCallback is a stable reference because
-  // `unsubscribe` has to be handed the same callback that was subscribed.
-  const subscribedCallback: EventCallback = withAck(handleEvent);
+  // life of the subscription. Track deliveries because in-process pubsub invokes
+  // callbacks synchronously but does not await their promises.
+  const inFlightDeliveries = new Set<Promise<void>>();
+  const ackingHandleEvent = withAck(handleEvent);
+  const subscribedCallback: EventCallback = (event, ack, nack) => {
+    const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    inFlightDeliveries.add(delivery);
+    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    return delivery;
+  };
+  const waitForEventDelivery = async () => {
+    while (inFlightDeliveries.size > 0) {
+      await Promise.allSettled([...inFlightDeliveries]);
+    }
+  };
 
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -588,9 +644,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       const subscribePromise =
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
-          : pubsub.supportsOffsets
-            ? pubsub.subscribeFromOffset(topic, offset, subscribedCallback)
-            : pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' });
+          : offset === 'latest' || !pubsub.supportsOffsets
+            ? pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' })
+            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
 
       subscribePromise
         .then(() => {
@@ -657,6 +713,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     stream,
     messageList,
     messageId,
+    finishUsageIsTotal: true,
     options: {
       runId,
       onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
@@ -684,6 +741,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     output,
     cleanup,
     detach,
+    waitForEventDelivery,
     ready,
   };
 }
@@ -695,6 +753,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
   runId: string,
   chunk: ChunkType<OUTPUT>,
+  outputProcessed?: boolean,
 ): Promise<void> {
   const topic = AGENT_STREAM_TOPIC(runId);
   await pubsub.publish(topic, {
@@ -703,6 +762,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     data: chunk,
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
+    ...(outputProcessed ? { outputProcessed } : {}),
   });
 }
 

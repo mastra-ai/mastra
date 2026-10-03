@@ -16,14 +16,17 @@ import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import type { Event } from '../../../events/types';
+import { PubSub } from '../../../events/pubsub';
+import type { Event, EventCallback, SubscribeOptions } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 // ============================================================================
 // Helper Functions
@@ -80,6 +83,110 @@ function createTextModel(text: string) {
       warnings: [],
     }),
   });
+}
+
+function createSuspendingThenTextModel(toolName: string, texts: string[]) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      call++;
+      const chunks =
+        call === 1
+          ? [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-1',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'tool-call' as const,
+                toolCallType: 'function' as const,
+                toolCallId: 'call-1',
+                toolName,
+                input: JSON.stringify({ action: 'continue' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]
+          : (() => {
+              const text = texts[call - 2];
+              if (text === undefined) throw new Error(`Unexpected model call ${call}`);
+              return [
+                { type: 'stream-start' as const, warnings: [] },
+                {
+                  type: 'response-metadata' as const,
+                  id: `id-${call}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start' as const, id: `text-${call}` },
+                { type: 'text-delta' as const, id: `text-${call}`, delta: text },
+                { type: 'text-end' as const, id: `text-${call}` },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'stop' as const,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ];
+            })();
+      return {
+        stream: convertArrayToReadableStream(chunks),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
+async function drain(stream: ReadableStream<any>) {
+  const chunks: any[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
+}
+
+class RetainingPubSub extends PubSub {
+  readonly history = new Map<string, Event[]>();
+  readonly subscribers = new Map<string, Set<EventCallback>>();
+
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    const retained = { ...event, id: crypto.randomUUID(), createdAt: new Date() };
+    const history = this.history.get(topic) ?? [];
+    history.push(retained);
+    this.history.set(topic, history);
+
+    for (const subscriber of this.subscribers.get(topic) ?? []) {
+      await subscriber(retained, async () => {});
+    }
+  }
+
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (options?.startFrom !== 'latest') {
+      for (const event of this.history.get(topic) ?? []) {
+        await cb(event, async () => {});
+      }
+    }
+
+    const subscribers = this.subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.subscribers.set(topic, subscribers);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {}
 }
 
 async function seedSuspendedRun(
@@ -365,7 +472,38 @@ describe('Resume API', () => {
       expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
     });
 
-    it('forwards storage-backed approval options into the durable resume path', async () => {
+    it.each([
+      {
+        name: 'merges an approval into custom data for an approval suspension',
+        approved: true,
+        resumeData: { note: 'hello' },
+        requiresApproval: true,
+        expectedResumeData: { approved: true, note: 'hello' },
+      },
+      {
+        name: 'keeps the decline decision authoritative when merging context into custom data',
+        approved: false,
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: { note: 'hello' },
+        requiresApproval: true,
+        expectedResumeData: { approved: false, reason: 'not allowed', note: 'hello' },
+      },
+      {
+        name: 'leaves custom data unchanged for an ordinary tool suspension',
+        approved: true,
+        resumeData: { note: 'hello' },
+        requiresApproval: false,
+        expectedResumeData: { note: 'hello' },
+      },
+      {
+        name: 'keeps the decline decision authoritative without custom data',
+        approved: false,
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: undefined,
+        requiresApproval: true,
+        expectedResumeData: { approved: false, reason: 'not allowed' },
+      },
+    ])('$name', async ({ approved, declineContext, resumeData, requiresApproval, expectedResumeData }) => {
       const baseAgent = new Agent({
         id: 'stored-approval-options-agent',
         name: 'Stored Approval Options Agent',
@@ -386,7 +524,7 @@ describe('Resume API', () => {
             threadId: memory.thread,
             resourceId: memory.resource,
             suspendedAt: new Date(0),
-            toolCalls: [{ toolCallId, requiresApproval: true }],
+            toolCalls: [{ toolCallId, requiresApproval }],
           },
         ],
         total: 1,
@@ -396,7 +534,9 @@ describe('Resume API', () => {
         threadId: memory.thread,
         resourceId: memory.resource,
         toolCallId,
-        approved: true,
+        approved,
+        declineContext,
+        resumeData,
         memory,
       });
 
@@ -405,7 +545,42 @@ describe('Resume API', () => {
         resourceId: memory.resource,
       });
       expect(result).toEqual({ accepted: true, runId, toolCallId });
-      expect(resumeSpy).toHaveBeenCalledWith(runId, { approved: true }, expect.objectContaining({ memory }));
+      expect(resumeSpy).toHaveBeenCalledWith(runId, expectedResumeData, expect.objectContaining({ memory }));
+    });
+
+    it('rejects custom data that cannot carry an approval decision', async () => {
+      const baseAgent = new Agent({
+        id: 'invalid-approval-data-agent',
+        name: 'Invalid Approval Data Agent',
+        instructions: 'Test invalid approval data rejection',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output: undefined } as any);
+      vi.spyOn(durableAgent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [
+          {
+            runId: 'invalid-approval-run',
+            status: 'suspended',
+            threadId: 'invalid-approval-thread',
+            resourceId: 'invalid-approval-resource',
+            suspendedAt: new Date(0),
+            toolCalls: [{ toolCallId: 'invalid-approval-tool-call', requiresApproval: true }],
+          },
+        ],
+        total: 1,
+      });
+
+      await expect(
+        durableAgent.sendToolApproval({
+          threadId: 'invalid-approval-thread',
+          resourceId: 'invalid-approval-resource',
+          toolCallId: 'invalid-approval-tool-call',
+          approved: true,
+          resumeData: 'hello',
+        }),
+      ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA' });
+      expect(resumeSpy).not.toHaveBeenCalled();
     });
 
     it('should preserve threadId and resourceId from prepare through resume', async () => {
@@ -590,6 +765,171 @@ describe('Resume with CachingPubSub Event Replay', () => {
 
     // Disconnect (cleanup)
     initialCleanup();
+  });
+
+  it('resumes after cached history and streams an autonomous continuation exactly once', async () => {
+    const store = new InMemoryStore();
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'A tool requiring approval',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (input, context) => {
+        if (!context?.agent?.resumeData) {
+          return context?.agent?.suspend?.({ reason: `Approve ${input.action}?` });
+        }
+        return { completed: true };
+      },
+    });
+    const model = createSuspendingThenTextModel('approvalTool', ['resumed response', 'continuation response']);
+    const baseAgent = new Agent({
+      id: 'resume-until-idle-agent',
+      name: 'Resume Until Idle Agent',
+      instructions: 'Test resume until idle stream boundaries',
+      model: model as LanguageModelV2,
+      memory: new MockMemory(),
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    const mastra = new Mastra({
+      agents: { resumeUntilIdleAgent: durableAgent },
+      storage: store,
+      logger: false,
+      backgroundTasks: { enabled: true },
+    });
+    const runId = 'resume-until-idle-run';
+    const threadId = 'resume-until-idle-thread';
+    const resourceId = 'resume-until-idle-resource';
+    const initial = await durableAgent.stream('Start', {
+      runId,
+      memory: { thread: threadId, resource: resourceId },
+      closeOnSuspend: true,
+    });
+    const retainedChunks = await drain(initial.fullStream);
+    expect(retainedChunks.some(chunk => chunk.type === 'tool-call')).toBe(true);
+
+    const streamSpy = vi.spyOn(durableAgent, 'stream');
+    const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: true });
+    const chunksPromise = drain(result.fullStream);
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = async (type: string) => {
+      await (bgManager as any).publishLifecycleEvent(type, {
+        id: 'resume-task',
+        toolName: 'dummy',
+        toolCallId: 'resume-task',
+        runId: 'background-run',
+        agentId: durableAgent.id,
+        threadId,
+        resourceId,
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+    };
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+
+    const chunks = await chunksPromise;
+    const texts = chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
+    expect(texts).toEqual(['resumed response', 'continuation response']);
+    expect(chunks.some(chunk => chunk.type === 'tool-call')).toBe(false);
+    expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(2);
+    expect(result.runId).toBe(runId);
+    expect(streamSpy).toHaveBeenCalledOnce();
+    expect(streamSpy.mock.calls[0]?.[1]).not.toHaveProperty('runId');
+
+    result.cleanup();
+    await mastra.backgroundTaskManager?.shutdown();
+  });
+
+  it('should deliver resumed output without replaying retained events when cached history is unavailable', async () => {
+    const storage = new InMemoryStore();
+    const memoryStorage = new InMemoryStore();
+    const transport = new RetainingPubSub();
+    const memory = { thread: 'cache-miss-thread', resource: 'cache-miss-resource' };
+
+    const buildAgent = (seenText: string[]) => {
+      const tool = createTool({
+        id: 'approvalTool',
+        description: 'Wait for approval',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (input, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend?.({ reason: `Approve ${input.action}?` });
+          }
+          return { completed: true };
+        },
+      });
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) =>
+          JSON.stringify(prompt).includes('"type":"tool-result"')
+            ? createTextModel('Resumed').doStream({ prompt } as any)
+            : createSuspendingToolModel('approvalTool', { action: 'delete' }).doStream({ prompt } as any),
+      });
+      const agent = new Agent({
+        id: 'cache-miss-resume-agent',
+        name: 'Cache Miss Resume Agent',
+        instructions: 'Use the tool, then answer.',
+        model: model as LanguageModelV2,
+        memory: new MockMemory({ storage: memoryStorage }),
+        tools: { approvalTool: tool },
+        outputProcessors: [
+          {
+            id: 'record-resumed-text',
+            processOutputStream: async ({ part }: any) => {
+              if (part.type === 'text-delta') seenText.push(part.payload?.text ?? part.delta ?? '');
+              return part;
+            },
+          },
+        ],
+      });
+      const pubsub = new CachingPubSub(transport, new InMemoryServerCache());
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      new Mastra({ agents: { cacheMissResumeAgent: durableAgent }, storage, logger: false });
+      return durableAgent;
+    };
+
+    const firstProcessText: string[] = [];
+    const firstProcess = buildAgent(firstProcessText);
+    const started = await firstProcess.stream('Delete the file', { memory, closeOnSuspend: true });
+    for await (const _chunk of started.fullStream) void _chunk;
+
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: started.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+    });
+
+    await transport.publish(AGENT_STREAM_TOPIC(started.runId), {
+      type: AgentStreamEventTypes.CHUNK,
+      runId: started.runId,
+      data: { type: 'text-delta', payload: { id: 'stale', text: 'STALE' } },
+    });
+
+    globalRunRegistry.clear();
+    const resumedText: string[] = [];
+    const secondProcess = buildAgent(resumedText);
+    const resumed = await secondProcess.resumeStream(
+      { approved: true },
+      { runId: started.runId, toolCallId: 'call-1', memory },
+    );
+    for await (const _chunk of resumed.fullStream) void _chunk;
+
+    expect(resumedText).toContain('Resumed');
+    expect(resumedText).not.toContain('STALE');
   });
 
   it('should deduplicate events during resume replay', async () => {

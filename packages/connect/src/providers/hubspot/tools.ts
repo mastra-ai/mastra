@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { batchCreateCompaniesTool } from './tools/batch-create-companies.js';
 import { batchUpdateCompaniesTool } from './tools/batch-update-companies.js';
 import { changeUserRoleTool } from './tools/change-user-role.js';
@@ -105,5 +105,5 @@ export function createHubspotTools(options?: ProviderToolsOptions) {
     hubspot_update_ticket: updateTicketTool(platformProxy),
     hubspot_whoami: whoamiTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

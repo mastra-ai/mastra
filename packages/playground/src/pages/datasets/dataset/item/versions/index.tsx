@@ -7,6 +7,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
@@ -15,7 +16,6 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
@@ -176,7 +176,7 @@ function DatasetItemVersionsComparePage() {
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
           <CardHeader>
             <VersionSelect
-              name="version"
+              label="Version"
               value={leftNumber != null ? String(leftNumber) : ''}
               options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
               onValueChange={val => setParam('version', Number(val))}
@@ -199,7 +199,7 @@ function DatasetItemVersionsComparePage() {
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
           <CardHeader>
             <VersionSelect
-              name="compare"
+              label="Compare version"
               value={rightNumber != null ? String(rightNumber) : ''}
               placeholder="Select a version to compare"
               options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
@@ -231,13 +231,13 @@ function DatasetItemVersionsComparePage() {
 }
 
 function VersionSelect({
-  name,
+  label,
   value,
   options,
   placeholder = 'Select version',
   onValueChange,
 }: {
-  name: string;
+  label: string;
   value: string;
   options: ReturnType<typeof versionOptions>;
   placeholder?: string;
@@ -246,8 +246,8 @@ function VersionSelect({
   return (
     <div className="grid grid-cols-[auto_1fr] items-center gap-4">
       <HistoryIcon className="size-4 opacity-50" />
-      <Select name={name} value={value} onValueChange={onValueChange}>
-        <SelectTrigger aria-label={name === 'compare' ? 'Compare version' : 'Version'} className="w-full">
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger aria-label={label} className="w-full">
           <SelectValue placeholder={placeholder} className="flex-1" />
         </SelectTrigger>
         <SelectContent>

@@ -29,6 +29,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChunkFrom } from '../../../../stream/types';
+import type { MastraToolInvocationOptions } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
@@ -138,6 +139,25 @@ afterEach(() => {
 });
 
 describe('durable tool-call: processToolResult hook (Option B)', () => {
+  it('provides a live conversation reader to tool execution', async () => {
+    const messageList = seedMessageList();
+    setupRegistry({}, messageList);
+    const entry = globalRunRegistry.get(RUN_ID)!;
+    let getMessages: MastraToolInvocationOptions['getMessages'];
+    const execute = vi.fn(async (_args: unknown, options: MastraToolInvocationOptions) => {
+      getMessages = options.getMessages;
+      expect(getMessages?.().map(message => message.id)).toEqual(['msg-1']);
+      return RAW_RESULT;
+    });
+    entry.tools = { [TOOL_NAME]: { execute } };
+    const output = await runToolCallStep();
+    expect(output.error).toBeUndefined();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(getMessages).toBeTypeOf('function');
+    messageList.removeByIds(['msg-1']);
+    expect(getMessages?.()).toEqual([]);
+  });
+
   it('syncs a processor mutation into the emitted chunk and the step output', async () => {
     const messageList = seedMessageList();
     setupRegistry(

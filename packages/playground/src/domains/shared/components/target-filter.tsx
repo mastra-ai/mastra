@@ -1,10 +1,10 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export const ALL_TARGETS = 'all';
 
@@ -33,7 +33,9 @@ export interface TargetFilterProps {
  */
 export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTargetIdChange }: TargetFilterProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({ enabled: targetType === 'workflow' });
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
+    enabled: targetType === 'workflow',
+  });
   const { data: scorers, isLoading: scorersLoading } = useScorers({ enabled: targetType === 'scorer' });
   const { data: processors, isLoading: processorsLoading } = useProcessors({ enabled: targetType === 'processor' });
 
@@ -59,15 +61,21 @@ export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTarge
 
   return (
     <>
-      <SelectFieldBlock
-        label="Target type"
-        labelIsHidden
-        name="filter-target-type"
-        options={targetTypeOptions}
+      <Select
         value={targetType || ALL_TARGETS}
         onValueChange={value => onTargetTypeChange(value === ALL_TARGETS ? '' : (value as DatasetTargetType))}
-        className="whitespace-nowrap"
-      />
+      >
+        <SelectTrigger aria-label="Target type" size="md" className="whitespace-nowrap">
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          {targetTypeOptions.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {targetType && (
         <Combobox
           options={[{ value: ALL_TARGETS, label: `All ${targetType}s` }, ...entityOptions]}

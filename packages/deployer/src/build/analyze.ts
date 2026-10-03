@@ -16,7 +16,7 @@ import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
-import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
+import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
   isBareModuleSpecifier,
@@ -392,7 +392,10 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+    bundlerOptions?: Pick<
+      InternalBundlerOptions,
+      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
+    > | null;
     env?: Record<string, string>;
   },
   logger: IMastraLogger,
@@ -415,7 +418,10 @@ export async function analyzeBundle(
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals);
+  const { externalsPreset, mergedExternals } = normalizeExternals(
+    bundlerOptions?.externals,
+    bundlerOptions?.externalsPreset,
+  );
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
 
   let index = 0;
@@ -444,6 +450,8 @@ export async function analyzeBundle(
       activeEntries: activeAnalyzeEntries,
       externals: mergedExternals,
       externalsPreset,
+      alias: bundlerOptions?.alias,
+      platform,
     });
 
     // Detect pino transports in the bundled output
@@ -520,6 +528,7 @@ export async function analyzeBundle(
       externalsPreset,
       mergedExternals,
       isDev,
+      alias: bundlerOptions?.alias,
     },
     projectRoot,
     workspaceRoot,

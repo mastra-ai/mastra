@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
@@ -596,6 +597,35 @@ describe('zodToJsonSchema', () => {
       expect(Object.keys(result.properties || {}).length).toBe(4);
     });
   });
+
+  // https://github.com/mastra-ai/mastra/issues/24516
+  describe('nullable enum and literal', () => {
+    function compile(schema: z.ZodTypeAny) {
+      const json = zodToJsonSchema(schema) as Record<string, unknown>;
+      delete json.$schema;
+      return new Ajv({ strict: false }).compile(json);
+    }
+
+    it('keeps null valid for a nullable enum', () => {
+      const schema = z.object({ color: z.enum(['red', 'blue']).nullable() });
+      const validate = compile(schema);
+
+      expect(schema.safeParse({ color: null }).success).toBe(true);
+      expect(validate({ color: null })).toBe(true);
+      expect(validate({ color: 'red' })).toBe(true);
+      expect(validate({ color: 'green' })).toBe(false);
+    });
+
+    it('keeps null valid for a nullable literal', () => {
+      const schema = z.object({ speed: z.literal('fast').nullable() });
+      const validate = compile(schema);
+
+      expect(schema.safeParse({ speed: null }).success).toBe(true);
+      expect(validate({ speed: null })).toBe(true);
+      expect(validate({ speed: 'fast' })).toBe(true);
+      expect(validate({ speed: 'slow' })).toBe(false);
+    });
+  });
 });
 
 // =============================================================================
@@ -1134,5 +1164,34 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
 
     const out = prepareJsonSchemaForOpenAIStrictMode(schema);
     expect(collectLeakedKeywords(out)).toEqual([]);
+  });
+});
+
+describe('prepareJsonSchemaForOpenAIStrictMode allOf with Object.prototype property names', () => {
+  const names = ['constructor', 'toString', 'hasOwnProperty', '__proto__'];
+  const branch = (name: string, type: 'string' | 'number'): JSONSchema7 =>
+    JSON.parse(JSON.stringify({ type: 'object', properties: { [name]: { type } }, required: [name] }));
+
+  it.each(names)('merges a distinct "%s" property as an own key', name => {
+    const result = prepareJsonSchemaForOpenAIStrictMode({
+      allOf: [branch(name, 'string'), { type: 'object', properties: { age: { type: 'number' } }, required: ['age'] }],
+    } as JSONSchema7);
+    expect(Object.hasOwn(result.properties!, name)).toBe(true);
+    expect((result.properties as Record<string, JSONSchema7>)[name]).toEqual({ type: 'string' });
+    expect(result.required).toEqual(expect.arrayContaining([name, 'age']));
+    expect(result.additionalProperties).toBe(false);
+  });
+
+  it.each(names)('merges identical "%s" definitions', name => {
+    const result = prepareJsonSchemaForOpenAIStrictMode({
+      allOf: [branch(name, 'string'), branch(name, 'string')],
+    } as JSONSchema7);
+    expect(Object.hasOwn(result.properties!, name)).toBe(true);
+  });
+
+  it.each(names)('rejects conflicting "%s" definitions', name => {
+    expect(() =>
+      prepareJsonSchemaForOpenAIStrictMode({ allOf: [branch(name, 'string'), branch(name, 'number')] } as JSONSchema7),
+    ).toThrow(/defined differently/);
   });
 });

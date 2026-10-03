@@ -4,6 +4,7 @@ import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type {
   EntryExecutionResult,
@@ -158,6 +159,11 @@ export interface PersistStepUpdateParams {
    * compatibility with external callers.
    */
   phase?: string;
+  /**
+   * Persist the `running` update even if the last persisted status was `suspended`.
+   * Used when a resumed step starts, so its resume data survives a crash mid-step.
+   */
+  recordResumedStepStart?: boolean;
 }
 
 export async function persistStepUpdate(
@@ -177,6 +183,7 @@ export async function persistStepUpdate(
     requestContext,
     tracingContext,
     phase,
+    recordResumedStepStart,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -204,7 +211,7 @@ export async function persistStepUpdate(
     // otherwise clobber the suspend record before the resume actually
     // completes. The engine tracks its own last-persisted status for this
     // run (process-local) so we don't need an extra storage read per step.
-    if (workflowStatus === 'running') {
+    if (workflowStatus === 'running' && !recordResumedStepStart) {
       const lastPersisted = engine.getLastPersistedStatus(runId);
       if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
         return;
@@ -827,7 +834,10 @@ export async function executeEntry(
   }
 
   if (abortController?.signal?.aborted) {
-    execResults = { ...execResults, status: 'canceled' };
+    execResults = {
+      ...execResults,
+      status: abortController.signal.reason === WORKFLOW_CANCELLED_SYMBOL ? 'canceled' : 'waiting',
+    };
   }
 
   await engine.persistStepUpdate({

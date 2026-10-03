@@ -31,6 +31,18 @@ import { z } from 'zod';
 import { init } from '../index';
 import type { InngestFlowControlConfig } from '../types';
 
+// Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
+// persisted so a finished run's snapshot replaces its stale suspended one and
+// resume() rejects it instead of re-running the suspended tool.
+const PERSISTED_SNAPSHOT_STATUSES = new Set<string>([
+  'suspended',
+  'success',
+  'failed',
+  'canceled',
+  'bailed',
+  'tripwire',
+]);
+
 /**
  * Input schema for the durable agentic workflow.
  * Extends base with observability fields for Inngest.
@@ -140,7 +152,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // This makes the trace structure match regular agents (agent_run -> model_generation -> tool_call)
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
       evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
       emitStepEvents: false,
@@ -170,6 +182,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
+          accumulatedSteps: state.accumulatedSteps,
         };
       },
       { id: 'map-to-llm-input' },
@@ -272,7 +285,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // This makes the trace structure match regular agents (agent_run -> model_generation -> tool_call)
           internal: InternalSpans.WORKFLOW,
         },
-        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
         evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
         emitStepEvents: false,
@@ -388,15 +401,23 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // End MODEL_GENERATION span with final output (children before parent)
           // This span was created BEFORE the workflow started and stayed open for all iterations.
-          // Same shape as the core durable agent: `text` is the output, usage goes to the
-          // attributes through the tracker so consumers find it where every other model span puts it.
+          // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
+          // usage goes to the attributes through the tracker so consumers find it where every
+          // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(
               state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
             ) as AIModelGenerationSpan | undefined;
+            const toolCalls = state.accumulatedSteps.flatMap(step =>
+              ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: tc.args,
+              })),
+            );
             modelSpan?.createTracker()?.endGeneration({
-              output: { text: finalText },
+              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
               usage: state.accumulatedUsage,
             });

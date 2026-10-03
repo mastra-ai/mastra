@@ -84,6 +84,7 @@ async function setup() {
     scope: SCOPE,
     userId: 'user-supervisor',
     workItems: seed.workItems,
+    boards: createBoardRegistry(),
     audit: seed.audit,
     transitionService,
     reconcileAcceptanceLabels,
@@ -135,6 +136,7 @@ describe('createFactorySupervisorWriteTools', () => {
       scope: SCOPE,
       userId: 'user-supervisor',
       workItems: seed.workItems,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       audit: seed.audit,
       transitionService,
     });
@@ -301,6 +303,22 @@ describe('createFactorySupervisorWriteTools', () => {
       action: 'factory.intake.binding_updated',
       metadata: expect.objectContaining({ cause: 'supervisor', role: 'work' }),
     });
+  });
+
+  it('does not report or audit delivery when worker startup was interrupted', async () => {
+    const context = await setup();
+    const item = await createItem(context.workItems, 6, 'execute');
+    await bindRun(context.workItems, item, 6);
+    context.messageSession.mockResolvedValueOnce({ status: 'interrupted' });
+
+    await expect(
+      execute(context.tools.factory_signal_session, {
+        sessionId: 'session-6',
+        message: 'Please stop after tests.',
+      }),
+    ).resolves.toMatchObject({ delivered: false, status: 'interrupted', workItemId: item.id });
+    const { events } = await context.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 });
+    expect(events.some(event => event.action === 'factory.agent.signaled')).toBe(false);
   });
 
   it('signals only a session bound to this factory', async () => {

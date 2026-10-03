@@ -31,6 +31,7 @@ import {
   metricsUnavailableSystemPackages,
   threadedTraceSpans,
   traceSpans,
+  traceSpansWithPayload,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
@@ -298,26 +299,28 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "Open full thread" is clicked, then the side panel shows every turn at the same wide size, and "Back to trace" restores the trace', async () => {
+      it('when "Open full thread" is clicked, then every turn opens in a drawer stacked above the trace, and "Back to trace" closes only that drawer', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
-        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+        const traceDialog = () => screen.getByRole('dialog', { name: 'Trace details', hidden: true });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
 
-        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
-        expect(dialog().className).toContain('w-4/5');
-        expect(screen.queryByTestId('messages-panel')).toBeNull();
-        // The page did not navigate away from the traces list.
-        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+        const threadView = await screen.findByTestId('thread-view-by-trace');
+        const threadDialog = threadView.closest<HTMLElement>('[role="dialog"]');
+        expect(threadDialog).not.toBeNull();
+        expect(threadDialog).not.toBe(traceDialog());
+        expect(threadDialog?.getAttribute('data-depth')).toBe('2');
+        await waitFor(() => expect(threadView.querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        // The trace stays open underneath.
+        expect(traceDialog().className).toContain('w-4/5');
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
 
-        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-        expect(dialog().className).toContain('w-4/5');
+        await waitFor(() => expect(screen.queryByTestId('thread-view-by-trace')).toBeNull());
+        expect(screen.getByTestId('messages-panel')).not.toBeNull();
+        expect(traceDialog().className).toContain('w-4/5');
         await waitFor(() => {
           expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
           expect(queryClient.isFetching()).toBe(0);
@@ -1238,13 +1241,13 @@ describe('Traces page filter bar', () => {
       expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
     });
 
-    it('does not offer Primitive Name in the field step', async () => {
+    it('does not offer Primitive name in the field step', async () => {
       await renderScoped();
 
       focusFilterInput();
       await screen.findByRole('option', { name: 'Trace ID' });
-      expect(screen.queryByRole('option', { name: 'Primitive Name' })).toBeNull();
-      expect(screen.queryByRole('option', { name: 'Primitive Type' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
     });
   });
@@ -1454,6 +1457,26 @@ describe('Traces page sorting', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+    });
+  });
+});
+
+describe('Traces side panel span search', () => {
+  describe('when the opened trace has a span whose payload holds the searched term', () => {
+    it('keeps only the span matching the payload text', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpansWithPayload)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('llm call')).toBeTruthy();
+      fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value: 'zanzibar-payload-term' } });
+
+      await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
+      expect(screen.getByText('weather tool')).toBeTruthy();
     });
   });
 });

@@ -13,6 +13,7 @@ import {
 } from '../../handlers/observability';
 import {
   QUERY_TRACES,
+  AGGREGATE_TRACES,
   QUERY_THREADS,
   GET_TRACE_QUERY_FIELDS,
   GET_TRACE_QUERY_VALUES,
@@ -64,6 +65,7 @@ export const OBSERVABILITY_ROUTES = [
   LIST_SCORES_BY_SPAN_ROUTE,
   // New observability routes
   QUERY_TRACES,
+  AGGREGATE_TRACES,
   QUERY_THREADS,
   GET_TRACE_QUERY_FIELDS,
   GET_TRACE_QUERY_VALUES,

@@ -7,6 +7,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -18,7 +19,6 @@ import { useDebouncedCallback } from 'use-debounce';
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCMSRefBlockProps {
   index: number;
@@ -121,7 +121,7 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-accent3/30 pl-3">
+      <div className="border-l-2 border-info-edge pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />
@@ -135,12 +135,12 @@ const RefBlockContent = ({
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
+                <Badge size="xs" variant="warning" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="warning" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
               )}
@@ -201,7 +201,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-error hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -231,7 +231,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning flex items-start gap-1.5 px-1 pb-1 text-meta">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -257,7 +257,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="text-warning flex items-center gap-2 py-3">
+          <div className="flex items-center gap-2 py-3 text-warning-foreground">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

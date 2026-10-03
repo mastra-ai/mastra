@@ -49,7 +49,6 @@ export interface UseFluidHoverReturn {
    * reads as the highlight sliding in from another row.
    */
   isMeasured: boolean;
-  sessionRef: RefObject<number>;
   /**
    * Events whose target sits outside the container in the DOM are ignored:
    * React bubbles events from a portaled child (a submenu) through its React
@@ -57,7 +56,6 @@ export interface UseFluidHoverReturn {
    */
   handlers: {
     onMouseMove: (e: React.MouseEvent) => void;
-    onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: (e: React.MouseEvent) => void;
     /**
      * Routes a click that lands between items (a gap, the padding, past the
@@ -104,6 +102,21 @@ export interface PickNearestInput {
   layoutSize: { width: number; height: number };
   /** Skips an item without unregistering it. */
   isDisabled?: (index: number) => boolean;
+}
+
+function isOverDisabledItem(
+  items: Iterable<HTMLElement>,
+  point: { clientX: number; clientY: number },
+  isItemDisabled: ((element: HTMLElement) => boolean) | undefined,
+) {
+  for (const element of items) {
+    if (!isItemDisabled?.(element)) continue;
+    const r = element.getBoundingClientRect();
+    if (point.clientX >= r.left && point.clientX <= r.right && point.clientY >= r.top && point.clientY <= r.bottom) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -242,7 +255,6 @@ export function useFluidHover<T extends HTMLElement>(
   const [itemRects, setItemRects] = useState<ItemRect[]>([]);
   const [isMeasured, setIsMeasured] = useState(false);
   const itemRectsRef = useRef<ItemRect[]>([]);
-  const sessionRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
   const remeasureRafIdRef = useRef<number | null>(null);
 
@@ -428,11 +440,6 @@ export function useFluidHover<T extends HTMLElement>(
     [axis, containerRef, isItemDisabled],
   );
 
-  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
-    if (!isFromInside(e)) return;
-    sessionRef.current += 1;
-  }, []);
-
   const handleMouseLeave = useCallback((e: React.MouseEvent) => {
     if (!isFromInside(e)) return;
     if (rafIdRef.current !== null) {
@@ -457,6 +464,7 @@ export function useFluidHover<T extends HTMLElement>(
       // a menu, a footer button, a theme toggle) keeps its own click too.
       if (target.closest(CONTROL_BETWEEN_ROWS)) return;
       if (gapClick === false) return;
+      if (isOverDisabledItem(itemsRef.current.values(), e, isItemDisabled)) return;
       const index = activeIndexRef.current;
       if (index === null) return;
       const element = itemsRef.current.get(index);
@@ -506,10 +514,8 @@ export function useFluidHover<T extends HTMLElement>(
     setActiveIndex,
     itemRects,
     isMeasured,
-    sessionRef,
     handlers: {
       onMouseMove: handleMouseMove,
-      onMouseEnter: handleMouseEnter,
       onMouseLeave: handleMouseLeave,
       onClick: handleClick,
     },

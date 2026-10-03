@@ -1,6 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -59,7 +58,6 @@ const renderPage = (skillId: string) => {
 };
 
 beforeEach(() => {
-  usePlaygroundStore.setState({ requestContext: {} });
   setCurrentUser({ id: 'viewer-1' });
   server.use(
     http.get(`${BASE_URL}/api/stored/skills`, () =>

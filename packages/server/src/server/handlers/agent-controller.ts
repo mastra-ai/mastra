@@ -194,7 +194,7 @@ const toolApprovalBodySchema = z.object({
   requestContext: bodyRequestContextSchema,
 });
 const toolSuspensionBodySchema = z.object({
-  toolCallId: z.string(),
+  toolCallId: z.string().min(1),
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
@@ -285,7 +285,14 @@ const createSessionResponseSchema = z.object({
   resourceId: z.string(),
   threadId: z.string().optional(),
 });
-const ackResponseSchema = z.object({ ok: z.boolean() });
+const ackResponseSchema = z.object({
+  ok: z.boolean(),
+});
+
+const toolCommandAckResponseSchema = z.object({
+  ok: z.boolean(),
+  reason: z.enum(['not_pending', 'stale_tool_call', 'aborting', 'no_pending_suspension']).optional(),
+});
 /**
  * Status-line relevant slice of the session's observational-memory progress.
  * Mirrors the TUI status line: `msg pending/threshold ↓removal` (the active
@@ -495,6 +502,7 @@ function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisp
     activeTools: Object.fromEntries(snapshot.activeTools),
     toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
     pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
     activeSubagents: Object.fromEntries(snapshot.activeSubagents),
     modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
   };
@@ -670,7 +678,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   pathParamSchema: sessionPathParams,
   queryParamSchema: sessionScopeQuerySchema,
   bodySchema: toolApprovalBodySchema,
-  responseSchema: ackResponseSchema,
+  responseSchema: toolCommandAckResponseSchema,
   summary: 'Respond to a controller tool approval',
   description: 'Approves or declines a pending tool call surfaced by the session.',
   tags: ['AgentController'],
@@ -685,14 +693,30 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
       // leaving the run loop hung and duplicating the resumed stream.
       // Pass toolCallId so a stale request cannot resolve a different pending gate.
-      const gated = session.approval.isArmed() && (!toolCallId || session.approval.getToolCallId() === toolCallId);
+      const gated = toolCallId ? session.approval.isArmed({ toolCallId }) : session.approval.isArmed();
       if (gated || !toolCallId) {
-        session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
+        const result = session.respondToToolApproval({
+          toolCallId,
+          decision: approved ? 'approve' : 'decline',
+          requestContext,
+        });
+        if (!result.accepted) return { ok: false, reason: result.reason };
       } else {
+        if (!(await session.hasPersistedToolApproval(toolCallId))) {
+          // Other approvals still waiting means the caller answered an outdated card.
+          return {
+            ok: false,
+            reason: session.approval.isArmed() ? ('stale_tool_call' as const) : ('not_pending' as const),
+          };
+        }
         // Nothing parked for this call (e.g. a card restored from history after a
-        // restart): resume the stored suspended run that owns it.
+        // restart): resume the stored suspended run that owns it. Claim synchronously
+        // after the lookup so a concurrent duplicate decision is rejected.
+        if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' as const };
         ackBackgroundSessionWork({
-          work: session.respondToPersistedToolApproval({ toolCallId, approved, requestContext }),
+          work: session
+            .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
+            .finally(() => session.releaseToolResponse(toolCallId)),
           session,
           mastra,
           operation: 'respondToPersistedToolApproval',
@@ -712,7 +736,7 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   pathParamSchema: sessionPathParams,
   queryParamSchema: sessionScopeQuerySchema,
   bodySchema: toolSuspensionBodySchema,
-  responseSchema: ackResponseSchema,
+  responseSchema: toolCommandAckResponseSchema,
   summary: 'Respond to a suspended controller tool',
   description:
     'Resumes a suspended interactive tool (ask_user, request_access, submit_plan) with the provided resume data.',
@@ -726,8 +750,15 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // A resumed tool drives the run to its next terminal or suspension boundary.
       // Awaiting it holds this request open until the continuation finishes, which
       // can trip the request timeout and leave CORS mutating an already-sent response.
+      // Claim the parked suspension before acking so a concurrent duplicate answer
+      // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
+      const claim = session.claimToolSuspension(toolCallId);
+      if (!claim.accepted) return { ok: false, reason: claim.reason };
+      const claimedToolCallId = claim.toolCallId;
       ackBackgroundSessionWork({
-        work: session.respondToToolSuspension({ toolCallId, resumeData, requestContext }),
+        work: session
+          .respondToToolSuspension({ toolCallId, resumeData, requestContext })
+          .finally(() => session.releaseToolResponse(claimedToolCallId)),
         session,
         mastra,
         operation: 'respondToToolSuspension',
@@ -837,7 +868,7 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       if (session.thread.getId() !== threadId) {
-        await session.thread.switch({ threadId });
+        await session.thread.switch({ threadId, requestContext });
       }
       return { ok: true };
     } catch (error) {
@@ -1096,18 +1127,21 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const result = await session.sendNotificationSignal({
-        source,
-        kind,
-        summary,
-        priority,
-        payload,
-        sourceId,
-        dedupeKey,
-        coalesceKey,
-        attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
-        metadata,
-      });
+      const result = await session.sendNotificationSignal(
+        {
+          source,
+          kind,
+          summary,
+          priority,
+          payload,
+          sourceId,
+          dedupeKey,
+          coalesceKey,
+          attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
+          metadata,
+        },
+        { requestContext },
+      );
       return {
         accepted: result.accepted !== undefined,
         notificationId: result.record?.id,
@@ -1141,7 +1175,7 @@ export const CREATE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const thread = await session.thread.create({ title });
+      const thread = await session.thread.create({ title, requestContext });
       return {
         id: thread.id,
         title: thread.title,
@@ -1171,7 +1205,7 @@ export const DELETE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.thread.delete({ threadId });
+      await session.thread.delete({ threadId, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error deleting controller thread');
@@ -1198,7 +1232,7 @@ export const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       // Ensure the thread is the active one (switch if not)
       if (session.thread.getId() !== threadId) {
-        await session.thread.switch({ threadId });
+        await session.thread.switch({ threadId, requestContext });
       }
       await session.thread.rename({ title });
       return { ok: true };
@@ -1225,7 +1259,7 @@ export const CLONE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const thread = await session.thread.clone({ sourceThreadId, title });
+      const thread = await session.thread.clone({ sourceThreadId, title, requestContext });
       return {
         id: thread.id,
         title: thread.title,

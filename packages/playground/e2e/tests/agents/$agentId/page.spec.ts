@@ -13,7 +13,7 @@ test.describe('Agent detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
 
       // Thread sidebar
-      const newChatButton = page.locator('a:has-text("New Chat")');
+      const newChatButton = page.locator('a:has-text("New Thread")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
       // Thread history: either stored threads or the empty state on a fresh database
@@ -42,6 +42,11 @@ test.describe('Agent detail page', () => {
       await expect(page.getByTestId('agent-overview-panel-toggle')).toBeVisible();
       const overview = page.getByTestId('agent-overview-panel');
       await expect(overview).not.toBeVisible();
+
+      // The composer auto-focuses and swallows `]` as text, so move focus out of it first.
+      const composer = page.getByPlaceholder('Enter your message...');
+      await expect(composer).toBeFocused();
+      await composer.blur();
 
       await page.keyboard.press(']');
       await expect(overview).toBeVisible();

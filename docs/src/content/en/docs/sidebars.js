@@ -674,6 +674,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/mcp-authentication-authorization',
+              label: 'MCP authentication',
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },

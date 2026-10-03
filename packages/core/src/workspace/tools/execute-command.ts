@@ -42,6 +42,28 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     ),
 });
 
+// Listed first so models write the summary before the command itself.
+const descriptionShape = {
+  description: z
+    .string()
+    .min(1)
+    .describe(
+      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it first, before `command` and the other arguments, so the user sees it while the rest of the call streams in. Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
+    ),
+};
+
+/** Base schema with a required leading `description` (used when `requireDescription` is set). */
+export const executeCommandWithDescriptionSchema = z.object({
+  ...descriptionShape,
+  ...executeCommandInputSchema.shape,
+});
+
+/** Background schema with a required leading `description`. */
+export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
+  ...descriptionShape,
+  ...executeCommandWithBackgroundSchema.shape,
+});
+
 /**
  * Extract `| tail -N` or `| tail -n N` from the end of a command.
  * LLMs are trained to pipe to tail for long outputs, but this prevents streaming —
@@ -64,6 +86,9 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
   }
   return { command };
 }
+
+const ABORTED_COMMAND_NOTE =
+  'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
 
 /** Format command streams consistently with get_process_output. */
 function formatCommandOutput(stdout: string, stderr: string): string[] {
@@ -254,28 +279,35 @@ async function executeCommand(input: Record<string, any>, context: any) {
   // Unbounded accumulation here crashes the process with RangeError on very large output.
   const stdout = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
   const stderr = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+  // Snapshot the abort state when the command settles: an abort that lands afterwards
+  // (while the result is being reported) did not stop the command.
+  let abortedWhenSettled = false;
   try {
-    const result = await sandbox.executeCommand(command, [], {
-      timeout: timeout ?? undefined,
-      cwd: cwd ?? undefined,
-      abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
-      onStdout: async (data: string) => {
-        stdout.append(data);
-        await context?.writer?.custom({
-          type: 'data-sandbox-stdout',
-          data: { output: data, timestamp: Date.now(), toolCallId },
-          transient: true,
-        });
-      },
-      onStderr: async (data: string) => {
-        stderr.append(data);
-        await context?.writer?.custom({
-          type: 'data-sandbox-stderr',
-          data: { output: data, timestamp: Date.now(), toolCallId },
-          transient: true,
-        });
-      },
-    });
+    const result = await sandbox
+      .executeCommand(command, [], {
+        timeout: timeout ?? undefined,
+        cwd: cwd ?? undefined,
+        abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
+        onStdout: async (data: string) => {
+          stdout.append(data);
+          await context?.writer?.custom({
+            type: 'data-sandbox-stdout',
+            data: { output: data, timestamp: Date.now(), toolCallId },
+            transient: true,
+          });
+        },
+        onStderr: async (data: string) => {
+          stderr.append(data);
+          await context?.writer?.custom({
+            type: 'data-sandbox-stderr',
+            data: { output: data, timestamp: Date.now(), toolCallId },
+            transient: true,
+          });
+        },
+      })
+      .finally(() => {
+        abortedWhenSettled = context?.abortSignal?.aborted === true;
+      });
 
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -296,7 +328,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
         await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
       );
-      return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
+      // The exit code of an aborted command is a provider-specific kill code (LocalSandbox
+      // reports 128, which also means "fatal" for git), so the abort signal is the only
+      // reliable way to tell the model why it stopped. `killed: false` means the command
+      // exited on its own just before the abort.
+      const aborted = abortedWhenSettled && result.killed !== false && !result.timedOut;
+      const exitLine = `Exit code: ${result.exitCode}`;
+      return appendTerminalLine(parts, aborted ? `${ABORTED_COMMAND_NOTE}\n${exitLine}` : exitLine);
     }
 
     return (
@@ -321,7 +359,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
       await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return appendTerminalLine(parts, `Error: ${errorMessage}`);
+    const errorLine = `Error: ${errorMessage}`;
+    return appendTerminalLine(parts, abortedWhenSettled ? `${ABORTED_COMMAND_NOTE}\n${errorLine}` : errorLine);
   }
 }
 
@@ -349,13 +388,35 @@ export const executeCommandTool = createTool({
   toModelOutput: sandboxToModelOutput,
 });
 
+const backgroundDescription = `${baseDescription}
+
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`;
+
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-  description: `${baseDescription}
-
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
+  description: backgroundDescription,
   inputSchema: executeCommandWithBackgroundSchema,
+  outputSchema: z.string(),
+  execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
+});
+
+/** Foreground-only tool that requires a leading `description` arg. */
+export const executeCommandWithDescriptionTool = createTool({
+  id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+  description: baseDescription,
+  inputSchema: executeCommandWithDescriptionSchema,
+  outputSchema: z.string(),
+  execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
+});
+
+/** Background-capable tool that requires a leading `description` arg. */
+export const executeCommandWithDescriptionAndBackgroundTool = createTool({
+  id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+  description: backgroundDescription,
+  inputSchema: executeCommandWithDescriptionAndBackgroundSchema,
   outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,

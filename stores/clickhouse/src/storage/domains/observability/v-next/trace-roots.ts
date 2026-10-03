@@ -79,6 +79,8 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'entityType',
   'entityId',
   'entityName',
+  'threadId',
+  'resourceId',
   'error',
   'metadataRaw',
   'input',

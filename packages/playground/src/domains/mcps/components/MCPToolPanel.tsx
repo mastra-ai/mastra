@@ -1,17 +1,17 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
-import { McpAppViewer } from './mcp-app-viewer';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -71,7 +71,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   const handleToolCall = useCallback(
     async (_toolName: string, args: Record<string, unknown>) => {
-      const response = await executeTool(args);
+      const response = await executeTool({ data: args });
       return response;
     },
     [executeTool],
@@ -84,11 +84,11 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
 
     // Failures are rendered in the result panel via `executionError`.
-    return await executeTool(data).catch(() => undefined);
+    return await executeTool({ data, requestContext }).catch(() => undefined);
   };
 
   if (isLoading) {
@@ -152,6 +152,8 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
         toolId={tool.name}
+        requestContextEntityType="mcp-tool"
+        requestContextEntityId={`${serverId}:${tool.name}`}
       />
     </div>
   );

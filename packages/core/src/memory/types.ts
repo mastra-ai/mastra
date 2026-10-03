@@ -444,7 +444,28 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
-export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
+/**
+ * A single idle activation TTL: milliseconds, a duration string like `"5m"` or `"1hr"`,
+ * `"auto"` for a provider-aware TTL, or `false` to disable idle activation.
+ */
+export type ObservationalMemoryActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs. Keys are provider names (e.g. `anthropic`, `openai`),
+ * matched case-insensitively against the part of the actor model's provider before the
+ * first `.` (so `anthropic` matches `anthropic.messages`). `default` applies to every
+ * provider without its own key; without `default`, unmatched providers don't idle-activate.
+ *
+ * @example { default: 'auto', anthropic: '1h' }
+ */
+export type ObservationalMemoryActivationTTLByProvider = {
+  default?: ObservationalMemoryActivationTTLValue;
+  [provider: string]: ObservationalMemoryActivationTTLValue | undefined;
+};
+
+export type ObservationalMemoryActivationTTL =
+  | ObservationalMemoryActivationTTLValue
+  | ObservationalMemoryActivationTTLByProvider;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -461,6 +482,12 @@ export interface ObservationalMemoryObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Manage working memory through Observational Memory extraction.
@@ -681,6 +708,12 @@ export interface ObservationalMemoryReflectionConfig {
    */
   model?: AgentConfig['model'];
 
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Token count of observations that triggers reflection.
    * When observation tokens exceed this, the Reflector is called to condense them.
@@ -859,6 +892,10 @@ export interface ObservationalMemoryOptions {
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
    *
+   * Pass an object to set a TTL per provider, with `default` for every other provider.
+   * Use this when your requests set a prompt cache TTL that Mastra can't detect, such as
+   * Anthropic's per-message `cacheControl: { ttl: '1h' }`.
+   *
    * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
    * opt reflections into idle activation.
    *
@@ -866,6 +903,7 @@ export interface ObservationalMemoryOptions {
    * @example "5m"
    * @example "1hr"
    * @example "auto"
+   * @example { default: 'auto', anthropic: '1h' }
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 
@@ -1444,6 +1482,10 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Number of retries after the initial Observer model call */
+  maxRetries?: number;
+  /** Terminal policy after Observer model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Manage working memory through Observational Memory extraction. */
   manageWorkingMemory?: boolean;
 
@@ -1477,6 +1519,10 @@ export type SerializedObservationalMemoryObservationConfig = {
 export type SerializedObservationalMemoryReflectionConfig = {
   /** Reflector model ID */
   model?: string;
+  /** Number of retries after the initial Reflector model call */
+  maxRetries?: number;
+  /** Terminal policy after Reflector model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Token count threshold that triggers reflection */
   observationTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

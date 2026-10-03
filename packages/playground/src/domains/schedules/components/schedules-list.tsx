@@ -3,12 +3,12 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo } from 'react';
 import { ScheduleStatusText } from './schedule-status-badge';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
-import { useLinkComponent } from '@/lib/framework';
 
 export type SchedulesSortKey = 'target' | 'status' | 'nextFireAt' | 'lastFireAt';
 export type SchedulesSort = ListSort<SchedulesSortKey>;
@@ -89,7 +89,11 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
               <Txt as="span" variant="caption" font="mono">
                 {s.cron}
               </Txt>
-              {s.timezone ? <span className="text-meta text-muted-foreground">{s.timezone}</span> : null}
+              {s.timezone ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {s.timezone}
+                </Txt>
+              ) : null}
             </span>
           </DataList.Cell>
           <DataList.Cell>

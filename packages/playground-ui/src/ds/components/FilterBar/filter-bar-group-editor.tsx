@@ -9,6 +9,7 @@ import type { FilterBarGroup, FilterBarLogic } from './types';
 import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
@@ -230,10 +231,12 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
     >
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         <FolderIcon className="size-3.5 text-muted-foreground" />
-        <span className="text-label text-foreground">Group</span>
-        <span className="text-label text-muted-foreground">
+        <Txt as="span" variant="label" tone="ink">
+          Group
+        </Txt>
+        <Txt as="span" variant="label" tone="muted">
           · {count} {count === 1 ? 'condition' : 'conditions'}
-        </span>
+        </Txt>
         <div className="ml-auto flex items-center gap-1">
           <FilterBarLogicSwitch groupId={group.id} logic={group.logic} />
           <Button

@@ -1,9 +1,11 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,7 +30,6 @@ import {
   DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
 
@@ -211,9 +212,9 @@ function CmsPromptBlocksEditForm({
           </div>
         </Notice>
       )}
-      <form className="h-full">
+      <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }

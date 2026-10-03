@@ -38,6 +38,7 @@ import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
 
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type {
@@ -48,19 +49,6 @@ export type {
   MessageScrollerScrollable,
   MessageScrollerVisibility,
 } from './message-scroller-context';
-
-const mergeRefs =
-  <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
-  (element: TElement | null) => {
-    refs.forEach(ref => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(element);
-        return;
-      }
-      ref.current = element;
-    });
-  };
 
 const scrollableMatches = (left: MessageScrollerScrollable, right: MessageScrollerScrollable) =>
   left.start === right.start && left.end === right.end;
@@ -553,6 +541,9 @@ export function MessageScrollerProvider({
 
       if (!didScroll) return;
       defaultScrollAppliedRef.current = true;
+      // A fresh thread opens on its first message with nothing to scroll yet: it is
+      // at its end, so the reply streaming in under it is followed.
+      if (autoScroll && getMaxScroll(viewportElement) <= VISIBILITY_EPSILON) followingRef.current = true;
       // Settling is what arms turn anchoring: the rows the transcript opened with
       // are recorded as read here, and on a settled thread the next anchor to
       // register is the send itself — an arming left to a later anchoring pass
@@ -584,6 +575,7 @@ export function MessageScrollerProvider({
       defaultScrollScheduledRef.current = false;
     };
   }, [
+    autoScroll,
     defaultScrollPosition,
     getLastAnchorId,
     getOrderedItems,

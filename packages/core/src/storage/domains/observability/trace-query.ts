@@ -524,6 +524,10 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     traceId: stringField(false),
     threadId: stringField(false),
     resourceId: stringField(false),
+    runId: stringField(false),
+    sessionId: stringField(false),
+    userId: stringField(false),
+    organizationId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
@@ -549,6 +553,10 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     entityVersionId: stringField(false),
     parentEntityVersionId: stringField(false),
     rootEntityVersionId: stringField(false),
+    runId: stringField(false),
+    sessionId: stringField(false),
+    userId: stringField(false),
+    organizationId: stringField(false),
   },
   scores: {
     scorerId: stringField(true),
@@ -1345,7 +1353,7 @@ function planThreadPredicate(
  * problems to `issues`.
  *
  * @internal Shared with the trace-aggregate planner so both apply identical selection
- * validation (Aggregate Query API Decision 2).
+ * validation.
  */
 export function planTraceQuerySelectionPredicate(
   where: TraceQueryPredicate,
@@ -1354,6 +1362,16 @@ export function planTraceQuerySelectionPredicate(
 ): TrustedTraceQueryPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   return planPredicate(where, 'trace', path, 1, state);
+}
+
+/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+export function planSpanQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  // Scalar grammar cannot produce a related-record predicate.
+  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1601,7 +1619,8 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   return normalized as Array<string | number>;
 }
 
-function digestBinding(value: unknown): string {
+/** @internal Shared query binding with property-order-independent serialization. */
+export function digestBinding(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 

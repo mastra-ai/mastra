@@ -425,6 +425,29 @@ describe('work item read wire', () => {
     expect(stored?.metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]).toBe('merged');
   });
 
+  it('hides the reconciler missing-source marker from list responses', async () => {
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '43',
+          url: 'https://github.com/acme/app/issues/43',
+        },
+        title: 'Gone upstream',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 43, externalSourceMissingAt: '2026-09-30T00:00:00.000Z' },
+      },
+    });
+
+    const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    expect((await listed.json()).workItems[0].metadata).toEqual({ number: 43 });
+  });
+
   it('drops internal tokens from browser writes', async () => {
     const created = await json(
       'POST',
@@ -434,6 +457,7 @@ describe('work item read wire', () => {
           number: 42,
           [FACTORY_RULE_MATERIALIZATION_KEY]: 'caller-materialization',
           [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+          externalSourceMissingAt: '2099-01-01T00:00:00.000Z',
         },
       }),
     );
@@ -445,6 +469,7 @@ describe('work item read wire', () => {
         prNumber: 7,
         [FACTORY_RULE_MATERIALIZATION_KEY]: 'replacement-materialization',
         [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed',
+        externalSourceMissingAt: '2099-01-01T00:00:00.000Z',
       },
     });
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
@@ -1097,6 +1122,66 @@ describe('GET /web/factory/projects/:id/decisions', () => {
 });
 
 describe('GET /web/factory/projects/:id/attention', () => {
+  it('refuses to retry a failed run once the card has left the phase it was decided for', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await seed.workItems.update({
+      orgId: 'org1',
+      id: (await created.json()).workItem.id,
+      userId: 'u1',
+      patch: { stages: ['triage'] },
+    }))!.item;
+    const decidedAt = new Date(Date.now() + 1_000);
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'stale-retry', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: 'stale-retry' }],
+      causalChain: [],
+      now: decidedAt,
+    });
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now: decidedAt,
+      leaseExpiresAt: new Date(decidedAt.getTime() + 60_000),
+      limit: 1,
+    });
+    const failed = await seed.workItems.failDeferredDecision({
+      id: claimed!.id,
+      orgId: claimed!.orgId,
+      factoryProjectId: claimed!.factoryProjectId,
+      ownerId: 'worker-1',
+      now: decidedAt,
+      availableAt: decidedAt,
+      lastError: 'Session unavailable.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    const listDecisions = async () =>
+      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json()).decisions;
+    await expect(listDecisions()).resolves.toMatchObject([{ id: failed!.id, canRetry: true }]);
+
+    vi.useFakeTimers({ now: new Date(decidedAt.getTime() + 60_000), toFake: ['Date'] });
+    try {
+      await seed.workItems.update({ orgId: 'org1', id: workItem.id, userId: 'u1', patch: { stages: ['planning'] } });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await expect(listDecisions()).resolves.toMatchObject([{ id: failed!.id, canRetry: false }]);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [{ decisionId: failed!.id, canRetry: false }],
+    });
+    const retry = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${failed!.id}/retry`);
+    expect(retry.status).toBe(409);
+    await expect(retry.json()).resolves.toEqual({ error: 'decision_not_retryable' });
+    expect((await seed.workItems.getDeferredDecision('org1', PROJECT_ID, failed!.id))?.status).toBe('failed');
+  });
+
   it('tracks read and archived failure occurrences across retries', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const createdBody = await created.json();

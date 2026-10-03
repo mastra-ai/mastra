@@ -1,9 +1,11 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,7 +24,6 @@ import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-p
 import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
 import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
 import { StoredScorerCrumb } from '@/domains/scores/scorer-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb }];
 
@@ -209,9 +210,9 @@ function CmsScorersEditForm({
           </div>
         </Notice>
       )}
-      <form ref={formRef} className="h-full">
+      <Form ref={formRef} className="h-full">
         <ScorerEditMain form={form} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }

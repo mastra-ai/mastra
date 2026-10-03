@@ -1,11 +1,24 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createObservabilityVNextTests } from '@internal/storage-test-utils';
+import {
+  createObservabilityVNextTests,
+  TRACE_AGGREGATE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_FIXTURE_DATA,
+  traceAggregateResponseMismatch,
+  writeTraceQueryFixture,
+} from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { parseQueryThreadsInput, parseTraceQueryRequest, planThreadQuery, planTraceQuery } from '@mastra/core/storage';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import {
+  parseQueryThreadsInput,
+  parseTraceAggregateRequest,
+  parseTraceQueryRequest,
+  planThreadQuery,
+  planTraceAggregate,
+  planTraceQuery,
+} from '@mastra/core/storage';
+import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
@@ -122,11 +135,13 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'delta-polling',
         'trace-query',
+        'trace-aggregate',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -141,11 +156,13 @@ describe('ObservabilityStorageDuckDB', () => {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        'trace-aggregate',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
@@ -175,11 +192,13 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'delta-polling',
         'trace-query',
+        'trace-aggregate',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -193,11 +212,13 @@ describe('ObservabilityStorageDuckDB', () => {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        'trace-aggregate',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
     } finally {
       coreFeatures.clear();
@@ -853,6 +874,32 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
 
+      // Empty and past-the-end pages must short-circuit before the page query:
+      // an empty page_roots makes the reconstruction bound NULL, forcing a
+      // full scan of span_events.
+      const querySpy = vi.spyOn(DuckDBConnection.prototype, 'query');
+      const pageQueries = () =>
+        querySpy.mock.calls.filter(([sql]) => /page_(roots|anchors) AS/.test(String(sql))).length;
+      const empty = await storage.listTraces({ filters: { startedAt: { end: new Date(0) } } });
+      expect(empty.pagination).toMatchObject({ total: 0, hasMore: false });
+      expect(empty.spans).toEqual([]);
+      const emptyLight = await storage.listTracesLight({ filters: { startedAt: { end: new Date(0) } } });
+      expect(emptyLight.spans).toEqual([]);
+      const pastEnd = await storage.listTraces({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEnd.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEnd.spans).toEqual([]);
+      const pastEndSlow = await storage.listTraces({
+        pagination: { page: 2, perPage: 3 },
+        orderBy: { field: 'endedAt', direction: 'DESC' },
+      });
+      expect(pastEndSlow.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndSlow.spans).toEqual([]);
+      const pastEndBranches = await storage.listBranches({ pagination: { page: 2, perPage: 3 } });
+      expect(pastEndBranches.pagination).toEqual({ total: 5, page: 2, perPage: 3, hasMore: false });
+      expect(pastEndBranches.branches).toEqual([]);
+      expect(pageQueries()).toBe(0);
+      querySpy.mockRestore();
+
       const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
       expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
       expect(delta.delta).toEqual({ limit: 3, hasMore: true });
@@ -871,6 +918,78 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(branchDelta.delta).toEqual({ limit: 10, hasMore: false });
     });
 
+    it('stores span payload only once when an ended span is written', async () => {
+      const payload = {
+        input: { prompt: 'hi' },
+        attributes: { a: 1 },
+        metadata: { m: 'x' },
+        requestContext: { r: 'y' },
+      };
+      const base = {
+        isEvent: false,
+        parentSpanId: null,
+        name: 'root',
+        spanType: SpanType.GENERIC,
+        entityType: null,
+        entityId: 'agent-payload',
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        tags: null,
+        links: null,
+        output: null,
+        error: null,
+        ...payload,
+      } as const;
+      const startedAt = new Date(Date.UTC(2026, 0, 2));
+      const started = { ...base, traceId: 'trace-payload', spanId: 'span-payload', startedAt, endedAt: null };
+      const ended = { ...started, endedAt: new Date(startedAt.getTime() + 1000), output: { ok: true } };
+      const event = {
+        ...base,
+        traceId: 'trace-event',
+        spanId: 'span-event',
+        isEvent: true,
+        startedAt,
+        endedAt: startedAt,
+      };
+
+      await storage.batchCreateSpans({ records: [started, event] });
+      await storage.batchCreateSpans({ records: [ended] });
+
+      const rows = await store.db.query<Record<string, unknown>>(
+        `SELECT spanId, eventType, endedAt, input, attributes, metadata, requestContext FROM span_events ORDER BY spanId, eventType, endedAt NULLS FIRST, cursorId`,
+      );
+      const payloadCols = (r: Record<string, unknown>) => [r.input, r.attributes, r.metadata, r.requestContext];
+      const spanRows = rows.filter(r => r.spanId === 'span-payload');
+      expect(spanRows.map(r => r.eventType)).toEqual(['end', 'start', 'start']);
+      // end row and the SPAN_STARTED start row carry the payload; the SPAN_ENDED start row does not.
+      expect(payloadCols(spanRows[0]!).every(v => v != null)).toBe(true);
+      expect(payloadCols(spanRows[1]!).every(v => v != null)).toBe(true);
+      expect(payloadCols(spanRows[2]!).every(v => v == null)).toBe(true);
+      const eventRows = rows.filter(r => r.spanId === 'span-event');
+      expect(eventRows).toHaveLength(1);
+      expect(payloadCols(eventRows[0]!).every(v => v != null)).toBe(true);
+
+      const span = (await storage.getSpan({ traceId: 'trace-payload', spanId: 'span-payload' }))!.span;
+      expect(span).toMatchObject({ ...payload, output: { ok: true } });
+
+      // Ended-only-once span: payload comes from the end row.
+      await storage.batchCreateSpans({ records: [{ ...ended, traceId: 'trace-once', spanId: 'span-once' }] });
+      const once = (await storage.getSpan({ traceId: 'trace-once', spanId: 'span-once' }))!.span;
+      expect(once).toMatchObject(payload);
+      const listed = await storage.listTraces({ filters: { entityId: 'agent-payload' } });
+      expect(listed.spans.map(s => s.traceId).sort()).toEqual(['trace-event', 'trace-once', 'trace-payload']);
+    });
+
     it('listTracesLight returns seeded traces via the facade', async () => {
       await storage.batchCreateSpans({
         records: [
@@ -886,10 +1005,10 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'myWorkflow',
             userId: null,
             organizationId: null,
-            resourceId: null,
+            resourceId: 'user-light',
             runId: null,
             sessionId: null,
-            threadId: null,
+            threadId: 'thread-light',
             requestId: null,
             environment: 'production',
             source: null,
@@ -917,6 +1036,8 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(row.inputPreview).toBe('summarize this thread');
       expect(row.status).toBe('success');
       expect(row.metadata).toEqual({ customer: 'acme' });
+      expect(row.threadId).toBe('thread-light');
+      expect(row.resourceId).toBe('user-light');
     });
 
     it('listTracesLight computes status from error and endedAt', async () => {
@@ -1385,6 +1506,68 @@ describe('ObservabilityStorageDuckDB', () => {
         after: page.deltaCursor!,
       });
       expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
+    });
+
+    it('computes branch page deltaCursor with post-aggregation filters', async () => {
+      const originalFeatures = new Set(coreFeatures);
+      coreFeatures.add('observability-delta-polling');
+      const toolSpan = (id: string, tags: string[], second: number) => ({
+        traceId: `trace-${id}`,
+        spanId: `tool-${id}`,
+        parentSpanId: null,
+        name: `tool-${id}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags,
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(`2026-03-01T00:00:0${second}Z`),
+        endedAt: new Date(`2026-03-01T00:00:0${second + 1}Z`),
+      });
+
+      try {
+        await storage.createSpan({ span: toolSpan('keep-1', ['keep'], 0) });
+        await storage.createSpan({ span: toolSpan('skip-1', ['skip'], 2) });
+
+        const page = await storage.listBranches({ filters: { tags: ['keep'] } });
+        expect(page.branches.map(branch => branch.spanId)).toEqual(['tool-keep-1']);
+        expect(page.deltaCursor).toBeTruthy();
+
+        const none = await storage.listBranches({ filters: { tags: ['missing'] } });
+        expect(none.branches).toEqual([]);
+        expect(none.deltaCursor).toBeTruthy();
+
+        await storage.createSpan({ span: toolSpan('keep-2', ['keep'], 4) });
+        await storage.createSpan({ span: toolSpan('skip-2', ['skip'], 6) });
+
+        const delta = await storage.listBranches({
+          mode: 'delta',
+          filters: { tags: ['keep'] },
+          after: page.deltaCursor!,
+        });
+        expect(delta.branches.map(branch => branch.spanId)).toEqual(['tool-keep-2']);
+      } finally {
+        coreFeatures.clear();
+        for (const feature of originalFeatures) coreFeatures.add(feature);
+      }
     });
 
     it('batch deletes traces', async () => {
@@ -3239,5 +3422,48 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(atHead.delta).toEqual({ limit: 10, hasMore: false });
       expect(atHead.deltaCursor).toBe(bootstrap.deltaCursor);
     });
+  });
+});
+
+describe('ObservabilityStorageDuckDB aggregateTraces', () => {
+  const TIME_RANGE = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+  let store: DuckDBStore;
+
+  beforeAll(async () => {
+    store = new DuckDBStore({ path: ':memory:' });
+    await store.init();
+    await writeTraceQueryFixture(store.observability, TRACE_AGGREGATE_FIXTURE_DATA, 'event-sourced');
+  });
+
+  afterAll(async () => {
+    await store.db.close();
+  });
+
+  it.each(TRACE_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+      const response = await store.observability.aggregateTraces(plan);
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
+
+  it.each<[string, Record<string, unknown> | undefined, TraceQueryTenantScope | undefined]>([
+    ['the whole window', undefined, undefined],
+    ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
+    ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+    ['a tenant scope', undefined, { organizationId: 'org-b' }],
+  ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
+    const aggregate = await store.observability.aggregateTraces(
+      planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] }), { scope }),
+    );
+    const traces = await store.observability.queryTraces(
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 1 } }), {
+        scope,
+      }),
+    );
+    const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+    expect(total).toBeGreaterThan(0);
+    expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
   });
 });

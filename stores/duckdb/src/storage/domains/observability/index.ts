@@ -84,9 +84,11 @@ import type {
   QueryThreadsResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -101,6 +103,7 @@ import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
@@ -248,11 +251,13 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        'trace-aggregate',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ] as const;
     }
 
@@ -267,11 +272,13 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
+      'trace-aggregate',
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
     ] as const;
   }
 
@@ -305,6 +312,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
+  }
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return traceAggregateOps.aggregateTraces(this.db, plan);
   }
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,

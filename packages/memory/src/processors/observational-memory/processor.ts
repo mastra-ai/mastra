@@ -236,17 +236,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           runState,
         });
-        // Pass the record through even without observations — resource-scoped
-        // retrieval still injects recall guidance so the actor can browse and
-        // search other threads.
-        const systemMessages = ctx.omRecord
-          ? await this.engine.buildContextSystemMessages({
-              threadId,
-              resourceId,
-              record: ctx.omRecord,
-              unobservedContextBlocks: ctx.otherThreadsContext,
-            })
-          : undefined;
+        // Recall guidance is useful even with no record; null preserves read-only behavior.
+        const systemMessages = await this.engine.buildContextSystemMessages({
+          threadId,
+          resourceId,
+          record: ctx.omRecord,
+          unobservedContextBlocks: ctx.otherThreadsContext,
+        });
 
         injectObservationContextMessages({
           messageList,

@@ -158,7 +158,7 @@ describe('Models', () => {
     it('the left-pane search filters the provider checklist without affecting the model grid', async () => {
       const { getByTestId, queryByTestId } = await renderModels();
 
-      const filterSearch = getByTestId('models-provider-filter-search').querySelector('input');
+      const filterSearch = getByTestId('models-provider-filter-search');
       expect(filterSearch).toBeTruthy();
       fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
 
@@ -175,7 +175,7 @@ describe('Models', () => {
 
       fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
-      const searchInput = getByTestId('model-card-picker-search').querySelector('input');
+      const searchInput = getByTestId('model-card-picker-search');
       expect(searchInput).toBeTruthy();
       fireEvent.change(searchInput!, { target: { value: 'claude' } });
 

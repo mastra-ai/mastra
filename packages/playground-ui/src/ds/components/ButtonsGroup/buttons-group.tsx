@@ -16,6 +16,7 @@ export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   size?: ControlSize;
 };
 
+/** Joins related actions into one pill. To pick one of several options, use `SegmentedControl` instead. */
 export const ButtonsGroup = React.forwardRef<HTMLDivElement, ButtonsGroupProps>(
   ({ children, className, orientation = 'horizontal', size = 'md', ...props }, ref) => {
     return (
