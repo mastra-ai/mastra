@@ -17,6 +17,33 @@ interface HttpTransportOptions {
   retryOptions?: RetryOptions;
 }
 
+class HttpResponseError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly retryAfterMs?: number,
+  ) {
+    super(message);
+  }
+}
+
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+
+  const normalizedValue = value.trim();
+  if (/^\d+$/.test(normalizedValue)) {
+    const milliseconds = Number(normalizedValue) * 1000;
+    return Number.isFinite(milliseconds) ? milliseconds : undefined;
+  }
+
+  const retryAt = Date.parse(normalizedValue);
+  return Number.isFinite(retryAt) && retryAt > now ? retryAt - now : undefined;
+}
+
 export class HttpTransport extends LoggerTransport {
   private url: string;
   private method: string;
@@ -79,17 +106,23 @@ export class HttpTransport extends LoggerTransport {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new HttpResponseError(
+          `HTTP ${response.status}: ${response.statusText}`,
+          isRetryableHttpStatus(response.status),
+          parseRetryAfter(response.headers?.get('retry-after')),
+        );
       }
 
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (retryCount < this.retryOptions.maxRetries) {
-        const delay = this.retryOptions.exponentialBackoff
+      const canRetry = !(error instanceof HttpResponseError) || error.retryable;
+      if (canRetry && retryCount < this.retryOptions.maxRetries) {
+        const backoffDelay = this.retryOptions.exponentialBackoff
           ? this.retryOptions.retryDelay * Math.pow(2, retryCount)
           : this.retryOptions.retryDelay;
+        const delay = error instanceof HttpResponseError ? Math.max(backoffDelay, error.retryAfterMs ?? 0) : backoffDelay;
 
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeHttpRequest(data, retryCount + 1);

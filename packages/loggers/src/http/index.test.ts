@@ -155,6 +155,51 @@ describe('HttpTransport', () => {
   });
 
   describe('error handling and retries', () => {
+    it('should not retry permanent client errors', async () => {
+      fetchMock.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+        }),
+      );
+      const t = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: { maxRetries: 2, retryDelay: 1, exponentialBackoff: false },
+      });
+
+      vi.useRealTimers();
+      await expect((t as any).makeHttpRequest({ logs: [] })).rejects.toThrow('HTTP 400: Bad Request');
+      vi.useFakeTimers();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should honor Retry-After for retryable responses', async () => {
+      fetchMock
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            ok: false,
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? '1' : null) },
+          }),
+        )
+        .mockImplementationOnce(() => Promise.resolve({ ok: true }));
+      const t = new HttpTransport({
+        ...defaultOptions,
+        retryOptions: { maxRetries: 1, retryDelay: 10, exponentialBackoff: false },
+      });
+
+      const request = (t as any).makeHttpRequest({ logs: [] });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await request;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
     it('should retry on HTTP errors', async () => {
       fetchMock
         .mockImplementationOnce(() =>
