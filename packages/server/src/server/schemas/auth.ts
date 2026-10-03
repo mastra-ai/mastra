@@ -66,10 +66,16 @@ export const ssoLoginQuerySchema = z.object({
   redirect_uri: z.string().optional(),
 });
 
-export const ssoCallbackQuerySchema = z.object({
-  code: z.string(),
-  state: z.string().optional(),
-});
+export const ssoCallbackQuerySchema = z
+  .object({
+    code: z.string().min(1).optional(),
+    state: z.string().optional(),
+    error: z.string().min(1).max(64).optional(),
+    error_description: z.string().max(256).optional(),
+  })
+  .refine(query => Boolean(query.code) !== Boolean(query.error), {
+    message: 'Expected either an authorization code or an OAuth error, but not both',
+  });
 
 export const ssoLoginResponseSchema = z.object({
   url: z.string(),

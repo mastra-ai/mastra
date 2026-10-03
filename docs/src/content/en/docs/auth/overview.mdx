@@ -16,10 +16,14 @@ You can start with basic shared secret JWT authentication and switch to known pr
 
 ## What auth secures
 
-Configuring authentication locks down two things at once:
+Choose where to configure authentication:
 
-- **Studio UI**: Studio displays a login screen (SSO, email/password, or both) and enforces role-based access control to determine what each team member can see and do.
-- **API routes**: All built-in routes (`/api/agents/*`, `/api/workflows/*`, etc.) and custom routes require authentication, whether requests come from Studio or direct API calls.
+- **`server.auth`**: Authenticates API requests. Studio also uses this provider unless you configure `studio.auth` separately.
+- **`studio.auth`**: Authenticates Studio requests with a separate provider. It doesn't require ordinary API callers to use that provider. If `server.auth` is unset, ordinary API requests remain unauthenticated.
+
+Studio displays the login options supported by its provider. Configure [role-based access control](/docs/studio/auth#role-based-access-control) separately to restrict what each team member can do.
+
+A Studio login screen doesn't secure an otherwise public API. See [Separate Studio and API authentication](/docs/studio/auth#separate-studio-and-api-authentication) for the routing behavior and security implications.
 
 Authentication is optional. If no auth is configured, all routes and Studio are publicly accessible. Public access can be enabled on individual custom routes using `requiresAuth: false`.
 
@@ -31,7 +35,7 @@ The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*
 
 :::note
 
-Authentication for Studio is currently supported by the following providers: Simple Auth, JWT, WorkOS, Better Auth, and Google.
+Authentication for Studio is supported by Simple Auth, JWT, WorkOS, Better Auth, Google, and Clerk. Available login methods and required configuration depend on the provider. See the provider's guide for Studio single sign-on (SSO) setup, which can require credentials beyond those used for API token verification.
 
 :::
 
