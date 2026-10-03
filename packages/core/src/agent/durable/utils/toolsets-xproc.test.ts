@@ -11,8 +11,9 @@ import { z } from 'zod';
 import { Mastra } from '../../../mastra';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
 import { globalRunRegistry } from '../run-registry';
-import { rebuildRunToolsFromMastra } from './resolve-runtime';
+import { rebuildRunToolsFromMastra, resolveRuntimeDependencies } from './resolve-runtime';
 import { serializeDurableOptions, serializeToolsetToolNames } from './serialize-state';
 
 const RUN_ID = 'run-toolsets-xproc';
@@ -86,6 +87,29 @@ describe('cross-process toolsets', () => {
   it('does not throw when toolset tools are also registered on the agent', async () => {
     const rebuilt = await rebuild(setup(), { extra: { echo } });
     expect(rebuilt?.tools.echo).toBeDefined();
+  });
+
+  it('throws from resolveRuntimeDependencies on a fresh worker when toolset tools are missing', async () => {
+    const mastra = setup();
+    const resolve = (toolsets: Record<string, Record<string, unknown>> | undefined) =>
+      resolveRuntimeDependencies({
+        mastra,
+        runId: RUN_ID,
+        agentId: 'toolsets-agent',
+        input: {
+          messageListState: new MessageList().serialize(),
+          state: { threadId: undefined, resourceId: undefined },
+          options: JSON.parse(
+            JSON.stringify(serializeDurableOptions({ toolsetToolNames: serializeToolsetToolNames(toolsets) })),
+          ),
+          modelConfig: { provider: 'mock', modelId: 'mock' },
+        } as any,
+      });
+
+    await expect(resolve({ extra: { shout } })).rejects.toThrow(/"shout".*register them on the agent/s);
+    globalRunRegistry.delete(RUN_ID);
+    const resolved = await resolve(undefined);
+    expect(Object.keys(resolved.tools)).toEqual(['echo']);
   });
 
   it('rebuilds normally without toolsets', async () => {
