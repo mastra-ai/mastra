@@ -759,20 +759,24 @@ const sidebars = {
       label: 'Workspaces',
     },
     {
-      type: 'doc',
-      id: 'mastra-platform/integrations',
+      type: 'category',
       label: 'Integrations',
+      collapsed: true,
       customProps: {
         tags: ['new'],
       },
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/connect',
-      label: 'Connect',
-      customProps: {
-        tags: ['new'],
-      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/integrations',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect',
+          label: 'Use in your app',
+        },
+      ],
     },
     {
       type: 'doc',
