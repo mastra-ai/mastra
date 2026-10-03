@@ -200,6 +200,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'sandboxes/cua',
+          label: 'Cua',
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/daytona',
           label: 'Daytona',
           customProps: { icon: '/img/integrations/daytona.svg', customCSS: 'dark:invert' },
