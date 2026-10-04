@@ -65,9 +65,9 @@ At the start of each step, Mastra batches pending input before per-step input pr
 
 Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
 
-Interrupted requests count toward `maxSteps`. The next request requires remaining steps and a run that hasn't been cancelled. If the step budget is exhausted, signals may be saved to history without an answer. Mastra doesn't extend the budget or start another run to answer them.
+Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
 
-Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers and clears buffers in its built-in batching and structured-output processors, but doesn't undo arbitrary custom-processor state, custom history writes, or external side effects. Interrupted requests can use billable tokens even when the provider doesn't report usage.
+Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers and clears buffers in its built-in batching and structured-output processors, but doesn't undo arbitrary custom-processor state, custom history writes, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
 
 This reasoning interruption applies to the default loop, not the experimental durable or evented agents or the Inngest engine.
 

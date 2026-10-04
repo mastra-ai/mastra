@@ -165,7 +165,7 @@ export type StreamInternal = {
   /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
   modelAttempt?: import('./shared/model-attempt').ModelAttempt;
-  transcriptSteps?: (import('./shared/model-attempt').TranscriptStep | null | undefined)[];
+  transcriptSteps?: (import('./shared/model-attempt').TranscriptStep | undefined)[];
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */

@@ -64,24 +64,22 @@ describe('step-finish token usage extraction', () => {
     {
       name: 'unknown',
       usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
-      count: 2,
-      expected: { promptTokens: 4, completionTokens: 5, totalTokens: 9 },
     },
     {
       name: 'measured zero',
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0 },
-      count: 3,
-      expected: { promptTokens: 4, completionTokens: 5, totalTokens: 9, reasoningTokens: 0 },
     },
     {
       name: 'reported',
-      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5, reasoningTokens: 1 },
-      count: 3,
-      expected: { promptTokens: 6, completionTokens: 8, totalTokens: 14, reasoningTokens: 1 },
+      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5, reasoningTokens: 1, cachedInputTokens: 2 },
+    },
+    {
+      name: 'partially reported',
+      usage: { inputTokens: 2, outputTokens: undefined, totalTokens: undefined, cacheCreationInputTokens: 1 },
     },
   ])(
-    'persists only reported interrupted usage ($name), preserving prior measured steps',
-    async ({ usage, count, expected }) => {
+    'excludes signal-cancelled usage ($name) from events, totals and persistence, preserving accepted steps',
+    async ({ usage }) => {
       const storage = new InMemoryStore();
       const observedUsages: unknown[] = [];
       const steps: unknown[] = [];
@@ -171,10 +169,21 @@ describe('step-finish token usage extraction', () => {
         release();
         await running;
         expect(calls).toBe(3);
-        expect(steps).toHaveLength(3);
-        expect(steps[1]).toMatchObject({ content: [], text: '', reasoning: [], usage });
-        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(count);
-        expect(session.getTokenUsage()).toMatchObject(expected);
+        expect(steps).toHaveLength(2);
+        expect(steps[1]).toMatchObject({
+          text: 'accepted answer',
+          reasoning: [],
+          usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+        });
+        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(2);
+        expect(session.getTokenUsage()).toEqual({
+          promptTokens: 4,
+          completionTokens: 5,
+          totalTokens: 9,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          raw: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+        });
         expect(session.displayState.get().tokenUsage).toEqual(session.getTokenUsage());
         expect(events.filter(event => event.type === 'agent_end')).toEqual([
           { type: 'agent_end', reason: 'complete' },

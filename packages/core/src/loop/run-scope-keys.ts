@@ -72,7 +72,7 @@ export const SUBSCRIBE_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
 export const MODEL_ATTEMPT_KEY = createRunScopeKey<ModelAttempt | undefined>('loop:modelAttempt');
-export const TRANSCRIPT_STEPS_KEY = createRunScopeKey<(TranscriptStep | null | undefined)[]>('loop:transcriptSteps');
+export const TRANSCRIPT_STEPS_KEY = createRunScopeKey<(TranscriptStep | undefined)[]>('loop:transcriptSteps');
 
 // --- Tool payload transform ------------------------------------------------
 

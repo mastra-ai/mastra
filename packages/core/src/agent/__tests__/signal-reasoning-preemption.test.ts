@@ -94,7 +94,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       });
       const stream = await agent.stream('initial question', {
         memory: { thread: scope.threadId, resource: scope.resourceId },
-        maxSteps: 4,
+        maxSteps: 1,
         abortSignal: runController.signal,
         onAbort,
         onError,
@@ -127,22 +127,19 @@ describe('queued signals preempt default-loop reasoning', () => {
       expect(signals[1]?.aborted).toBe(false);
       expect(chunks).not.toContain('abort');
       expect(chunks).not.toContain('error');
-      expect(chunks.filter(type => type === 'step-finish')).toHaveLength(2);
+      expect(chunks.filter(type => type === 'step-finish')).toHaveLength(1);
       expect(onAbort).not.toHaveBeenCalled();
       expect(onError).not.toHaveBeenCalled();
-      expect(onStepFinish).toHaveBeenCalledTimes(2);
+      expect(onStepFinish).toHaveBeenCalledTimes(1);
       expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({
-        content: [],
         reasoning: [],
         reasoningText: '',
-        text: '',
-        usage: {},
+        text: 'replacement answer',
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
       });
-      expect(stopWhen.mock.calls[0]?.[0]?.steps[0]).toMatchObject({ content: [], text: '', usage: {} });
-      const unknownUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-      expect(onStepFinish.mock.calls[0]?.[0]?.usage).toMatchObject(unknownUsage);
-      expect((await stream.steps)[0]?.usage).toMatchObject(unknownUsage);
-      expect(await stream.totalUsage).toMatchObject(unknownUsage);
+      expect(stopWhen).not.toHaveBeenCalled();
+      expect(await stream.steps).toHaveLength(1);
+      expect(await stream.totalUsage).toMatchObject({ inputTokens: 3, outputTokens: 4, totalTokens: 7 });
       const recalled = await memory.recall(scope);
       expect(JSON.stringify(recalled.messages)).toContain('replacement answer');
       expect(JSON.stringify(recalled.messages)).toContain('SYNTHETIC_SIGNAL_MARKER');
@@ -205,20 +202,25 @@ describe('queued signals preempt default-loop reasoning', () => {
     await result._waitUntilFinished();
     expect(await result.text).toBe('generated replacement');
     const steps = await result.steps;
-    expect(steps).toHaveLength(2);
+    expect(steps).toHaveLength(1);
     expect(steps[0]).toMatchObject({
-      content: [],
-      text: '',
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      text: 'generated replacement',
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
     });
+    expect(await result.totalUsage).toMatchObject(steps[0].usage);
     expect(JSON.stringify(prompts[1])).toContain('GENERATE_SIGNAL');
     expect(processAPIError).not.toHaveBeenCalled();
     expect(onAbort).not.toHaveBeenCalled();
   });
 
-  it.each(['caller', 'total-timeout'] as const)(
-    'honors %s cancellation after preemption while a processor is settling',
-    async cancellation => {
+  it.each([
+    { cancellation: 'caller', prior: false },
+    { cancellation: 'caller', prior: true },
+    { cancellation: 'total-timeout', prior: false },
+    { cancellation: 'total-timeout', prior: true },
+  ] as const)(
+    'honors $cancellation after preemption without charging discarded output (prior accepted step: $prior)',
+    async ({ cancellation, prior }) => {
       const entered = deferred<void>();
       const release = deferred<void>();
       const onAbort = vi.fn();
@@ -226,16 +228,36 @@ describe('queued signals preempt default-loop reasoning', () => {
       const processAPIError = vi.fn();
       const memory = new MockMemory();
       const runController = new AbortController();
-      const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
-        warnings: [],
-        stream: new ReadableStream<LanguageModelV2StreamPart>({
-          start(controller) {
-            controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
-            controller.enqueue({ type: 'reasoning-delta', id: 'discarded', delta: 'STALE_CANCELLED_REASONING' });
-            abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
-          },
-        }),
-      }));
+      let modelCalls = 0;
+      const acceptedUsage = {
+        inputTokens: 3,
+        outputTokens: 4,
+        totalTokens: 7,
+        cachedInputTokens: 1,
+        reasoningTokens: 2,
+      };
+      const onStepFinish = vi.fn();
+      const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+        modelCalls++;
+        if (prior && modelCalls === 1)
+          return {
+            warnings: [],
+            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+              { type: 'tool-call', toolCallId: 'prior-call', toolName: 'prior', input: '{}' },
+              { type: 'finish', finishReason: 'tool-calls', usage: acceptedUsage },
+            ]),
+          };
+        return {
+          warnings: [],
+          stream: new ReadableStream<LanguageModelV2StreamPart>({
+            start(controller) {
+              controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'discarded', delta: 'STALE_CANCELLED_REASONING' });
+              abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+            },
+          }),
+        };
+      });
       const settled = deferred<void>();
       const settings = defaultSettings();
       const messageList = createMessageListWithUserMessage();
@@ -250,7 +272,15 @@ describe('queued signals preempt default-loop reasoning', () => {
             { id: 'cancel', model: new AISDKV5LanguageModel(new MockLanguageModelV2({ doStream })), maxRetries: 0 },
           ],
           maxSteps: 3,
-          options: { abortSignal: runController.signal, onAbort, onError },
+          tools: {
+            prior: createTool({
+              id: 'prior',
+              description: 'Prior accepted work',
+              inputSchema: z.object({}),
+              execute: async () => 'PRIOR_TOOL_RESULT',
+            }),
+          },
+          options: { abortSignal: runController.signal, onAbort, onError, onStepFinish },
           errorProcessors: [{ id: 'track-errors', processAPIError }],
           outputProcessors: [
             {
@@ -295,7 +325,24 @@ describe('queued signals preempt default-loop reasoning', () => {
         await settled.promise;
         await consumption;
         await stream._waitUntilFinished();
-        expect(doStream).toHaveBeenCalledTimes(1);
+        expect(doStream).toHaveBeenCalledTimes(prior ? 2 : 1);
+        expect(onStepFinish).toHaveBeenCalledTimes(prior ? 1 : 0);
+        expect(chunks.filter(type => type === 'step-finish')).toHaveLength(prior ? 1 : 0);
+        if (cancellation === 'total-timeout') {
+          await expect(stream.steps).rejects.toThrow('Agent execution timed out');
+          await expect(stream.totalUsage).rejects.toThrow('Agent execution timed out');
+        } else {
+          expect(await stream.steps).toHaveLength(prior ? 1 : 0);
+          expect(await stream.totalUsage).toMatchObject(
+            prior ? acceptedUsage : { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          );
+        }
+        if (prior) {
+          expect(onStepFinish).toHaveBeenCalledWith(
+            expect.objectContaining({ usage: expect.objectContaining(acceptedUsage) }),
+          );
+          expect(JSON.stringify(messageList.get.all.db())).toContain('PRIOR_TOOL_RESULT');
+        }
         expect(processAPIError).not.toHaveBeenCalled();
         if (cancellation === 'caller') {
           expect(chunks.filter(type => type === 'abort')).toHaveLength(1);
@@ -400,10 +447,10 @@ describe('queued signals preempt default-loop reasoning', () => {
       expect(chunks).not.toContain('abort');
       expect(chunks).not.toContain('error');
       expect(chunks.filter(type => type === 'finish')).toHaveLength(1);
-      expect(chunks.filter(type => type === 'step-finish')).toHaveLength(2);
-      expect(onStepFinish).toHaveBeenCalledTimes(2);
-      expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({ content: [], text: '' });
-      expect(await stream.steps).toHaveLength(2);
+      expect(chunks.filter(type => type === 'step-finish')).toHaveLength(1);
+      expect(onStepFinish).toHaveBeenCalledTimes(1);
+      expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({ text: 'replacement answer', reasoning: [] });
+      expect(await stream.steps).toHaveLength(1);
       expect(await stream.text).toBe('replacement answer');
       expect(doStream).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(prompts[0])).toContain('VIOLATION_RACE_SIGNAL');
@@ -627,7 +674,8 @@ describe('queued signals preempt default-loop reasoning', () => {
         expect(JSON.stringify(prompts[0])).toContain('WRITER_SIGNAL');
         expect(JSON.stringify(chunks)).not.toContain('DISCARDED_WRITER_MARKER');
         expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain('DISCARDED_WRITER_MARKER');
-        expect((await stream.steps)[0]).toMatchObject({ content: [], text: '' });
+        expect(await stream.steps).toHaveLength(1);
+        expect((await stream.steps)[0]).toMatchObject({ text: 'replacement answer', reasoning: [] });
       } finally {
         release.resolve();
       }
@@ -735,20 +783,27 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(primary).toHaveBeenCalledTimes(1);
     expect(fallback).toHaveBeenCalledTimes(2);
     expect(await stream.text).toBe('replacement answer');
+    expect(onStepFinish).toHaveBeenCalledTimes(1);
     expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({
-      content: [],
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      text: 'replacement answer',
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
     });
     expect(JSON.stringify(prompts[1])).toContain('FALLBACK_SIGNAL');
     expect(JSON.stringify(prompts[1])).not.toContain('FAILED_MODEL_REASONING');
   });
 
-  it('preserves accepted signed/tool steps and separates transcript indices from charged attempts', async () => {
+  it('preserves signed/tool steps and their logical ordinals across discarded attempts', async () => {
     const reasoning = deferred<void>();
     const prompts: unknown[] = [];
     const snapshots: Array<{ stepNumber: number; content: string[] }> = [];
     const stateIdentities = new Set<object>();
+    const stopStepCounts: number[] = [];
+    const stopWhen = vi.fn(({ steps }: { steps: unknown[] }) => {
+      stopStepCounts.push(steps.length);
+      return false;
+    });
     const onStepFinish = vi.fn();
+    const onIterationComplete = vi.fn();
     const execute = vi.fn(async () => ({ result: 'tool result' }));
     const memory = new MockMemory();
     const capture: Processor = {
@@ -822,6 +877,8 @@ describe('queued signals preempt default-loop reasoning', () => {
       memory: { thread: scope.threadId, resource: scope.resourceId },
       maxSteps: 4,
       onStepFinish,
+      onIterationComplete,
+      stopWhen,
       onChunk: chunk => {
         if (chunk.type === 'reasoning-delta' && chunk.payload.text === 'STALE_REASONING_FINGERPRINT')
           reasoning.resolve();
@@ -835,17 +892,20 @@ describe('queued signals preempt default-loop reasoning', () => {
     await stream._waitUntilFinished();
     expect(prompts).toHaveLength(4);
     expect(execute).toHaveBeenCalledTimes(2);
-    expect(onStepFinish).toHaveBeenCalledTimes(4);
+    expect(onStepFinish).toHaveBeenCalledTimes(3);
+    expect(stopWhen).toHaveBeenCalledTimes(2);
+    expect(stopStepCounts).toEqual([1, 2]);
+    expect(onIterationComplete.mock.calls.map(([context]) => context.iteration)).toEqual([1, 2, 3]);
     const steps = await stream.steps;
-    expect(steps[1]).toMatchObject({ content: [], text: '', reasoning: [], reasoningText: '' });
+    expect(steps).toHaveLength(3);
     expect(JSON.stringify(steps[0]?.content)).toContain('call-1');
-    expect(JSON.stringify(steps[2]?.content)).toContain('call-3');
-    expect(JSON.stringify(steps[2]?.content)).not.toContain('call-1');
-    expect(steps[3]?.text).toBe('replacement answer');
-    expect(snapshots.map(snapshot => snapshot.stepNumber)).toEqual([0, 1, 2, 3]);
-    expect(snapshots[3]?.content[1]).toBe('[]');
+    expect(JSON.stringify(steps[1]?.content)).toContain('call-3');
+    expect(JSON.stringify(steps[1]?.content)).not.toContain('call-1');
+    expect(steps[2]?.text).toBe('replacement answer');
+    expect(snapshots.map(snapshot => snapshot.stepNumber)).toEqual([0, 1, 1, 2]);
+    expect(snapshots[3]?.content).toHaveLength(2);
     expect(snapshots[3]?.content[0]).toContain('tool result');
-    expect(snapshots[3]?.content[2]).toContain('tool result');
+    expect(snapshots[3]?.content[1]).toContain('tool result');
     expect(stateIdentities.size).toBe(1);
     expect(JSON.stringify(prompts[2])).toContain('KEPT_SIGNATURE');
     expect(JSON.stringify(prompts[2])).not.toContain('STALE_REASONING_FINGERPRINT');
@@ -855,16 +915,24 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(recalled.messages.filter(message => message.role === 'assistant')).toHaveLength(2);
   });
 
-  it('charges repeated interruptions to maxSteps and saves the final unanswered signal without extending the run', async () => {
-    const ready = [deferred<void>(), deferred<void>(), deferred<void>()];
+  it('retries the same logical step without a signal cap, step-budget charge or processor retry', async () => {
+    const ready = Array.from({ length: 5 }, () => deferred<void>());
     const prompts: unknown[] = [];
+    const prepareSteps: number[] = [];
+    const inputSteps: number[] = [];
+    const requestSteps: number[] = [];
+    const retryCounts: number[] = [];
+    const stepLengths: number[] = [];
+    const processAPIError = vi.fn();
     const onStepFinish = vi.fn();
+    const onIterationComplete = vi.fn();
     const onAbort = vi.fn();
     const memory = new MockMemory();
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         const number = prompts.length;
+        if (number > ready.length) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
         return {
           warnings: [],
           stream: new ReadableStream<LanguageModelV2StreamPart>({
@@ -883,41 +951,74 @@ describe('queued signals preempt default-loop reasoning', () => {
     });
     const agent = new Agent({
       id: crypto.randomUUID(),
-      name: 'Bounded preemption',
+      name: 'Same-step preemption',
       instructions: 'Test',
       model,
       memory,
+      inputProcessors: [
+        {
+          id: 'step-accounting',
+          processInputStep({ messageList, stepNumber }) {
+            inputSteps.push(stepNumber);
+            return messageList;
+          },
+          processLLMRequest({ prompt, stepNumber, retryCount, steps }) {
+            requestSteps.push(stepNumber);
+            retryCounts.push(retryCount);
+            stepLengths.push(steps.length);
+            return { prompt };
+          },
+          processAPIError,
+        },
+      ],
     });
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
     const stream = await agent.stream('initial', {
       memory: { thread: scope.threadId, resource: scope.resourceId },
-      maxSteps: 3,
+      maxSteps: 1,
+      prepareStep: ({ stepNumber }) => {
+        prepareSteps.push(stepNumber);
+      },
       onStepFinish,
+      onIterationComplete,
       onAbort,
       onChunk: chunk => {
         if (chunk.type === 'reasoning-delta') ready[Number(chunk.payload.text.split('_').at(-1)) - 1]?.resolve();
       },
     });
     const consumption = stream.consumeStream();
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < ready.length; index++) {
       await ready[index]?.promise;
       const signal = await agent.sendSignal({ type: 'user-message', contents: `QUEUED_SIGNAL_${index + 1}` }, scope);
       await expect(signal.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     }
     await consumption;
     await stream._waitUntilFinished();
-    expect(prompts).toHaveLength(3);
-    expect(await stream.text).toBe('');
-    expect(await stream.steps).toHaveLength(3);
-    expect(onStepFinish).toHaveBeenCalledTimes(3);
+    expect(prompts).toHaveLength(6);
+    expect(prepareSteps).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(inputSteps).toEqual(prepareSteps);
+    expect(requestSteps).toEqual(prepareSteps);
+    expect(retryCounts).toEqual(prepareSteps);
+    expect(stepLengths).toEqual(prepareSteps);
+    expect(processAPIError).not.toHaveBeenCalled();
+    expect(await stream.text).toBe('replacement answer');
+    expect(await stream.steps).toHaveLength(1);
+    expect(await stream.totalUsage).toMatchObject({ inputTokens: 3, outputTokens: 4, totalTokens: 7 });
+    expect(onStepFinish).toHaveBeenCalledTimes(1);
     expect(onAbort).not.toHaveBeenCalled();
-    for (const [step] of onStepFinish.mock.calls) expect(step).toMatchObject({ content: [], text: '', reasoning: [] });
-    expect(JSON.stringify(prompts[1])).toContain('QUEUED_SIGNAL_1');
-    expect(JSON.stringify(prompts[2])).toContain('QUEUED_SIGNAL_2');
+    expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({ text: 'replacement answer', reasoning: [] });
+    expect(onIterationComplete).toHaveBeenCalledTimes(1);
+    expect(onIterationComplete.mock.calls[0]?.[0]).toMatchObject({
+      iteration: 1,
+      isFinal: true,
+      text: 'replacement answer',
+    });
+    for (let index = 0; index < ready.length; index++)
+      expect(JSON.stringify(prompts[index + 1])).toContain(`QUEUED_SIGNAL_${index + 1}`);
     expect(JSON.stringify(prompts)).not.toContain('STALE_ATTEMPT_');
     const recalled = await memory.recall(scope);
-    expect(JSON.stringify(recalled.messages)).toContain('QUEUED_SIGNAL_3');
-    expect(recalled.messages.some(message => message.role === 'assistant')).toBe(false);
+    expect(JSON.stringify(recalled.messages)).toContain('QUEUED_SIGNAL_5');
+    expect(recalled.messages.filter(message => message.role === 'assistant')).toHaveLength(1);
     expect(JSON.stringify(recalled.messages)).not.toContain('STALE_ATTEMPT_');
   });
 });

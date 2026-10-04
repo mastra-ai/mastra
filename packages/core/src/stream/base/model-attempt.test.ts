@@ -9,7 +9,7 @@ import { BatchPartsProcessor } from '../../processors/processors/batch-parts';
 import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
 import { ProcessorRunner, ProcessorState } from '../../processors/runner';
 import { REPROCESS_PART_KEY } from '../../processors/stream-reprocess';
-import type { ChunkType } from '../types';
+import type { ChunkType, LLMStepResult } from '../types';
 import { ChunkFrom } from '../types';
 import { MastraModelOutput } from './output';
 
@@ -305,6 +305,94 @@ describe('model attempt output ownership', () => {
     );
     expect(states.get(processor.id)).toBe(priorState);
     replacement.attempt.dispose();
+  });
+
+  it('drops disposed-attempt reasoning delivered after a preceding completion callback settles', async () => {
+    const entered = gate();
+    const release = gate();
+    let notify!: () => void;
+    const discarded = new ModelAttempt(undefined, listener => {
+      notify = listener;
+      return () => {};
+    });
+    discarded.arm();
+    let controller!: ReadableStreamDefaultController<ChunkType>;
+    const stream = new ReadableStream<ChunkType>({
+      start(source) {
+        controller = source;
+      },
+    });
+    const finishStep: ChunkType = {
+      type: 'step-finish',
+      runId: 'run',
+      from: ChunkFrom.AGENT,
+      payload: {
+        stepResult: { reason: 'stop', isContinued: false },
+        output: { usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 }, steps: [] },
+        metadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      },
+    };
+    const completed: LLMStepResult[] = [];
+    const onStepFinish = vi.fn(async (step: LLMStepResult) => {
+      completed.push(step);
+      if (completed.length === 1) {
+        entered.resolve();
+        await release.promise;
+      }
+    });
+    const output = new MastraModelOutput({
+      stream,
+      model: { modelId: 'test', provider: 'test', version: 'v2' },
+      messageList: new MessageList(),
+      messageId: 'message',
+      options: { runId: 'run', onStepFinish },
+    });
+    const consumption = output.consumeStream();
+    try {
+      controller.enqueue(finishStep);
+      await entered.promise;
+      const staleStart: ChunkType = {
+        type: 'reasoning-start',
+        runId: 'run',
+        from: ChunkFrom.AGENT,
+        payload: { id: 'transformed-reused-id' },
+      };
+      const staleDelta: ChunkType = {
+        ...reasoning,
+        payload: { id: 'transformed-reused-id', text: 'LATE_DISCARDED_THINKING' },
+      };
+      for (const chunk of [staleStart, staleDelta]) {
+        bindModelAttempt(chunk, discarded);
+        controller.enqueue(chunk);
+      }
+      notify();
+      await discarded.discardOutput();
+      discarded.dispose();
+      controller.enqueue({ ...staleStart });
+      controller.enqueue({
+        ...staleDelta,
+        payload: { id: 'transformed-reused-id', text: 'accepted replacement thinking' },
+      });
+      controller.enqueue({
+        type: 'reasoning-end',
+        runId: 'run',
+        from: ChunkFrom.AGENT,
+        payload: { id: 'transformed-reused-id' },
+      });
+      controller.enqueue({ ...finishStep });
+      controller.enqueue({ ...finishStep, type: 'finish' });
+      controller.close();
+      release.resolve();
+      await consumption;
+      expect(onStepFinish).toHaveBeenCalledTimes(2);
+      expect(onStepFinish.mock.calls[1]?.[0]).toMatchObject({ reasoningText: 'accepted replacement thinking' });
+      expect(JSON.stringify(await output.steps)).not.toContain('LATE_DISCARDED_THINKING');
+      expect(await output.totalUsage).toMatchObject({ inputTokens: 6, outputTokens: 8, totalTokens: 14 });
+    } finally {
+      release.resolve();
+      discarded.dispose();
+    }
   });
 
   it.each([true, false])('drops only discarded built-in batch buffers (emitOnNonText=%s)', async emitOnNonText => {

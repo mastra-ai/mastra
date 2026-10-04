@@ -693,6 +693,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
+          const attempt = getModelAttempt(chunk);
+          if (attempt?.discarded && chunk.type !== 'data-signal' && chunk.type !== 'data-user-message') return;
+          if (attempt && chunk.type.startsWith('reasoning-')) {
+            attempt.trackParts(self.#bufferedByStep.reasoning);
+            const details = self.#bufferedByStepReasoningDetails;
+            const previousDetails = { ...details };
+            attempt.addDiscardCleanup(details, () => {
+              for (const id of Object.keys(details)) delete details[id];
+              Object.assign(details, previousDetails);
+            });
+          }
           switch (chunk.type) {
             case 'tool-call-suspended':
             case 'tool-call-approval':

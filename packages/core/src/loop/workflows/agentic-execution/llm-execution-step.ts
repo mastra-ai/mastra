@@ -1653,7 +1653,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const previousSteps = inputData.output?.steps || [];
         const lastPreviousStep = previousSteps[previousSteps.length - 1];
         const lastTranscriptStep = transcriptSteps?.[previousSteps.length - 1];
-        if (lastPreviousStep && lastTranscriptStep !== null) {
+        if (lastPreviousStep) {
           const refreshedContent = lastTranscriptStep
             ? getTranscriptStepContent(messageList, lastTranscriptStep)
             : messageList.get.response.aiV5.modelContent(previousSteps.length);
@@ -3329,33 +3329,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (!attempt.discarded) throw error;
       await attempt.discardOutput();
       attempt.closeReasoning(chunk => safeEnqueue(runController, chunk));
-      transcriptSteps.push(null);
-      const discardedStep = new DefaultStepResult({
-        content: [],
-        warnings: attempt.warnings,
-        finishReason: 'other',
-        providerMetadata: undefined,
-        usage: attempt.usage,
-        request: attempt.request ?? {},
-        response: {
-          id: attempt.messageId ?? context.inputData.messageId,
-          timestamp: new Date(),
-          modelId: attempt.modelId ?? '',
-          messages: [],
-        },
-      });
-      bindModelAttempt(discardedStep, attempt);
-      const steps = [...previousSteps, discardedStep];
+      const steps = previousSteps;
       const aborted = options?.abortSignal?.aborted === true;
       const result = {
         messageId: attempt.messageId ?? context.inputData.messageId,
         stepResult: {
           reason: aborted ? ('abort' as const) : ('other' as const),
           isContinued: !aborted,
+          signalPreempted: true,
           warnings: attempt.warnings,
         },
         metadata: { request: attempt.request },
-        output: { text: '', toolCalls: [], usage: attempt.usage, steps },
+        output: { text: '', toolCalls: [], usage: {}, steps },
         messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
         processorRetryCount: context.inputData.processorRetryCount,
         fallbackModelIndex: attempt.fallbackModelIndex ?? context.inputData.fallbackModelIndex,
