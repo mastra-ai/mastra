@@ -1,6 +1,6 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MessageHistory } from '@mastra/core/processors';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
@@ -21,10 +21,19 @@ import type {
   ResolvedReflectionConfig,
 } from '../types';
 
-import type { ObservationRunOpts, ObservationRunResult, ObserverOutput, ProcessedObservation } from './types';
+import type {
+  ObservationPersistOutcome,
+  ObservationRunOpts,
+  ObservationRunResult,
+  ObserverOutput,
+  ProcessedObservation,
+} from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
+
+/** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
+const MAX_HEAD_COMMIT_RETRIES = 3;
 
 /**
  * Dependencies injected into observation strategies.
@@ -108,13 +117,31 @@ export abstract class ObservationStrategy {
       const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
       const output = await this.observe(existingObservations, observationMessages);
-      const processed = await this.process(output, existingObservations);
-      await this.persist(processed);
+      let processed = await this.process(output, existingObservations);
+      let committedRecord = record;
+      const outcome = await this.persist(processed);
+      if (outcome?.status === 'not-committed') {
+        // Nothing landed on the head: no completion marker, no reflection, and the caller
+        // keeps the source messages in context (`observed: false`).
+        omDebug(`[OM:observe] cycle ${cycleId} not committed: ${outcome.reason}`);
+        await this.emitFailedMarkers(cycleId, new Error(`Observation not committed: ${outcome.reason}`));
+        return { observed: false, usage: output.usage, providerMetadata: output.providerMetadata };
+      }
+      if (outcome?.status === 'committed') {
+        processed = outcome.processed;
+        committedRecord = outcome.record;
+      }
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
         await this.deps.reflector.maybeReflect({
-          record: { ...record, activeObservations: processed.observations },
+          // The reflection snapshot is the text this cycle committed; storage keeps anything
+          // appended to it while the Reflector runs.
+          record: {
+            ...committedRecord,
+            activeObservations: processed.observations,
+            observationTokenCount: processed.observationTokens,
+          },
           observationTokens: processed.observationTokens,
           threadId,
           writer,
@@ -324,6 +351,44 @@ export abstract class ObservationStrategy {
     return `${existingObservations}${boundary}${newThreadSection}`;
   }
 
+  /**
+   * Commit composed observations to the current head generation.
+   *
+   * The write is conditional on the head text the observations were composed from. When the
+   * target generation was retired by a reflection, or another writer changed the text, the
+   * observations are recomposed against the fresh head and the commit is retried (bounded).
+   * Returns null when no commit landed — callers must then leave cursors, markers, and the live
+   * context untouched.
+   */
+  protected async commitActiveObservationsToHead(opts: {
+    processed: ProcessedObservation;
+    composedFrom: string;
+    target: ObservationalMemoryRecord;
+    recompose: (head: ObservationalMemoryRecord) => Promise<ProcessedObservation>;
+  }): Promise<{ processed: ProcessedObservation; record: ObservationalMemoryRecord } | null> {
+    let { processed, composedFrom, target } = opts;
+    for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
+      const result = await this.storage.updateActiveObservations({
+        id: target.id,
+        observations: processed.observations,
+        tokenCount: processed.observationTokens,
+        lastObservedAt: processed.lastObservedAt,
+        observedMessageIds: processed.observedMessageIds,
+        expectedActiveObservations: composedFrom,
+      });
+      if (!result || result.applied) return { processed, record: target };
+
+      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); recomposing against the head`);
+      if (attempt === MAX_HEAD_COMMIT_RETRIES) break;
+      const head = await this.storage.getObservationalMemory(target.threadId, target.resourceId);
+      if (!head) return null;
+      target = head;
+      composedFrom = head.activeObservations ?? '';
+      processed = await opts.recompose(head);
+    }
+    return null;
+  }
+
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
@@ -449,7 +514,7 @@ export abstract class ObservationStrategy {
   abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
   abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
-  abstract persist(processed: ProcessedObservation): Promise<void>;
+  abstract persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void>;
   abstract emitStartMarkers(cycleId: string): Promise<void>;
   abstract emitEndMarkers(cycleId: string, processed: ProcessedObservation): Promise<void>;
   abstract emitFailedMarkers(cycleId: string, error: unknown): Promise<void>;
