@@ -27,6 +27,7 @@ vi.mock('../auth/orgs.js', () => ({
 
 vi.mock('../auth/client.js', () => ({
   MASTRA_PLATFORM_API_URL: 'https://platform.mastra.ai',
+  MASTRA_PROJECTS_URL: 'https://projects.mastra.ai',
 }));
 
 vi.mock('./resolve-project.js', () => ({

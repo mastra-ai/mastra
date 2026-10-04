@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts';
 
-import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
+import { deployDashboardUrl } from '../../utils/deploy-failure-output.js';
 import { getToken } from '../auth/credentials.js';
 import { resolveCurrentOrg } from '../auth/orgs.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
@@ -106,12 +106,7 @@ async function resolveTarget(
 }
 
 function buildLogsUrl(orgId: string, projectId: string, envId: string, deployId: string): string {
-  // Mirror derivePublicUrls() in deploy/index.ts: pick the staging dashboard
-  // host when the platform API is staging so users don't get sent to a prod
-  // link that doesn't contain their deploy.
-  const isStaging = MASTRA_PLATFORM_API_URL.includes('staging');
-  const host = isStaging ? 'https://projects.staging.mastra.ai' : 'https://projects.mastra.ai';
-  return `${host}/orgs/${orgId}/projects/${projectId}/environments/${envId}/deploys/${deployId}`;
+  return deployDashboardUrl('environment', { orgId, projectId, envId, deployId });
 }
 
 export async function envSuggestionsAction(deployId: string | undefined, opts: SuggestionsOptions = {}) {

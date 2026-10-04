@@ -3,7 +3,13 @@ import createClient from 'openapi-fetch';
 import type { paths } from '../platform-api.js';
 
 export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
-export const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects.mastra.ai';
+/**
+ * Dashboard host for links printed by the CLI. Follows the platform API host so a
+ * staging deploy is never linked to the production dashboard, where it does not exist.
+ */
+export const MASTRA_PROJECTS_URL =
+  process.env.MASTRA_PROJECTS_URL ||
+  (MASTRA_PLATFORM_API_URL.includes('staging') ? 'https://projects.staging.mastra.ai' : 'https://projects.mastra.ai');
 
 /**
  * Derive the gateway URL from the platform URL when not explicitly set.

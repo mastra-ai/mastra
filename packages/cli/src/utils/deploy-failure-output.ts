@@ -6,13 +6,22 @@ import { selectFailureExcerpt } from './deploy-log-format.js';
 
 export type DeployDashboardKind = 'server' | 'environment';
 
-/** Dashboard page for a deploy, where the complete log can be read. */
+/**
+ * Dashboard page for a deploy, where the complete log can be read.
+ *
+ * The CLI only knows organization and project IDs, so it builds the ID form of the
+ * route. The dashboard resolves that form and redirects to the organization's slug
+ * URL when it has one. IDs never change, which keeps printed links stable. The
+ * retired `/studio/` and `/server/` product segments must not be used here.
+ */
 export function deployDashboardUrl(
   kind: DeployDashboardKind,
-  ids: { orgId: string; projectId: string; deployId: string },
+  ids: { orgId: string; projectId: string; deployId: string; envId?: string },
 ): string {
-  const segment = kind === 'server' ? 'server-deploys' : 'deploys';
-  return `${MASTRA_PROJECTS_URL}/orgs/${ids.orgId}/projects/${ids.projectId}/${segment}/${ids.deployId}`;
+  const project = `${MASTRA_PROJECTS_URL}/orgs/${ids.orgId}/projects/${ids.projectId}`;
+  if (kind === 'server') return `${project}/server-deploys/${ids.deployId}`;
+  if (ids.envId) return `${project}/environments/${ids.envId}/deploys/${ids.deployId}`;
+  return `${project}/deploys/${ids.deployId}`;
 }
 
 /**

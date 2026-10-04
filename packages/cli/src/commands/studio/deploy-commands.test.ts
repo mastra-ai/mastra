@@ -34,6 +34,7 @@ vi.mock('./project-config.js', () => ({
 
 vi.mock('../auth/client.js', () => ({
   MASTRA_PLATFORM_API_URL: 'http://localhost:9999',
+  MASTRA_PROJECTS_URL: 'https://projects.mastra.ai',
   createApiClient: vi.fn(() => ({
     GET: vi.fn().mockResolvedValue({ data: { logs: 'log line 1\nlog line 2' } }),
   })),

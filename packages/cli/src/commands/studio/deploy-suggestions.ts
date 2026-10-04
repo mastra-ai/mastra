@@ -1,5 +1,6 @@
 import * as p from '@clack/prompts';
 
+import { deployDashboardUrl } from '../../utils/deploy-failure-output.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { getCurrentOrgId, getToken, validateOrgAccess } from '../auth/credentials.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
@@ -107,7 +108,7 @@ export async function suggestionsAction(deployId?: string) {
     }
 
     const logsUrl = resolved.projectId
-      ? `https://projects.mastra.ai/orgs/${orgId}/studio/projects/${resolved.projectId}/deploys/${targetDeployId}`
+      ? deployDashboardUrl('environment', { orgId, projectId: resolved.projectId, deployId: targetDeployId })
       : undefined;
 
     if (diagnosisResult.diagnosis.status === 'FAILED') {

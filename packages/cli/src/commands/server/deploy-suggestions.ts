@@ -1,5 +1,6 @@
 import * as p from '@clack/prompts';
 
+import { deployDashboardUrl } from '../../utils/deploy-failure-output.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
 import { resolveAuth, resolveProjectId } from './env.js';
@@ -28,7 +29,7 @@ async function resolveDeployId(
 
 function buildLogsUrl(orgId: string, projectId: string | undefined, deployId: string): string | undefined {
   if (!projectId) return undefined;
-  return `https://projects.mastra.ai/orgs/${orgId}/server/projects/${projectId}/deploys/${deployId}`;
+  return deployDashboardUrl('server', { orgId, projectId, deployId });
 }
 
 export async function serverSuggestionsAction(deployId: string | undefined, opts: { org?: string }) {
