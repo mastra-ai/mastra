@@ -114,6 +114,12 @@ export abstract class ObservationStrategy {
       }
 
       const { messages, existingObservations } = await this.prepare();
+      if (messages.length === 0) {
+        // Nothing is unobserved (e.g. a stale persisted pending count met the threshold). Observing
+        // nothing would still commit a cursor at the current time, past any message that is
+        // timestamped earlier but not yet observed.
+        return { observed: false };
+      }
       const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
       const output = await this.observe(existingObservations, observationMessages);
