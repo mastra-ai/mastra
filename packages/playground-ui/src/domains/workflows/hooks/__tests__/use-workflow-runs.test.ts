@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 import { getWorkflowRunsNextPageParam, selectUniqueRuns, PER_PAGE } from '../use-workflow-runs';

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { MastraClient } from '@mastra/client-js';
 import { getMetricBreakdownArgsSchema } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';

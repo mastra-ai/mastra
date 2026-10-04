@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraClientError } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 

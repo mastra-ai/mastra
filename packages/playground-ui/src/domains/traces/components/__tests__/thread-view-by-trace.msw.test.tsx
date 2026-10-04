@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import '@/test/inert-resize-observer';
 import type { ListScoresResponse } from '@mastra/client-js';
-import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
