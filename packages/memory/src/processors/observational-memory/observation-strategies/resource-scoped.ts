@@ -75,6 +75,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     this.resourceId = opts.resourceId!;
   }
 
+  protected override getObservedMessagesForThread(threadId: string) {
+    return this.threadsWithMessages.get(threadId);
+  }
+
   get needsLock() {
     return true;
   }

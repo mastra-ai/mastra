@@ -35,6 +35,17 @@ const hasherPromise = xxhash();
 /** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
 const MAX_HEAD_COMMIT_RETRIES = 3;
 
+const OBSERVATION_LIFECYCLE_MARKERS = new Set([
+  'data-om-observation-start',
+  'data-om-observation-end',
+  'data-om-observation-failed',
+]);
+
+function isObservationLifecycleMarker(marker: { type: string; data: unknown }): boolean {
+  const operationType = (marker.data as { operationType?: string } | undefined)?.operationType;
+  return OBSERVATION_LIFECYCLE_MARKERS.has(marker.type) && operationType !== 'reflection';
+}
+
 /**
  * Dependencies injected into observation strategies.
  * Built by the factory in index.ts from the ObservationalMemory instance.
@@ -180,7 +191,12 @@ export abstract class ObservationStrategy {
             threadId,
           },
         };
-        await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
+        const observed = this.getObservedMessagesForThread(threadId);
+        await (
+          observed?.length
+            ? this.persistMarkerToObservedMessage(failedMarkerForStorage, observed, threadId, this.opts.resourceId)
+            : this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId)
+        ).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
         return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
@@ -211,6 +227,13 @@ export abstract class ObservationStrategy {
     }
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
+    const observed = isObservationLifecycleMarker(marker)
+      ? this.getObservedMessagesForThread(markerThreadId)
+      : undefined;
+    if (observed?.length) {
+      await this.persistMarkerToObservedMessage(marker, observed, markerThreadId, this.opts.resourceId);
+      return;
+    }
     // Prefer the live MessageList (markers land on the pending assistant message
     // before it reaches storage); fall back to the storage scan when no list was
     // provided or the list contains no assistant message yet.
@@ -433,6 +456,59 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
+   * Messages this cycle observed for `threadId`, or undefined when the strategy does not
+   * place observation lifecycle markers.
+   */
+  protected getObservedMessagesForThread(_threadId: string): MastraDBMessage[] | undefined {
+    return undefined;
+  }
+
+  /**
+   * Persist an observation start/end/failed marker without hiding unobserved content. A completed
+   * end marker tells `getUnobservedMessages` that everything before it in that message is observed,
+   * so the marker must never land on a message saved while the cycle ran (by another instance or
+   * process). Placement, in order:
+   * 1. the newest observed assistant message;
+   * 2. the live MessageList's newest assistant message (this turn's response or its seed);
+   * 3. the newest stored assistant message that is not newer than the observed range.
+   * Lifecycle markers never go on user messages.
+   */
+  protected async persistMarkerToObservedMessage(
+    marker: { type: string; data: unknown },
+    observed: MastraDBMessage[],
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    const target = [...observed].reverse().find(m => m.role === 'assistant');
+    if (!target) {
+      if (await this.persistMarkerToMessage(marker, this.opts.messageList, threadId, resourceId)) return;
+      const observedTimes = observed.filter(m => m.createdAt).map(m => new Date(m.createdAt!).getTime());
+      if (observedTimes.length === 0) return;
+      await this.persistMarkerToStorage(marker, threadId, resourceId, {
+        notAfter: new Date(Math.max(...observedTimes)),
+      });
+      return;
+    }
+    const fromList = this.opts.messageList
+      ? getObservableMessages(this.opts.messageList).find(m => m.id === target.id)
+      : undefined;
+    try {
+      const msg = fromList ?? (await this.storage.listMessagesById({ messageIds: [target.id] })).messages[0];
+      if (!msg?.content?.parts || !Array.isArray(msg.content.parts)) return;
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      if (!alreadyPresent) {
+        msg.content.parts.push(marker as any);
+      }
+      await this.messageHistory.persistMessages({ messages: [msg], threadId, resourceId });
+    } catch (e) {
+      omDebug(`[OM:persistMarkerToObservedMessage] failed to save marker to DB: ${e}`);
+    }
+  }
+
+  /**
    * Persist a marker to the last assistant message in storage.
    * Fetches messages directly from the DB so it works even when
    * no MessageList is available (e.g. async buffering ops).
@@ -441,12 +517,14 @@ export abstract class ObservationStrategy {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    opts?: { notAfter?: Date },
   ): Promise<void> {
     try {
       const result = await this.storage.listMessages({
         threadId,
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
+        ...(opts?.notAfter ? { filter: { dateRange: { end: opts.notAfter } } } : {}),
       });
       const messages = result?.messages ?? [];
       for (const msg of messages) {
