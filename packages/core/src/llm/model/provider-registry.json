@@ -1575,6 +1575,7 @@
         "umans-deepseek-v4-flash-0731",
         "umans-deepseek-v4.1-flash",
         "umans-flash",
+        "umans-glm-5.3",
         "umans-glm-5.3-flash",
         "umans-kimi-k3",
         "umans-qwen3.6-35b-a3b"
@@ -1601,6 +1602,7 @@
         "umans-deepseek-v4-flash-0731",
         "umans-deepseek-v4.1-flash",
         "umans-flash",
+        "umans-glm-5.3",
         "umans-glm-5.3-flash",
         "umans-kimi-k3"
       ],
@@ -5665,6 +5667,7 @@
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-pro-0813",
         "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-fast",
         "fireworks/ember-1",
         "fish-audio/s1",
         "fish-audio/s2-pro",
@@ -6887,6 +6890,7 @@
         "claude-opus-4-7",
         "claude-opus-4-8",
         "claude-opus-5",
+        "claude-opus-5-5",
         "claude-sonnet-4-5",
         "claude-sonnet-4-6",
         "claude-sonnet-5",
@@ -7709,6 +7713,9 @@
         "grok-4.7": {
           "npm": "@ai-sdk/openai"
         },
+        "qwen3.8-max": {
+          "npm": "@ai-sdk/anthropic"
+        },
         "grok-4.5": {
           "npm": "@ai-sdk/openai"
         },
@@ -7735,6 +7742,9 @@
         },
         "grok-4.6": {
           "npm": "@ai-sdk/openai"
+        },
+        "qwen3.7-plus": {
+          "npm": "@ai-sdk/anthropic"
         }
       },
       "deprecatedModels": ["grok-4.5", "kimi-k2.6", "qwen3.6-plus", "qwen3.7-max"]
@@ -7958,6 +7968,7 @@
         "fireworks_ai/gpt-oss-120b",
         "flexai/DeepSeek-V4-Flash-0731",
         "flexai/DeepSeek-V4.1-Flash",
+        "flexai/Step-3.7-Flash",
         "flexai/gpt-oss-120b",
         "flexai/gpt-oss-20b",
         "google/gemini-2.5-flash-image",
@@ -11903,6 +11914,7 @@
       "umans-deepseek-v4-flash-0731",
       "umans-deepseek-v4.1-flash",
       "umans-flash",
+      "umans-glm-5.3",
       "umans-glm-5.3-flash",
       "umans-kimi-k3",
       "umans-qwen3.6-35b-a3b"
@@ -11913,6 +11925,7 @@
       "umans-deepseek-v4-flash-0731",
       "umans-deepseek-v4.1-flash",
       "umans-flash",
+      "umans-glm-5.3",
       "umans-glm-5.3-flash",
       "umans-kimi-k3"
     ],
@@ -15060,6 +15073,7 @@
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-pro-0813",
       "deepseek/deepseek-v4.1-flash",
+      "deepseek/deepseek-v4.1-flash-fast",
       "fireworks/ember-1",
       "fish-audio/s1",
       "fish-audio/s2-pro",
@@ -15876,6 +15890,7 @@
       "claude-opus-4-7",
       "claude-opus-4-8",
       "claude-opus-5",
+      "claude-opus-5-5",
       "claude-sonnet-4-5",
       "claude-sonnet-4-6",
       "claude-sonnet-5",
@@ -16634,6 +16649,7 @@
       "fireworks_ai/gpt-oss-120b",
       "flexai/DeepSeek-V4-Flash-0731",
       "flexai/DeepSeek-V4.1-Flash",
+      "flexai/Step-3.7-Flash",
       "flexai/gpt-oss-120b",
       "flexai/gpt-oss-20b",
       "google/gemini-2.5-flash-image",
