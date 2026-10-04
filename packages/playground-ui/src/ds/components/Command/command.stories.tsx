@@ -426,12 +426,12 @@ const InsetResults = ({ search }: { search: string }) => (
       </CommandItem>
     </CommandGroup>
     <CommandGroup heading="Help" forceMount={search.length > 0}>
-      {search ? (
+      {search && (
         <CommandItem forceMount value={`ask ai ${search}`}>
           <Bot />
           Ask AI: “{search}”<CommandShortcut>⌘ ↵</CommandShortcut>
         </CommandItem>
-      ) : null}
+      )}
       <CommandItem forceMount={search.length > 0} value="help contact support">
         <LifeBuoy />
         Contact support

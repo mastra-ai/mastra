@@ -88,7 +88,7 @@ function DialogContent({
         data-size={size}
         data-intent={intent}
         role={isDestructive ? 'alertdialog' : 'dialog'}
-        initialFocus={initialFocus ?? (isDestructive ? closeRef : true)}
+        initialFocus={initialFocus ?? (isDestructive && showCloseButton ? closeRef : true)}
         aria-busy={pending || undefined}
         className={cn(
           dialogPopupClassName,
@@ -99,7 +99,7 @@ function DialogContent({
         {...props}
       >
         {children}
-        {showCloseButton ? (
+        {showCloseButton && (
           <DialogPrimitive.Close
             ref={closeRef}
             disabled={pending}
@@ -111,7 +111,7 @@ function DialogContent({
               </Button>
             }
           />
-        ) : null}
+        )}
       </DialogPrimitive.Popup>
     </DialogPortal>
   );
