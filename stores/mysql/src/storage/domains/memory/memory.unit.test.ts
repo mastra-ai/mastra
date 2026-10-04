@@ -85,17 +85,21 @@ describe('listThreads pagination', () => {
   });
 });
 
+// Every init runs one read for the observational-memory supersededBy backfill (keys with more
+// than one live record); with none found, it writes nothing.
+const backfillRead = expect.stringMatching(/`supersededBy` IS NULL GROUP BY/);
+
 describe('memory domain init consults the schema snapshot', () => {
-  it('issues no statements at all when the snapshot shows a converged schema', async () => {
+  it('issues no DDL when the snapshot shows a converged schema', async () => {
     const { statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: true }));
-    expect(statements).toEqual([]);
+    expect(statements).toEqual([backfillRead]);
   });
 
   it('creates idx_om_lookup_key once and maintains the snapshot', async () => {
     const { memory, statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: false }));
-    expect(statements).toEqual([expect.stringMatching(/^CREATE INDEX idx_om_lookup_key/)]);
+    expect(statements).toEqual([expect.stringMatching(/^CREATE INDEX idx_om_lookup_key/), backfillRead]);
     statements.length = 0;
     await memory.init(); // second init in the same snapshot window
-    expect(statements).toEqual([]);
+    expect(statements).toEqual([backfillRead]);
   });
 });

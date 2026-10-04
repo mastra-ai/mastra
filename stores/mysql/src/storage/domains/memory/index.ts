@@ -13,6 +13,11 @@ import {
   normalizePerPage,
   validateStorageMetadataFilter,
   createStorageErrorId,
+  getObservationalMemoryGeneration0Id,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -38,10 +43,12 @@ import type {
   ThreadCloneMetadata,
   ThreadSortOptions,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
-import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { indexKey } from '../../db/schema-snapshot';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
@@ -49,6 +56,19 @@ import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } 
 
 const OM_TABLE = 'mastra_observational_memory' as const;
 const OM_TABLE_QUOTED = quoteIdentifier(OM_TABLE, 'table name');
+
+/** Canonical head order: newest generation, then earliest createdAt, then lowest id. */
+const OM_HEAD_ORDER = `${quoteIdentifier('generationCount', 'column name')} DESC, ${quoteIdentifier('createdAt', 'column name')} ASC, ${quoteIdentifier('id', 'column name')} ASC`;
+/** Max `supersededBy` hops when redirecting a write aimed at a retired record. */
+const OM_MAX_HEAD_HOPS = 3;
+/** Attempts for an OM transaction that hits a deadlock or lock-wait timeout. */
+const OM_MAX_TRANSACTION_ATTEMPTS = 3;
+
+/** ER_LOCK_DEADLOCK (1213) or ER_LOCK_WAIT_TIMEOUT (1205): the transaction was rolled back and can be retried. */
+function isRetryableLockError(error: unknown): boolean {
+  const errno = (error as { errno?: number } | null)?.errno;
+  return errno === 1213 || errno === 1205;
+}
 
 function emitValidationError(message: string): MastraError {
   return new MastraError({
@@ -237,6 +257,7 @@ export class MemoryMySQL extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'supersededBy',
         ],
       });
     }
@@ -267,6 +288,10 @@ export class MemoryMySQL extends MemoryStorage {
           }
         }
       }
+    }
+
+    if (omSchema) {
+      await this.backfillSupersededBy();
     }
 
     await this.createDefaultIndexes();
@@ -1866,7 +1891,7 @@ export class MemoryMySQL extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${omCol('generationCount')} DESC LIMIT 1`,
+        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${OM_HEAD_ORDER} LIMIT 1`,
         [lookupKey],
       );
       if (!rows || rows.length === 0) return null;
@@ -1937,33 +1962,14 @@ export class MemoryMySQL extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = globalThis.crypto.randomUUID();
-      const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+      // Deterministic generation-0 id: concurrent initializations of a key insert the same row,
+      // and the primary key turns every insert after the first into a no-op.
+      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      const now = new Date();
 
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.scope,
-        threadId: input.threadId,
-        resourceId: input.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: undefined,
-        originType: 'initial',
-        generationCount: 0,
-        activeObservations: '',
-        totalTokensObserved: 0,
-        observationTokenCount: 0,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.config,
-        observedTimezone: input.observedTimezone,
-      };
+      const existing = await this.getObservationalMemory(input.threadId, input.resourceId);
+      if (existing) return existing;
 
       const nowSql = transformToSqlValue(now);
       const cols = [
@@ -1991,12 +1997,13 @@ export class MemoryMySQL extends MemoryStorage {
         'observedTimezone',
         'createdAt',
         'updatedAt',
+        'supersededBy',
       ]
         .map(omCol)
         .join(', ');
-      const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
+      const placeholders = Array.from({ length: 25 }, () => '?').join(', ');
 
-      await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
+      await this.pool.execute(`INSERT IGNORE INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
         id,
         lookupKey,
         input.scope,
@@ -2021,9 +2028,13 @@ export class MemoryMySQL extends MemoryStorage {
         input.observedTimezone || null,
         nowSql,
         nowSql,
+        null,
       ]);
 
-      return record;
+      // Whoever inserted first (this call or a concurrent one), the head is now the answer.
+      const head = await this.getObservationalMemory(input.threadId, input.resourceId);
+      if (!head) throwOMNotFound(id, 'INITIALIZE_OBSERVATIONAL_MEMORY');
+      return head;
     } catch (error) {
       rethrowOrWrapOM(error, '', 'INITIALIZE_OBSERVATIONAL_MEMORY', {
         threadId: input.threadId,
@@ -2032,35 +2043,45 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
-      const now = new Date();
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
 
-      const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('activeObservations')} = ?,
-          ${omCol('lastObservedAt')} = ?,
-          ${omCol('pendingMessageTokens')} = 0,
-          ${omCol('observationTokenCount')} = ?,
-          ${omCol('totalTokensObserved')} = ${omCol('totalTokensObserved')} + ?,
-          ${omCol('observedMessageIds')} = ?,
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [
-          input.observations,
-          transformToSqlValue(input.lastObservedAt),
-          input.tokenCount,
-          input.tokenCount,
-          observedMessageIdsJson,
-          transformToSqlValue(now),
-          input.id,
-        ],
-      );
+      return await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, input.id);
+        if (!row) throwOMNotFound(input.id, 'UPDATE_ACTIVE_OBSERVATIONS');
+        if (row.supersededBy) return { applied: false, reason: 'retired' as const };
+        if (
+          input.expectedActiveObservations !== undefined &&
+          input.expectedActiveObservations !== ((row.activeObservations as string) || '')
+        ) {
+          return { applied: false, reason: 'conflict' as const };
+        }
 
-      if ((result as ResultSetHeader).affectedRows === 0) {
-        throwOMNotFound(input.id, 'UPDATE_ACTIVE_OBSERVATIONS');
-      }
+        // The cursor never moves backward.
+        const lastObservedAt = maxObservationCursor(parseDateTime(row.lastObservedAt), input.lastObservedAt)!;
+        await connection.execute(
+          `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('activeObservations')} = ?,
+            ${omCol('lastObservedAt')} = ?,
+            ${omCol('pendingMessageTokens')} = 0,
+            ${omCol('observationTokenCount')} = ?,
+            ${omCol('totalTokensObserved')} = ${omCol('totalTokensObserved')} + ?,
+            ${omCol('observedMessageIds')} = ?,
+            ${omCol('updatedAt')} = ?
+          WHERE ${omCol('id')} = ?`,
+          [
+            input.observations,
+            transformToSqlValue(lastObservedAt),
+            input.tokenCount,
+            input.tokenCount,
+            observedMessageIdsJson,
+            transformToSqlValue(new Date()),
+            input.id,
+          ],
+        );
+        return { applied: true };
+      });
     } catch (error) {
       rethrowOrWrapOM(error, input.id, 'UPDATE_ACTIVE_OBSERVATIONS');
     }
@@ -2068,94 +2089,25 @@ export class MemoryMySQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = globalThis.crypto.randomUUID();
-      const now = new Date();
-      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
-
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.currentRecord.scope,
-        threadId: input.currentRecord.threadId,
-        resourceId: input.currentRecord.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
-        originType: 'reflection',
-        generationCount: input.currentRecord.generationCount + 1,
-        activeObservations: input.reflection,
-        totalTokensObserved: input.currentRecord.totalTokensObserved,
-        observationTokenCount: input.tokenCount,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
-        observedTimezone: input.currentRecord.observedTimezone,
-      };
-
-      const nowSql = transformToSqlValue(now);
-      const cols = [
-        'id',
-        'lookupKey',
-        'scope',
-        'resourceId',
-        'threadId',
-        'activeObservations',
-        'activeObservationsPendingUpdate',
-        'originType',
-        'config',
-        'generationCount',
-        'lastObservedAt',
-        'lastReflectionAt',
-        'pendingMessageTokens',
-        'totalTokensObserved',
-        'observationTokenCount',
-        'isObserving',
-        'isReflecting',
-        'isBufferingObservation',
-        'isBufferingReflection',
-        'lastBufferedAtTokens',
-        'lastBufferedAtTime',
-        'observedTimezone',
-        'createdAt',
-        'updatedAt',
-      ]
-        .map(omCol)
-        .join(', ');
-      const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
-
-      await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
-        id,
-        lookupKey,
-        record.scope,
-        record.resourceId,
-        record.threadId || null,
-        input.reflection,
-        null,
-        'reflection',
-        JSON.stringify(record.config),
-        input.currentRecord.generationCount + 1,
-        record.lastObservedAt ? transformToSqlValue(record.lastObservedAt) : null,
-        nowSql,
-        record.pendingMessageTokens,
-        record.totalTokensObserved,
-        record.observationTokenCount,
-        false,
-        false,
-        false,
-        false,
-        0,
-        null,
-        record.observedTimezone || null,
-        nowSql,
-        nowSql,
-      ]);
-
-      return record;
+      const { currentRecord } = input;
+      return await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, currentRecord.id);
+        if (!row) return currentRecord;
+        // A retired snapshot creates nothing; the caller adopts the head.
+        if (row.supersededBy) return this.parseOMRow(await this.resolveLiveOMRow(connection, row));
+        const stored = this.parseOMRow(row);
+        const plan = planReflectionGenerationText({
+          storedObservations: stored.activeObservations,
+          storedObservationTokenCount: stored.observationTokenCount,
+          snapshotObservations: currentRecord.activeObservations,
+          snapshotObservationTokenCount: currentRecord.observationTokenCount,
+          reflection: input.reflection,
+          tokenCount: input.tokenCount,
+        });
+        // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+        if (!plan) return stored;
+        return this.rollOverOMRow(connection, stored.id, plan.observations, plan.tokenCount, input.newRecordId, false);
+      });
     } catch (error) {
       rethrowOrWrapOM(error, input.currentRecord.id, 'CREATE_REFLECTION_GENERATION', {
         currentRecordId: input.currentRecord.id,
@@ -2173,22 +2125,23 @@ export class MemoryMySQL extends MemoryStorage {
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
     try {
-      const nowSql = transformToSqlValue(new Date());
-      const sets = [
-        `${omCol('isBufferingObservation')} = ?`,
-        ...(lastBufferedAtTokens !== undefined ? [`${omCol('lastBufferedAtTokens')} = ?`] : []),
-        `${omCol('updatedAt')} = ?`,
-      ].join(', ');
-      const params = [isBuffering, ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []), nowSql, id];
-
-      const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET ${sets} WHERE ${omCol('id')} = ?`,
-        params,
-      );
-
-      if ((result as ResultSetHeader).affectedRows === 0) {
-        throwOMNotFound(id, 'SET_BUFFERING_OBSERVATION_FLAG');
-      }
+      await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, id);
+        if (!row) throwOMNotFound(id, 'SET_BUFFERING_OBSERVATION_FLAG');
+        // A retired id is redirected to the head.
+        const target = await this.resolveLiveOMRow(connection, row);
+        const sets = [
+          `${omCol('isBufferingObservation')} = ?`,
+          ...(lastBufferedAtTokens !== undefined ? [`${omCol('lastBufferedAtTokens')} = ?`] : []),
+          `${omCol('updatedAt')} = ?`,
+        ].join(', ');
+        await connection.execute(`UPDATE ${OM_TABLE_QUOTED} SET ${sets} WHERE ${omCol('id')} = ?`, [
+          isBuffering,
+          ...(lastBufferedAtTokens !== undefined ? [lastBufferedAtTokens] : []),
+          transformToSqlValue(new Date()),
+          target.id,
+        ]);
+      });
     } catch (error) {
       rethrowOrWrapOM(error, id, 'SET_BUFFERING_OBSERVATION_FLAG');
     }
@@ -2209,111 +2162,90 @@ export class MemoryMySQL extends MemoryStorage {
 
   async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
-      const [result] = await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('pendingMessageTokens')} = ?,
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [tokenCount, transformToSqlValue(new Date()), id],
-      );
-
-      if ((result as ResultSetHeader).affectedRows === 0) {
-        throwOMNotFound(id, 'SET_PENDING_MESSAGE_TOKENS');
-      }
+      await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, id);
+        if (!row) throwOMNotFound(id, 'SET_PENDING_MESSAGE_TOKENS');
+        // A retired id is redirected to the head.
+        const target = await this.resolveLiveOMRow(connection, row);
+        await connection.execute(
+          `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('pendingMessageTokens')} = ?,
+            ${omCol('updatedAt')} = ?
+          WHERE ${omCol('id')} = ?`,
+          [tokenCount, transformToSqlValue(new Date()), target.id],
+        );
+      });
     } catch (error) {
       rethrowOrWrapOM(error, id, 'SET_PENDING_MESSAGE_TOKENS');
     }
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
-      const connection = await this.pool.getConnection();
-      try {
-        await connection.beginTransaction();
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${globalThis.crypto.randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
 
-        const nowSql = transformToSqlValue(new Date());
+      return await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, input.id);
+        if (!row) throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+        // A retired id is redirected to the head.
+        const target = await this.resolveLiveOMRow(connection, row);
+        const existingChunks = parseBufferedChunks(target.bufferedObservationChunks);
 
-        const [currentRows] = await connection.execute<RowDataPacket[]>(
-          `SELECT ${omCol('bufferedObservationChunks')} FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
-          [input.id],
+        // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
+        if (
+          existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
+          isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, parseDateTime(target.lastObservedAt))
+        ) {
+          return { persisted: false, recordId: target.id as string };
+        }
+
+        // lastBufferedAtTime never moves backward.
+        const lastBufferedAtTime = maxObservationCursor(
+          parseDateTime(target.lastBufferedAtTime),
+          input.lastBufferedAtTime ?? undefined,
         );
-
-        if (!currentRows || currentRows.length === 0) {
-          throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
-        }
-
-        const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
-        if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
-          await connection.commit();
-          return;
-        }
-
-        const newChunk: BufferedObservationChunk = {
-          id: `ombuf-${globalThis.crypto.randomUUID()}`,
-          cycleId: input.chunk.cycleId,
-          observations: input.chunk.observations,
-          tokenCount: input.chunk.tokenCount,
-          messageIds: input.chunk.messageIds,
-          messageTokens: input.chunk.messageTokens,
-          lastObservedAt: input.chunk.lastObservedAt,
-          createdAt: new Date(),
-          suggestedContinuation: input.chunk.suggestedContinuation,
-          currentTask: input.chunk.currentTask,
-          threadTitle: input.chunk.threadTitle,
-          extractedValues: input.chunk.extractedValues,
-          extractionFailures: input.chunk.extractionFailures,
-        };
-
-        const newChunks = [...existingChunks, newChunk];
-        const lastBufferedAtTime = input.lastBufferedAtTime ? transformToSqlValue(input.lastBufferedAtTime) : null;
-
-        const [result] = await connection.execute(
+        await connection.execute(
           `UPDATE ${OM_TABLE_QUOTED} SET
             ${omCol('bufferedObservationChunks')} = ?,
-            ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
+            ${omCol('lastBufferedAtTime')} = ?,
             ${omCol('updatedAt')} = ?
           WHERE ${omCol('id')} = ?`,
-          [JSON.stringify(newChunks), lastBufferedAtTime, nowSql, input.id],
+          [
+            JSON.stringify([...existingChunks, newChunk]),
+            transformToSqlValue(lastBufferedAtTime),
+            transformToSqlValue(new Date()),
+            target.id,
+          ],
         );
-
-        if ((result as ResultSetHeader).affectedRows === 0) {
-          throwOMNotFound(input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
-        }
-
-        await connection.commit();
-      } catch (error) {
-        await connection.rollback();
-        throw error;
-      } finally {
-        connection.release();
-      }
+        return { persisted: true, recordId: target.id as string };
+      });
     } catch (error) {
       rethrowOrWrapOM(error, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
     }
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
-    const connection = await this.pool.getConnection();
     try {
-      await connection.beginTransaction();
+      return await this.withOMTransaction(async connection => {
+        // Lock the record: activation is computed from (and written back to) the stored state.
+        const row = await this.lockOMRow(connection, input.id);
+        if (!row) throwOMNotFound(input.id, 'SWAP_BUFFERED_TO_ACTIVE');
 
-      const nowSql = transformToSqlValue(new Date());
-
-      const [currentRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
-        [input.id],
-      );
-
-      if (!currentRows || currentRows.length === 0) {
-        throwOMNotFound(input.id, 'SWAP_BUFFERED_TO_ACTIVE');
-      }
-
-      const row = currentRows[0]!;
-      const chunks = parseBufferedChunks(row.bufferedObservationChunks);
-
-      if (chunks.length === 0) {
-        await connection.commit();
-        return {
+        const emptyResult: SwapBufferedToActiveResult = {
           chunksActivated: 0,
           messageTokensActivated: 0,
           observationTokensActivated: 0,
@@ -2321,132 +2253,144 @@ export class MemoryMySQL extends MemoryStorage {
           activatedCycleIds: [],
           activatedMessageIds: [],
         };
-      }
+        // A retired record is frozen: activation reports it and writes nothing.
+        if (row.supersededBy) return { ...emptyResult, retired: true };
 
-      // Calculate target message tokens to activate
-      const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
-      const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+        // Activation always works on the stored list, so a chunk appended after the caller read
+        // the record is never dropped. Caller-provided chunks only override token weights.
+        const persistedChunks = parseBufferedChunks(row.bufferedObservationChunks);
+        const refreshedWeights = new Map(
+          (Array.isArray(input.bufferedChunks) ? input.bufferedChunks : []).map(c => [c.id, c.messageTokens]),
+        );
+        const chunks = persistedChunks.map(c =>
+          refreshedWeights.has(c.id) ? { ...c, messageTokens: refreshedWeights.get(c.id)! } : c,
+        );
 
-      // Find the closest chunk boundary to the target
-      let cumulativeMessageTokens = 0;
-      let bestOverBoundary = 0;
-      let bestOverTokens = 0;
-      let bestUnderBoundary = 0;
-      let bestUnderTokens = 0;
+        if (chunks.length === 0) {
+          return emptyResult;
+        }
 
-      for (let i = 0; i < chunks.length; i++) {
-        cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
-        const boundary = i + 1;
+        // Calculate target message tokens to activate
+        const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+        const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-        if (cumulativeMessageTokens >= targetMessageTokens) {
-          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
-            bestOverBoundary = boundary;
-            bestOverTokens = cumulativeMessageTokens;
-          }
-        } else {
-          if (cumulativeMessageTokens > bestUnderTokens) {
-            bestUnderBoundary = boundary;
-            bestUnderTokens = cumulativeMessageTokens;
+        // Find the closest chunk boundary to the target
+        let cumulativeMessageTokens = 0;
+        let bestOverBoundary = 0;
+        let bestOverTokens = 0;
+        let bestUnderBoundary = 0;
+        let bestUnderTokens = 0;
+
+        for (let i = 0; i < chunks.length; i++) {
+          cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+          const boundary = i + 1;
+
+          if (cumulativeMessageTokens >= targetMessageTokens) {
+            if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+              bestOverBoundary = boundary;
+              bestOverTokens = cumulativeMessageTokens;
+            }
+          } else {
+            if (cumulativeMessageTokens > bestUnderTokens) {
+              bestUnderBoundary = boundary;
+              bestUnderTokens = cumulativeMessageTokens;
+            }
           }
         }
-      }
 
-      const maxOvershoot = retentionFloor * 0.95;
-      const overshoot = bestOverTokens - targetMessageTokens;
-      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
-      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
-      const minRemaining = Math.min(1000, retentionFloor);
+        const maxOvershoot = retentionFloor * 0.95;
+        const overshoot = bestOverTokens - targetMessageTokens;
+        const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+        const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+        const minRemaining = Math.min(1000, retentionFloor);
 
-      let chunksToActivate: number;
-      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
-        chunksToActivate = bestOverBoundary;
-      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
-        chunksToActivate = bestOverBoundary;
-      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
-        chunksToActivate = bestUnderBoundary;
-      } else if (bestOverBoundary > 0) {
-        chunksToActivate = bestOverBoundary;
-      } else {
-        chunksToActivate = 1;
-      }
+        let chunksToActivate: number;
+        if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+          chunksToActivate = bestOverBoundary;
+        } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+          chunksToActivate = bestOverBoundary;
+        } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+          chunksToActivate = bestUnderBoundary;
+        } else if (bestOverBoundary > 0) {
+          chunksToActivate = bestOverBoundary;
+        } else {
+          chunksToActivate = 1;
+        }
 
-      // Split chunks
-      const activatedChunks = chunks.slice(0, chunksToActivate);
-      const remainingChunks = chunks.slice(chunksToActivate);
+        // Split chunks: activate a stored prefix, keep the rest of the stored list.
+        const activatedChunks = chunks.slice(0, chunksToActivate);
+        const remainingChunks = persistedChunks.slice(chunksToActivate);
 
-      // Combine activated observations
-      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-      const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
-      const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((cid): cid is string => !!cid);
-      const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+        // Combine activated observations
+        const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+        const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+        const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+        const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+        const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((cid): cid is string => !!cid);
+        const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
 
-      // Derive lastObservedAt from the latest activated chunk
-      const latestChunk = activatedChunks[activatedChunks.length - 1];
-      const lastObservedAt =
-        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
-      const lastObservedAtSql = transformToSqlValue(lastObservedAt);
+        // Derive lastObservedAt from the latest activated chunk; the stored cursor never moves
+        // backward (a sync observation may already be past this chunk).
+        const latestChunk = activatedChunks[activatedChunks.length - 1];
+        const derivedLastObservedAt =
+          input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+        const lastObservedAt = maxObservationCursor(parseDateTime(row.lastObservedAt), derivedLastObservedAt)!;
 
-      // Get existing values
-      const existingActive = (row.activeObservations as string) || '';
-      const existingTokenCount = Number(row.observationTokenCount || 0);
+        // Get existing values
+        const existingActive = (row.activeObservations as string) || '';
+        const existingTokenCount = Number(row.observationTokenCount || 0);
 
-      // Calculate new values
-      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
-      const newTokenCount = existingTokenCount + activatedTokens;
+        // Calculate new values
+        const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+        const newTokenCount = existingTokenCount + activatedTokens;
 
-      // Decrement pending message tokens (clamped to zero)
-      const existingPending = Number(row.pendingMessageTokens || 0);
-      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+        // Decrement pending message tokens (clamped to zero)
+        const existingPending = Number(row.pendingMessageTokens || 0);
+        const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await connection.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('activeObservations')} = ?,
-          ${omCol('observationTokenCount')} = ?,
-          ${omCol('pendingMessageTokens')} = ?,
-          ${omCol('bufferedObservationChunks')} = ?,
-          ${omCol('lastObservedAt')} = ?,
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [
-          newActive,
-          newTokenCount,
-          newPending,
-          remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
-          lastObservedAtSql,
-          nowSql,
-          input.id,
-        ],
-      );
+        await connection.execute(
+          `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('activeObservations')} = ?,
+            ${omCol('observationTokenCount')} = ?,
+            ${omCol('pendingMessageTokens')} = ?,
+            ${omCol('bufferedObservationChunks')} = ?,
+            ${omCol('lastObservedAt')} = ?,
+            ${omCol('updatedAt')} = ?
+          WHERE ${omCol('id')} = ?`,
+          [
+            newActive,
+            newTokenCount,
+            newPending,
+            remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
+            transformToSqlValue(lastObservedAt),
+            transformToSqlValue(new Date()),
+            input.id,
+          ],
+        );
 
-      await connection.commit();
+        const latestChunkHints = activatedChunks[activatedChunks.length - 1];
 
-      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
-
-      return {
-        chunksActivated: activatedChunks.length,
-        messageTokensActivated: activatedMessageTokens,
-        observationTokensActivated: activatedTokens,
-        messagesActivated: activatedMessageCount,
-        activatedCycleIds,
-        activatedMessageIds,
-        observations: activatedContent,
-        perChunk: activatedChunks.map(c => ({
-          cycleId: c.cycleId ?? '',
-          messageTokens: c.messageTokens ?? 0,
-          observationTokens: c.tokenCount,
-          messageCount: c.messageIds.length,
-          observations: c.observations,
-        })),
-        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
-        currentTask: latestChunkHints?.currentTask ?? undefined,
-      };
+        return {
+          chunksActivated: activatedChunks.length,
+          messageTokensActivated: activatedMessageTokens,
+          observationTokensActivated: activatedTokens,
+          messagesActivated: activatedMessageCount,
+          activatedCycleIds,
+          activatedMessageIds,
+          observations: activatedContent,
+          perChunk: activatedChunks.map(c => ({
+            cycleId: c.cycleId ?? '',
+            messageTokens: c.messageTokens ?? 0,
+            observationTokens: c.tokenCount,
+            messageCount: c.messageIds.length,
+            observations: c.observations,
+          })),
+          suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+          currentTask: latestChunkHints?.currentTask ?? undefined,
+        };
+      });
     } catch (error) {
-      await connection.rollback();
       rethrowOrWrapOM(error, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
-    } finally {
-      connection.release();
     }
   }
 
@@ -2488,57 +2432,224 @@ export class MemoryMySQL extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
-      const [currentRows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
-        [input.currentRecord.id],
-      );
+      const { currentRecord } = input;
+      return await this.withOMTransaction(async connection => {
+        const row = await this.lockOMRow(connection, currentRecord.id);
+        if (!row) return currentRecord;
+        // A retired snapshot creates nothing; the caller adopts the head.
+        if (row.supersededBy) return this.parseOMRow(await this.resolveLiveOMRow(connection, row));
+        const stored = this.parseOMRow(row);
 
-      if (!currentRows || currentRows.length === 0) {
-        throwOMNotFound(input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
-      }
+        const bufferedReflection = stored.bufferedReflection || '';
+        if (!bufferedReflection) {
+          throw new MastraError({
+            id: createStorageErrorId('MYSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+            text: 'No buffered reflection to swap',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { id: currentRecord.id },
+          });
+        }
+        // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+        // reflected line count.
+        if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+          return stored;
+        }
 
-      const row = currentRows[0]!;
-      const bufferedReflection = (row.bufferedReflection as string) || '';
-      const reflectedLineCount = Number(row.reflectedObservationLineCount || 0);
+        // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+        // Lines after reflectedLineCount were added after reflection started → kept as-is.
+        const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
+        const unreflectedContent = (stored.activeObservations || '')
+          .split('\n')
+          .slice(reflectedLineCount)
+          .join('\n')
+          .trim();
+        const newObservations = unreflectedContent
+          ? `${bufferedReflection}\n\n${unreflectedContent}`
+          : bufferedReflection;
+        // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+        const tokenCount =
+          input.tokenCount +
+          Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-      if (!bufferedReflection) {
-        throw new MastraError({
-          id: createStorageErrorId('MYSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
-          text: 'No buffered reflection to swap',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { id: input.currentRecord.id },
-        });
-      }
-
-      const currentObservations = (row.activeObservations as string) || '';
-      const unreflectedContent = currentObservations.split('\n').slice(reflectedLineCount).join('\n').trim();
-
-      const newObservations = unreflectedContent
-        ? `${bufferedReflection}\n\n${unreflectedContent}`
-        : bufferedReflection;
-
-      const newRecord = await this.createReflectionGeneration({
-        currentRecord: input.currentRecord,
-        reflection: newObservations,
-        tokenCount: input.tokenCount,
+        return this.rollOverOMRow(connection, stored.id, newObservations, tokenCount, input.newRecordId, true);
       });
-
-      const nowSql = transformToSqlValue(new Date());
-      await this.pool.execute(
-        `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('bufferedReflection')} = NULL,
-          ${omCol('bufferedReflectionTokens')} = NULL,
-          ${omCol('bufferedReflectionInputTokens')} = NULL,
-          ${omCol('reflectedObservationLineCount')} = NULL,
-          ${omCol('updatedAt')} = ?
-        WHERE ${omCol('id')} = ?`,
-        [nowSql, input.currentRecord.id],
-      );
-
-      return newRecord;
     } catch (error) {
       rethrowOrWrapOM(error, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
+    }
+  }
+
+  /**
+   * Runs `fn` in one transaction on a dedicated connection. Every OM lifecycle write locks its
+   * target row by primary key (`SELECT … FOR UPDATE`, a record lock — never a range), so the
+   * only expected lock conflict is a wait; a deadlock or lock-wait timeout (e.g. against the
+   * startup backfill's scan) is retried a bounded number of times.
+   */
+  private async withOMTransaction<T>(fn: (connection: PoolConnection) => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const result = await fn(connection);
+        await connection.commit();
+        return result;
+      } catch (error) {
+        await connection.rollback().catch(() => {});
+        if (attempt < OM_MAX_TRANSACTION_ATTEMPTS && isRetryableLockError(error)) continue;
+        throw error;
+      } finally {
+        connection.release();
+      }
+    }
+  }
+
+  /** Row-locks one OM record by primary key for the rest of the transaction. */
+  private async lockOMRow(connection: PoolConnection, id: string): Promise<RowDataPacket | null> {
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ? FOR UPDATE`,
+      [id],
+    );
+    return rows?.[0] ?? null;
+  }
+
+  /**
+   * The live, row-locked record a lifecycle write aimed at `row` lands on: `row` itself while
+   * live, otherwise its successor, found by following `supersededBy` with primary-key locking
+   * reads. Locking reads see the latest committed row, so (unlike a plain head query under
+   * REPEATABLE READ) a rollover committed after this transaction started is never missed.
+   */
+  private async resolveLiveOMRow(connection: PoolConnection, row: RowDataPacket): Promise<RowDataPacket> {
+    let current = row;
+    for (let hop = 0; current.supersededBy; hop++) {
+      const next = hop < OM_MAX_HEAD_HOPS ? await this.lockOMRow(connection, current.supersededBy as string) : null;
+      if (!next) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'RESOLVE_OBSERVATIONAL_MEMORY_HEAD', 'FAILED'),
+          text: `Observational memory record ${row.id} is superseded but no live head was found`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: row.id as string },
+        });
+      }
+      current = next;
+    }
+    return current;
+  }
+
+  /**
+   * Create the next generation from the stored (live, row-locked) record and retire the stored
+   * record in the same transaction. Carried columns are copied in SQL from the stored row, so
+   * nothing round-trips through a client-side date conversion. Buffered chunks move to the new
+   * generation; the cursor, buffering markers, flags, and counters carry over; buffered
+   * reflection state does not (and is cleared on the retired row after a buffered swap).
+   */
+  private async rollOverOMRow(
+    connection: PoolConnection,
+    storedId: string,
+    observations: string,
+    tokenCount: number,
+    newRecordId: string | undefined,
+    clearBufferedReflection: boolean,
+  ): Promise<ObservationalMemoryRecord> {
+    const id = newRecordId ?? globalThis.crypto.randomUUID();
+    const nowSql = transformToSqlValue(new Date());
+    const c = omCol;
+    await connection.execute(
+      `INSERT INTO ${OM_TABLE_QUOTED} (
+        ${c('id')}, ${c('lookupKey')}, ${c('scope')}, ${c('resourceId')}, ${c('threadId')},
+        ${c('activeObservations')}, ${c('activeObservationsPendingUpdate')},
+        ${c('originType')}, ${c('config')}, ${c('generationCount')}, ${c('lastObservedAt')}, ${c('lastReflectionAt')},
+        ${c('pendingMessageTokens')}, ${c('totalTokensObserved')}, ${c('observationTokenCount')}, ${c('bufferedObservationChunks')},
+        ${c('isObserving')}, ${c('isReflecting')}, ${c('isBufferingObservation')}, ${c('isBufferingReflection')},
+        ${c('lastBufferedAtTokens')}, ${c('lastBufferedAtTime')},
+        ${c('observedTimezone')}, ${c('metadata')}, ${c('supersededBy')}, ${c('createdAt')}, ${c('updatedAt')}
+      )
+      SELECT
+        ?, ${c('lookupKey')}, ${c('scope')}, ${c('resourceId')}, ${c('threadId')},
+        ?, NULL,
+        'reflection', ${c('config')}, ${c('generationCount')} + 1, ${c('lastObservedAt')}, ?,
+        ${c('pendingMessageTokens')}, ${c('totalTokensObserved')}, ?, ${c('bufferedObservationChunks')},
+        false, false, ${c('isBufferingObservation')}, false,
+        ${c('lastBufferedAtTokens')}, ${c('lastBufferedAtTime')},
+        ${c('observedTimezone')}, ${c('metadata')}, NULL, ?, ?
+      FROM ${OM_TABLE_QUOTED} WHERE ${c('id')} = ?`,
+      [id, observations, nowSql, Math.round(tokenCount), nowSql, nowSql, storedId],
+    );
+
+    // Retire the stored record: chunks moved, liveness marker set (never cleared).
+    const [retired] = await connection.execute(
+      `UPDATE ${OM_TABLE_QUOTED} SET
+        ${c('supersededBy')} = ?,
+        ${c('bufferedObservationChunks')} = NULL,
+        ${
+          clearBufferedReflection
+            ? `${c('bufferedReflection')} = NULL, ${c('bufferedReflectionTokens')} = NULL,
+        ${c('bufferedReflectionInputTokens')} = NULL, ${c('reflectedObservationLineCount')} = NULL,`
+            : ''
+        }
+        ${c('updatedAt')} = ?
+      WHERE ${c('id')} = ? AND ${c('supersededBy')} IS NULL`,
+      [id, nowSql, storedId],
+    );
+    if ((retired as ResultSetHeader).affectedRows !== 1) {
+      throw new MastraError({
+        id: createStorageErrorId('MYSQL', 'CREATE_REFLECTION_GENERATION', 'RETIRE_FAILED'),
+        text: `Failed to retire observational memory record ${storedId}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id: storedId },
+      });
+    }
+
+    const inserted = await this.lockOMRow(connection, id);
+    if (!inserted) throwOMNotFound(id, 'CREATE_REFLECTION_GENERATION');
+    return this.parseOMRow(inserted);
+  }
+
+  /**
+   * Retire every live row that sorts after its key's canonical head, marking it superseded by
+   * the head. Rows retired by older adapter versions (which never set `supersededBy`) become
+   * frozen. Only keys with more than one live row are touched; each update embeds the head's
+   * ordering key, so a row created by a concurrent rollover (a newer generation) never matches.
+   * Runs at READ COMMITTED so the scan takes no gap locks.
+   */
+  private async backfillSupersededBy(): Promise<void> {
+    const [keys] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT ${omCol('lookupKey')} AS lookupKey FROM ${OM_TABLE_QUOTED}
+      WHERE ${omCol('supersededBy')} IS NULL GROUP BY ${omCol('lookupKey')} HAVING COUNT(*) > 1`,
+    );
+    for (const { lookupKey } of keys ?? []) {
+      for (let attempt = 1; ; attempt++) {
+        const connection = await this.pool.getConnection();
+        try {
+          await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+          await connection.beginTransaction();
+          await connection.execute(
+            `UPDATE ${OM_TABLE_QUOTED} AS r
+            JOIN (
+              SELECT ${omCol('id')} AS id, ${omCol('generationCount')} AS generationCount, ${omCol('createdAt')} AS createdAt
+              FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${OM_HEAD_ORDER} LIMIT 1
+            ) AS h
+            SET r.${omCol('supersededBy')} = h.id
+            WHERE r.${omCol('lookupKey')} = ?
+              AND r.${omCol('supersededBy')} IS NULL
+              AND (
+                r.${omCol('generationCount')} < h.generationCount
+                OR (r.${omCol('generationCount')} = h.generationCount AND r.${omCol('createdAt')} > h.createdAt)
+                OR (r.${omCol('generationCount')} = h.generationCount AND r.${omCol('createdAt')} = h.createdAt AND r.${omCol('id')} > h.id)
+              )`,
+            [lookupKey, lookupKey],
+          );
+          await connection.commit();
+          break;
+        } catch (error) {
+          await connection.rollback().catch(() => {});
+          if (attempt < OM_MAX_TRANSACTION_ATTEMPTS && isRetryableLockError(error)) continue;
+          throw error;
+        } finally {
+          connection.release();
+        }
+      }
     }
   }
 
@@ -2601,6 +2712,7 @@ export class MemoryMySQL extends MemoryStorage {
       metadata: parseJSONColumn(row.metadata),
       observedMessageIds: parseJSONColumn<string[]>(row.observedMessageIds),
       observedTimezone: row.observedTimezone || undefined,
+      supersededBy: row.supersededBy ?? null,
     };
   }
 }
