@@ -88,6 +88,7 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
+      githubSourceControl: seed.sourceControl.forIntegration('github'),
       boardRegistry,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
@@ -157,6 +158,99 @@ beforeEach(async () => {
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+describe('repository-scoped manual GitHub intake', () => {
+  it.each([
+    { kind: 'issue', polled: false },
+    { kind: 'pull-request', polled: false },
+    { kind: 'issue', polled: true },
+    { kind: 'pull-request', polled: true },
+  ] as const)(
+    'reuses $kind intake (polled: $polled) without overwriting another repository legacy card',
+    async ({ kind, polled }) => {
+      const github = seed.sourceControl.forIntegration('github');
+      const installation = await github.installations.upsert({
+        orgId: 'org1',
+        connectedByUserId: 'u1',
+        externalId: '7',
+      });
+      const repository = await github.repositories.upsert({
+        orgId: 'org1',
+        input: {
+          installationId: installation.id,
+          externalId: '10',
+          slug: 'acme/app',
+          defaultBranch: 'main',
+        },
+      });
+      const connection = await github.connections.create({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        installationId: installation.id,
+        createdByUserId: 'u1',
+      });
+      await github.projectRepositories.link({
+        orgId: 'org1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'u1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace',
+      });
+      const canonical = kind === 'issue' ? 'github-issue:42' : 'github-pr:42';
+      const url = `https://github.com/acme/app/${kind === 'issue' ? 'issues' : 'pull'}/42`;
+      const legacy = (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: {
+            title: 'Other repository',
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+            externalSource: {
+              integrationId: 'github',
+              type: kind,
+              externalId: canonical,
+              url: url.replace('acme/app', 'acme/other'),
+            },
+          },
+        })
+      ).item;
+      const polledItem = polled
+        ? (
+            await seed.workItems.upsert({
+              orgId: 'org1',
+              userId: 'u1',
+              factoryProjectId: PROJECT_ID,
+              input: {
+                title: 'Polled card',
+                stages: ['intake'],
+                sessions: {},
+                metadata: {},
+                externalSource: { integrationId: 'github', type: kind, externalId: `github:10:${kind}:42`, url },
+              },
+            })
+          ).item
+        : undefined;
+      const body = createBody({ externalSource: { integrationId: 'github', type: kind, externalId: canonical, url } });
+      const first = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, body);
+      expect(first.status).toBe(200);
+      expect(await first.json()).toMatchObject({
+        workItem: { externalSource: { externalId: `github:10:${kind}:42` } },
+      });
+      const items = await listItems();
+      expect(items).toHaveLength(2);
+      if (polledItem) expect(items.find(item => item.id !== legacy.id)?.id).toBe(polledItem.id);
+      expect(items.find(item => item.id !== legacy.id)?.externalSource?.externalId).toBe(`github:10:${kind}:42`);
+      const second = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, body);
+      expect(second.status).toBe(200);
+      expect(await listItems()).toHaveLength(2);
+      expect((await listItems()).find(item => item.id === legacy.id)?.title).toBe('Other repository');
+    },
+  );
 });
 
 describe('installed board catalog', () => {

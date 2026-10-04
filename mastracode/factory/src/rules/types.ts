@@ -292,6 +292,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    * leaves the flag unset.
    */
   pullRequestIntake?: boolean;
+  /** Existing number-only intake identity retained for this repository's legacy card. */
+  intakeSourceKey?: string;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };

@@ -27,6 +27,12 @@ import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import {
+  cardBelongsToRepository,
+  canonicalSourceKey,
+  legacySourceKey,
+  githubIntakeSourceKey,
+} from './source-identity.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -132,32 +138,6 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
   return undefined;
-}
-
-/**
- * Canonical source keys (`github-issue:N`, `github-pr:N`) do not identify a
- * repository, so a project linked to several repositories could bind repo A's
- * event to repo B's same-numbered card. The card's intake-stamped URL is
- * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
- * cards. A card with neither signal cannot be attributed by number alone.
- */
-function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
-  const url = item.externalSource?.url;
-  if (url) {
-    const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
-    if (match && match[1] === repositoryFullName) return true;
-  }
-  // A renamed repository leaves the old owner/name in the card URL, so a URL
-  // mismatch still defers to the stable intake-stamped repository id.
-  return item.metadata?.githubRepositoryId === repositoryId;
-}
-
-function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
-}
-
-function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return `github:${repositoryId}:${kind}:${itemNumber}`;
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -523,6 +503,17 @@ export class GithubRules {
     ) {
       return { status: 'ignored' };
     }
+    const intakeNumber = issueNumber ?? pullRequestNumber;
+    const intakeSourceKey = intakeNumber
+      ? await githubIntakeSourceKey(this.options.storage, {
+          orgId: project.orgId,
+          factoryProjectId: project.factoryProjectId,
+          repositoryId,
+          repositoryFullName: repositoryName,
+          kind: issueNumber ? 'issue' : 'pull-request',
+          number: intakeNumber,
+        })
+      : undefined;
     // One delivery can concern two cards — a merged pull request settles both
     // its own Review card and the Work item that authored it — and every
     // decision a rule returns is committed against a single item, at that
@@ -559,6 +550,7 @@ export class GithubRules {
             }
           : {}),
         ...(intake ? { intake } : {}),
+        ...(intakeSourceKey ? { intakeSourceKey } : {}),
         ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
         event,
         deliveryId: parsed.deliveryId,

@@ -33,7 +33,7 @@ export function WorkItemDetailsPanel({
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
-  projectRepositoryId: string;
+  projectRepositoryId: string | undefined;
   activityPage?: AuditEventPage;
   morph: CardMorph;
   relatedLinks: ReactNode;

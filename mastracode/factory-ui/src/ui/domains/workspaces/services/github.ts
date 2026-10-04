@@ -241,7 +241,7 @@ interface ProjectRepositoryPayload {
 }
 
 /** A source-control connection (with linked repos) from the Factory project routes. */
-interface ProjectConnectionPayload {
+export interface ProjectConnectionPayload {
   id: string;
   integrationId?: string;
   installationId: string;

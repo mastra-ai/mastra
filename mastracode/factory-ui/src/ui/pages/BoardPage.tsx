@@ -4,7 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -12,6 +12,8 @@ import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useIntakeConfigQuery } from '../../hooks/useIntakeConfig';
+import { useRepositoryIntakeSync } from '../../hooks/useRepositoryIntakeSync';
+import { persistedSourceKeys, repositoryIdForItem } from '../domains/factory/boardItems';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -167,6 +169,7 @@ function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
+  const repositoryIntakeSync = useRepositoryIntakeSync(factory, kind);
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
@@ -247,12 +250,23 @@ function BoardContent({
       () => items.handleDrop(payload, stage, cause),
     );
   };
+  const candidateSourceKeys = useMemo(
+    () =>
+      persistedSourceKeys(
+        items.all.filter(
+          item =>
+            (item.source !== 'github-issue' && item.source !== 'github-pr') ||
+            repositoryIdForItem(item, factory.repositories) === repository.projectRepositoryId,
+        ),
+      ),
+    [items.all, factory.repositories, repository.projectRepositoryId],
+  );
   const intake = useBoardIntake({
     factoryProjectId,
     repository,
     definition,
-    knownSourceKeys: items.knownSourceKeys,
-    elsewhereSourceKeys: items.elsewhereSourceKeys,
+    knownSourceKeys: candidateSourceKeys,
+    elsewhereSourceKeys: new Set([...items.elsewhereSourceKeys].filter(key => candidateSourceKeys.has(key))),
   });
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
@@ -412,6 +426,16 @@ function BoardContent({
           </Notice>
         </div>
       )}
+      {repositoryIntakeSync.failedRepositories.length > 0 && (
+        <div className="shrink-0 p-4 pb-0">
+          <Notice variant="destructive">
+            Unable to sync intake from {repositoryIntakeSync.failedRepositories.join(', ')}.
+            <Button variant="ghost" onClick={() => void repositoryIntakeSync.refetch()}>
+              Retry
+            </Button>
+          </Notice>
+        </div>
+      )}
       <div className="[container-type:inline-size] m-px min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
@@ -527,7 +551,7 @@ function BoardContent({
                           columnStage={stage.id}
                           relatedItems={relatedItemsFor(item)}
                           sessionStatus={sessionStatuses.get(item.id)}
-                          projectRepositoryId={repository.projectRepositoryId}
+                          projectRepositoryId={repositoryIdForItem(item, factory.repositories)}
                           activityPage={activityPage}
                           preparing={runs.preparingFor(item.id)}
                           evaluatingStage={items.evaluatingStages.get(item.id)}

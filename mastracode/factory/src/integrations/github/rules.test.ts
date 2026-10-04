@@ -235,6 +235,87 @@ function pullRequest(
 }
 
 describe('GithubRules', () => {
+  it.each(['issue', 'pull-request'] as const)(
+    'keeps same-number %s cards separate across repositories and replays safely',
+    async kind => {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+      const [connection] = await sourceControl.connections.list({ orgId: 'org-1', factoryProjectId: project.id });
+      const repository = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: connection!.installationId,
+          externalId: '11',
+          slug: 'acme/other',
+          defaultBranch: 'main',
+        },
+      });
+      await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection!.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace',
+      });
+      const boards = createBoardRegistry();
+      const configVersion = 'multi-repository';
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        configVersion,
+        boards,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: {} as never,
+        transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+        storage: workItems,
+        boards,
+        isAutoRunEnabled: async () => false,
+        ownerId: 'multi-repository',
+      });
+      const first = kind === 'issue' ? issueOpened('first-repo') : pullRequest('opened', 'first-repo');
+      const second = kind === 'issue' ? issueOpened('second-repo') : pullRequest('opened', 'second-repo');
+      second.payload.repository = { id: 11, full_name: 'acme/other' };
+      if ('issue' in second.payload) second.payload.issue.html_url = 'https://github.com/acme/other/issues/42';
+      if ('pull_request' in second.payload)
+        second.payload.pull_request.html_url = 'https://github.com/acme/other/pull/17';
+      // Existing installations must retain their number-only card identity.
+      const number = kind === 'issue' ? 42 : 17;
+      const legacyKey = kind === 'issue' ? 'github-issue:42' : 'github-pr:17';
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: 'Existing card',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+          externalSource: {
+            integrationId: 'github',
+            type: kind,
+            externalId: legacyKey,
+            url: `https://github.com/acme/repo/${kind === 'issue' ? 'issues' : 'pull'}/${number}`,
+          },
+        },
+      });
+      await service.ingest(first);
+      await service.ingest(second);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const items = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+      expect(items).toHaveLength(2);
+      expect(new Set(items.map(item => item.id)).size).toBe(2);
+      expect(items.map(item => item.externalSource?.externalId).sort()).toEqual(
+        [legacyKey, `github:11:${kind}:${number}`].sort(),
+      );
+      await expect(service.ingest(second)).resolves.toEqual({ status: 'replayed' });
+      expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(2);
+    },
+  );
+
   it('accepts a linked target on another installed board and preserves committed ingress after uninstall', async () => {
     const decision = {
       type: 'upsertLinkedWorkItem' as const,
@@ -902,7 +983,7 @@ describe('GithubRules', () => {
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -955,7 +1036,7 @@ describe('GithubRules', () => {
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);

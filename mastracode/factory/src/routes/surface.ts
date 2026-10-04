@@ -768,6 +768,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          githubSourceControl: deps.sourceControlStorage.forIntegration('github'),
           boardRegistry: deps.boardRegistry,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
