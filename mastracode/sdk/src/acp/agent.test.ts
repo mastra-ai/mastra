@@ -181,3 +181,105 @@ describe('ACP Agent - Turn failures and cancellation', () => {
     expect(abort).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ACP Agent - Provider authentication', () => {
+  function newSession(models: { id: string; hasApiKey: boolean }[] | Error, currentModelId: string) {
+    const createThread = vi.fn(async () => ({ id: 'thread-1' }));
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    let modelId = currentModelId;
+    const switchModel = vi.fn(async ({ modelId: next }: { modelId: string }) => {
+      modelId = next;
+    });
+    const session = {
+      subscribe: () => () => {},
+      thread: { create: createThread, switch: async () => {} },
+      mode: { get: () => 'default' },
+      model: { get: () => modelId, switch: switchModel },
+    } as unknown as Session;
+    const agent = new MastraCodeAcpAgent(
+      { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection,
+      async () => ({
+        controller: {
+          listAvailableModels: async () => {
+            if (models instanceof Error) throw models;
+            return models;
+          },
+        } as unknown as AgentController,
+        session,
+        modes: [],
+        cleanup,
+      }),
+    );
+    return { created: agent.newSession({ cwd: '/tmp', mcpServers: [] }), createThread, cleanup, switchModel };
+  }
+
+  it.each([
+    ['no model is selected', ''],
+    ['the selected model has no credentials', 'openai/gpt-5'],
+  ])('requires authentication when no provider is configured and %s', async (_case, currentModelId) => {
+    const { created, createThread, cleanup } = newSession([{ id: 'openai/gpt-5', hasApiKey: false }], currentModelId);
+    await expect(created).rejects.toMatchObject({ code: -32000 });
+    expect(createThread).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['a provider has credentials', [{ id: 'openai/gpt-5', hasApiKey: true }], ''],
+    [
+      'the selected model is a custom model outside the catalog',
+      [{ id: 'openai/gpt-5', hasApiKey: false }],
+      'local/llama',
+    ],
+  ])('starts the session when %s', async (_case, models, currentModelId) => {
+    const { created } = newSession(models, currentModelId);
+    await expect(created).resolves.toMatchObject({ sessionId: 'thread-1' });
+  });
+
+  it('fails session creation when model discovery fails instead of hiding the catalog', async () => {
+    const { created, createThread, cleanup } = newSession(new Error('catalog unavailable'), 'openai/gpt-5');
+    await expect(created).rejects.toThrow('catalog unavailable');
+    expect(createThread).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('moves a new session off a default model without credentials to a signed-in provider default', async () => {
+    const { created, switchModel } = newSession(
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: false },
+        { id: 'anthropic/claude-haiku-4-5', hasApiKey: true },
+        { id: 'xai/grok-4.5', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    );
+    await expect(created).resolves.toMatchObject({ models: { currentModelId: 'xai/grok-4.5' } });
+    expect(switchModel).toHaveBeenCalledWith({ modelId: 'xai/grok-4.5' });
+  });
+
+  it.each([
+    [
+      'the current model has credentials',
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: true },
+        { id: 'xai/grok-4.5', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    ],
+    [
+      'the current model is a custom model outside the catalog',
+      [{ id: 'xai/grok-4.5', hasApiKey: true }],
+      'local/llama',
+    ],
+    [
+      'no provider default has credentials',
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: false },
+        { id: 'groq/llama', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    ],
+  ])('keeps the current model when %s', async (_case, models, currentModelId) => {
+    const { created, switchModel } = newSession(models, currentModelId);
+    await expect(created).resolves.toMatchObject({ models: { currentModelId } });
+    expect(switchModel).not.toHaveBeenCalled();
+  });
+});
