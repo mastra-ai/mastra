@@ -1218,7 +1218,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timezone used for observation date formatting
       observedTimezone: stored.observedTimezone,
       // Extensible metadata (optional)
-      metadata: {},
+      metadata: stored.metadata ?? {},
     };
 
     // Retire the stored record: chunks moved, liveness marker set (never cleared).

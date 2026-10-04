@@ -2262,6 +2262,104 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(await rows(input)).toHaveLength(2);
       });
 
+      it('C16: writes aimed at a record several rollovers old land on the head', async () => {
+        const input = createSampleOMInput();
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        const firstSnapshot = await snapshot(input);
+        for (let i = 0; i < 5; i++) {
+          await memoryStorage.createReflectionGeneration({
+            currentRecord: await snapshot(input),
+            reflection: `- reflection ${i}`,
+            tokenCount: 1,
+          });
+        }
+        const current = await head(input);
+        expect(current.generationCount).toBe(5);
+
+        const late = chunkAt('late', 100);
+        expect(await memoryStorage.updateBufferedObservations({ id: first.id, chunk: late })).toEqual({
+          persisted: true,
+          recordId: current.id,
+        });
+        await memoryStorage.setPendingMessageTokens(first.id, 321);
+        await memoryStorage.setBufferingObservationFlag(first.id, true, 654);
+        expect((await activateAll(first.id, 500)).retired).toBe(true);
+        expect(
+          (
+            await memoryStorage.createReflectionGeneration({
+              currentRecord: firstSnapshot,
+              reflection: '- stale',
+              tokenCount: 1,
+            })
+          ).id,
+        ).toBe(current.id);
+
+        const after = await head(input);
+        expect(after.id).toBe(current.id);
+        expect(cycleIds(after)).toEqual([late.cycleId]);
+        expect(after.pendingMessageTokens).toBe(321);
+        expect(after.isBufferingObservation).toBe(true);
+        expect(after.lastBufferedAtTokens).toBe(654);
+        expect(await rows(input)).toHaveLength(6);
+      });
+
+      it('C17: rollover carries config, metadata, and timezone from the stored record', async () => {
+        const input = {
+          ...createSampleOMInput(),
+          config: { observation: { messageTokens: 1234 } },
+          observedTimezone: 'Europe/Berlin',
+        };
+        await memoryStorage.initializeObservationalMemory(input);
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(input),
+          reflection: '- r',
+          tokenCount: 1,
+        });
+        const current = await head(input);
+        expect(current.id).toBe(next.id);
+        expect(current.generationCount).toBe(1);
+        expect(current.config).toEqual({ observation: { messageTokens: 1234 } });
+        expect(current.observedTimezone).toBe('Europe/Berlin');
+
+        // Metadata can only be seeded through the optional raw insert.
+        const seeded = { ...createSampleOMInput() };
+        const now = new Date();
+        try {
+          await memoryStorage.insertObservationalMemoryRecord({
+            id: randomUUID(),
+            scope: seeded.scope,
+            threadId: seeded.threadId,
+            resourceId: seeded.resourceId,
+            createdAt: now,
+            updatedAt: now,
+            lastObservedAt: at(0),
+            originType: 'initial',
+            generationCount: 0,
+            activeObservations: '- a',
+            totalTokensObserved: 0,
+            observationTokenCount: 1,
+            pendingMessageTokens: 0,
+            isReflecting: false,
+            isObserving: false,
+            isBufferingObservation: false,
+            isBufferingReflection: false,
+            lastBufferedAtTokens: 0,
+            lastBufferedAtTime: null,
+            config: {},
+            metadata: { origin: 'c17' },
+          });
+        } catch (error) {
+          if (String(error).includes('not implemented')) return;
+          throw error;
+        }
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(seeded),
+          reflection: '- r',
+          tokenCount: 1,
+        });
+        expect((await head(seeded)).metadata).toEqual({ origin: 'c17' });
+      });
+
       it('C13: a lookup key has exactly one live record and it is the head', async () => {
         const input = createSampleOMInput();
         const expectOneLive = async () => {
