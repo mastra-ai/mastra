@@ -3158,7 +3158,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       const steps = inputData.output?.steps || [];
 
-      // Discarded attempts consume budget but have no committed transcript step.
       if (modelAttempt?.transcriptStep) {
         modelAttempt.transcriptStep.end =
           messageList.get.response.aiV5.ui().find(message => message.id === modelAttempt.transcriptStep?.messageId)
