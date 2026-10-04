@@ -2514,12 +2514,19 @@ export class MemoryMySQL extends MemoryStorage {
 
   /**
    * The live, row-locked record a lifecycle write aimed at `row` lands on: `row` itself while
-   * live, otherwise its successor, found by following `supersededBy` with primary-key locking
-   * reads. Locking reads see the latest committed row, so (unlike a plain head query under
-   * REPEATABLE READ) a rollover committed after this transaction started is never missed.
+   * live, otherwise the head. The head is found with a plain (non-locking, so no range locks)
+   * canonical head read, then locked by primary key. Under REPEATABLE READ that read can predate
+   * a rollover committed after this transaction started; the locking read sees the latest
+   * committed row, so a head retired since is followed through `supersededBy` (bounded).
    */
   private async resolveLiveOMRow(connection: PoolConnection, row: RowDataPacket): Promise<RowDataPacket> {
-    let current = row;
+    if (!row.supersededBy) return row;
+    const [heads] = await connection.execute<RowDataPacket[]>(
+      `SELECT id FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? ORDER BY ${OM_HEAD_ORDER} LIMIT 1`,
+      [row.lookupKey],
+    );
+    const headId = (heads?.[0]?.id as string | undefined) ?? (row.supersededBy as string);
+    let current: RowDataPacket = (await this.lockOMRow(connection, headId)) ?? row;
     for (let hop = 0; current.supersededBy; hop++) {
       const next = hop < OM_MAX_HEAD_HOPS ? await this.lockOMRow(connection, current.supersededBy as string) : null;
       if (!next) {
