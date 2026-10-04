@@ -157,3 +157,71 @@ describe('LibSQL observational memory supersededBy upgrade', () => {
     }
   }, 120_000);
 });
+
+describe('LibSQL observational memory writes alongside other writes in the same process', () => {
+  it('never hold a write transaction open across awaits (no SQLITE_BUSY for concurrent message saves)', async () => {
+    const db = tempDbUrl();
+    const store = new MemoryLibSQL({ url: db.url });
+    try {
+      await store.init();
+      const threadId = 'busy-thread';
+      const resourceId = 'busy-resource';
+      await store.saveThread({
+        thread: { id: threadId, resourceId, title: 't', createdAt: new Date(), updatedAt: new Date() },
+      });
+      await store.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+
+      const errors: unknown[] = [];
+      const capture = (promise: Promise<unknown>) => promise.catch(error => errors.push(error));
+      await Promise.all([
+        (async () => {
+          for (let i = 0; i < 20; i++) {
+            const head = (await store.getObservationalMemory(threadId, resourceId))!;
+            await capture(
+              store.updateBufferedObservations({
+                id: head.id,
+                chunk: {
+                  cycleId: `c${i}`,
+                  observations: `- ${i}`,
+                  tokenCount: 1,
+                  messageIds: [`m${i}`],
+                  messageTokens: 1,
+                  lastObservedAt: new Date(),
+                },
+                lastBufferedAtTime: new Date(),
+              }),
+            );
+            await capture(store.setPendingMessageTokens(head.id, i));
+          }
+        })(),
+        (async () => {
+          for (let i = 0; i < 20; i++) {
+            await capture(
+              store.saveMessages({
+                messages: [
+                  {
+                    id: `msg-${i}`,
+                    threadId,
+                    resourceId,
+                    role: 'user',
+                    type: 'text',
+                    createdAt: new Date(),
+                    content: { format: 2, parts: [{ type: 'text', text: 'x' }] },
+                  },
+                ],
+              }),
+            );
+          }
+        })(),
+      ]);
+
+      expect(errors).toEqual([]);
+      const head = (await store.getObservationalMemory(threadId, resourceId))!;
+      expect(head.bufferedObservationChunks?.map(c => c.cycleId)).toEqual(
+        Array.from({ length: 20 }, (_, i) => `c${i}`),
+      );
+    } finally {
+      db.cleanup();
+    }
+  }, 60_000);
+});
