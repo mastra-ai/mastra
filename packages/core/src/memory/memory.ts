@@ -855,6 +855,7 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            readOnly: effectiveConfig.readOnly || effectiveConfig.workingMemory?.agentManaged === false,
           }),
         );
       }
