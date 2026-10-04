@@ -505,7 +505,7 @@ describe('sync observation commits against the head text', () => {
 });
 
 describe('reflection side effects only follow an applied reflection', () => {
-  it('a reflection that lost to a newer head skips notify, suppression, and the end marker', async () => {
+  it('a reflection that lost to a newer head skips notify, suppression, extracted values, and the end marker', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage);
     const ids = await setupThread(storage);
@@ -524,9 +524,10 @@ describe('reflection side effects only follow an applied reflection', () => {
       entered.resolve();
       await release.promise;
       // Above the reflection threshold so an applied commit would record suppression.
-      return { observations: `- slow reflection ${'w '.repeat(3_000)}` } as Awaited<
-        ReturnType<typeof om.reflector.call>
-      >;
+      return {
+        observations: `- slow reflection ${'w '.repeat(3_000)}`,
+        extractedValues: { currentTask: 'loser task' },
+      } as Awaited<ReturnType<typeof om.reflector.call>>;
     });
     const notify = vi.spyOn(
       om.reflector as unknown as { notifyReflectionCommitted: () => Promise<void> },
@@ -534,6 +535,7 @@ describe('reflection side effects only follow an applied reflection', () => {
     );
     const suppression = (om.reflector as unknown as { syncReflectionSuppression: Map<string, number> })
       .syncReflectionSuppression;
+    const patchThread = vi.spyOn(storage, 'patchThread');
     const { writer, types } = createWriter();
 
     const reflecting = om.reflector.maybeReflect({
@@ -558,55 +560,64 @@ describe('reflection side effects only follow an applied reflection', () => {
     expect(rows).toHaveLength(2);
     expect(notify).not.toHaveBeenCalled();
     expect(suppression.size).toBe(0);
+    // The losing reflection's extracted values must not overwrite the winner's thread metadata.
+    expect(patchThread).not.toHaveBeenCalled();
     expect(types()).not.toContain('data-om-observation-end');
     expect(types()).toContain('data-om-observation-failed');
   });
 });
 
 describe('async buffering only reports chunks that landed', () => {
-  it('a chunk the cursor covered while the Observer ran is not indexed, marked buffered, or advanced past', async () => {
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
-    const ids = await setupThread(storage);
-    const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
-    const messages = [
-      message(ids.threadId, ids.resourceId, 'b1', 'q'.repeat(1_200), new Date(ids.t0.getTime() + 1_000)),
-      message(ids.threadId, ids.resourceId, 'b2', 'ok', new Date(ids.t0.getTime() + 2_000), 'assistant'),
-    ];
-    await storage.saveMessages({ messages });
+  it.each([
+    ['different text', '- sync observed'],
+    // A first-attempt skip is final even when the head already holds identical text.
+    ['identical text', '- buffered fact'],
+  ])(
+    'a chunk the cursor covered while the Observer ran is not indexed, marked buffered, or advanced past (%s)',
+    async (_label, syncText) => {
+      const storage = new InMemoryMemory({ db: new InMemoryDB() });
+      const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
+      const ids = await setupThread(storage);
+      const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
+      const messages = [
+        message(ids.threadId, ids.resourceId, 'b1', 'q'.repeat(1_200), new Date(ids.t0.getTime() + 1_000)),
+        message(ids.threadId, ids.resourceId, 'b2', 'ok', new Date(ids.t0.getTime() + 2_000), 'assistant'),
+      ];
+      await storage.saveMessages({ messages });
 
-    const entered = deferred();
-    const release = deferred();
-    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
-      entered.resolve();
-      await release.promise;
-      return { observations: '- buffered fact' } as Awaited<ReturnType<typeof om.observer.call>>;
-    });
-    const index = vi.spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups');
-    const { writer, types } = createWriter();
+      const entered = deferred();
+      const release = deferred();
+      vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+        entered.resolve();
+        await release.promise;
+        return { observations: '- buffered fact' } as Awaited<ReturnType<typeof om.observer.call>>;
+      });
+      const index = vi.spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups');
+      const { writer, types } = createWriter();
 
-    const buffering = om.buffer({ threadId: ids.threadId, resourceId: ids.resourceId, messages, writer });
-    await entered.promise;
-    // A sync observation covers the same messages while the buffer's Observer runs.
-    await storage.updateActiveObservations({
-      id: record.id,
-      observations: '- sync observed',
-      tokenCount: 3,
-      lastObservedAt: new Date(ids.t0.getTime() + 2_000),
-    });
-    release.resolve();
-    const result = await buffering;
-    await om.waitForBuffering(ids.threadId, ids.resourceId, 5_000);
+      const buffering = om.buffer({ threadId: ids.threadId, resourceId: ids.resourceId, messages, writer });
+      await entered.promise;
+      // A sync observation covers the same messages while the buffer's Observer runs.
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: syncText,
+        tokenCount: 3,
+        lastObservedAt: new Date(ids.t0.getTime() + 2_000),
+      });
+      release.resolve();
+      const result = await buffering;
+      await om.waitForBuffering(ids.threadId, ids.resourceId, 5_000);
 
-    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
-    expect(result.buffered).toBe(false);
-    expect(head.bufferedObservationChunks ?? []).toEqual([]);
-    expect(index).not.toHaveBeenCalled();
-    expect(types()).not.toContain('data-om-buffering-end');
-    expect(types()).toContain('data-om-buffering-failed');
-    const bufferKey = (om as any).buffering.getObservationBufferKey(
-      (om as any).buffering.getLockKey(ids.threadId, ids.resourceId),
-    );
-    expect(BufferingCoordinator.lastBufferedAtTime.get(bufferKey)).toBeUndefined();
-  });
+      const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+      expect(result.buffered).toBe(false);
+      expect(head.bufferedObservationChunks ?? []).toEqual([]);
+      expect(index).not.toHaveBeenCalled();
+      expect(types()).not.toContain('data-om-buffering-end');
+      expect(types()).toContain('data-om-buffering-failed');
+      const bufferKey = (om as any).buffering.getObservationBufferKey(
+        (om as any).buffering.getLockKey(ids.threadId, ids.resourceId),
+      );
+      expect(BufferingCoordinator.lastBufferedAtTime.get(bufferKey)).toBeUndefined();
+    },
+  );
 });
