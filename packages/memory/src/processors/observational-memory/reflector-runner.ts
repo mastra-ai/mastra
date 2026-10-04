@@ -1443,12 +1443,6 @@ export class ReflectorRunner {
       );
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
-      await persistThreadExtractedValues(
-        this.storage,
-        this.reflectionConfig.extractors,
-        record.threadId ?? undefined,
-        reflectResult.extractedValues,
-      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       const newRecordId = crypto.randomUUID();
@@ -1465,6 +1459,13 @@ export class ReflectorRunner {
         omDebug(`[OM:reflect] reflection of ${record.id} not applied (head is ${committedRecord.id})`);
         throw new ReflectionNotAppliedError(record.id, committedRecord.id);
       }
+      // Only an applied reflection's extracted values belong to the thread.
+      await persistThreadExtractedValues(
+        this.storage,
+        this.reflectionConfig.extractors,
+        record.threadId ?? undefined,
+        reflectResult.extractedValues,
+      );
 
       // Best-effort results still over threshold are committed (they usually
       // shrink observations somewhat), but shouldReflect remains true — record

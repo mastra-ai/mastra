@@ -166,9 +166,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     }
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
+    let appendAttempts = 0;
     const appendResult = await withRetry(
-      () =>
-        this.storage.updateBufferedObservations({
+      () => {
+        appendAttempts++;
+        return this.storage.updateBufferedObservations({
           id: record.id,
           chunk: {
             cycleId: this.cycleId,
@@ -184,15 +186,18 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
             extractionFailures: processed.extractionFailures,
           },
           lastBufferedAtTime: processed.lastObservedAt,
-        }),
+        });
+      },
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
     // Storage skips a chunk it already holds (same cycle) or whose messages the cursor already
-    // covers. A skip after a retried write can mean an earlier attempt landed (and may already
-    // be activated), so look for this cycle's chunk on the head before giving up. A chunk that
-    // never landed must not be indexed, reported as buffered, or advance buffering.
+    // covers. A first-attempt skip is final: this cycle's chunk never landed. A skip after a
+    // retried write can mean an earlier attempt landed (and may already be activated), so look
+    // for this cycle's chunk on the head before giving up. A chunk that never landed must not
+    // be indexed, reported as buffered, or advance buffering.
     if (appendResult && !appendResult.persisted) {
-      const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+      const head =
+        appendAttempts > 1 ? await this.storage.getObservationalMemory(record.threadId, record.resourceId) : null;
       const landed =
         !!head &&
         (getBufferedChunks(head).some(chunk => chunk.cycleId === this.cycleId) ||
