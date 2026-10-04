@@ -170,10 +170,14 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
               groupId?: string;
             } = {},
           ) => memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, ...options });
-          expect((await find({ sortDirection: 'ASC' })).map(r => r.id)).toEqual([first.id]);
+          // Rollover moves unactivated chunks to the new generation, so the buffered group is
+          // found once, on the head, still unactivated.
+          expect(before.find(r => r.id === first.id)?.bufferedObservationChunks ?? []).toEqual([]);
+          expect(before.find(r => r.id === second.id)?.bufferedObservationChunks).toHaveLength(2);
+          expect((await find({ sortDirection: 'ASC' })).map(r => r.id)).toEqual([second.id]);
           expect((await find()).map(r => r.id)).toEqual([second.id]);
-          expect((await find({ sortDirection: 'ASC', offset: 1 })).map(r => r.id)).toEqual([second.id]);
-          expect((await find({ beforeGeneration: 1 })).map(r => r.id)).toEqual([first.id]);
+          expect(await find({ sortDirection: 'ASC', offset: 1 })).toEqual([]);
+          expect(await find({ beforeGeneration: 1 })).toEqual([]);
           expect(await find({ groupId: groupId.toUpperCase() })).toEqual([]);
           expect(await find({ groupId: groupId.slice(0, -1) })).toEqual([]);
           expect(await memoryStorage.getObservationalMemoryHistory(threadId, resourceId)).toEqual(before);
@@ -1030,9 +1034,12 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           lastObservedAt: new Date(),
         });
 
+        // Reflect from the record as stored (the reflection covers 'Initial observations');
+        // a stale snapshot is covered by the lifecycle-safety tests.
+        const current = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
         const reflection = 'Condensed reflection of observations';
         const newRecord = await memoryStorage.createReflectionGeneration({
-          currentRecord: initial,
+          currentRecord: current!,
           reflection,
           tokenCount: 50,
         });
@@ -1736,6 +1743,636 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         const observations = chunks.map(c => c.observations).sort();
         const expected = [...labels].sort();
         expect(observations).toEqual(expected);
+      });
+    });
+
+    describe('lifecycle safety', () => {
+      const T0 = Date.parse('2026-01-10T12:00:00.000Z');
+      const at = (ms: number) => new Date(T0 + ms);
+      const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : value);
+      type OMInput = ReturnType<typeof createSampleOMInput>;
+      const head = async (input: OMInput) =>
+        (await memoryStorage.getObservationalMemory(input.threadId, input.resourceId))!;
+      const snapshot = async (input: OMInput) => structuredClone(await head(input));
+      const rows = (input: OMInput) => memoryStorage.getObservationalMemoryHistory(input.threadId, input.resourceId);
+      const row = async (input: OMInput, id: string) => (await rows(input)).find(r => r.id === id)!;
+      const liveRows = async (input: OMInput) => (await rows(input)).filter(r => !r.supersededBy);
+      const cycleIds = (record: { bufferedObservationChunks?: { cycleId: string }[] | null }) =>
+        (record.bufferedObservationChunks ?? []).map(c => c.cycleId);
+      /** A chunk whose newest message is at `T0 + endMs` (so its `lastObservedAt` is one ms later). */
+      const chunkAt = (label: string, endMs: number, messageTokens = 500) => ({
+        cycleId: `cycle-${label}-${randomUUID()}`,
+        observations: `- ${label}`,
+        tokenCount: 10,
+        messageIds: [`msg-${label}-${randomUUID()}`],
+        messageTokens,
+        lastObservedAt: at(endMs + 1),
+      });
+      const activateAll = (id: string, currentPendingTokens: number) =>
+        memoryStorage.swapBufferedToActive({
+          id,
+          activationRatio: 1,
+          messageTokensThreshold: 1000,
+          currentPendingTokens,
+        });
+
+      it('C1: rollover from a stale snapshot moves stored chunks and carries buffering state', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- base',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        const stale = await snapshot(input);
+
+        const one = chunkAt('one', 100);
+        const two = chunkAt('two', 200);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: one, lastBufferedAtTime: at(101) });
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: two, lastBufferedAtTime: at(201) });
+        await memoryStorage.setPendingMessageTokens(record.id, 1234);
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 777);
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: 'buffered reflection',
+          tokenCount: 5,
+          inputTokenCount: 10,
+          reflectedObservationLineCount: 1,
+        });
+
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- reflected',
+          tokenCount: 5,
+        });
+
+        const current = await head(input);
+        expect(next.id).not.toBe(record.id);
+        expect(current.id).toBe(next.id);
+        expect(current.activeObservations).toBe('- reflected');
+        expect(cycleIds(current)).toEqual([one.cycleId, two.cycleId]);
+        expect(iso(current.lastBufferedAtTime)).toBe(iso(at(201)));
+        expect(current.lastBufferedAtTokens).toBe(777);
+        expect(current.pendingMessageTokens).toBe(1234);
+        expect(current.isBufferingObservation).toBe(true);
+        expect(iso(current.lastObservedAt)).toBe(iso(at(0)));
+        expect(current.bufferedReflection || undefined).toBeUndefined();
+        expect(current.reflectedObservationLineCount || undefined).toBeUndefined();
+
+        const retired = await row(input, record.id);
+        expect(cycleIds(retired)).toEqual([]);
+      });
+
+      it('C2: rollover from a snapshot taken before an activation keeps the activated tail', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- base',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        const stale = await snapshot(input);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('activated', 100) });
+        const activation = await activateAll(record.id, 500);
+        expect(activation.chunksActivated).toBe(1);
+        const stored = await head(input);
+        expect(stored.activeObservations).toContain('- activated');
+
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- reflected',
+          tokenCount: 5,
+        });
+
+        expect(next.activeObservations.startsWith('- reflected\n\n')).toBe(true);
+        expect(next.activeObservations).toContain('- activated');
+        expect(next.activeObservations).not.toContain('- base');
+        expect(next.observationTokenCount).toBe(5 + (stored.observationTokenCount - stale.observationTokenCount));
+        expect(iso(next.lastObservedAt)).toBe(iso(stored.lastObservedAt));
+      });
+
+      it('C2: rollover from an empty snapshot joins the activated tail without gluing text', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        const stale = await snapshot(input);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('activated', 100) });
+        await activateAll(record.id, 500);
+
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- reflected',
+          tokenCount: 5,
+        });
+
+        expect(next.activeObservations).toBe('- reflected\n\n- activated');
+      });
+
+      it('C3/C11: rollover on a retired snapshot returns the head and creates nothing', async () => {
+        const input = createSampleOMInput();
+        await memoryStorage.initializeObservationalMemory(input);
+        const stale = await snapshot(input);
+        const firstId = randomUUID();
+        const first = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- first',
+          tokenCount: 1,
+          newRecordId: firstId,
+        });
+        expect(first.id).toBe(firstId);
+
+        const secondId = randomUUID();
+        const second = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- second',
+          tokenCount: 1,
+          newRecordId: secondId,
+        });
+
+        expect(second.id).toBe(firstId);
+        expect(second.id).not.toBe(secondId);
+        expect((await head(input)).id).toBe(firstId);
+        expect(await rows(input)).toHaveLength(2);
+      });
+
+      it('C4: rollover after a non-append rewrite of the snapshot creates nothing', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '<thread id="a">\n- one\n</thread>',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        const stale = await snapshot(input);
+        const merged = '<thread id="a">\n- one\n- two\n</thread>';
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: merged,
+          tokenCount: 12,
+          lastObservedAt: at(100),
+        });
+
+        const returned = await memoryStorage.createReflectionGeneration({
+          currentRecord: stale,
+          reflection: '- reflected',
+          tokenCount: 5,
+          newRecordId: randomUUID(),
+        });
+
+        expect(returned.id).toBe(record.id);
+        expect(returned.activeObservations).toBe(merged);
+        expect(await rows(input)).toHaveLength(1);
+      });
+
+      it('C5/C11: buffered reflection swap moves chunks, counts appended tokens, and tolerates a retired record', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- L1\n- L2',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: '- condensed',
+          tokenCount: 3,
+          inputTokenCount: 10,
+          reflectedObservationLineCount: 2,
+        });
+        const stale = await snapshot(input);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('activated', 100) });
+        await activateAll(record.id, 500);
+        const pending = chunkAt('pending', 200);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: pending });
+        const stored = await head(input);
+
+        const newRecordId = randomUUID();
+        const next = await memoryStorage.swapBufferedReflectionToActive({
+          currentRecord: stale,
+          tokenCount: 7,
+          newRecordId,
+        });
+
+        expect(next.id).toBe(newRecordId);
+        expect(next.activeObservations).toContain('- condensed');
+        expect(next.activeObservations).toContain('- activated');
+        expect(next.activeObservations).not.toContain('- L1');
+        expect(next.observationTokenCount).toBe(7 + (stored.observationTokenCount - stale.observationTokenCount));
+        expect(cycleIds(next)).toEqual([pending.cycleId]);
+        expect(cycleIds(await row(input, record.id))).toEqual([]);
+
+        const again = await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 7 });
+        expect(again.id).toBe(newRecordId);
+        expect(await rows(input)).toHaveLength(2);
+      });
+
+      it('C6: appends land on the head, dedupe by cycleId, skip covered retries, and never move lastBufferedAtTime back', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- base',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        const one = chunkAt('one', 100);
+        const firstAppend = await memoryStorage.updateBufferedObservations({
+          id: record.id,
+          chunk: one,
+          lastBufferedAtTime: at(101),
+        });
+        expect(firstAppend).toEqual({ persisted: true, recordId: record.id });
+
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(input),
+          reflection: '- reflected',
+          tokenCount: 5,
+        });
+
+        const two = chunkAt('two', 200);
+        const lateAppend = await memoryStorage.updateBufferedObservations({
+          id: record.id,
+          chunk: two,
+          lastBufferedAtTime: at(50),
+        });
+        expect(lateAppend).toEqual({ persisted: true, recordId: next.id });
+
+        let current = await head(input);
+        expect(cycleIds(current)).toEqual([one.cycleId, two.cycleId]);
+        expect(iso(current.lastBufferedAtTime)).toBe(iso(at(101)));
+        expect(cycleIds(await row(input, record.id))).toEqual([]);
+
+        expect(await memoryStorage.updateBufferedObservations({ id: next.id, chunk: one })).toEqual({
+          persisted: false,
+          recordId: next.id,
+        });
+        expect(await memoryStorage.updateBufferedObservations({ id: record.id, chunk: two })).toEqual({
+          persisted: false,
+          recordId: next.id,
+        });
+        expect(cycleIds(await head(input))).toEqual([one.cycleId, two.cycleId]);
+
+        const activation = await activateAll(next.id, 1000);
+        expect(activation.chunksActivated).toBe(2);
+        const retry = await memoryStorage.updateBufferedObservations({ id: next.id, chunk: two });
+        expect(retry).toEqual({ persisted: false, recordId: next.id });
+        current = await head(input);
+        expect(cycleIds(current)).toEqual([]);
+      });
+
+      it('C7: activation on a retired record reports retired and writes nothing', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('one', 100) });
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(input),
+          reflection: '- reflected',
+          tokenCount: 5,
+        });
+        const oldBefore = structuredClone(await row(input, record.id));
+        const headBefore = structuredClone(await head(input));
+
+        const result = await activateAll(record.id, 500);
+
+        expect(result.retired).toBe(true);
+        expect(result.chunksActivated).toBe(0);
+        expect(result.activatedMessageIds).toEqual([]);
+        const oldAfter = await row(input, record.id);
+        const headAfter = await head(input);
+        expect(headAfter.id).toBe(next.id);
+        for (const [before, after] of [
+          [oldBefore, oldAfter],
+          [headBefore, headAfter],
+        ] as const) {
+          expect(after.activeObservations).toBe(before.activeObservations);
+          expect(cycleIds(after)).toEqual(cycleIds(before));
+          expect(iso(after.lastObservedAt)).toBe(iso(before.lastObservedAt));
+        }
+      });
+
+      it('C8: activation keeps a chunk the caller did not see and honors caller weights', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        const one = chunkAt('one', 100);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: one });
+        const stale = await snapshot(input);
+        const two = chunkAt('two', 200);
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: two });
+
+        const result = await memoryStorage.swapBufferedToActive({
+          id: record.id,
+          activationRatio: 1,
+          messageTokensThreshold: 1000,
+          currentPendingTokens: 500,
+          bufferedChunks: stale.bufferedObservationChunks,
+        });
+        expect(result.activatedCycleIds).toEqual([one.cycleId]);
+        expect(cycleIds(await head(input))).toEqual([two.cycleId]);
+
+        const weighted = createSampleOMInput();
+        const weightedRecord = await memoryStorage.initializeObservationalMemory(weighted);
+        await memoryStorage.updateBufferedObservations({ id: weightedRecord.id, chunk: chunkAt('a', 100) });
+        await memoryStorage.updateBufferedObservations({ id: weightedRecord.id, chunk: chunkAt('b', 200) });
+        const storedChunks = (await head(weighted)).bufferedObservationChunks!;
+        const heavyFirst = storedChunks.map((chunk, index) =>
+          index === 0 ? { ...chunk, messageTokens: 2000 } : chunk,
+        );
+        const weightedResult = await memoryStorage.swapBufferedToActive({
+          id: weightedRecord.id,
+          activationRatio: 1,
+          messageTokensThreshold: 1000,
+          currentPendingTokens: 1000,
+          bufferedChunks: heavyFirst,
+        });
+        expect(weightedResult.chunksActivated).toBe(1);
+        expect((await head(weighted)).bufferedObservationChunks).toHaveLength(1);
+      });
+
+      it('C9: active-observation commits reject retired records and stale text, and never move the cursor back', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        expect(
+          await memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- a',
+            tokenCount: 1,
+            lastObservedAt: at(100),
+          }),
+        ).toEqual({ applied: true });
+
+        expect(
+          await memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- b',
+            tokenCount: 1,
+            lastObservedAt: at(200),
+            expectedActiveObservations: '- stale',
+          }),
+        ).toEqual({ applied: false, reason: 'conflict' });
+        let current = await head(input);
+        expect(current.activeObservations).toBe('- a');
+        expect(iso(current.lastObservedAt)).toBe(iso(at(100)));
+
+        expect(
+          await memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- a\n- b',
+            tokenCount: 2,
+            lastObservedAt: at(200),
+            expectedActiveObservations: '- a',
+          }),
+        ).toEqual({ applied: true });
+
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- c',
+          tokenCount: 1,
+          lastObservedAt: at(50),
+        });
+        current = await head(input);
+        expect(current.activeObservations).toBe('- c');
+        expect(iso(current.lastObservedAt)).toBe(iso(at(200)));
+
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(input),
+          reflection: '- reflected',
+          tokenCount: 1,
+        });
+        expect(
+          await memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- late',
+            tokenCount: 1,
+            lastObservedAt: at(300),
+          }),
+        ).toEqual({ applied: false, reason: 'retired' });
+        expect((await row(input, record.id)).activeObservations).toBe('- c');
+        expect((await head(input)).id).toBe(next.id);
+        expect((await head(input)).activeObservations).toBe('- reflected');
+      });
+
+      it('C10: a chunk wholly covered by the cursor is skipped, and activation never moves the cursor back', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- sync',
+          tokenCount: 1,
+          lastObservedAt: at(1000),
+        });
+
+        const covered = chunkAt('covered', 1000);
+        expect(await memoryStorage.updateBufferedObservations({ id: record.id, chunk: covered })).toEqual({
+          persisted: false,
+          recordId: record.id,
+        });
+        const after = chunkAt('after', 1001);
+        expect(await memoryStorage.updateBufferedObservations({ id: record.id, chunk: after })).toEqual({
+          persisted: true,
+          recordId: record.id,
+        });
+        const partial = chunkAt('partial', 1500);
+        expect(await memoryStorage.updateBufferedObservations({ id: record.id, chunk: partial })).toEqual({
+          persisted: true,
+          recordId: record.id,
+        });
+        expect(cycleIds(await head(input))).toEqual([after.cycleId, partial.cycleId]);
+
+        const backward = createSampleOMInput();
+        const backwardRecord = await memoryStorage.initializeObservationalMemory(backward);
+        await memoryStorage.updateBufferedObservations({ id: backwardRecord.id, chunk: chunkAt('early', 100) });
+        await memoryStorage.updateActiveObservations({
+          id: backwardRecord.id,
+          observations: '- sync passed the chunk',
+          tokenCount: 1,
+          lastObservedAt: at(500),
+        });
+        await activateAll(backwardRecord.id, 500);
+        expect(iso((await head(backward)).lastObservedAt)).toBe(iso(at(500)));
+      });
+
+      it('C12: writes aimed at a retired record never change it', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          observations: '- a',
+          tokenCount: 1,
+          lastObservedAt: at(0),
+        });
+        await memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('one', 100) });
+        const nextId = randomUUID();
+        const next = await memoryStorage.createReflectionGeneration({
+          currentRecord: await snapshot(input),
+          reflection: '- reflected',
+          tokenCount: 1,
+          newRecordId: nextId,
+        });
+        expect(next.id).toBe(nextId);
+        const oldBefore = structuredClone(await row(input, record.id));
+        expect(oldBefore.supersededBy).toBe(nextId);
+        expect((await head(input)).supersededBy ?? null).toBeNull();
+
+        const late = chunkAt('late', 200);
+        expect(await memoryStorage.updateBufferedObservations({ id: record.id, chunk: late })).toEqual({
+          persisted: true,
+          recordId: nextId,
+        });
+        expect((await activateAll(record.id, 500)).retired).toBe(true);
+        expect(
+          await memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- late',
+            tokenCount: 1,
+            lastObservedAt: at(300),
+          }),
+        ).toEqual({ applied: false, reason: 'retired' });
+        expect(
+          (
+            await memoryStorage.createReflectionGeneration({
+              currentRecord: oldBefore,
+              reflection: '- x',
+              tokenCount: 1,
+            })
+          ).id,
+        ).toBe(nextId);
+        expect(
+          (await memoryStorage.swapBufferedReflectionToActive({ currentRecord: oldBefore, tokenCount: 1 })).id,
+        ).toBe(nextId);
+        await memoryStorage.setPendingMessageTokens(record.id, 999);
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 555);
+
+        const oldAfter = await row(input, record.id);
+        expect(oldAfter.supersededBy).toBe(nextId);
+        expect(oldAfter.activeObservations).toBe(oldBefore.activeObservations);
+        expect(cycleIds(oldAfter)).toEqual([]);
+        expect(oldAfter.pendingMessageTokens).toBe(oldBefore.pendingMessageTokens);
+        expect(oldAfter.isBufferingObservation).toBe(oldBefore.isBufferingObservation);
+        expect(oldAfter.lastBufferedAtTokens).toBe(oldBefore.lastBufferedAtTokens);
+
+        const current = await head(input);
+        expect(current.id).toBe(nextId);
+        expect(cycleIds(current)).toContain(late.cycleId);
+        expect(current.pendingMessageTokens).toBe(999);
+        expect(current.isBufferingObservation).toBe(true);
+        expect(current.lastBufferedAtTokens).toBe(555);
+        expect(await rows(input)).toHaveLength(2);
+      });
+
+      it('C13: a lookup key has exactly one live record and it is the head', async () => {
+        const input = createSampleOMInput();
+        const expectOneLive = async () => {
+          const live = await liveRows(input);
+          expect(live.map(r => r.id)).toEqual([(await head(input)).id]);
+        };
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await expectOneLive();
+        const stale = await snapshot(input);
+        await memoryStorage.createReflectionGeneration({ currentRecord: stale, reflection: '- one', tokenCount: 1 });
+        await expectOneLive();
+        const current = await head(input);
+        await memoryStorage.updateBufferedReflection({
+          id: current.id,
+          reflection: '- buffered',
+          tokenCount: 1,
+          inputTokenCount: 1,
+          reflectedObservationLineCount: 1,
+        });
+        await memoryStorage.swapBufferedReflectionToActive({ currentRecord: current, tokenCount: 1 });
+        await expectOneLive();
+        await memoryStorage.createReflectionGeneration({ currentRecord: stale, reflection: '- stale', tokenCount: 1 });
+        await expectOneLive();
+        expect(await memoryStorage.initializeObservationalMemory(input)).toMatchObject({ id: (await head(input)).id });
+        await expectOneLive();
+        expect((await row(input, record.id)).supersededBy).toBeTruthy();
+      });
+
+      it('C14: the head is the newest generation, then earliest createdAt, then lowest id', async () => {
+        const input = createSampleOMInput();
+        const base = await memoryStorage.initializeObservationalMemory(input);
+        const duplicate = (id: string, createdAt: Date) => ({
+          ...structuredClone(base),
+          id,
+          generationCount: 1,
+          originType: 'reflection' as const,
+          activeObservations: `- ${id}`,
+          supersededBy: null,
+          createdAt,
+          updatedAt: createdAt,
+        });
+        try {
+          await memoryStorage.insertObservationalMemoryRecord(duplicate(`b-${randomUUID()}`, at(2000)));
+        } catch (error) {
+          if (String(error).includes('not implemented')) return;
+          throw error;
+        }
+        const earliest = duplicate(`c-${randomUUID()}`, at(1000));
+        await memoryStorage.insertObservationalMemoryRecord(earliest);
+        expect((await head(input)).id).toBe(earliest.id);
+
+        const tie = createSampleOMInput();
+        const tieBase = await memoryStorage.initializeObservationalMemory(tie);
+        const tied = (id: string) => ({
+          ...structuredClone(tieBase),
+          id,
+          generationCount: 1,
+          originType: 'reflection' as const,
+          supersededBy: null,
+          createdAt: at(1000),
+          updatedAt: at(1000),
+        });
+        const suffix = randomUUID();
+        await memoryStorage.insertObservationalMemoryRecord(tied(`b-${suffix}`));
+        await memoryStorage.insertObservationalMemoryRecord(tied(`a-${suffix}`));
+        expect((await head(tie)).id).toBe(`a-${suffix}`);
+      });
+
+      it('C15: after the key is deleted, writes create nothing and initialization is deterministic', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        expect((await memoryStorage.initializeObservationalMemory(input)).id).toBe(record.id);
+        const stale = await snapshot(input);
+        await memoryStorage.clearObservationalMemory(input.threadId, input.resourceId);
+
+        const settle = async (write: () => Promise<unknown>) => {
+          try {
+            return await write();
+          } catch (error) {
+            expect(String(error)).toMatch(/not found/i);
+            return undefined;
+          }
+        };
+        const append = await settle(() =>
+          memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('gone', 100) }),
+        );
+        if (append) expect(append).toMatchObject({ persisted: false });
+        const swap = (await settle(() => activateAll(record.id, 500))) as { chunksActivated: number } | undefined;
+        if (swap) expect(swap.chunksActivated).toBe(0);
+        await expect(
+          memoryStorage.updateActiveObservations({
+            id: record.id,
+            observations: '- gone',
+            tokenCount: 1,
+            lastObservedAt: at(0),
+          }),
+        ).rejects.toThrow(/not found/);
+        await expect(memoryStorage.setPendingMessageTokens(record.id, 1)).rejects.toThrow(/not found/);
+        await expect(memoryStorage.setBufferingObservationFlag(record.id, true)).rejects.toThrow(/not found/);
+        expect(
+          (await memoryStorage.createReflectionGeneration({ currentRecord: stale, reflection: '- x', tokenCount: 1 }))
+            .id,
+        ).toBe(record.id);
+        expect((await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 1 })).id).toBe(
+          record.id,
+        );
+        expect(await rows(input)).toEqual([]);
+
+        const reinitialized = await memoryStorage.initializeObservationalMemory(input);
+        expect(reinitialized.id).toBe(record.id);
+        expect(await rows(input)).toHaveLength(1);
       });
     });
   });
