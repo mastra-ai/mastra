@@ -1,0 +1,4 @@
+{
+  "ignorePatterns": ["node_modules/**", "dist/**", ".data/**", "package-lock.json"],
+  "printWidth": 100
+}

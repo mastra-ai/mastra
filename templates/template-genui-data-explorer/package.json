@@ -1,0 +1,30 @@
+{
+  "name": "template-genui-data-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reproducible synthetic SaaS Sales analytics for a candidate Mastra generative UI data explorer.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "data:init": "node scripts/cli.ts init",
+    "data:inspect": "node scripts/cli.ts inspect",
+    "format": "oxfmt --config .oxfmtrc.json .",
+    "format:check": "oxfmt --check --config .oxfmtrc.json .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:unit": "vitest run --config tests/vitest.config.ts tests/unit",
+    "test:integration": "vitest run --config tests/vitest.config.ts tests/integration"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "oxfmt": "0.71.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  },
+  "engines": {
+    "node": ">=24.15.0"
+  }
+}

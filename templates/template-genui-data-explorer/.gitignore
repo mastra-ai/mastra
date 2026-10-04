@@ -1,0 +1,9 @@
+node_modules/
+.npm-cache/
+dist/
+.data/
+coverage/
+*.tsbuildinfo
+!package-lock.json
+!.npmrc
+!.env.example
