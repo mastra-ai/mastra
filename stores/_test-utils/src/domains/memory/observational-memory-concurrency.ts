@@ -241,6 +241,60 @@ export function createObservationalMemoryConcurrencyTests({
     );
 
     it(
+      'rollover vs active-observation commit: an applied commit reaches the head',
+      async () => {
+        for (let i = 0; i < iterations; i++) {
+          const key = newKey();
+          const chunk = chunkAt('carried', 100);
+          const snapshot = await seed(key, [chunk]);
+          const appended = `${snapshot.activeObservations}\n- committed-${randomUUID()}`;
+          const [, commit] = await Promise.all([
+            stores.a.createReflectionGeneration({ currentRecord: snapshot, reflection: '- reflected', tokenCount: 5 }),
+            stores.b.updateActiveObservations({
+              id: snapshot.id,
+              observations: appended,
+              tokenCount: 20,
+              lastObservedAt: at(50),
+              expectedActiveObservations: snapshot.activeObservations,
+            }),
+          ]);
+          const current = await expectInvariants(key, [chunk], snapshot.lastObservedAt);
+          expect(current.generationCount).toBe(1);
+          if (commit && commit.applied) {
+            // Committed before the rollover: the rollover keeps the appended tail.
+            expect(current.activeObservations).toContain(appended.slice(snapshot.activeObservations.length).trim());
+            expect(new Date(current.lastObservedAt!).getTime()).toBe(at(50).getTime());
+          } else {
+            expect(commit).toEqual({ applied: false, reason: 'retired' });
+          }
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'rollover vs pending-token and buffering-flag writes: the values reach the head',
+      async () => {
+        for (let i = 0; i < iterations; i++) {
+          const key = newKey();
+          const chunk = chunkAt('carried', 100);
+          const snapshot = await seed(key, [chunk]);
+          await Promise.all([
+            stores.a.createReflectionGeneration({ currentRecord: snapshot, reflection: '- reflected', tokenCount: 5 }),
+            stores.b.setPendingMessageTokens(snapshot.id, 777),
+            stores.b.setBufferingObservationFlag(snapshot.id, true, 321),
+          ]);
+          const current = await expectInvariants(key, [chunk], snapshot.lastObservedAt);
+          expect(current.generationCount).toBe(1);
+          expect(current.pendingMessageTokens).toBe(777);
+          expect(current.isBufferingObservation).toBe(true);
+          expect(current.lastBufferedAtTokens).toBe(321);
+        }
+      },
+      timeout,
+    );
+
+    it(
       'concurrent initialize: one live record',
       async () => {
         for (let i = 0; i < iterations; i++) {

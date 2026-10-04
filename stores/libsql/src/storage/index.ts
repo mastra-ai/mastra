@@ -238,6 +238,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const domainConfig = {
       client: this.client,
+      embeddedReplica: 'url' in config && !!config.syncUrl,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     };

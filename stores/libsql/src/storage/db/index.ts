@@ -25,6 +25,12 @@ import { withClientWriteLock } from './write-lock';
  */
 export type LibSQLDomainBaseConfig = {
   /**
+   * The client is a Turso embedded replica (`syncUrl`): reads are served from the local
+   * replica, so a write that conflicts with another instance's change syncs before retrying.
+   * @internal Set by `LibSQLStore`.
+   */
+  embeddedReplica?: boolean;
+  /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
    */
