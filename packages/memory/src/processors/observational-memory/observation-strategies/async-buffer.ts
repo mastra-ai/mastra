@@ -17,12 +17,14 @@ import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import { resolveThreadTitleUpdate } from './thread-title';
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+import type { ObservationPersistOutcome, ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
   private readonly startedAt: string;
   private readonly cycleId: string;
   private priorExtractedValues?: Record<string, unknown>;
+  /** The generation the chunk was written to (the head when the target was retired). */
+  private persistedRecordId?: string;
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -147,8 +149,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     };
   }
 
-  async persist(processed: ProcessedObservation): Promise<boolean> {
-    if (!processed.observations) return false;
+  async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
+    if (!processed.observations) return;
 
     const { record, threadId, resourceId, messages } = this.opts;
 
@@ -160,11 +162,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     if (!liveRecord) {
       omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
-      return false;
+      return;
     }
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
-    await withRetry(
+    const appendResult = await withRetry(
       () =>
         this.storage.updateBufferedObservations({
           id: record.id,
@@ -185,13 +187,30 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         }),
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
+    // Storage skips a chunk it already holds (same cycle) or whose messages the cursor already
+    // covers. A skip after a retried write can mean an earlier attempt landed (and may already
+    // be activated), so look for this cycle's chunk on the head before giving up. A chunk that
+    // never landed must not be indexed, reported as buffered, or advance buffering.
+    if (appendResult && !appendResult.persisted) {
+      const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+      const landed =
+        !!head &&
+        (getBufferedChunks(head).some(chunk => chunk.cycleId === this.cycleId) ||
+          head.activeObservations.includes(processed.observations));
+      if (!landed) {
+        return { status: 'not-committed', reason: 'the buffered chunk was already observed' };
+      }
+      this.persistedRecordId = head.id;
+    } else {
+      this.persistedRecordId = appendResult?.recordId ?? record.id;
+    }
 
     await this.indexObservationGroups(
       processed.observations,
       threadId,
       resourceId,
       processed.lastObservedAt,
-      record.id,
+      this.persistedRecordId,
     );
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
@@ -234,7 +253,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         }
       }
     }
-    return true;
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
@@ -253,7 +271,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       startedAt: this.startedAt,
       tokensBuffered,
       bufferedTokens: totalBufferedTokens,
-      recordId: record.id,
+      recordId: this.persistedRecordId ?? record.id,
       threadId,
       observations: processed.observations,
       extractedValues: processed.extractedValues,

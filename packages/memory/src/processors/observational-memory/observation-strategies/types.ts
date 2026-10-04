@@ -91,3 +91,22 @@ export interface ProcessedObservation {
   extractionFailures?: Array<{ slug: string; error: string }>;
   extractors?: readonly Extractor<any>[];
 }
+
+/**
+ * What `persist()` did with a processed observation. A strategy returning nothing persisted
+ * the observation as given.
+ */
+export type ObservationPersistOutcome =
+  | {
+      /** The observation landed on the current head generation. */
+      status: 'committed';
+      /** The observation as committed (recomposed when the head changed under the cycle). */
+      processed: ProcessedObservation;
+      /** The head record the observation was written to, as read before the write. */
+      record: ObservationalMemoryRecord;
+    }
+  | {
+      /** Nothing was written; the cycle must not remove context or report completion. */
+      status: 'not-committed';
+      reason: string;
+    };
