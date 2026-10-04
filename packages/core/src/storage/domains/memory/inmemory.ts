@@ -905,6 +905,8 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    // Every stored record reports liveness explicitly (`null` = live), like the other adapters.
+    record.supersededBy ??= null;
     const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
     const existing = this.db.observationalMemory.get(key) ?? [];
     // Insert in order by generationCount descending (newest first)
