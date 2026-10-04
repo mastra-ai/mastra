@@ -406,6 +406,16 @@ async function main() {
     return process.exit(await runPruneCommand(process.argv.slice(3)));
   }
 
+  const loginIndex = process.argv.findIndex(
+    (arg, index) => index >= 2 && arg !== '--acp' && arg !== '--dangerous-auto-approve',
+  );
+  if (process.argv[loginIndex] === 'login') {
+    const { runLoginCommand } = await import('./login-command.js');
+    const code = await runLoginCommand({ args: process.argv.slice(loginIndex + 1) });
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(code);
+  }
+
   const initialPrompt = takeInitialPrompt(process.argv, process.env);
   if (initialPrompt.error) {
     process.stderr.write(`${initialPrompt.error}\n`);

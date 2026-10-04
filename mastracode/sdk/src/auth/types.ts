@@ -14,6 +14,7 @@ export type OAuthProviderId = string;
 export interface OAuthAuthInfo {
   url: string;
   instructions?: string;
+  userCode?: string;
 }
 
 export interface OAuthPrompt {
