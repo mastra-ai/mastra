@@ -668,3 +668,64 @@ describe('sync observation with nothing to observe', () => {
     },
   );
 });
+
+describe('observation markers land on an observed message', () => {
+  it.each(['thread', 'resource'] as const)(
+    '%s scope: a message saved while the Observer runs keeps its content unobserved',
+    async scope => {
+      const storage = new InMemoryMemory({ db: new InMemoryDB() });
+      const om = createOM(storage, { scope, messageTokens: 100 });
+      const ids = await setupThread(storage);
+      const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+      const asked = message(ids.threadId, ids.resourceId, `asked-${ids.threadId}`, 'question', at(1));
+      const answered = message(
+        ids.threadId,
+        ids.resourceId,
+        `answered-${ids.threadId}`,
+        'answer '.repeat(300),
+        at(2),
+        'assistant',
+      );
+      const late = message(ids.threadId, ids.resourceId, `late-${ids.threadId}`, 'LATE_FACT', at(3), 'assistant');
+      await storage.saveMessages({ messages: [asked, answered] });
+
+      // Another instance saves `late` while this cycle's Observer runs on `asked` + `answered`.
+      const saveLate = async () => {
+        await storage.saveMessages({ messages: [late] });
+      };
+      if (scope === 'thread') {
+        vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+          await saveLate();
+          return { observations: '- question answered' } as Awaited<ReturnType<typeof om.observer.call>>;
+        });
+      } else {
+        vi.spyOn(om.observer, 'callMultiThread').mockImplementation(async () => {
+          await saveLate();
+          return {
+            results: new Map([[ids.threadId, { observations: '- question answered' }]]),
+          } as Awaited<ReturnType<typeof om.observer.callMultiThread>>;
+        });
+      }
+
+      const result = await om.observe({
+        threadId: ids.threadId,
+        resourceId: ids.resourceId,
+        messages: [asked, answered],
+      });
+
+      expect(result.observed).toBe(true);
+      const stored = (await storage.listMessages({ threadId: ids.threadId, perPage: false })).messages;
+      const markerTypes = (id: string) =>
+        stored
+          .find(m => m.id === id)!
+          .content.parts.map(p => p.type)
+          .filter(t => t.startsWith('data-om-observation'));
+      expect(markerTypes(answered.id)).toEqual(['data-om-observation-start', 'data-om-observation-end']);
+      expect(markerTypes(late.id)).toEqual([]);
+      const head = (await storage.getObservationalMemory(scope === 'resource' ? null : ids.threadId, ids.resourceId))!;
+      const unobserved = om.getUnobservedMessages(stored, head);
+      expect(unobserved.map(m => m.id)).toEqual([late.id]);
+      expect(JSON.stringify(unobserved[0]!.content.parts)).toContain('LATE_FACT');
+    },
+  );
+});

@@ -38,6 +38,10 @@ export class SyncObservationStrategy extends ObservationStrategy {
     this.lastMessage = opts.messages[opts.messages.length - 1];
   }
 
+  protected override getObservedMessagesForThread(threadId: string) {
+    return threadId === this.opts.threadId ? this.opts.messages : undefined;
+  }
+
   get needsLock() {
     return true;
   }
