@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { getThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -618,6 +618,53 @@ describe('async buffering only reports chunks that landed', () => {
         (om as any).buffering.getLockKey(ids.threadId, ids.resourceId),
       );
       expect(BufferingCoordinator.lastBufferedAtTime.get(bufferKey)).toBeUndefined();
+    },
+  );
+});
+
+describe('sync observation with nothing to observe', () => {
+  it.each(['thread', 'resource'] as const)(
+    '%s scope: a stale pending count does not run the Observer or move the cursor to the current time',
+    async scope => {
+      const storage = new InMemoryMemory({ db: new InMemoryDB() });
+      const om = createOM(storage, { scope, messageTokens: 1_000 });
+      const ids = await setupThread(storage);
+      const observed = message(
+        ids.threadId,
+        ids.resourceId,
+        `seen-${ids.threadId}`,
+        'seen',
+        new Date(ids.t0.getTime() + 1_000),
+      );
+      await storage.saveMessages({ messages: [observed] });
+      const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
+      const cursor = new Date(ids.t0.getTime() + 1_000);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- seen',
+        tokenCount: 2,
+        lastObservedAt: cursor,
+      });
+      if (scope === 'resource') {
+        // Resource scope tracks each thread's cursor in thread metadata.
+        const thread = (await storage.getThreadById({ threadId: ids.threadId }))!;
+        await storage.updateThread({
+          id: ids.threadId,
+          title: thread.title ?? '',
+          metadata: setThreadOMMetadata(thread.metadata, { lastObservedAt: cursor.toISOString() }),
+        });
+      }
+      // The persisted pending count is stale: everything it counted has been observed.
+      await storage.setPendingMessageTokens(record.id, 5_000);
+
+      const result = await om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages: [observed] });
+
+      const head = (await storage.getObservationalMemory(scope === 'resource' ? null : ids.threadId, ids.resourceId))!;
+      expect(result.observed).toBe(false);
+      expect(om.observer.call).not.toHaveBeenCalled();
+      expect(om.observer.callMultiThread).not.toHaveBeenCalled();
+      expect(head.lastObservedAt!.getTime()).toBe(cursor.getTime());
+      expect(head.activeObservations).toBe('- seen');
     },
   );
 });
