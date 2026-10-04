@@ -1,5 +1,10 @@
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
+import {
+  TABLE_OBSERVATIONAL_MEMORY,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+} from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
   ObservationalMemoryRecord,
@@ -7,15 +12,13 @@ import type {
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
-import type { Connection } from 'oracledb';
 
-import { asBindParameters, executeOptions, nullableClobBind, nullableJsonBind, rows } from '../../../shared/connection';
-import type { ObjectRow } from '../../../shared/connection';
+import { asBindParameters, nullableClobBind, nullableJsonBind } from '../../../shared/connection';
 import { toDate } from '../../domain-utils';
-import { insertOMRecord, omSelect, parseOMRow } from './observational';
-import type { ObservationalMemoryRow } from './observational';
+import { findOMRowForUpdate, lockOMRow, parseOMRow, resolveLiveOMRow, rollOverOMRow } from './observational';
 import {
   OM_ACTIVE_OBSERVATIONS,
   OM_BUFFERED_OBSERVATION_CHUNKS,
@@ -29,7 +32,15 @@ import {
   OM_REFLECTED_OBSERVATION_LINE_COUNT,
   OM_UPDATED_AT,
 } from './schema';
-import { assertRowsAffected, numberOrZero, parseBufferedChunks, storageError, stringOrEmpty, table } from './utils';
+import {
+  assertRowsAffected,
+  numberOrZero,
+  parseBufferedChunks,
+  storageError,
+  stringOrEmpty,
+  table,
+  timestampBind,
+} from './utils';
 import type { MemoryContext } from './utils';
 
 // Async buffering/reflection workflow: observations and reflections generated
@@ -39,11 +50,23 @@ import type { MemoryContext } from './utils';
 export async function updateBufferedObservations(
   ctx: MemoryContext,
   input: UpdateBufferedObservationsInput,
-): Promise<void> {
+): Promise<UpdateBufferedObservationsResult> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
-      const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
+    return await ctx.db.tx(async (_client, connection) => {
+      // A retired id is redirected to the head.
+      const row = await resolveLiveOMRow(
+        ctx,
+        connection,
+        await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS'),
+      );
       const existingChunks = parseBufferedChunks(row.bufferedObservationChunks);
+      // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
+      if (
+        existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
+        isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, row.lastObservedAt)
+      ) {
+        return { persisted: false, recordId: row.id };
+      }
       // Buffer chunks let long observation cycles append safely without
       // rewriting the active observation CLOB on every small update.
       const newChunk: BufferedObservationChunk = {
@@ -61,28 +84,23 @@ export async function updateBufferedObservations(
         extractedValues: input.chunk.extractedValues,
         extractionFailures: input.chunk.extractionFailures,
       };
-      const updatedChunks = [...existingChunks, newChunk];
-      const lastBufferedAtTimeSql =
-        input.lastBufferedAtTime === undefined || input.lastBufferedAtTime === null
-          ? ''
-          : `,\n               ${OM_LAST_BUFFERED_AT_TIME} = :lastBufferedAtTime`;
-      const binds: Record<string, unknown> = {
-        id: input.id,
-        bufferedObservationChunks: nullableJsonBind(updatedChunks),
-        updatedAt: new Date(),
-      };
-      if (input.lastBufferedAtTime !== undefined && input.lastBufferedAtTime !== null) {
-        binds.lastBufferedAtTime = toDate(input.lastBufferedAtTime);
-      }
-
+      // lastBufferedAtTime never moves backward.
+      const lastBufferedAtTime = maxObservationCursor(row.lastBufferedAtTime, input.lastBufferedAtTime);
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_OBSERVATION_CHUNKS} = :bufferedObservationChunks,
-               ${OM_UPDATED_AT} = :updatedAt${lastBufferedAtTimeSql}
+               ${OM_LAST_BUFFERED_AT_TIME} = :lastBufferedAtTime,
+               ${OM_UPDATED_AT} = :updatedAt
            WHERE id = :id`,
-        asBindParameters(binds),
+        asBindParameters({
+          id: row.id,
+          bufferedObservationChunks: nullableJsonBind([...existingChunks, newChunk]),
+          lastBufferedAtTime: timestampBind(lastBufferedAtTime),
+          updatedAt: timestampBind(new Date()),
+        }),
       );
-      assertRowsAffected(result.rowsAffected, 'UPDATE_BUFFERED_OBSERVATIONS', input.id);
+      assertRowsAffected(result.rowsAffected, 'UPDATE_BUFFERED_OBSERVATIONS', row.id);
+      return { persisted: true, recordId: row.id };
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;
@@ -97,9 +115,16 @@ export async function swapBufferedToActive(
   try {
     return await ctx.db.tx(async (_client, connection) => {
       const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
-      const chunks = input.bufferedChunks?.length
-        ? input.bufferedChunks
-        : parseBufferedChunks(row.bufferedObservationChunks);
+      // A retired record is frozen: activation reports it and writes nothing.
+      if (row.supersededBy) return { ...emptySwapResult(), retired: true };
+
+      // Activation always works on the stored list, so a chunk appended after the caller read
+      // the record is never dropped. Caller-provided chunks only override token weights.
+      const refreshedWeights = new Map((input.bufferedChunks ?? []).map(chunk => [chunk.id, chunk.messageTokens]));
+      const chunks = parseBufferedChunks(row.bufferedObservationChunks).map(chunk => {
+        const weight = refreshedWeights.get(chunk.id);
+        return weight === undefined ? chunk : { ...chunk, messageTokens: weight };
+      });
 
       if (chunks.length === 0) {
         return emptySwapResult();
@@ -111,6 +136,8 @@ export async function swapBufferedToActive(
         (activation.activatedChunks.at(-1)?.lastObservedAt
           ? toDate(activation.activatedChunks.at(-1)!.lastObservedAt)
           : new Date());
+      // The stored cursor never moves backward (a sync observation may already be past this chunk).
+      const storedCursor = maxObservationCursor(row.lastObservedAt, lastObservedAt);
       const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
       // Keep each activated chunk readable inside one CLOB while preserving the observation timestamp boundary.
       const existingActive = stringOrEmpty(row.activeObservations);
@@ -136,8 +163,8 @@ export async function swapBufferedToActive(
           bufferedObservationChunks: nullableJsonBind(
             activation.remainingChunks.length > 0 ? activation.remainingChunks : null,
           ),
-          lastObservedAt,
-          updatedAt: new Date(),
+          lastObservedAt: timestampBind(storedCursor),
+          updatedAt: timestampBind(new Date()),
         },
       );
       assertRowsAffected(result.rowsAffected, 'SWAP_BUFFERED_TO_ACTIVE', input.id);
@@ -174,7 +201,7 @@ export async function updateBufferedReflection(
           tokenCount: Math.round(input.tokenCount),
           inputTokenCount: Math.round(input.inputTokenCount),
           reflectedObservationLineCount: Math.round(input.reflectedObservationLineCount),
-          updatedAt: new Date(),
+          updatedAt: timestampBind(new Date()),
         },
       );
       assertRowsAffected(result.rowsAffected, 'UPDATE_BUFFERED_REFLECTION', input.id);
@@ -189,98 +216,62 @@ export async function swapBufferedReflectionToActive(
   ctx: MemoryContext,
   input: SwapBufferedReflectionToActiveInput,
 ): Promise<ObservationalMemoryRecord> {
+  const { currentRecord } = input;
   try {
     return await ctx.db.tx(async (_client, connection) => {
-      const row = await lockOMRow(ctx, connection, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
-      const bufferedReflection = stringOrEmpty(row.bufferedReflection);
+      const row = await findOMRowForUpdate(ctx, connection, currentRecord.id);
+      // Missing target: create nothing.
+      if (!row) return currentRecord;
+      // A retired snapshot creates nothing; the caller adopts the head.
+      if (row.supersededBy) return parseOMRow(await resolveLiveOMRow(ctx, connection, row));
+
+      // Derive everything from the row locked above (FOR UPDATE), not input.currentRecord,
+      // which can be stale if another writer updated the record concurrently.
+      const stored = parseOMRow(row);
+      const bufferedReflection = stored.bufferedReflection ?? '';
       if (!bufferedReflection) {
         throw storageError(
           'SWAP_BUFFERED_REFLECTION_TO_ACTIVE',
           'NO_CONTENT',
-          { id: input.currentRecord.id },
+          { id: currentRecord.id },
           new Error('No buffered reflection to swap'),
           ErrorCategory.USER,
         );
       }
+      // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+      // reflected line count.
+      if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+        return stored;
+      }
 
-      const reflectedLineCount = numberOrZero(row.reflectedObservationLineCount);
-      const currentObservations = stringOrEmpty(row.activeObservations);
+      const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
       // The buffered reflection replaces the lines it summarized, but any
       // observations added after reflection started are preserved below it.
-      const unreflectedContent = currentObservations.split('\n').slice(reflectedLineCount).join('\n').trim();
+      const unreflectedContent = stored.activeObservations.split('\n').slice(reflectedLineCount).join('\n').trim();
       const newObservations = unreflectedContent
         ? `${bufferedReflection}\n\n${unreflectedContent}`
         : bufferedReflection;
-      const now = new Date();
-      // Derive the carried-over fields from the row we just locked (FOR UPDATE
-      // above) instead of input.currentRecord, which can be stale if another
-      // writer updated generationCount/config/metadata/etc. concurrently.
-      const lockedRecord = parseOMRow(row);
-      const newRecord: ObservationalMemoryRecord = {
-        id: globalThis.crypto.randomUUID(),
-        scope: lockedRecord.scope,
-        threadId: lockedRecord.threadId,
-        resourceId: lockedRecord.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: lockedRecord.lastObservedAt,
-        originType: 'reflection',
-        generationCount: lockedRecord.generationCount + 1,
-        activeObservations: newObservations,
-        totalTokensObserved: lockedRecord.totalTokensObserved,
-        observationTokenCount: Math.round(input.tokenCount),
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: lockedRecord.config,
-        metadata: lockedRecord.metadata,
-        observedTimezone: lockedRecord.observedTimezone,
-      };
+      // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+      const tokenCount =
+        input.tokenCount + Math.max(0, stored.observationTokenCount - (currentRecord.observationTokenCount ?? 0));
 
-      await insertOMRecord(ctx, connection, newRecord, now);
+      const newRecord = await rollOverOMRow(ctx, connection, stored, newObservations, tokenCount, input.newRecordId);
       const updateResult = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_REFLECTION} = NULL,
                ${OM_BUFFERED_REFLECTION_TOKENS} = NULL,
                ${OM_BUFFERED_REFLECTION_INPUT_TOKENS} = NULL,
-               ${OM_REFLECTED_OBSERVATION_LINE_COUNT} = NULL,
-               ${OM_UPDATED_AT} = :updatedAt
+               ${OM_REFLECTED_OBSERVATION_LINE_COUNT} = NULL
            WHERE id = :id`,
-        { id: input.currentRecord.id, updatedAt: now },
+        { id: stored.id },
       );
-      assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', input.currentRecord.id);
-
+      assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', stored.id);
       return newRecord;
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;
-    throw storageError('SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED', { id: input.currentRecord.id }, error);
+    throw storageError('SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED', { id: currentRecord.id }, error);
   }
-}
-
-async function lockOMRow(
-  ctx: MemoryContext,
-  connection: Connection,
-  id: string,
-  operation: string,
-): Promise<ObservationalMemoryRow> {
-  // Observational memory updates are incremental and order-sensitive, so
-  // mutating paths derive their next state from a locked row.
-  const result = await connection.execute<ObjectRow>(
-    `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)} WHERE id = :id FOR UPDATE`,
-    { id },
-    executeOptions(),
-  );
-  const row = rows(result)[0] as ObservationalMemoryRow | undefined;
-  if (!row) {
-    assertRowsAffected(0, operation, id);
-    throw new Error(`Observational memory record not found: ${id}`);
-  }
-  return row;
 }
 
 function emptySwapResult(): SwapBufferedToActiveResult {
