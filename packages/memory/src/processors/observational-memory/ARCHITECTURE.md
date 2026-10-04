@@ -218,6 +218,18 @@ Activation sets the cursor to the last activated chunk's `lastObservedAt` uncond
 
 `sync.ts` and `resource-scoped.ts` patch the thread's `lastObservedMessageCursor` (and per-thread `lastObservedAt`) before `updateActiveObservations`, and `base.ts` emits the completion end marker after it without checking where the commit landed. `filterObservedMessages` removes live messages on that basis, so an aborted commit, or one that landed on a retired record, still removes context. A P4 variant.
 
+### H4. A stale pending count observes nothing and moves the cursor to "now" (main, proven; fixed in PR 1)
+
+`meetsObservationThreshold()` adds the persisted `pendingMessageTokens` to the unobserved count, so a stale count can start a sync cycle when every message is already observed. The cycle called the Observer with no messages and committed the fallback cursor `new Date()` (`getMaxMessageTimestamp` with nothing to scan), past messages another instance had saved with earlier timestamps and not yet observed. Those messages were then treated as observed. **Fix:** `run()` returns `observed: false` before the Observer call when there is nothing unobserved. Test: `lifecycle-safety.test.ts` "sync observation with nothing to observe" (thread and resource scope; red without the guard).
+
+### H5. Observation markers landed on messages the cycle never observed (main, proven; fixed in PR 1)
+
+Start/end markers went on the newest assistant message in the live list, or in storage when there was no list (the `observe()` API, other instances, other processes). A completed end marker tells `getUnobservedMessages` that everything before it in that message is observed, so a message saved while the Observer ran got the end marker and was never observed or shown to the actor again (loss). The start and end markers could also land on different messages, leaving the first looking in progress and observed twice. **Fix:** lifecycle markers go on the newest **observed** assistant message. With no observed assistant message they keep the live list's placement (this turn's response or its seed; markers never go on user messages, #16612), and the storage fallback only considers messages no newer than the observed range. Test: `lifecycle-safety.test.ts` "observation markers land on an observed message" (thread and resource scope).
+
+### H6. Observed messages carrying later OM markers were observed again (main, proven; fixed in PR 1)
+
+`createUnobservedMessage` kept every part after the last end marker except `data-om-observation-*`. A later buffering cycle's `data-om-buffering-*` markers on an already observed message made it "unobserved" with no content, and it went back to the Observer (duplicate cost and, with a real model, possibly invented observations). **Fix:** a message whose remaining parts are all `data-om-*` markers has nothing to observe. The activation context cleanup, which also uses `getUnobservedParts`, is unchanged.
+
 ### F1. OracleDB shifted timestamps by the host's DST offset (proven, pre-existing; fixed for OM in PR 1)
 
 Oracle's shared OM suite failed two cursor round-trip tests under a non-UTC host time zone (`TZ` = PDT: `09:00Z` instead of `10:00Z` for a January date) and passed under `TZ=UTC`. A shifted cursor can skip or re-observe messages.
@@ -334,5 +346,5 @@ Related history:
 - `__tests__/threshold-activation-tail.test.ts`: post-activation tail observation (#25060).
 - `stores/_test-utils/src/domains/memory/observational-memory.ts` C1–C17: the PR 1 lifecycle contract (rollover carry-forward and text rules, retired targets, append dedup and covered chunks, stored-list activation, cursor monotonicity, liveness marker, canonical head, deterministic initialization).
 - `stores/_test-utils/src/domains/memory/observational-memory-concurrency.ts`: eight two-store races (25 iterations each, invariant-checked), run per networked adapter by `stores/<adapter>/src/storage/domains/memory/om-lifecycle-concurrency.test.ts` (LibSQL with the second store in a child process), next to each adapter's `supersededBy` upgrade, backfill-vs-rollover, and adapter-specific tests (MongoDB crash recovery and roll-forward, Oracle timestamp binds, LibSQL same-process writes).
-- `__tests__/lifecycle-safety.test.ts`: memory-layer behavior on retired and conflicting commits (P4, P6, H2, H3, reflection not applied, covered appends).
+- `__tests__/lifecycle-safety.test.ts`: memory-layer behavior on retired and conflicting commits (P4, P6, H2–H6, reflection not applied, covered appends).
 - The probes for P2 and P4 live outside the repo and are ported into the stack as regression tests: the ready+late rollover probe and the activation-vs-reflection probe matrix including the two-agent LibSQL repro.
