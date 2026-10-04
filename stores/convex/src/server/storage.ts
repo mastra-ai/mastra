@@ -366,6 +366,10 @@ export async function handleTypedOperation(
   switch (request.op) {
     case 'omGetLatest':
     case 'omGetHistory':
+    case 'omInitialize':
+    case 'omCreateReflectionGeneration':
+    case 'omSetPendingMessageTokens':
+    case 'omSetBufferingObservationFlag':
     case 'omUpdateActive':
     case 'omAppendBufferedChunk':
     case 'omSwapBuffered':

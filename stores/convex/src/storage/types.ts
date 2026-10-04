@@ -65,6 +65,10 @@ export type SerializedOMCurrentRecord = {
   lastObservedAt: string | null;
   totalTokensObserved: number;
   generationCount: number;
+  /** The snapshot's active observations; the server only applies a rollover if the stored text equals or extends it. */
+  activeObservations?: string;
+  /** The snapshot's observation token count; tokens appended since are added to the new generation. */
+  observationTokenCount?: number;
 };
 
 export type StorageRequest =
@@ -215,6 +219,40 @@ export type StorageRequest =
       sortDirection?: 'ASC' | 'DESC';
     }
   | {
+      op: 'omInitialize';
+      tableName: TABLE_NAMES | string;
+      /** Serialized generation-0 record (deterministic id); inserted only when the lookup key has no record. */
+      record: Record<string, unknown> & { id: string; lookupKey: string };
+    }
+  | {
+      op: 'omCreateReflectionGeneration';
+      tableName: TABLE_NAMES | string;
+      currentRecord: SerializedOMCurrentRecord;
+      /** ID for the new generation record */
+      newId: string;
+      reflection: string;
+      tokenCount: number;
+      /** ISO timestamp */
+      now: string;
+    }
+  | {
+      op: 'omSetPendingMessageTokens';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      tokenCount: number;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omSetBufferingObservationFlag';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      isBuffering: boolean;
+      lastBufferedAtTokens?: number;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
       op: 'omUpdateActive';
       tableName: TABLE_NAMES | string;
       id: string;
@@ -225,6 +263,8 @@ export type StorageRequest =
       observedMessageIds: string[] | null;
       /** ISO timestamp */
       updatedAt: string;
+      /** Commit only if the stored active observations still equal this text. */
+      expectedActiveObservations?: string;
     }
   | {
       op: 'omAppendBufferedChunk';

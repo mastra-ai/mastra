@@ -458,28 +458,72 @@ export class ConvexDB extends MastraBase {
     });
   }
 
-  public async omUpdateActive(args: {
+  public async omInitialize<R>(record: Record<string, unknown> & { id: string; lookupKey: string }): Promise<R | null> {
+    return this.client.callStorage<R | null>({
+      op: 'omInitialize',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      record,
+    });
+  }
+
+  public async omCreateReflectionGeneration<R>(args: {
+    currentRecord: SerializedOMCurrentRecord;
+    newId: string;
+    reflection: string;
+    tokenCount: number;
+    now: string;
+  }): Promise<R | null> {
+    return this.client.callStorage<R | null>({
+      op: 'omCreateReflectionGeneration',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omSetPendingMessageTokens(args: { id: string; tokenCount: number; updatedAt: string }): Promise<void> {
+    await this.client.callStorage({
+      op: 'omSetPendingMessageTokens',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omSetBufferingObservationFlag(args: {
+    id: string;
+    isBuffering: boolean;
+    lastBufferedAtTokens?: number;
+    updatedAt: string;
+  }): Promise<void> {
+    await this.client.callStorage({
+      op: 'omSetBufferingObservationFlag',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omUpdateActive<R>(args: {
     id: string;
     observations: string;
     tokenCount: number;
     lastObservedAt: string;
     observedMessageIds: string[] | null;
     updatedAt: string;
-  }): Promise<void> {
-    await this.client.callStorage({
+    expectedActiveObservations?: string;
+  }): Promise<R> {
+    return this.client.callStorage<R>({
       op: 'omUpdateActive',
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });
   }
 
-  public async omAppendBufferedChunk(args: {
+  public async omAppendBufferedChunk<R>(args: {
     id: string;
     chunk: SerializedOMChunk;
     lastBufferedAtTime?: string;
     updatedAt: string;
-  }): Promise<void> {
-    await this.client.callStorage({
+  }): Promise<R> {
+    return this.client.callStorage<R>({
       op: 'omAppendBufferedChunk',
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
@@ -523,8 +567,8 @@ export class ConvexDB extends MastraBase {
     newId: string;
     tokenCount: number;
     now: string;
-  }): Promise<R> {
-    return this.client.callStorage<R>({
+  }): Promise<R | null> {
+    return this.client.callStorage<R | null>({
       op: 'omSwapBufferedReflection',
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,

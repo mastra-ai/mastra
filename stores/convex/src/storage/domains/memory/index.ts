@@ -10,6 +10,7 @@ import {
   TABLE_THREADS,
   calculatePagination,
   createStorageErrorId,
+  getObservationalMemoryGeneration0Id,
   normalizePerPage,
   safelyParseJSON,
   storageMessageMatchesMetadataFilter,
@@ -31,7 +32,9 @@ import type {
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
@@ -120,6 +123,7 @@ type StoredOMRecord = {
   lastBufferedAtTokens: number;
   lastBufferedAtTime?: string | null;
   metadata?: string | null;
+  supersededBy?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -191,6 +195,7 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
     metadata: (metadata as Record<string, unknown>) ?? undefined,
     observedMessageIds: doc.observedMessageIds || undefined,
     observedTimezone: doc.observedTimezone || undefined,
+    supersededBy: doc.supersededBy ?? null,
   };
 }
 
@@ -937,9 +942,10 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
-    const id = crypto.randomUUID();
     const now = new Date();
     const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+    // Deterministic generation-0 id; the server inserts it only when the key has no record.
+    const id = getObservationalMemoryGeneration0Id(lookupKey);
 
     const record: ObservationalMemoryRecord = {
       id,
@@ -964,39 +970,37 @@ export class MemoryConvex extends MemoryStorage {
       lastBufferedAtTime: null,
       config: input.config,
       observedTimezone: input.observedTimezone,
+      supersededBy: null,
     };
 
-    await this.#db.insert({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      record: {
-        id,
-        lookupKey,
-        scope: input.scope,
-        resourceId: input.resourceId,
-        threadId: input.threadId || null,
-        activeObservations: '',
-        activeObservationsPendingUpdate: null,
-        originType: 'initial',
-        config: JSON.stringify(input.config ?? {}),
-        generationCount: 0,
-        lastObservedAt: null,
-        lastReflectionAt: null,
-        pendingMessageTokens: 0,
-        totalTokensObserved: 0,
-        observationTokenCount: 0,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: input.observedTimezone || null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
+    const doc = await this.#db.omInitialize<StoredOMRecord>({
+      id,
+      lookupKey,
+      scope: input.scope,
+      resourceId: input.resourceId,
+      threadId: input.threadId || null,
+      activeObservations: '',
+      activeObservationsPendingUpdate: null,
+      originType: 'initial',
+      config: JSON.stringify(input.config ?? {}),
+      generationCount: 0,
+      lastObservedAt: null,
+      lastReflectionAt: null,
+      pendingMessageTokens: 0,
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      isObserving: false,
+      isReflecting: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      observedTimezone: input.observedTimezone || null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
     });
 
-    return record;
+    return doc ? parseStoredOMRecord(doc) : record;
   }
 
   async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
@@ -1037,24 +1041,30 @@ export class MemoryConvex extends MemoryStorage {
         lastBufferedAtTime: record.lastBufferedAtTime ? toISO(record.lastBufferedAtTime) : null,
         observedTimezone: record.observedTimezone || null,
         metadata: record.metadata ? JSON.stringify(record.metadata) : null,
+        supersededBy: record.supersededBy ?? null,
         createdAt: toISO(record.createdAt),
         updatedAt: toISO(record.updatedAt),
       },
     });
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    await this.#db.omUpdateActive({
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult | void> {
+    return this.#db.omUpdateActive<UpdateActiveObservationsResult | undefined>({
       id: input.id,
       observations: input.observations,
       tokenCount: input.tokenCount,
       lastObservedAt: toISO(input.lastObservedAt),
       observedMessageIds: input.observedMessageIds ?? null,
       updatedAt: new Date().toISOString(),
+      ...(input.expectedActiveObservations !== undefined
+        ? { expectedActiveObservations: input.expectedActiveObservations }
+        : {}),
     });
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(
+    input: UpdateBufferedObservationsInput,
+  ): Promise<UpdateBufferedObservationsResult | void> {
     const chunk: SerializedOMChunk = {
       id: `ombuf-${crypto.randomUUID()}`,
       cycleId: input.chunk.cycleId,
@@ -1071,7 +1081,7 @@ export class MemoryConvex extends MemoryStorage {
       extractionFailures: input.chunk.extractionFailures,
     };
 
-    await this.#db.omAppendBufferedChunk({
+    return this.#db.omAppendBufferedChunk<UpdateBufferedObservationsResult | undefined>({
       id: input.id,
       chunk,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
@@ -1094,68 +1104,36 @@ export class MemoryConvex extends MemoryStorage {
     });
   }
 
-  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
-
-    const record: ObservationalMemoryRecord = {
-      id,
-      scope: input.currentRecord.scope,
-      threadId: input.currentRecord.threadId,
-      resourceId: input.currentRecord.resourceId,
-      createdAt: now,
-      updatedAt: now,
-      lastObservedAt: input.currentRecord.lastObservedAt,
-      originType: 'reflection',
-      generationCount: input.currentRecord.generationCount + 1,
-      activeObservations: input.reflection,
-      totalTokensObserved: input.currentRecord.totalTokensObserved,
-      observationTokenCount: input.tokenCount,
-      pendingMessageTokens: 0,
-      isReflecting: false,
-      isObserving: false,
-      isBufferingObservation: false,
-      isBufferingReflection: false,
-      lastBufferedAtTokens: 0,
-      lastBufferedAtTime: null,
-      config: input.currentRecord.config,
-      metadata: input.currentRecord.metadata,
-      observedTimezone: input.currentRecord.observedTimezone,
+  /** The caller's snapshot as the server's rollover ops expect it. */
+  #serializeCurrentRecord(currentRecord: ObservationalMemoryRecord): SerializedOMCurrentRecord {
+    return {
+      id: currentRecord.id,
+      lookupKey: this.getOMKey(currentRecord.threadId, currentRecord.resourceId),
+      scope: currentRecord.scope,
+      threadId: currentRecord.threadId || null,
+      resourceId: currentRecord.resourceId,
+      config: JSON.stringify(currentRecord.config ?? {}),
+      metadata: currentRecord.metadata ? JSON.stringify(currentRecord.metadata) : null,
+      observedTimezone: currentRecord.observedTimezone || null,
+      lastObservedAt: currentRecord.lastObservedAt ? toISO(currentRecord.lastObservedAt) : null,
+      totalTokensObserved: currentRecord.totalTokensObserved,
+      generationCount: currentRecord.generationCount,
+      activeObservations: currentRecord.activeObservations ?? '',
+      observationTokenCount: currentRecord.observationTokenCount ?? 0,
     };
+  }
 
-    await this.#db.insert({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      record: {
-        id,
-        lookupKey,
-        scope: record.scope,
-        resourceId: record.resourceId,
-        threadId: record.threadId || null,
-        activeObservations: input.reflection,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: JSON.stringify(record.config ?? {}),
-        generationCount: record.generationCount,
-        lastObservedAt: record.lastObservedAt ? toISO(record.lastObservedAt) : null,
-        lastReflectionAt: now.toISOString(),
-        pendingMessageTokens: 0,
-        totalTokensObserved: record.totalTokensObserved,
-        observationTokenCount: record.observationTokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: record.observedTimezone || null,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    // The server builds the next generation from the stored record and retires it in one mutation.
+    const doc = await this.#db.omCreateReflectionGeneration<StoredOMRecord>({
+      currentRecord: this.#serializeCurrentRecord(input.currentRecord),
+      newId: input.newRecordId ?? crypto.randomUUID(),
+      reflection: input.reflection,
+      tokenCount: input.tokenCount,
+      now: new Date().toISOString(),
     });
-
-    return record;
+    // No stored record: nothing was created.
+    return doc ? parseStoredOMRecord(doc) : input.currentRecord;
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
@@ -1170,29 +1148,14 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord } = input;
-    const serializedCurrentRecord: SerializedOMCurrentRecord = {
-      id: currentRecord.id,
-      lookupKey: this.getOMKey(currentRecord.threadId, currentRecord.resourceId),
-      scope: currentRecord.scope,
-      threadId: currentRecord.threadId || null,
-      resourceId: currentRecord.resourceId,
-      config: JSON.stringify(currentRecord.config ?? {}),
-      metadata: currentRecord.metadata ? JSON.stringify(currentRecord.metadata) : null,
-      observedTimezone: currentRecord.observedTimezone || null,
-      lastObservedAt: currentRecord.lastObservedAt ? toISO(currentRecord.lastObservedAt) : null,
-      totalTokensObserved: currentRecord.totalTokensObserved,
-      generationCount: currentRecord.generationCount,
-    };
-
     const doc = await this.#db.omSwapBufferedReflection<StoredOMRecord>({
-      currentRecord: serializedCurrentRecord,
-      newId: crypto.randomUUID(),
+      currentRecord: this.#serializeCurrentRecord(input.currentRecord),
+      newId: input.newRecordId ?? crypto.randomUUID(),
       tokenCount: input.tokenCount,
       now: new Date().toISOString(),
     });
-
-    return parseStoredOMRecord(doc);
+    // No stored record: nothing was created.
+    return doc ? parseStoredOMRecord(doc) : input.currentRecord;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
@@ -1218,18 +1181,13 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
-    const found = await this.#db.patch({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
+    // The server redirects a retired id to the head.
+    await this.#db.omSetBufferingObservationFlag({
       id,
-      record: {
-        isBufferingObservation: isBuffering,
-        ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
-        updatedAt: new Date(),
-      },
+      isBuffering,
+      ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
+      updatedAt: new Date().toISOString(),
     });
-    if (!found) {
-      throw this.omRecordNotFound('SET_BUFFERING_OBSERVATION_FLAG', id);
-    }
   }
 
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
@@ -1254,14 +1212,8 @@ export class MemoryConvex extends MemoryStorage {
       });
     }
 
-    const found = await this.#db.patch({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      id,
-      record: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
-    });
-    if (!found) {
-      throw this.omRecordNotFound('SET_PENDING_MESSAGE_TOKENS', id);
-    }
+    // The server redirects a retired id to the head.
+    await this.#db.omSetPendingMessageTokens({ id, tokenCount, updatedAt: new Date().toISOString() });
   }
 
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
