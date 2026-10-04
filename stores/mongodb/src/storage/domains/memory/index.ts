@@ -13,6 +13,11 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  getObservationalMemoryGeneration0Id,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
 } from '@mastra/core/storage';
 
 /**
@@ -40,7 +45,9 @@ import type {
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,
@@ -48,11 +55,126 @@ import type {
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
+import type { Collection } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
+
+type OMCollection = Collection<any>;
+
+/** Canonical head order: newest generation, then earliest createdAt, then lowest id. */
+const OM_HEAD_SORT = { generationCount: -1, createdAt: 1, id: 1 } as const;
+/** Max redirects when a write aimed at a retired record follows the head. */
+const OM_MAX_HEAD_HOPS = 3;
+/** Max read-decide-conditional-update rounds before giving up on a contended record. */
+const OM_MAX_CONDITIONAL_ATTEMPTS = 3;
+
+/**
+ * Inputs for a rollover's successor, stored on the fenced (retired) document so that any
+ * process can finish the rollover. Small by design: no chunks or text copies beyond the
+ * reflection itself; everything else is copied from the frozen old document.
+ */
+interface PendingSuccessor {
+  newId: string;
+  /** `equal`: the successor's text is `reflection`. `append`: `reflection` + the old text after `snapTextLength`. */
+  mode: 'equal' | 'append';
+  reflection: string;
+  tokenCount: number;
+  snapTextLength: number;
+  snapObservationTokenCount: number;
+  /** Clear the old document's buffered reflection fields during cleanup (buffered reflection swap). */
+  clearBufferedReflection: boolean;
+  createdAt: Date;
+}
+
+/**
+ * The successor document of a fenced (frozen) document: a pure function of the old document's
+ * final state and the rollover inputs, so concurrent roll-forwards insert identical documents.
+ * Buffered chunks, the cursor, buffering markers, flags, and counters carry over; buffered
+ * reflection state does not.
+ */
+function buildSuccessorDocument(old: any, pending: PendingSuccessor): Record<string, unknown> {
+  let activeObservations = pending.reflection;
+  let observationTokenCount = pending.tokenCount;
+  if (pending.mode === 'append') {
+    const tail = String(old.activeObservations ?? '')
+      .slice(pending.snapTextLength)
+      .trimStart();
+    activeObservations = pending.reflection ? `${pending.reflection}\n\n${tail}` : tail;
+    observationTokenCount =
+      pending.tokenCount + Math.max(0, Number(old.observationTokenCount || 0) - pending.snapObservationTokenCount);
+  }
+  return {
+    id: pending.newId,
+    lookupKey: old.lookupKey,
+    scope: old.scope,
+    resourceId: old.resourceId,
+    threadId: old.threadId ?? null,
+    activeObservations,
+    activeObservationsPendingUpdate: null,
+    originType: 'reflection',
+    config: old.config ?? null,
+    generationCount: Number(old.generationCount || 0) + 1,
+    lastObservedAt: old.lastObservedAt ?? null,
+    lastReflectionAt: pending.createdAt,
+    pendingMessageTokens: old.pendingMessageTokens ?? 0,
+    totalTokensObserved: old.totalTokensObserved ?? 0,
+    observationTokenCount,
+    bufferedObservationChunks: Array.isArray(old.bufferedObservationChunks) ? old.bufferedObservationChunks : [],
+    isObserving: false,
+    isReflecting: false,
+    isBufferingObservation: Boolean(old.isBufferingObservation),
+    isBufferingReflection: false,
+    lastBufferedAtTokens: old.lastBufferedAtTokens ?? 0,
+    lastBufferedAtTime: old.lastBufferedAtTime ?? null,
+    observedTimezone: old.observedTimezone ?? null,
+    metadata: old.metadata ?? null,
+    supersededBy: null,
+    createdAt: pending.createdAt,
+    updatedAt: pending.createdAt,
+  };
+}
+
+/** Equality filters for `fields` as stored in `doc` (`$exists: false` for absent fields). */
+function matchStoredFields(doc: any, fields: string[]): Record<string, unknown> {
+  return Object.fromEntries(fields.map(f => [f, doc[f] === undefined ? { $exists: false } : doc[f]]));
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return (error as { code?: number } | null)?.code === 11000;
+}
+
+function omNotFound(operation: string, id: string): MastraError {
+  return new MastraError({
+    id: createStorageErrorId('MONGODB', operation, 'NOT_FOUND'),
+    text: `Observational memory record not found: ${id}`,
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.THIRD_PARTY,
+    details: { id },
+  });
+}
+
+function omConflict(operation: string, id: string): MastraError {
+  return new MastraError({
+    id: createStorageErrorId('MONGODB', operation, 'CONFLICT'),
+    text: `Observational memory record ${id} kept changing during ${operation}; giving up after ${OM_MAX_CONDITIONAL_ATTEMPTS} attempts`,
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.THIRD_PARTY,
+    details: { id },
+  });
+}
+
+function omNoLiveHead(id: string): MastraError {
+  return new MastraError({
+    id: createStorageErrorId('MONGODB', 'RESOLVE_OBSERVATIONAL_MEMORY_HEAD', 'FAILED'),
+    text: `Observational memory record ${id} is superseded but no live head was found`,
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.THIRD_PARTY,
+    details: { id },
+  });
+}
 
 export class MemoryStorageMongoDB extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
@@ -93,6 +215,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.#warnIfOMIdIndexMissing();
+    await this.#maintainSupersededBy();
   }
 
   /**
@@ -1525,16 +1649,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
       observedTimezone: doc.observedTimezone || undefined,
+      supersededBy: doc.supersededBy ?? null,
     };
   }
 
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
-      const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(OM_TABLE);
-      const doc = await collection.findOne({ lookupKey }, { sort: { generationCount: -1 } });
-      if (!doc) return null;
-      return this.parseOMDocument(doc);
+      const doc = await this.#getHeadDoc(collection, this.getOMKey(threadId, resourceId));
+      return doc ? this.parseOMDocument(doc) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -1617,64 +1740,62 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = globalThis.crypto.randomUUID();
-      const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
-
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.scope,
-        threadId: input.threadId,
-        resourceId: input.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: undefined,
-        originType: 'initial',
-        generationCount: 0,
-        activeObservations: '',
-        totalTokensObserved: 0,
-        observationTokenCount: 0,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.config,
-        observedTimezone: input.observedTimezone,
-      };
-
       const collection = await this.getCollection(OM_TABLE);
-      await collection.insertOne({
-        id,
-        lookupKey,
-        scope: input.scope,
-        resourceId: input.resourceId,
-        threadId: input.threadId || null,
-        activeObservations: '',
-        activeObservationsPendingUpdate: null,
-        originType: 'initial',
-        config: input.config,
-        generationCount: 0,
-        lastObservedAt: null,
-        lastReflectionAt: null,
-        pendingMessageTokens: 0,
-        totalTokensObserved: 0,
-        observationTokenCount: 0,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: input.observedTimezone || null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const existing = await this.#getHeadDoc(collection, lookupKey);
+      if (existing) return this.parseOMDocument(existing);
 
-      return record;
+      // Deterministic generation-0 id: concurrent initializations insert the same id, and the
+      // unique `id` index rejects every insert after the first.
+      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      const now = new Date();
+      try {
+        await collection.insertOne({
+          id,
+          lookupKey,
+          scope: input.scope,
+          resourceId: input.resourceId,
+          threadId: input.threadId || null,
+          activeObservations: '',
+          activeObservationsPendingUpdate: null,
+          originType: 'initial',
+          config: input.config,
+          generationCount: 0,
+          lastObservedAt: null,
+          lastReflectionAt: null,
+          pendingMessageTokens: 0,
+          totalTokensObserved: 0,
+          observationTokenCount: 0,
+          isObserving: false,
+          isReflecting: false,
+          isBufferingObservation: false,
+          isBufferingReflection: false,
+          lastBufferedAtTokens: 0,
+          lastBufferedAtTime: null,
+          observedTimezone: input.observedTimezone || null,
+          supersededBy: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+      }
+
+      const head = await this.#getHeadDoc(collection, lookupKey);
+      if (!head) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'NOT_FOUND'),
+          text: `Observational memory record not found after initialization: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
+        });
+      }
+      return this.parseOMDocument(head);
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
@@ -1723,6 +1844,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         lastBufferedAtTime: record.lastBufferedAtTime || null,
         observedTimezone: record.observedTimezone || null,
         metadata: record.metadata || null,
+        supersededBy: record.supersededBy ?? null,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       });
@@ -1739,38 +1861,41 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
-      const now = new Date();
       const collection = await this.getCollection(OM_TABLE);
       const safeTokenCount = Number.isFinite(input.tokenCount) && input.tokenCount >= 0 ? input.tokenCount : 0;
 
-      const updateDoc: any = {
-        activeObservations: input.observations,
-        lastObservedAt: input.lastObservedAt,
-        pendingMessageTokens: 0,
-        observationTokenCount: safeTokenCount,
-        observedMessageIds: input.observedMessageIds ?? null,
-        updatedAt: now,
-      };
+      for (let attempt = 1; attempt <= OM_MAX_CONDITIONAL_ATTEMPTS; attempt++) {
+        const doc = await collection.findOne({ id: input.id });
+        if (!doc) throw omNotFound('UPDATE_ACTIVE_OBSERVATIONS', input.id);
+        if (doc.supersededBy) return { applied: false, reason: 'retired' };
+        if (
+          input.expectedActiveObservations !== undefined &&
+          input.expectedActiveObservations !== (doc.activeObservations || '')
+        ) {
+          return { applied: false, reason: 'conflict' };
+        }
 
-      const result = await collection.updateOne(
-        { id: input.id },
-        {
-          $set: updateDoc,
-          $inc: { totalTokensObserved: safeTokenCount },
-        },
-      );
-
-      if (result.matchedCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
+        // The cursor never moves backward. The update applies only if nothing this decision read
+        // has changed; otherwise re-read and decide again.
+        const result = await collection.updateOne(
+          { id: input.id, supersededBy: null, ...matchStoredFields(doc, ['activeObservations', 'lastObservedAt']) },
+          {
+            $set: {
+              activeObservations: input.observations,
+              lastObservedAt: maxObservationCursor(doc.lastObservedAt, input.lastObservedAt),
+              pendingMessageTokens: 0,
+              observationTokenCount: safeTokenCount,
+              observedMessageIds: input.observedMessageIds ?? null,
+              updatedAt: new Date(),
+            },
+            $inc: { totalTokensObserved: safeTokenCount },
+          },
+        );
+        if (result.matchedCount === 1) return { applied: true };
       }
+      throw omConflict('UPDATE_ACTIVE_OBSERVATIONS', input.id);
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -1789,66 +1914,34 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = globalThis.crypto.randomUUID();
-      const now = new Date();
-      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
-
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.currentRecord.scope,
-        threadId: input.currentRecord.threadId,
-        resourceId: input.currentRecord.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
-        originType: 'reflection',
-        generationCount: input.currentRecord.generationCount + 1,
-        activeObservations: input.reflection,
-        totalTokensObserved: input.currentRecord.totalTokensObserved,
-        observationTokenCount: input.tokenCount,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
-        observedTimezone: input.currentRecord.observedTimezone,
-      };
-
-      const collection = await this.getCollection(OM_TABLE);
-      await collection.insertOne({
-        id,
-        lookupKey,
-        scope: record.scope,
-        resourceId: record.resourceId,
-        threadId: record.threadId || null,
-        activeObservations: input.reflection,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: record.config,
-        generationCount: input.currentRecord.generationCount + 1,
-        lastObservedAt: record.lastObservedAt || null,
-        lastReflectionAt: now,
-        pendingMessageTokens: record.pendingMessageTokens,
-        totalTokensObserved: record.totalTokensObserved,
-        observationTokenCount: record.observationTokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: record.observedTimezone || null,
-        createdAt: now,
-        updatedAt: now,
-        metadata: record.metadata || null,
+      const { currentRecord } = input;
+      return await this.#rollOver(currentRecord, doc => {
+        const stored = this.parseOMDocument(doc);
+        const plan = planReflectionGenerationText({
+          storedObservations: stored.activeObservations,
+          storedObservationTokenCount: stored.observationTokenCount,
+          snapshotObservations: currentRecord.activeObservations,
+          snapshotObservationTokenCount: currentRecord.observationTokenCount,
+          reflection: input.reflection,
+          tokenCount: input.tokenCount,
+        });
+        // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+        if (!plan) return null;
+        return {
+          newId: input.newRecordId ?? globalThis.crypto.randomUUID(),
+          mode: plan.mode,
+          reflection: input.reflection,
+          tokenCount: input.tokenCount,
+          snapTextLength: (currentRecord.activeObservations ?? '').length,
+          snapObservationTokenCount: currentRecord.observationTokenCount ?? 0,
+          clearBufferedReflection: false,
+          createdAt: new Date(),
+        };
       });
-
-      return record;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
@@ -1923,7 +2016,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
     try {
-      const collection = await this.getCollection(OM_TABLE);
       const updateDoc: any = {
         isBufferingObservation: isBuffering,
         updatedAt: new Date(),
@@ -1933,17 +2025,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updateDoc.lastBufferedAtTokens = lastBufferedAtTokens;
       }
 
-      const result = await collection.updateOne({ id }, { $set: updateDoc });
-
-      if (result.matchedCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_OBSERVATION_FLAG', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
-        });
-      }
+      await this.#updateLiveDoc(id, 'SET_BUFFERING_OBSERVATION_FLAG', { $set: updateDoc });
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2024,23 +2106,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
 
     try {
-      const collection = await this.getCollection(OM_TABLE);
-      const result = await collection.updateOne(
-        { id },
-        {
-          $set: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
-        },
-      );
-
-      if (result.matchedCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id, tokenCount },
-        });
-      }
+      await this.#updateLiveDoc(id, 'SET_PENDING_MESSAGE_TOKENS', {
+        $set: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
+      });
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2098,7 +2166,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   // Async Buffering Methods
   // ============================================
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
       const collection = await this.getCollection(OM_TABLE);
 
@@ -2118,29 +2186,87 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         extractedValues: input.chunk.extractedValues,
         extractionFailures: input.chunk.extractionFailures,
       };
+      // A chunk stores max message time + 1ms; it is wholly covered iff cursor >= that − 1ms, so
+      // it may be appended only while the stored cursor is strictly below that bound.
+      const coverBound = new Date(new Date(input.chunk.lastObservedAt).getTime() - 1);
+      const notCovered = { $or: [{ lastObservedAt: null }, { lastObservedAt: { $lt: coverBound } }] };
+      const lastBufferedAtTime = input.lastBufferedAtTime ? new Date(input.lastBufferedAtTime) : undefined;
 
-      // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
-      const now = new Date();
-      const setStage: Record<string, any> = {
-        updatedAt: now,
-        bufferedObservationChunks: {
-          $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, [newChunk as any]],
-        },
-      };
-      if (input.lastBufferedAtTime) {
-        setStage.lastBufferedAtTime = input.lastBufferedAtTime;
-      }
+      let targetId = input.id;
+      let hops = 0;
+      let retries = 0;
+      for (;;) {
+        // One atomic conditional update carries every skip decision: live record, cycle not yet
+        // stored, chunk not covered by the cursor, chunk list absent/null/array. `$literal` keeps
+        // `$`-prefixed strings inside the chunk from being read as field paths.
+        const result = await collection.updateOne(
+          {
+            id: targetId,
+            supersededBy: null,
+            'bufferedObservationChunks.cycleId': { $ne: input.chunk.cycleId },
+            ...notCovered,
+            $and: [
+              {
+                $or: [
+                  { bufferedObservationChunks: { $exists: false } },
+                  { bufferedObservationChunks: null },
+                  { bufferedObservationChunks: { $type: 'array' } },
+                ],
+              },
+            ],
+          },
+          [
+            {
+              $set: {
+                bufferedObservationChunks: {
+                  $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, { $literal: [newChunk] }],
+                },
+                ...(lastBufferedAtTime
+                  ? { lastBufferedAtTime: { $max: ['$lastBufferedAtTime', { $literal: lastBufferedAtTime }] } }
+                  : {}),
+                updatedAt: { $literal: new Date() },
+              },
+            },
+          ],
+        );
+        if (result.matchedCount === 1) return { persisted: true, recordId: targetId };
 
-      const result = await collection.updateOne({ id: input.id }, [{ $set: setStage }]);
-
-      if (result.matchedCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
+        // Nothing matched: classify from the stored document.
+        const doc = await collection.findOne({ id: targetId });
+        if (!doc) throw omNotFound('UPDATE_BUFFERED_OBSERVATIONS', targetId);
+        if (doc.supersededBy) {
+          // A retired id is redirected to the head.
+          const head = hops < OM_MAX_HEAD_HOPS ? await this.#getHeadDoc(collection, doc.lookupKey) : null;
+          if (!head || head.supersededBy || head.id === targetId) throw omNoLiveHead(input.id);
+          targetId = head.id;
+          hops++;
+          continue;
+        }
+        const stored = doc.bufferedObservationChunks;
+        if (Array.isArray(stored) && stored.some((c: any) => c?.cycleId === input.chunk.cycleId)) {
+          return { persisted: false, recordId: targetId };
+        }
+        if (isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, doc.lastObservedAt)) {
+          return { persisted: false, recordId: targetId };
+        }
+        if (stored !== undefined && stored !== null && !Array.isArray(stored)) {
+          // A legacy non-array value: replace it, conditioned on the exact stored value.
+          const replaced = await collection.updateOne(
+            { id: targetId, supersededBy: null, bufferedObservationChunks: stored, ...notCovered },
+            {
+              $set: {
+                bufferedObservationChunks: [newChunk],
+                ...(lastBufferedAtTime
+                  ? { lastBufferedAtTime: maxObservationCursor(doc.lastBufferedAtTime, lastBufferedAtTime) }
+                  : {}),
+                updatedAt: new Date(),
+              },
+            },
+          );
+          if (replaced.matchedCount === 1) return { persisted: true, recordId: targetId };
+        }
+        // A concurrent write changed a predicate field and the append is still allowed: retry.
+        if (++retries >= OM_MAX_CONDITIONAL_ATTEMPTS) throw omConflict('UPDATE_BUFFERED_OBSERVATIONS', targetId);
       }
     } catch (error) {
       if (error instanceof MastraError) {
@@ -2161,183 +2287,186 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
     try {
       const collection = await this.getCollection(OM_TABLE);
+      const emptyResult: SwapBufferedToActiveResult = {
+        chunksActivated: 0,
+        messageTokensActivated: 0,
+        observationTokensActivated: 0,
+        messagesActivated: 0,
+        activatedCycleIds: [],
+        activatedMessageIds: [],
+      };
 
-      // Get current record
-      const doc = await collection.findOne({ id: input.id });
-      if (!doc) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
-      }
+      for (let attempt = 1; attempt <= OM_MAX_CONDITIONAL_ATTEMPTS; attempt++) {
+        const doc = await collection.findOne({ id: input.id });
+        if (!doc) throw omNotFound('SWAP_BUFFERED_TO_ACTIVE', input.id);
+        // A retired record is frozen: activation reports it and writes nothing.
+        if (doc.supersededBy) return { ...emptyResult, retired: true };
 
-      // Parse buffered chunks safely
-      const chunks: BufferedObservationChunk[] = Array.isArray(doc.bufferedObservationChunks)
-        ? doc.bufferedObservationChunks
-        : [];
+        // Activation always works on the stored list, so a chunk appended after the caller read
+        // the record is never dropped. Caller-provided chunks only override token weights.
+        const persistedChunks: BufferedObservationChunk[] = Array.isArray(doc.bufferedObservationChunks)
+          ? doc.bufferedObservationChunks
+          : [];
+        const refreshedWeights = new Map(
+          (Array.isArray(input.bufferedChunks) ? input.bufferedChunks : []).map(c => [c.id, c.messageTokens]),
+        );
+        const chunks = persistedChunks.map(c =>
+          refreshedWeights.has(c.id) ? { ...c, messageTokens: refreshedWeights.get(c.id)! } : c,
+        );
 
-      if (chunks.length === 0) {
-        return {
-          chunksActivated: 0,
-          messageTokensActivated: 0,
-          observationTokensActivated: 0,
-          messagesActivated: 0,
-          activatedCycleIds: [],
-          activatedMessageIds: [],
-        };
-      }
+        if (chunks.length === 0) {
+          return emptyResult;
+        }
 
-      // Calculate target message tokens to activate based on new formula:
-      // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
-      // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
-      const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
-      const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+        // Calculate target message tokens to activate based on new formula:
+        // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
+        // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
+        const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+        const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-      // Find the closest chunk boundary to the target, biased over (prefer removing
-      // slightly more than the target so remaining context lands at or below retentionFloor).
-      // Track both best-over and best-under boundaries so we can fall back to under
-      // if the over boundary would overshoot by too much.
-      let cumulativeMessageTokens = 0;
-      let bestOverBoundary = 0;
-      let bestOverTokens = 0;
-      let bestUnderBoundary = 0;
-      let bestUnderTokens = 0;
+        // Find the closest chunk boundary to the target, biased over (prefer removing
+        // slightly more than the target so remaining context lands at or below retentionFloor).
+        // Track both best-over and best-under boundaries so we can fall back to under
+        // if the over boundary would overshoot by too much.
+        let cumulativeMessageTokens = 0;
+        let bestOverBoundary = 0;
+        let bestOverTokens = 0;
+        let bestUnderBoundary = 0;
+        let bestUnderTokens = 0;
 
-      for (let i = 0; i < chunks.length; i++) {
-        cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
-        const boundary = i + 1;
+        for (let i = 0; i < chunks.length; i++) {
+          cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+          const boundary = i + 1;
 
-        if (cumulativeMessageTokens >= targetMessageTokens) {
-          // Over or equal — track the closest (lowest) over boundary
-          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
-            bestOverBoundary = boundary;
-            bestOverTokens = cumulativeMessageTokens;
-          }
-        } else {
-          // Under — track the closest (highest) under boundary
-          if (cumulativeMessageTokens > bestUnderTokens) {
-            bestUnderBoundary = boundary;
-            bestUnderTokens = cumulativeMessageTokens;
+          if (cumulativeMessageTokens >= targetMessageTokens) {
+            // Over or equal — track the closest (lowest) over boundary
+            if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+              bestOverBoundary = boundary;
+              bestOverTokens = cumulativeMessageTokens;
+            }
+          } else {
+            // Under — track the closest (highest) under boundary
+            if (cumulativeMessageTokens > bestUnderTokens) {
+              bestUnderBoundary = boundary;
+              bestUnderTokens = cumulativeMessageTokens;
+            }
           }
         }
-      }
 
-      // Safeguard: if the over boundary would eat into more than 95% of the
-      // retention floor, fall back to the best under boundary instead.
-      // This prevents edge cases where a large chunk overshoots dramatically.
-      // When forceMaxActivation is set (above blockAfter), still prefer the over
-      // boundary, but never if it would leave fewer than the smaller of 1000
-      // tokens or the retention floor remaining.
-      const maxOvershoot = retentionFloor * 0.95;
-      const overshoot = bestOverTokens - targetMessageTokens;
-      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
-      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
-      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
-      const minRemaining = Math.min(1000, retentionFloor);
+        // Safeguard: if the over boundary would eat into more than 95% of the
+        // retention floor, fall back to the best under boundary instead.
+        // This prevents edge cases where a large chunk overshoots dramatically.
+        // When forceMaxActivation is set (above blockAfter), still prefer the over
+        // boundary, but never if it would leave fewer than the smaller of 1000
+        // tokens or the retention floor remaining.
+        const maxOvershoot = retentionFloor * 0.95;
+        const overshoot = bestOverTokens - targetMessageTokens;
+        const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+        const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+        // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+        const minRemaining = Math.min(1000, retentionFloor);
 
-      let chunksToActivate: number;
-      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
-        chunksToActivate = bestOverBoundary;
-      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
-        chunksToActivate = bestOverBoundary;
-      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
-        chunksToActivate = bestUnderBoundary;
-      } else if (bestOverBoundary > 0) {
-        // All boundaries are over and exceed the safeguard — still activate
-        // the closest over boundary (better than nothing)
-        chunksToActivate = bestOverBoundary;
-      } else {
-        chunksToActivate = 1;
-      }
+        let chunksToActivate: number;
+        if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+          chunksToActivate = bestOverBoundary;
+        } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+          chunksToActivate = bestOverBoundary;
+        } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+          chunksToActivate = bestUnderBoundary;
+        } else if (bestOverBoundary > 0) {
+          // All boundaries are over and exceed the safeguard — still activate
+          // the closest over boundary (better than nothing)
+          chunksToActivate = bestOverBoundary;
+        } else {
+          chunksToActivate = 1;
+        }
 
-      // Split chunks
-      const activatedChunks = chunks.slice(0, chunksToActivate);
-      const remainingChunks = chunks.slice(chunksToActivate);
+        // Split chunks: activate a stored prefix, keep the rest of the stored list.
+        const activatedChunks = chunks.slice(0, chunksToActivate);
+        const remainingChunks = persistedChunks.slice(chunksToActivate);
 
-      // Combine activated observations
-      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-      const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
-      const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
-      const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+        // Combine activated observations
+        const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+        const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+        const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+        const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+        const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+        const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
 
-      // Derive lastObservedAt from the latest activated chunk, or use provided value
-      const latestChunk = activatedChunks[activatedChunks.length - 1];
-      const lastObservedAt =
-        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+        // Derive lastObservedAt from the latest activated chunk, or use provided value
+        const latestChunk = activatedChunks[activatedChunks.length - 1];
+        const lastObservedAt =
+          input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
-      // Get existing values
-      const existingActive = (doc.activeObservations as string) || '';
-      const existingTokenCount = Number(doc.observationTokenCount || 0);
+        // Get existing values
+        const existingActive = (doc.activeObservations as string) || '';
+        const existingTokenCount = Number(doc.observationTokenCount || 0);
 
-      // Calculate new values
-      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
-      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
-      const newTokenCount = existingTokenCount + activatedTokens;
+        // Calculate new values
+        const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+        const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
+        const newTokenCount = existingTokenCount + activatedTokens;
 
-      // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
-      // Buffered chunks represent observations of messages as they were at buffering time.
-      // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
-      // New content after lastObservedAt will be picked up in subsequent observations.
+        // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+        // Buffered chunks represent observations of messages as they were at buffering time.
+        // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+        // New content after lastObservedAt will be picked up in subsequent observations.
 
-      // Decrement pending message tokens (clamped to zero)
-      const existingPending = Number(doc.pendingMessageTokens || 0);
-      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+        // Decrement pending message tokens (clamped to zero)
+        const existingPending = Number(doc.pendingMessageTokens || 0);
+        const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
-      const updateResult = await collection.updateOne(
-        {
-          id: input.id,
-          bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
-        },
-        {
-          $set: {
-            activeObservations: newActive,
-            observationTokenCount: newTokenCount,
-            pendingMessageTokens: newPending,
-            bufferedObservationChunks: remainingChunks,
-            lastObservedAt,
-            updatedAt: new Date(),
+        // Conditional update: applies only if every field this computation read is unchanged
+        // (a concurrent append, activation, commit, or rollover makes it re-read and recompute).
+        const updateResult = await collection.updateOne(
+          {
+            id: input.id,
+            supersededBy: null,
+            ...matchStoredFields(doc, [
+              'bufferedObservationChunks',
+              'activeObservations',
+              'observationTokenCount',
+              'pendingMessageTokens',
+              'lastObservedAt',
+            ]),
           },
-        },
-      );
+          {
+            $set: {
+              activeObservations: newActive,
+              observationTokenCount: newTokenCount,
+              pendingMessageTokens: newPending,
+              bufferedObservationChunks: remainingChunks,
+              // The stored cursor never moves backward (a sync observation may already be past this chunk).
+              lastObservedAt: maxObservationCursor(doc.lastObservedAt, lastObservedAt),
+              updatedAt: new Date(),
+            },
+          },
+        );
+        if (updateResult.matchedCount === 0) continue;
 
-      if (updateResult.modifiedCount === 0) {
+        // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+        const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
         return {
-          chunksActivated: 0,
-          messageTokensActivated: 0,
-          observationTokensActivated: 0,
-          messagesActivated: 0,
-          activatedCycleIds: [],
-          activatedMessageIds: [],
+          chunksActivated: activatedChunks.length,
+          messageTokensActivated: activatedMessageTokens,
+          observationTokensActivated: activatedTokens,
+          messagesActivated: activatedMessageCount,
+          activatedCycleIds,
+          activatedMessageIds,
+          observations: activatedContent,
+          perChunk: activatedChunks.map(c => ({
+            cycleId: c.cycleId ?? '',
+            messageTokens: c.messageTokens ?? 0,
+            observationTokens: c.tokenCount,
+            messageCount: c.messageIds.length,
+            observations: c.observations,
+          })),
+          suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+          currentTask: latestChunkHints?.currentTask ?? undefined,
         };
       }
-
-      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
-      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
-
-      return {
-        chunksActivated: activatedChunks.length,
-        messageTokensActivated: activatedMessageTokens,
-        observationTokensActivated: activatedTokens,
-        messagesActivated: activatedMessageCount,
-        activatedCycleIds,
-        activatedMessageIds,
-        observations: activatedContent,
-        perChunk: activatedChunks.map(c => ({
-          cycleId: c.cycleId ?? '',
-          messageTokens: c.messageTokens ?? 0,
-          observationTokens: c.tokenCount,
-          messageCount: c.messageIds.length,
-          observations: c.observations,
-        })),
-        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
-        currentTask: latestChunkHints?.currentTask ?? undefined,
-      };
+      throw omConflict('SWAP_BUFFERED_TO_ACTIVE', input.id);
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2419,69 +2548,49 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
-      const collection = await this.getCollection(OM_TABLE);
+      const { currentRecord } = input;
+      return await this.#rollOver(currentRecord, doc => {
+        const stored = this.parseOMDocument(doc);
+        const bufferedReflection = stored.bufferedReflection || '';
+        if (!bufferedReflection) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+            text: 'No buffered reflection to swap',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { id: currentRecord.id },
+          });
+        }
+        // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+        // reflected line count.
+        if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) return null;
 
-      // Get current record
-      const doc = await collection.findOne({ id: input.currentRecord.id });
-      if (!doc) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.currentRecord.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.currentRecord.id },
-        });
-      }
-
-      const bufferedReflection = (doc.bufferedReflection as string) || '';
-      const reflectedLineCount = Number(doc.reflectedObservationLineCount || 0);
-
-      if (!bufferedReflection) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
-          text: 'No buffered reflection to swap',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { id: input.currentRecord.id },
-        });
-      }
-
-      // Split current activeObservations by the recorded boundary.
-      // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
-      // Lines after reflectedLineCount were added after reflection started → kept as-is.
-      const currentObservations = (doc.activeObservations as string) || '';
-      const allLines = currentObservations.split('\n');
-      const unreflectedLines = allLines.slice(reflectedLineCount);
-      const unreflectedContent = unreflectedLines.join('\n').trim();
-
-      // New activeObservations = bufferedReflection + unreflected observations
-      const newObservations = unreflectedContent
-        ? `${bufferedReflection}\n\n${unreflectedContent}`
-        : bufferedReflection;
-
-      // Create new generation with the merged content.
-      // tokenCount is computed by the processor using its token counter on the combined content.
-      const newRecord = await this.createReflectionGeneration({
-        currentRecord: input.currentRecord,
-        reflection: newObservations,
-        tokenCount: input.tokenCount,
+        // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+        // Lines after reflectedLineCount were added after reflection started → kept as-is.
+        const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
+        const unreflectedContent = (stored.activeObservations || '')
+          .split('\n')
+          .slice(reflectedLineCount)
+          .join('\n')
+          .trim();
+        const newObservations = unreflectedContent
+          ? `${bufferedReflection}\n\n${unreflectedContent}`
+          : bufferedReflection;
+        // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+        const tokenCount =
+          input.tokenCount +
+          Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+        return {
+          newId: input.newRecordId ?? globalThis.crypto.randomUUID(),
+          mode: 'equal' as const,
+          reflection: newObservations,
+          tokenCount,
+          snapTextLength: (stored.activeObservations ?? '').length,
+          snapObservationTokenCount: stored.observationTokenCount ?? 0,
+          clearBufferedReflection: true,
+          createdAt: new Date(),
+        };
       });
-
-      // Clear buffered state on old record
-      await collection.updateOne(
-        { id: input.currentRecord.id },
-        {
-          $set: {
-            bufferedReflection: null,
-            bufferedReflectionTokens: null,
-            bufferedReflectionInputTokens: null,
-            reflectedObservationLineCount: null,
-            updatedAt: new Date(),
-          },
-        },
-      );
-
-      return newRecord;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2495,6 +2604,191 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * The head of a lookup key by the canonical order (`generationCount DESC, createdAt ASC, id ASC`).
+   * A head that was fenced for rollover but whose successor insert never ran (crash, or still in
+   * flight in another process) is rolled forward here, so every head read reaches the successor.
+   */
+  async #getHeadDoc(collection: OMCollection, lookupKey: string): Promise<any | null> {
+    for (let hop = 0; hop <= OM_MAX_HEAD_HOPS; hop++) {
+      const head = await collection.findOne({ lookupKey }, { sort: OM_HEAD_SORT });
+      if (!head || !head.supersededBy || !head.pendingSuccessor) return head;
+      await this.#completeRollover(collection, head, head.pendingSuccessor);
+    }
+    throw omNoLiveHead(lookupKey);
+  }
+
+  /**
+   * A single-document update aimed at a live record. A retired (or concurrently fenced) id is
+   * redirected to the head, at most `OM_MAX_HEAD_HOPS` times.
+   */
+  async #updateLiveDoc(id: string, operation: string, update: Record<string, unknown>): Promise<string> {
+    const collection = await this.getCollection(OM_TABLE);
+    let targetId = id;
+    for (let hop = 0; hop <= OM_MAX_HEAD_HOPS; hop++) {
+      // `supersededBy: null` also matches legacy documents that have no such field.
+      const result = await collection.updateOne({ id: targetId, supersededBy: null }, update);
+      if (result.matchedCount === 1) return targetId;
+      const doc = await collection.findOne({ id: targetId }, { projection: { lookupKey: 1, supersededBy: 1 } });
+      if (!doc) throw omNotFound(operation, targetId);
+      if (!doc.supersededBy) continue;
+      const head = await this.#getHeadDoc(collection, doc.lookupKey);
+      if (!head || head.supersededBy || head.id === targetId) throw omNoLiveHead(id);
+      targetId = head.id;
+    }
+    throw omNoLiveHead(id);
+  }
+
+  /**
+   * Roll the live record `currentRecord.id` over to a new generation.
+   *
+   * 1. Read the stored document and decide (`decide` returns the successor inputs, or `null`
+   *    when the snapshot is stale).
+   * 2. Fence: one conditional update sets `supersededBy` and the small `pendingSuccessor`
+   *    payload, matching only if the fields the decision read are unchanged. From here the old
+   *    document is frozen — no lifecycle write matches it — so its pre-image is its final state.
+   * 3. Insert the successor built purely from that pre-image, then clear the old document's
+   *    chunks (they moved) and `pendingSuccessor`.
+   *
+   * A crash between 2 and 3 is finished by the next head read (`#getHeadDoc`) or startup.
+   */
+  async #rollOver(
+    currentRecord: ObservationalMemoryRecord,
+    decide: (doc: any) => PendingSuccessor | null,
+  ): Promise<ObservationalMemoryRecord> {
+    const collection = await this.getCollection(OM_TABLE);
+    for (let attempt = 1; attempt <= OM_MAX_CONDITIONAL_ATTEMPTS; attempt++) {
+      const doc = await collection.findOne({ id: currentRecord.id });
+      if (!doc) return currentRecord;
+      // A retired snapshot creates nothing; the caller adopts the head.
+      if (doc.supersededBy) {
+        const head = await this.#getHeadDoc(collection, doc.lookupKey);
+        return head ? this.parseOMDocument(head) : currentRecord;
+      }
+      const pending = decide(doc);
+      if (!pending) return this.parseOMDocument(doc);
+
+      const frozen = await collection.findOneAndUpdate(
+        {
+          id: doc.id,
+          supersededBy: null,
+          ...matchStoredFields(doc, [
+            'activeObservations',
+            'observationTokenCount',
+            'bufferedReflection',
+            'reflectedObservationLineCount',
+          ]),
+        },
+        { $set: { supersededBy: pending.newId, pendingSuccessor: pending } },
+        { returnDocument: 'before' },
+      );
+      if (!frozen) continue;
+      return this.parseOMDocument(await this.#completeRollover(collection, frozen, pending));
+    }
+    throw omConflict('CREATE_REFLECTION_GENERATION', currentRecord.id);
+  }
+
+  /** Insert the successor of a fenced document (idempotent) and clean up the old document. */
+  async #completeRollover(collection: OMCollection, frozen: any, pending: PendingSuccessor): Promise<any> {
+    try {
+      await collection.insertOne(buildSuccessorDocument(frozen, pending));
+    } catch (error) {
+      // Already inserted (by this rollover's retry or a concurrent roll-forward).
+      if (!isDuplicateKeyError(error)) throw error;
+    }
+    await collection.updateOne(
+      { id: frozen.id, supersededBy: pending.newId },
+      {
+        $set: {
+          bufferedObservationChunks: [],
+          ...(pending.clearBufferedReflection
+            ? {
+                bufferedReflection: null,
+                bufferedReflectionTokens: null,
+                bufferedReflectionInputTokens: null,
+                reflectedObservationLineCount: null,
+              }
+            : {}),
+          updatedAt: new Date(),
+        },
+        $unset: { pendingSuccessor: '' },
+      },
+    );
+    const successor = await collection.findOne({ id: pending.newId });
+    if (!successor) throw omNotFound('CREATE_REFLECTION_GENERATION', pending.newId);
+    return successor;
+  }
+
+  /**
+   * Startup maintenance for the `supersededBy` marker:
+   * - finish rollovers interrupted after the fence (insert the successor if missing, clean up);
+   * - for keys with more than one live document (left by older adapter versions, which never set
+   *   `supersededBy`), retire every live document that sorts after the canonical head. The head's
+   *   ordering key is embedded in the filter, so a document created by a concurrent rollover
+   *   (a newer generation) never matches.
+   */
+  async #maintainSupersededBy(): Promise<void> {
+    const collection = await this.getCollection(OM_TABLE);
+    const interrupted = await collection
+      .find({ supersededBy: { $nin: [null] }, pendingSuccessor: { $exists: true } })
+      .toArray();
+    for (const doc of interrupted) {
+      await this.#completeRollover(collection, doc, doc.pendingSuccessor);
+    }
+
+    const keys = await collection
+      .aggregate<{ _id: string }>([
+        { $match: { supersededBy: null } },
+        { $group: { _id: '$lookupKey', live: { $sum: 1 } } },
+        { $match: { live: { $gt: 1 } } },
+      ])
+      .toArray();
+    for (const { _id: lookupKey } of keys) {
+      const head = await this.#getHeadDoc(collection, lookupKey);
+      if (!head || head.supersededBy) continue;
+      await collection.updateMany(
+        {
+          lookupKey,
+          supersededBy: null,
+          $or: [
+            { generationCount: { $lt: head.generationCount } },
+            { generationCount: head.generationCount, createdAt: { $gt: head.createdAt } },
+            { generationCount: head.generationCount, createdAt: head.createdAt, id: { $gt: head.id } },
+          ],
+        },
+        { $set: { supersededBy: head.id } },
+      );
+    }
+  }
+
+  /**
+   * Cross-process rollover and initialization rely on the unique `id` index (a duplicate insert
+   * of the same successor or generation-0 id must fail). Warn once if it is missing, e.g. under
+   * `skipDefaultIndexes`.
+   */
+  async #warnIfOMIdIndexMissing(): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      // NamespaceNotFound (26): the collection does not exist yet, so it has no indexes either.
+      const indexes = await collection
+        .listIndexes()
+        .toArray()
+        .catch((error: { code?: number }) => (error?.code === 26 ? [] : Promise.reject(error)));
+      const hasUniqueId = indexes.some(
+        (index: any) => index.unique && Object.keys(index.key ?? {}).length === 1 && index.key.id === 1,
+      );
+      if (!hasUniqueId) {
+        this.logger?.warn?.(
+          `MongoDB collection "${OM_TABLE}" has no unique index on { id: 1 }. Observational memory needs it to stay ` +
+            `consistent when several processes write the same thread or resource. Create it with ` +
+            `db.${OM_TABLE}.createIndex({ id: 1 }, { unique: true }).`,
+        );
+      }
+    } catch (error) {
+      this.logger?.warn?.(`Could not list indexes on MongoDB collection "${OM_TABLE}":`, error);
     }
   }
 }
