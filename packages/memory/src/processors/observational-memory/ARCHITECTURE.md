@@ -218,9 +218,13 @@ Activation sets the cursor to the last activated chunk's `lastObservedAt` uncond
 
 `sync.ts` and `resource-scoped.ts` patch the thread's `lastObservedMessageCursor` (and per-thread `lastObservedAt`) before `updateActiveObservations`, and `base.ts` emits the completion end marker after it without checking where the commit landed. `filterObservedMessages` removes live messages on that basis, so an aborted commit, or one that landed on a retired record, still removes context. A P4 variant.
 
-### F1. OracleDB shifts the cursor by the host's DST offset (proven, pre-existing)
+### F1. OracleDB shifted timestamps by the host's DST offset (proven, pre-existing; fixed for OM in PR 1)
 
-Oracle's shared OM suite fails two cursor round-trip tests under a non-UTC host time zone (`TZ` = PDT: `09:00Z` read back instead of `10:00Z` for a January date) and passes under `TZ=UTC`. A shifted cursor can skip or re-observe messages. Root cause to be decided in the Oracle adapter work.
+Oracle's shared OM suite failed two cursor round-trip tests under a non-UTC host time zone (`TZ` = PDT: `09:00Z` instead of `10:00Z` for a January date) and passed under `TZ=UTC`. A shifted cursor can skip or re-observe messages.
+
+- **Root cause:** node-oracledb binds a bare `Date` as `TIMESTAMP WITH LOCAL TIME ZONE`, which the server converts with the session's time zone. That is a fixed offset captured at connect time (`-07:00` for a process started in PDT), so an instant on the other side of a DST change is **stored** an hour off. Reads are correct. A direct probe stored `2024-01-15T10:00Z` as `09:00Z` with a bare `Date` and as `10:00Z` with an explicit `DB_TYPE_TIMESTAMP_TZ` bind.
+- **Fix (PR 1):** every OM timestamp bind uses `timestampBind()` (`DB_TYPE_TIMESTAMP_TZ`). The shared OM suite passes 96/96 in both PDT and UTC.
+- **Not fixed (outside OM):** the same bare-`Date` binds in Oracle's thread, resource, and observability paths. Under PDT, 4 shared-suite tests fail there on `main` and on this stack (thread sort with identical timestamps, resource dates, two trace date-range filters). Already-stored OM rows written before the fix keep their shifted values.
 
 ### Smaller notes
 
@@ -250,7 +254,7 @@ Correctness lives at the storage boundary, because that's the only thing every p
 - `updateActiveObservations` returns `{ applied: false, reason: 'retired' | 'conflict' }` instead of writing to a retired row, with an optional exact-text compare-and-set (`expectedActiveObservations`).
 - Flag/counter writes on a retired id go to the head.
 
-**Per-adapter primitive:** InMemory: no `await` inside a critical section. LibSQL: client write lock + write transaction. PostgreSQL and MySQL: transaction + `SELECT … FOR UPDATE` on the target row by id (PG keeps its advisory lock for generation creation). MongoDB: single-document conditional updates only (identical on standalone and replica sets); rollover fences the old document with a small `pendingSuccessor` payload, inserts the successor (its unique `id` index makes that idempotent), then clears the old document's chunks; any reader that finds a fenced head without a successor rolls it forward. OracleDB: transaction + `lockOMRow`. Convex: one server mutation per operation, including rollover and initialize. Convex users must redeploy functions after upgrading.
+**Per-adapter primitive:** InMemory: no `await` inside a critical section. LibSQL: client write lock + write transaction. PostgreSQL and MySQL: transaction + `SELECT … FOR UPDATE` on the target row by id (PG keeps its advisory lock for generation creation). MongoDB: single-document conditional updates only (identical on standalone and replica sets); rollover fences the old document with a small `pendingSuccessor` payload, inserts the successor (its unique `id` index makes that idempotent), then clears the old document's chunks; any reader that finds a fenced head without a successor rolls it forward. OracleDB: transaction + `lockOMRow` (`SELECT … FOR UPDATE` by id); the column arrives through the memory-schema repeatable migration (schema version 2), and the backfill also runs on every `OracleStore.init()` because unchanged repeatable migrations are skipped. Convex: one server mutation per operation, including rollover and initialize. Convex users must redeploy functions after upgrading.
 
 **Memory layer:** activation retries on `retired` and only removes messages from the live `MessageList` after a head commit; sync and resource-scoped commits pass `expectedActiveObservations`, recompose against the fresh head on conflict, and patch the thread cursor and emit the end marker only after a successful head commit; reflection side effects (suppression, `notifyReflectionCommitted`, end marker) run only when the reflection applied; a skipped append isn't indexed and emits no end marker.
 
