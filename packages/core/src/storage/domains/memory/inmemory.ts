@@ -19,7 +19,9 @@ import type {
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
@@ -36,6 +38,14 @@ import {
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
+import {
+  compareObservationalMemoryHeadOrder,
+  getObservationalMemoryGeneration0Id,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+} from './observational-memory-lifecycle';
 
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
@@ -774,9 +784,24 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
-    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    return this.getObservationalMemoryHead(this.getObservationalMemoryKey(threadId, resourceId));
+  }
+
+  /** Head generation for a lookup key, by the canonical order (generationCount DESC, createdAt ASC, id ASC). */
+  private getObservationalMemoryHead(key: string): ObservationalMemoryRecord | null {
     const records = this.db.observationalMemory.get(key);
-    return records?.[0] ?? null;
+    if (!records?.length) return null;
+    return records.reduce((head, record) => (compareObservationalMemoryHeadOrder(record, head) < 0 ? record : head));
+  }
+
+  /**
+   * Resolve a record id to the live record lifecycle writes should target: the record itself
+   * while live, otherwise the head of its lookup key. Returns null when the id does not exist.
+   */
+  private resolveLiveObservationalMemoryRecord(id: string): ObservationalMemoryRecord | null {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record || !record.supersededBy) return record;
+    return this.getObservationalMemoryHead(this.getObservationalMemoryKey(record.threadId, record.resourceId));
   }
 
   async getObservationalMemoryHistory(
@@ -829,10 +854,12 @@ export class InMemoryMemory extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     const { threadId, resourceId, scope, config, observedTimezone } = input;
     const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const existingHead = this.getObservationalMemoryHead(key);
+    if (existingHead) return existingHead;
     const now = new Date();
 
     const record: ObservationalMemoryRecord = {
-      id: crypto.randomUUID(),
+      id: getObservationalMemoryGeneration0Id(key),
       scope,
       threadId,
       resourceId,
@@ -844,6 +871,7 @@ export class InMemoryMemory extends MemoryStorage {
       lastObservedAt: undefined,
       originType: 'initial',
       generationCount: 0,
+      supersededBy: null,
       activeObservations: '',
       // Buffering (for async observation/reflection)
       bufferedObservations: undefined,
@@ -892,11 +920,20 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.observationalMemory.set(key, existing);
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
+    }
+    if (record.supersededBy) {
+      return { applied: false, reason: 'retired' };
+    }
+    if (
+      input.expectedActiveObservations !== undefined &&
+      input.expectedActiveObservations !== record.activeObservations
+    ) {
+      return { applied: false, reason: 'conflict' };
     }
 
     record.activeObservations = observations;
@@ -905,25 +942,32 @@ export class InMemoryMemory extends MemoryStorage {
     // Reset pending tokens since we've now observed them
     record.pendingMessageTokens = 0;
 
-    // Update timestamps (top-level, not in metadata)
-    record.lastObservedAt = lastObservedAt;
+    // Update timestamps (top-level, not in metadata). The cursor never moves backward.
+    record.lastObservedAt = maxObservationCursor(record.lastObservedAt, lastObservedAt);
     record.updatedAt = new Date();
 
     // Store observed message IDs as safeguard against re-observation
     if (observedMessageIds) {
       record.observedMessageIds = observedMessageIds;
     }
+    return { applied: true };
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     const { id, chunk } = input;
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
+    if (!this.findObservationalMemoryRecordById(id)) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
+    // A superseded id is redirected to the head generation.
+    const record = this.resolveLiveObservationalMemoryRecord(id)!;
 
     const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
-    if (existingChunks.some(existing => existing.cycleId === chunk.cycleId)) return;
+    if (
+      existingChunks.some(existing => existing.cycleId === chunk.cycleId) ||
+      isBufferedChunkCoveredByCursor(chunk.lastObservedAt, record.lastObservedAt)
+    ) {
+      return { persisted: false, recordId: record.id };
+    }
 
     // Create a new chunk with generated id and timestamp
     const newChunk: BufferedObservationChunk = {
@@ -946,10 +990,11 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedObservationChunks = [...existingChunks, newChunk];
 
     if (input.lastBufferedAtTime) {
-      record.lastBufferedAtTime = input.lastBufferedAtTime;
+      record.lastBufferedAtTime = maxObservationCursor(record.lastBufferedAtTime, input.lastBufferedAtTime) ?? null;
     }
 
     record.updatedAt = new Date();
+    return { persisted: true, recordId: record.id };
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
@@ -958,21 +1003,29 @@ export class InMemoryMemory extends MemoryStorage {
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
+    const emptyResult: SwapBufferedToActiveResult = {
+      chunksActivated: 0,
+      messageTokensActivated: 0,
+      observationTokensActivated: 0,
+      messagesActivated: 0,
+      activatedCycleIds: [],
+      activatedMessageIds: [],
+    };
+    if (record.supersededBy) {
+      return { ...emptyResult, retired: true };
+    }
 
-    // Use caller-provided refreshed chunks (with up-to-date token weights) for
-    // activation math, falling back to persisted chunks otherwise.
-    // Keep refreshed chunks local — don't overwrite the stored buffer.
+    // Activation always works on the stored list, so a chunk appended after the caller read
+    // the record is never dropped. Caller-provided refreshed chunks only override token weights.
     const persistedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
-    const chunks = Array.isArray(input.bufferedChunks) ? input.bufferedChunks : persistedChunks;
+    const refreshedWeights = new Map(
+      (Array.isArray(input.bufferedChunks) ? input.bufferedChunks : []).map(c => [c.id, c.messageTokens]),
+    );
+    const chunks = persistedChunks.map(c =>
+      refreshedWeights.has(c.id) ? { ...c, messageTokens: refreshedWeights.get(c.id)! } : c,
+    );
     if (chunks.length === 0) {
-      return {
-        chunksActivated: 0,
-        messageTokensActivated: 0,
-        observationTokensActivated: 0,
-        messagesActivated: 0,
-        activatedCycleIds: [],
-        activatedMessageIds: [],
-      };
+      return emptyResult;
     }
 
     // Calculate target: how many message tokens to remove so that
@@ -1038,7 +1091,7 @@ export class InMemoryMemory extends MemoryStorage {
       chunksToActivate = 1;
     }
     const activatedChunks = chunks.slice(0, chunksToActivate);
-    const remainingChunks = chunks.slice(chunksToActivate);
+    const remainingChunks = persistedChunks.slice(chunksToActivate);
 
     // Combine activated chunks into content
     const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
@@ -1076,8 +1129,8 @@ export class InMemoryMemory extends MemoryStorage {
     // Update buffered state with remaining chunks
     record.bufferedObservationChunks = remainingChunks.length > 0 ? remainingChunks : undefined;
 
-    // Update timestamps
-    record.lastObservedAt = derivedLastObservedAt;
+    // Update timestamps. The cursor never moves backward.
+    record.lastObservedAt = maxObservationCursor(record.lastObservedAt, derivedLastObservedAt);
     record.updatedAt = new Date();
 
     // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
@@ -1104,37 +1157,74 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord, reflection, tokenCount } = input;
-    const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
+    const { currentRecord } = input;
+    const stored = this.findObservationalMemoryRecordById(currentRecord.id);
+    if (!stored) return currentRecord;
+    if (stored.supersededBy) {
+      return this.resolveLiveObservationalMemoryRecord(stored.id) ?? currentRecord;
+    }
+    const plan = planReflectionGenerationText({
+      storedObservations: stored.activeObservations,
+      storedObservationTokenCount: stored.observationTokenCount,
+      snapshotObservations: currentRecord.activeObservations,
+      snapshotObservationTokenCount: currentRecord.observationTokenCount,
+      reflection: input.reflection,
+      tokenCount: input.tokenCount,
+    });
+    if (!plan) return stored;
+    return this.rollOverObservationalMemory(stored, plan.observations, plan.tokenCount, input.newRecordId);
+  }
+
+  /**
+   * Create the next generation from the stored record and retire the stored record in one
+   * synchronous step. Buffered chunks move to the new generation; buffering state, flags,
+   * counters, and the cursor carry over; buffered reflection state does not.
+   */
+  private rollOverObservationalMemory(
+    stored: ObservationalMemoryRecord,
+    observations: string,
+    tokenCount: number,
+    newRecordId?: string,
+  ): ObservationalMemoryRecord {
+    const key = this.getObservationalMemoryKey(stored.threadId, stored.resourceId);
     const now = new Date();
+    const chunks = Array.isArray(stored.bufferedObservationChunks) ? stored.bufferedObservationChunks : [];
 
     const newRecord: ObservationalMemoryRecord = {
-      id: crypto.randomUUID(),
-      scope: currentRecord.scope,
-      threadId: currentRecord.threadId,
-      resourceId: currentRecord.resourceId,
+      id: newRecordId ?? crypto.randomUUID(),
+      scope: stored.scope,
+      threadId: stored.threadId,
+      resourceId: stored.resourceId,
       // Timestamps at top level
       createdAt: now,
       updatedAt: now,
-      lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
+      // Carried verbatim: inventing a cursor here would mark unobserved messages (and moved chunks) as observed.
+      lastObservedAt: stored.lastObservedAt,
       originType: 'reflection',
-      generationCount: currentRecord.generationCount + 1,
-      activeObservations: reflection,
-      config: currentRecord.config,
-      totalTokensObserved: currentRecord.totalTokensObserved,
+      generationCount: stored.generationCount + 1,
+      supersededBy: null,
+      activeObservations: observations,
+      bufferedObservationChunks: chunks.length > 0 ? [...chunks] : undefined,
+      config: stored.config,
+      totalTokensObserved: stored.totalTokensObserved,
       observationTokenCount: tokenCount,
-      pendingMessageTokens: 0,
+      pendingMessageTokens: stored.pendingMessageTokens ?? 0,
       isReflecting: false,
       isObserving: false,
-      isBufferingObservation: false,
+      isBufferingObservation: stored.isBufferingObservation ?? false,
       isBufferingReflection: false,
-      lastBufferedAtTokens: 0,
-      lastBufferedAtTime: null,
+      lastBufferedAtTokens: stored.lastBufferedAtTokens ?? 0,
+      lastBufferedAtTime: stored.lastBufferedAtTime ?? null,
       // Timezone used for observation date formatting
-      observedTimezone: currentRecord.observedTimezone,
+      observedTimezone: stored.observedTimezone,
       // Extensible metadata (optional)
       metadata: {},
     };
+
+    // Retire the stored record: chunks moved, liveness marker set (never cleared).
+    stored.bufferedObservationChunks = undefined;
+    stored.supersededBy = newRecord.id;
+    stored.updatedAt = now;
 
     // Add as first record (most recent)
     const existing = this.db.observationalMemory.get(key) ?? [];
@@ -1161,12 +1251,18 @@ export class InMemoryMemory extends MemoryStorage {
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     const { currentRecord } = input;
     const record = this.findObservationalMemoryRecordById(currentRecord.id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${currentRecord.id}`);
+    if (!record) return currentRecord;
+    if (record.supersededBy) {
+      return this.resolveLiveObservationalMemoryRecord(record.id) ?? currentRecord;
     }
 
     if (!record.bufferedReflection) {
       throw new Error('No buffered reflection to swap');
+    }
+    // Only appends may have happened since the caller's snapshot; a rewrite invalidates
+    // the reflected line count.
+    if (!isAppendOnlySince(record.activeObservations, currentRecord.activeObservations)) {
+      return record;
     }
 
     const bufferedReflection = record.bufferedReflection;
@@ -1183,13 +1279,10 @@ export class InMemoryMemory extends MemoryStorage {
     // New activeObservations = bufferedReflection + unreflected observations
     const newObservations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
 
-    // Create a new generation with the merged content.
-    // tokenCount is computed by the processor using its token counter on the combined content.
-    const newRecord = await this.createReflectionGeneration({
-      currentRecord: record,
-      reflection: newObservations,
-      tokenCount: input.tokenCount,
-    });
+    // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+    const tokenCount =
+      input.tokenCount + Math.max(0, (record.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+    const newRecord = this.rollOverObservationalMemory(record, newObservations, tokenCount, input.newRecordId);
 
     // Clear buffered state on old record
     record.bufferedReflection = undefined;
@@ -1221,7 +1314,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
+    const record = this.resolveLiveObservationalMemoryRecord(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
@@ -1249,7 +1342,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
+    const record = this.resolveLiveObservationalMemoryRecord(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }

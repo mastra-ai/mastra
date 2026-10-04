@@ -17,7 +17,9 @@ import type {
   ObservationalMemoryHistoryOptions,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
@@ -475,8 +477,15 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Update active observations.
    * Called when observations are created and immediately activated (no buffering).
+   *
+   * Never writes to a superseded record (`{ applied: false, reason: 'retired' }`), and when
+   * `expectedActiveObservations` is given, writes only if the stored text still equals it
+   * (`{ applied: false, reason: 'conflict' }` otherwise). The cursor never moves backward.
+   * A `void` return (older adapters) means the write was applied.
    */
-  async updateActiveObservations(_input: UpdateActiveObservationsInput): Promise<void> {
+  async updateActiveObservations(
+    _input: UpdateActiveObservationsInput,
+  ): Promise<UpdateActiveObservationsResult | void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
@@ -488,8 +497,15 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Update buffered observations.
    * Called when observations are created asynchronously via `bufferTokens`.
+   *
+   * Appends to the head generation (a superseded `id` is redirected to the head). Skips the
+   * append when the head already holds a chunk with the same `cycleId` or the chunk is wholly
+   * covered by the head's cursor; see {@link UpdateBufferedObservationsResult}.
+   * A `void` return (older adapters) means the chunk was stored on `input.id`.
    */
-  async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(
+    _input: UpdateBufferedObservationsInput,
+  ): Promise<UpdateBufferedObservationsResult | void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
@@ -500,6 +516,10 @@ export abstract class MemoryStorage extends StorageDomain {
    * 2. Moves activated bufferedMessageIds → observedMessageIds
    * 3. Keeps remaining buffered content if activationRatio < 100
    * 4. Updates lastObservedAt
+   *
+   * Activates a prefix of the **stored** chunk list (`bufferedChunks` only overrides per-chunk
+   * token weights), never moves the cursor backward, and returns `retired: true` without
+   * writing when the target record was superseded.
    *
    * Returns info about what was activated for UI feedback.
    */
@@ -513,6 +533,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * - originType: 'reflection'
    * - activeObservations containing the reflection
    * - generationCount incremented from the current record
+   *
+   * See {@link CreateReflectionGenerationInput} for how the stored record (not the snapshot)
+   * decides the carried state, and how superseded or rewritten records are handled.
    */
   async createReflectionGeneration(_input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
@@ -530,6 +553,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * Swap buffered reflection to active observations.
    * Creates a new generation where activeObservations = bufferedReflection + unreflected observations.
    * The `tokenCount` in input is the processor-computed token count for the combined content.
+   * Buffered observation chunks and buffering state move to the new generation, as in
+   * `createReflectionGeneration`. If `currentRecord` was superseded, nothing is created and
+   * the head is returned.
    */
   async swapBufferedReflectionToActive(
     _input: SwapBufferedReflectionToActiveInput,
@@ -557,6 +583,8 @@ export abstract class MemoryStorage extends StorageDomain {
    * @param id - Record ID
    * @param isBuffering - Whether buffering is in progress
    * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
+   *
+   * A superseded `id` is redirected to the head generation.
    */
   async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
@@ -590,6 +618,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Set the pending message token count.
    * Called at the end of each OM processing step to persist the current
    * context window token count so the UI can display it on page load.
+   * A superseded `id` is redirected to the head generation.
    */
   async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);

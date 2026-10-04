@@ -622,12 +622,13 @@ describe('Storage Operations', () => {
         config: {},
       });
 
-      // Set initial active observations
+      // Set initial active observations. The cursor sits before the buffered chunk's
+      // messages: a chunk wholly covered by the cursor is already observed and is not stored.
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Active observation',
         tokenCount: 50,
-        lastObservedAt: new Date(),
+        lastObservedAt: new Date('2025-01-01T09:00:00Z'),
       });
 
       // Add buffered observations as a chunk

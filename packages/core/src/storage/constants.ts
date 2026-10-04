@@ -527,6 +527,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
   config: { type: 'text', nullable: false }, // JSON object
   generationCount: { type: 'integer', nullable: false },
+  supersededBy: { type: 'text', nullable: true }, // id of the next generation once this one is retired; null while live
   lastObservedAt: { type: 'timestamp', nullable: true },
   lastReflectionAt: { type: 'timestamp', nullable: true },
   pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
