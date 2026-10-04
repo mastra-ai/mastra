@@ -25,3 +25,31 @@ describe('EmptyState', () => {
     });
   });
 });
+
+describe('EmptyState illustration', () => {
+  afterEach(cleanup);
+
+  it('renders the named illustration instead of the icon, hidden from assistive tech', () => {
+    render(<EmptyState illustration="logs" titleSlot="No logs yet" />);
+    const art = document.querySelector('svg[data-illustration="logs"]');
+    expect(art?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelectorAll('svg')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'No logs yet' })).toBeTruthy();
+  });
+
+  it('gives each rendered illustration its own mask and gradient ids', () => {
+    render(
+      <>
+        <EmptyState illustration="api-keys" titleSlot="First" />
+        <EmptyState illustration="api-keys" titleSlot="Second" />
+      </>,
+    );
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const element of document.querySelectorAll('[mask], [fill^="url("]')) {
+      const reference = (element.getAttribute('mask') ?? element.getAttribute('fill'))?.match(/url\(#(.+)\)/)?.[1];
+      expect(reference && ids.includes(reference)).toBe(true);
+    }
+  });
+});

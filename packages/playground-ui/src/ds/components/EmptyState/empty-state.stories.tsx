@@ -87,3 +87,79 @@ export const ErrorTone: Story = {
     actionSlot: <Button>Try again</Button>,
   },
 };
+
+export const Illustrated: Story = {
+  args: {
+    illustration: 'traces',
+    titleSlot: 'No traces yet',
+    descriptionSlot: 'Traces appear here when your agents run.',
+    actionSlot: <Button>Open setup</Button>,
+  },
+};
+
+export const IllustratedError: Story = {
+  args: {
+    tone: 'error',
+    illustration: 'logs',
+    titleSlot: 'Couldn’t load logs',
+    descriptionSlot: 'The request timed out. Try again in a moment.',
+    actionSlot: <Button>Retry</Button>,
+  },
+};
+
+const illustrations = [
+  ['traces', 'Traces'],
+  ['logs', 'Logs'],
+  ['api-keys', 'API keys'],
+  ['environments', 'Environments'],
+  ['requests', 'Requests'],
+  ['databases', 'Databases'],
+  ['threads', 'Threads'],
+  ['deploys', 'Deploys'],
+] as const;
+
+export const AllIllustrations: Story = {
+  parameters: { layout: 'padded' },
+  render: () => (
+    <div className="grid grid-cols-4 gap-8">
+      {illustrations.map(([illustration, title]) => (
+        <EmptyState
+          key={illustration}
+          illustration={illustration}
+          titleSlot={title}
+          descriptionSlot="Deploy a project to see its history here."
+          actionSlot={<Button>View projects</Button>}
+        />
+      ))}
+    </div>
+  ),
+};
+
+export const ErrorIllustrations: Story = {
+  parameters: { layout: 'padded' },
+  render: () => (
+    <div className="grid grid-cols-3 gap-8">
+      <EmptyState
+        tone="error"
+        illustration="disconnected"
+        titleSlot="Couldn’t load logs"
+        descriptionSlot="Check your connection and try again."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        illustration="locked"
+        titleSlot="Couldn’t load API keys"
+        descriptionSlot="You don’t have access to this. Ask an organization admin."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        illustration="rate-limited"
+        titleSlot="Couldn’t load requests"
+        descriptionSlot="Too many requests. Wait a moment and try again."
+        actionSlot={<Button>Retry</Button>}
+      />
+    </div>
+  ),
+};
