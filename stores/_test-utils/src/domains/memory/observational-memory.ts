@@ -2304,9 +2304,10 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('C17: rollover carries config, metadata, and timezone from the stored record', async () => {
+        const sample = createSampleOMInput();
         const input = {
-          ...createSampleOMInput(),
-          config: { observation: { messageTokens: 1234 } },
+          ...sample,
+          config: { ...sample.config, observationThreshold: 1234 },
           observedTimezone: 'Europe/Berlin',
         };
         await memoryStorage.initializeObservationalMemory(input);
@@ -2318,7 +2319,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         const current = await head(input);
         expect(current.id).toBe(next.id);
         expect(current.generationCount).toBe(1);
-        expect(current.config).toEqual({ observation: { messageTokens: 1234 } });
+        expect(current.config).toEqual(input.config);
         expect(current.observedTimezone).toBe('Europe/Berlin');
 
         // Metadata can only be seeded through the optional raw insert.
@@ -2349,7 +2350,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
             metadata: { origin: 'c17' },
           });
         } catch (error) {
-          if (String(error).includes('not implemented')) return;
+          if (String(error).includes('is not implemented by this storage adapter')) return;
           throw error;
         }
         await memoryStorage.createReflectionGeneration({
@@ -2404,7 +2405,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         try {
           await memoryStorage.insertObservationalMemoryRecord(duplicate(`b-${randomUUID()}`, at(2000)));
         } catch (error) {
-          if (String(error).includes('not implemented')) return;
+          if (String(error).includes('is not implemented by this storage adapter')) return;
           throw error;
         }
         const earliest = duplicate(`c-${randomUUID()}`, at(1000));
