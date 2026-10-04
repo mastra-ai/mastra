@@ -206,15 +206,15 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 
 All in-process coordination (static maps, registry) is invisible to other processes. Durable flags are hints, and adapter locking differs (see the table above).
 
-### H1. Activation can move the cursor backward; a retried append can re-add an activated chunk (hypothesis)
+### H1. Activation can move the cursor backward; a retried append can re-add an activated chunk (main, proven)
 
 Activation sets the cursor to the last activated chunk's `lastObservedAt` unconditionally. A chunk appended after a sync observation already passed its range could move the cursor **backward**. `cycleId` dedup only checks the current list, so a retried append after activation re-adds the chunk.
 
-### H2. Sync observation commit can overwrite a concurrent activation (hypothesis)
+### H2. Sync observation commit can overwrite a concurrent activation (main, proven)
 
 `updateActiveObservations` replaces `activeObservations` wholesale with text built from an earlier head read. Text appended by a concurrent activation in between is overwritten. A prefix check can't detect this safely: resource scope rewrites the middle of the text when it merges a same-day `<thread>` section (`observation-strategies/base.ts` `replaceOrAppendThreadSection`).
 
-### H3. Sync observation patches the thread cursor and end marker before (and regardless of) the commit (source-read)
+### H3. Sync observation patches the thread cursor and end marker before (and regardless of) the commit (main, proven)
 
 `sync.ts` and `resource-scoped.ts` patch the thread's `lastObservedMessageCursor` (and per-thread `lastObservedAt`) before `updateActiveObservations`, and `base.ts` emits the completion end marker after it without checking where the commit landed. `filterObservedMessages` removes live messages on that basis, so an aborted commit, or one that landed on a retired record, still removes context. A P4 variant.
 
@@ -253,6 +253,15 @@ Correctness lives at the storage boundary, because that's the only thing every p
 **Per-adapter primitive:** InMemory: no `await` inside a critical section. LibSQL: client write lock + write transaction. PostgreSQL and MySQL: transaction + `SELECT … FOR UPDATE` on the target row by id (PG keeps its advisory lock for generation creation). MongoDB: single-document conditional updates only (identical on standalone and replica sets); rollover fences the old document with a small `pendingSuccessor` payload, inserts the successor (its unique `id` index makes that idempotent), then clears the old document's chunks; any reader that finds a fenced head without a successor rolls it forward. OracleDB: transaction + `lockOMRow`. Convex: one server mutation per operation, including rollover and initialize. Convex users must redeploy functions after upgrading.
 
 **Memory layer:** activation retries on `retired` and only removes messages from the live `MessageList` after a head commit; sync and resource-scoped commits pass `expectedActiveObservations`, recompose against the fresh head on conflict, and patch the thread cursor and emit the end marker only after a successful head commit; reflection side effects (suppression, `notifyReflectionCommitted`, end marker) run only when the reflection applied; a skipped append isn't indexed and emits no end marker.
+
+Implementation notes (PR 1):
+
+- **Bounded retries.** Activation re-reads the head at most 3 times after `retired`. A sync commit recomposes and retries at most 3 times; if it still doesn't land, the cycle ends with a failed marker and `observed: false`, so nothing is removed from context and the next step tries again. A reflection that didn't apply ends with a failed marker but doesn't fail the turn.
+- **Reflection snapshots are copies.** The InMemory store hands out live record references, so a record held across the Reflector call would change under it and look "unchanged" at commit time. The reflector and `reflect()` copy the record before reading it.
+- **"Applied" for older adapters.** A reflection applied iff the returned record's id is the requested `newRecordId`. Adapters that predate `newRecordId` ignore it and don't report `supersededBy`; for those, a returned record other than the reflected one counts as applied (their old behavior).
+- **Retried appends.** A transient error after the write landed makes `withRetry` append again, which storage skips. The buffer therefore checks the head for its `cycleId` (or its text already activated) before treating a skip as "never landed".
+- **Recall hints after a move.** Observation groups are indexed with the record id they were written to. After rollover moves a chunk, that hint names the retired record; `findGroupTimeline` (`tools/om-observations.ts`) treats the hint as a primary-key read and falls back to scanning generations for the group, which finds it once, on the head.
+- **Async-buffer chunks are the only chunk producer** (`git grep "updateBufferedObservations("` under `packages/memory/src`), so the `lastObservedAt = max message time + 1ms` convention behind the covered-chunk rule holds for every stored chunk.
 
 ### D2. Per-thread/resource commit queue (PR 2)
 
