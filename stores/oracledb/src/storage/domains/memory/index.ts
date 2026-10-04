@@ -26,7 +26,9 @@ import type {
   SwapBufferedToActiveResult,
   ThreadCloneMetadata,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
@@ -67,7 +69,7 @@ import {
   updateBufferedReflection,
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
-import { clearAllMemoryTables, initMemorySchema } from './schema';
+import { backfillObservationalMemorySupersededBy, clearAllMemoryTables, initMemorySchema } from './schema';
 import {
   deleteThread,
   getThreadById,
@@ -147,6 +149,16 @@ export class MemoryOracle extends MemoryStorage {
 
   async init(): Promise<void> {
     await initMemorySchema(this.ctx);
+  }
+
+  /**
+   * Mark observational memory rows that are not their key's canonical head as superseded.
+   * Runs as part of `init()`; `OracleStore` also runs it on every start when the memory schema
+   * migration is unchanged and skipped.
+   * @internal
+   */
+  async backfillObservationalMemorySupersededBy(): Promise<void> {
+    await this.ctx.db.withConnection(connection => backfillObservationalMemorySupersededBy(this.ctx, connection));
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -365,7 +377,7 @@ export class MemoryOracle extends MemoryStorage {
     return insertObservationalMemoryRecord(this.ctx, record);
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     return updateActiveObservations(this.ctx, input);
   }
 
@@ -401,7 +413,7 @@ export class MemoryOracle extends MemoryStorage {
     return updateObservationalMemoryConfig(this.ctx, input);
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     return updateBufferedObservations(this.ctx, input);
   }
 

@@ -10,6 +10,8 @@ import type {
   StorageOrderBy,
 } from '@mastra/core/storage';
 
+import oracledb from 'oracledb';
+
 import { clobBind, isOracleErrorCode } from '../../../shared/connection';
 import { qualifyName } from '../../../vector/identifiers';
 import type { OracleDB, OracleCreateIndexOptions, OracleTxClient } from '../../db';
@@ -97,6 +99,15 @@ export function chunkValues<T>(values: T[], size = ORACLE_IN_LIMIT): T[][] {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
+}
+
+/**
+ * Bind an instant as TIMESTAMP WITH TIME ZONE. A bare `Date` binds as TIMESTAMP WITH LOCAL
+ * TIME ZONE, which the server converts with the session's fixed offset (captured at connect
+ * time); an instant on the other side of a DST change is then stored shifted by an hour.
+ */
+export function timestampBind(value: Date | string | null | undefined): oracledb.BindParameter | null {
+  return value === undefined || value === null ? null : { type: oracledb.DB_TYPE_TIMESTAMP_TZ, val: toDate(value) };
 }
 
 export function boolToNumber(value: boolean | undefined): number {

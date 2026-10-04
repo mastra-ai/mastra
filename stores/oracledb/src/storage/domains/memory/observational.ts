@@ -1,11 +1,17 @@
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
+import {
+  TABLE_OBSERVATIONAL_MEMORY,
+  getObservationalMemoryGeneration0Id,
+  maxObservationCursor,
+  planReflectionGenerationText,
+} from '@mastra/core/storage';
 import type {
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { Connection } from 'oracledb';
@@ -13,6 +19,7 @@ import type { Connection } from 'oracledb';
 import {
   asBindParameters,
   executeOptions,
+  isOracleErrorCode,
   jsonBind,
   nullableClobBind,
   nullableJsonBind,
@@ -49,6 +56,7 @@ import {
   OM_REFLECTED_OBSERVATION_LINE_COUNT,
   OM_RESOURCE_ID,
   OM_SCOPE,
+  OM_SUPERSEDED_BY,
   OM_THREAD_ID,
   OM_TOTAL_TOKENS_OBSERVED,
   OM_UPDATED_AT,
@@ -64,6 +72,7 @@ import {
   storageError,
   stringOrEmpty,
   table,
+  timestampBind,
   toBoolean,
 } from './utils';
 import type { MemoryContext } from './utils';
@@ -105,9 +114,16 @@ export type ObservationalMemoryRow = {
   lastBufferedAtTokens?: number | string | null;
   lastBufferedAtTime?: Date | string | null;
   metadata?: unknown;
+  supersededBy?: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
+
+/** Hops a write aimed at a retired record may follow to reach the head before giving up. */
+const OM_MAX_HEAD_HOPS = 3;
+
+/** Canonical head order for a lookup key. */
+const OM_HEAD_ORDER = `${OM_GENERATION_COUNT} DESC, ${OM_CREATED_AT} ASC, id ASC`;
 
 export async function getObservationalMemory(
   ctx: MemoryContext,
@@ -119,15 +135,7 @@ export async function getObservationalMemory(
     // A resource can have global and thread-scoped observations. lookupKey
     // keeps those scopes independent while sharing one indexed table.
     return await ctx.db.withConnection(async connection => {
-      const result = await connection.execute<ObjectRow>(
-        `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
-         WHERE ${OM_LOOKUP_KEY} = :lookupKey
-         ORDER BY ${OM_GENERATION_COUNT} DESC
-         FETCH FIRST 1 ROWS ONLY`,
-        asBindParameters({ lookupKey }),
-        executeOptions(),
-      );
-      const row = rows(result)[0] as ObservationalMemoryRow | undefined;
+      const row = await getHeadOMRow(ctx, connection, lookupKey);
       return row ? parseOMRow(row) : null;
     });
   } catch (error) {
@@ -165,11 +173,11 @@ export async function getObservationalMemoryHistory(
     }
     if (options?.from) {
       conditions.push(`${OM_CREATED_AT} >= :fromDate`);
-      binds.fromDate = options.from;
+      binds.fromDate = timestampBind(options.from);
     }
     if (options?.to) {
       conditions.push(`${OM_CREATED_AT} <= :toDate`);
-      binds.toDate = options.to;
+      binds.toDate = timestampBind(options.to);
     }
     if (options?.groupId !== undefined) {
       conditions.push(`(DBMS_LOB.INSTR(${OM_ACTIVE_OBSERVATIONS}, :groupPrefix) > 0 OR EXISTS (
@@ -218,9 +226,12 @@ export async function initializeObservationalMemory(
   input: CreateObservationalMemoryInput,
 ): Promise<ObservationalMemoryRecord> {
   const now = new Date();
+  const lookupKey = getOMKey(input.threadId, input.resourceId);
   // Start with empty active observations; later calls append observations and reflection output transactionally.
+  // Deterministic generation-0 id: concurrent initializations of a key insert the same primary key,
+  // so exactly one creates the record and the others return it.
   const record: ObservationalMemoryRecord = {
-    id: globalThis.crypto.randomUUID(),
+    id: getObservationalMemoryGeneration0Id(lookupKey),
     scope: input.scope,
     threadId: input.threadId,
     resourceId: input.resourceId,
@@ -241,13 +252,24 @@ export async function initializeObservationalMemory(
     lastBufferedAtTime: null,
     config: input.config,
     observedTimezone: input.observedTimezone,
+    supersededBy: null,
   };
 
   try {
-    await ctx.db.tx(async (_client, connection) => {
-      await insertOMRecord(ctx, connection, record);
-    });
-    return record;
+    const existing = await getObservationalMemory(ctx, input.threadId, input.resourceId);
+    if (existing) return existing;
+    try {
+      await ctx.db.tx(async (_client, connection) => {
+        await insertOMRecord(ctx, connection, record);
+      });
+      return record;
+    } catch (error) {
+      // ORA-00001: another caller inserted the same generation-0 record first.
+      if (!isOracleErrorCode(error, [-1])) throw error;
+      const head = await getObservationalMemory(ctx, input.threadId, input.resourceId);
+      if (!head) throw error;
+      return head;
+    }
   } catch (error) {
     throw storageError(
       'INITIALIZE_OBSERVATIONAL_MEMORY',
@@ -279,9 +301,19 @@ export async function insertObservationalMemoryRecord(
 export async function updateActiveObservations(
   ctx: MemoryContext,
   input: UpdateActiveObservationsInput,
-): Promise<void> {
+): Promise<UpdateActiveObservationsResult> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (_client, connection) => {
+      const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_ACTIVE_OBSERVATIONS');
+      if (row.supersededBy) return { applied: false, reason: 'retired' as const };
+      if (
+        input.expectedActiveObservations !== undefined &&
+        input.expectedActiveObservations !== stringOrEmpty(row.activeObservations)
+      ) {
+        return { applied: false, reason: 'conflict' as const };
+      }
+      // The cursor never moves backward.
+      const lastObservedAt = maxObservationCursor(row.lastObservedAt, input.lastObservedAt);
       const result = await connection.execute(
         `
           UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
@@ -297,16 +329,17 @@ export async function updateActiveObservations(
         {
           id: input.id,
           activeObservations: nullableClobBind(input.observations),
-          lastObservedAt: input.lastObservedAt,
+          lastObservedAt: timestampBind(lastObservedAt),
           // Moving observations to active memory consumes pending tokens and
           // advances the cumulative observed-token counter atomically.
           tokenCount: Math.round(input.tokenCount),
           observedMessageIds: nullableJsonBind(input.observedMessageIds),
           observedTimezone: input.observedTimezone ?? null,
-          updatedAt: new Date(),
+          updatedAt: timestampBind(new Date()),
         },
       );
       assertRowsAffected(result.rowsAffected, 'UPDATE_ACTIVE_OBSERVATIONS', input.id);
+      return { applied: true };
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;
@@ -318,40 +351,93 @@ export async function createReflectionGeneration(
   ctx: MemoryContext,
   input: CreateReflectionGenerationInput,
 ): Promise<ObservationalMemoryRecord> {
+  const { currentRecord } = input;
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      const row = await findOMRowForUpdate(ctx, connection, currentRecord.id);
+      // Missing target: create nothing.
+      if (!row) return currentRecord;
+      // A retired snapshot creates nothing; the caller adopts the head.
+      if (row.supersededBy) return parseOMRow(await resolveLiveOMRow(ctx, connection, row));
+      const stored = parseOMRow(row);
+      const plan = planReflectionGenerationText({
+        storedObservations: stored.activeObservations,
+        storedObservationTokenCount: stored.observationTokenCount,
+        snapshotObservations: currentRecord.activeObservations,
+        snapshotObservationTokenCount: currentRecord.observationTokenCount,
+        reflection: input.reflection,
+        tokenCount: input.tokenCount,
+      });
+      // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+      if (!plan) return stored;
+      return rollOverOMRow(ctx, connection, stored, plan.observations, plan.tokenCount, input.newRecordId);
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('CREATE_REFLECTION_GENERATION', 'FAILED', { id: currentRecord.id }, error);
+  }
+}
+
+/**
+ * Create the next generation from the stored (live, row-locked) record and retire it in the
+ * same transaction. Buffered chunks move to the new generation; the cursor, buffering markers,
+ * flags, and counters carry over; buffered reflection state does not.
+ */
+export async function rollOverOMRow(
+  ctx: MemoryContext,
+  connection: Connection,
+  stored: ObservationalMemoryRecord,
+  observations: string,
+  tokenCount: number,
+  newRecordId: string | undefined,
+): Promise<ObservationalMemoryRecord> {
   const now = new Date();
   const record: ObservationalMemoryRecord = {
-    id: globalThis.crypto.randomUUID(),
-    scope: input.currentRecord.scope,
-    threadId: input.currentRecord.threadId,
-    resourceId: input.currentRecord.resourceId,
+    id: newRecordId ?? globalThis.crypto.randomUUID(),
+    scope: stored.scope,
+    threadId: stored.threadId,
+    resourceId: stored.resourceId,
     createdAt: now,
     updatedAt: now,
-    lastObservedAt: input.currentRecord.lastObservedAt,
+    lastObservedAt: stored.lastObservedAt,
     originType: 'reflection',
-    generationCount: input.currentRecord.generationCount + 1,
-    activeObservations: input.reflection,
-    totalTokensObserved: input.currentRecord.totalTokensObserved,
-    observationTokenCount: Math.round(input.tokenCount),
-    pendingMessageTokens: 0,
+    generationCount: stored.generationCount + 1,
+    activeObservations: observations,
+    totalTokensObserved: stored.totalTokensObserved,
+    observationTokenCount: Math.round(tokenCount),
+    pendingMessageTokens: stored.pendingMessageTokens,
     isReflecting: false,
     isObserving: false,
-    isBufferingObservation: false,
+    isBufferingObservation: stored.isBufferingObservation,
     isBufferingReflection: false,
-    lastBufferedAtTokens: 0,
-    lastBufferedAtTime: null,
-    config: input.currentRecord.config,
-    metadata: input.currentRecord.metadata,
-    observedTimezone: input.currentRecord.observedTimezone,
+    lastBufferedAtTokens: stored.lastBufferedAtTokens,
+    lastBufferedAtTime: stored.lastBufferedAtTime ?? null,
+    bufferedObservationChunks: stored.bufferedObservationChunks?.length ? stored.bufferedObservationChunks : undefined,
+    config: stored.config,
+    metadata: stored.metadata,
+    observedTimezone: stored.observedTimezone,
+    supersededBy: null,
   };
+  await insertOMRecord(ctx, connection, record, now);
 
-  try {
-    await ctx.db.tx(async (_client, connection) => {
-      await insertOMRecord(ctx, connection, record, now);
-    });
-    return record;
-  } catch (error) {
-    throw storageError('CREATE_REFLECTION_GENERATION', 'FAILED', { id: input.currentRecord.id }, error);
+  // Retire the stored record: chunks moved, liveness marker set (never cleared).
+  const retired = await connection.execute(
+    `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+       SET ${OM_SUPERSEDED_BY} = :newId,
+           ${OM_BUFFERED_OBSERVATION_CHUNKS} = NULL,
+           ${OM_UPDATED_AT} = :updatedAt
+     WHERE id = :id AND ${OM_SUPERSEDED_BY} IS NULL`,
+    { newId: record.id, updatedAt: timestampBind(now), id: stored.id },
+  );
+  if (retired.rowsAffected !== 1) {
+    throw storageError(
+      'CREATE_REFLECTION_GENERATION',
+      'RETIRE_FAILED',
+      { id: stored.id },
+      new Error(`Failed to retire observational memory record ${stored.id}`),
+    );
   }
+  return record;
 }
 
 export async function setReflectingFlag(ctx: MemoryContext, id: string, isReflecting: boolean): Promise<void> {
@@ -375,12 +461,19 @@ export async function setBufferingObservationFlag(
       const binds: Record<string, unknown> = {
         id,
         isBuffering: boolToNumber(isBuffering),
-        updatedAt: new Date(),
+        updatedAt: timestampBind(new Date()),
       };
       if (lastBufferedAtTokens !== undefined) {
         binds.lastBufferedAtTokens = Math.round(lastBufferedAtTokens);
       }
 
+      // A retired id is redirected to the head.
+      const target = await resolveLiveOMRow(
+        ctx,
+        connection,
+        await lockOMRow(ctx, connection, id, 'SET_BUFFERING_OBSERVATION_FLAG'),
+      );
+      binds.id = target.id;
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_IS_BUFFERING_OBSERVATION} = :isBuffering,
@@ -418,8 +511,21 @@ export async function clearObservationalMemory(
 
 export async function setPendingMessageTokens(ctx: MemoryContext, id: string, tokenCount: number): Promise<void> {
   try {
-    await updateOMColumns(ctx, id, 'SET_PENDING_MESSAGE_TOKENS', {
-      [OM_PENDING_MESSAGE_TOKENS]: Math.round(tokenCount),
+    await ctx.db.tx(async (_client, connection) => {
+      // A retired id is redirected to the head.
+      const target = await resolveLiveOMRow(
+        ctx,
+        connection,
+        await lockOMRow(ctx, connection, id, 'SET_PENDING_MESSAGE_TOKENS'),
+      );
+      const result = await connection.execute(
+        `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+           SET ${OM_PENDING_MESSAGE_TOKENS} = :tokenCount,
+               ${OM_UPDATED_AT} = :updatedAt
+           WHERE id = :id`,
+        { tokenCount: Math.round(tokenCount), updatedAt: timestampBind(new Date()), id: target.id },
+      );
+      assertRowsAffected(result.rowsAffected, 'SET_PENDING_MESSAGE_TOKENS', id);
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;
@@ -452,7 +558,7 @@ export async function updateObservationalMemoryConfig(
            SET config = :config,
                ${OM_UPDATED_AT} = :updatedAt
            WHERE id = :id`,
-        { id: input.id, config: jsonBind(merged), updatedAt: new Date() },
+        { id: input.id, config: jsonBind(merged), updatedAt: timestampBind(new Date()) },
       );
       assertRowsAffected(updateResult.rowsAffected, 'UPDATE_OM_CONFIG', input.id);
     });
@@ -509,6 +615,7 @@ export async function insertOMRecord(
       ${OM_LAST_BUFFERED_AT_TOKENS},
       ${OM_LAST_BUFFERED_AT_TIME},
       metadata,
+      ${OM_SUPERSEDED_BY},
       ${OM_CREATED_AT},
       ${OM_UPDATED_AT}
     ) VALUES (
@@ -544,6 +651,7 @@ export async function insertOMRecord(
       :lastBufferedAtTokens,
       :lastBufferedAtTime,
       :metadata,
+      :supersededBy,
       :createdAt,
       :updatedAt
     )`,
@@ -558,8 +666,8 @@ export async function insertOMRecord(
       originType: record.originType ?? 'initial',
       config: jsonBind(record.config ?? {}),
       generationCount: record.generationCount ?? 0,
-      lastObservedAt: record.lastObservedAt ?? null,
-      lastReflectionAt: record.originType === 'reflection' ? timestamp : null,
+      lastObservedAt: timestampBind(record.lastObservedAt),
+      lastReflectionAt: record.originType === 'reflection' ? timestampBind(timestamp) : null,
       pendingMessageTokens: Math.round(record.pendingMessageTokens ?? 0),
       totalTokensObserved: Math.round(record.totalTokensObserved ?? 0),
       observationTokenCount: Math.round(record.observationTokenCount ?? 0),
@@ -578,10 +686,11 @@ export async function insertOMRecord(
       isBufferingObservation: boolToNumber(record.isBufferingObservation),
       isBufferingReflection: boolToNumber(record.isBufferingReflection),
       lastBufferedAtTokens: Math.round(record.lastBufferedAtTokens ?? 0),
-      lastBufferedAtTime: record.lastBufferedAtTime ?? null,
+      lastBufferedAtTime: timestampBind(record.lastBufferedAtTime),
       metadata: nullableJsonBind(record.metadata),
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
+      supersededBy: record.supersededBy ?? null,
+      createdAt: timestampBind(record.createdAt),
+      updatedAt: timestampBind(record.updatedAt),
     },
   );
 }
@@ -615,7 +724,7 @@ async function updateOMColumns(
          SET ${setParts.join(', ')},
              ${OM_UPDATED_AT} = :updatedAt
          WHERE id = :id`,
-      { ...binds, id, updatedAt: new Date() },
+      { ...binds, id, updatedAt: timestampBind(new Date()) },
     );
     assertRowsAffected(result.rowsAffected, operation, id);
   });
@@ -655,6 +764,7 @@ export function omSelect(): string {
     ${OM_LAST_BUFFERED_AT_TOKENS} AS "lastBufferedAtTokens",
     ${OM_LAST_BUFFERED_AT_TIME} AS "lastBufferedAtTime",
     metadata AS "metadata",
+    ${OM_SUPERSEDED_BY} AS "supersededBy",
     ${OM_CREATED_AT} AS "createdAt",
     ${OM_UPDATED_AT} AS "updatedAt"`;
 }
@@ -692,5 +802,83 @@ export function parseOMRow(row: ObservationalMemoryRow): ObservationalMemoryReco
     metadata: parseOptionalJsonObject(row.metadata, { emptyObjectAsUndefined: true }),
     observedMessageIds: parseOptionalStringArray(row.observedMessageIds),
     observedTimezone: row.observedTimezone ? String(row.observedTimezone) : undefined,
+    supersededBy: row.supersededBy ? String(row.supersededBy) : null,
   };
+}
+
+/** The canonical head row of a lookup key (non-locking read). */
+async function getHeadOMRow(
+  ctx: MemoryContext,
+  connection: Connection,
+  lookupKey: string,
+): Promise<ObservationalMemoryRow | undefined> {
+  const result = await connection.execute<ObjectRow>(
+    `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+     WHERE ${OM_LOOKUP_KEY} = :lookupKey
+     ORDER BY ${OM_HEAD_ORDER}
+     FETCH FIRST 1 ROWS ONLY`,
+    asBindParameters({ lookupKey }),
+    executeOptions(),
+  );
+  return rows(result)[0] as ObservationalMemoryRow | undefined;
+}
+
+/** Row-locks one record by primary key for the rest of the transaction; `undefined` when missing. */
+export async function findOMRowForUpdate(
+  ctx: MemoryContext,
+  connection: Connection,
+  id: string,
+): Promise<ObservationalMemoryRow | undefined> {
+  const result = await connection.execute<ObjectRow>(
+    `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)} WHERE id = :id FOR UPDATE`,
+    { id },
+    executeOptions(),
+  );
+  return rows(result)[0] as ObservationalMemoryRow | undefined;
+}
+
+/**
+ * Row-locks one record by primary key. Observational memory updates are incremental and
+ * order-sensitive, so mutating paths derive their next state from a locked row.
+ * Throws "record not found" when it is missing.
+ */
+export async function lockOMRow(
+  ctx: MemoryContext,
+  connection: Connection,
+  id: string,
+  operation: string,
+): Promise<ObservationalMemoryRow> {
+  const row = await findOMRowForUpdate(ctx, connection, id);
+  if (!row) {
+    assertRowsAffected(0, operation, id);
+    throw new Error(`Observational memory record not found: ${id}`);
+  }
+  return row;
+}
+
+/**
+ * The live, row-locked record a lifecycle write aimed at `row` lands on: `row` itself while
+ * live, otherwise the head of its lookup key (locked, then re-checked — a rollover may retire
+ * it between the head read and the lock).
+ */
+export async function resolveLiveOMRow(
+  ctx: MemoryContext,
+  connection: Connection,
+  row: ObservationalMemoryRow,
+): Promise<ObservationalMemoryRow> {
+  let current = row;
+  for (let hop = 0; current.supersededBy; hop++) {
+    const head = hop < OM_MAX_HEAD_HOPS ? await getHeadOMRow(ctx, connection, current.lookupKey) : undefined;
+    const locked = head && head.id !== current.id ? await findOMRowForUpdate(ctx, connection, head.id) : undefined;
+    if (!locked) {
+      throw storageError(
+        'RESOLVE_OBSERVATIONAL_MEMORY_HEAD',
+        'FAILED',
+        { id: row.id },
+        new Error(`Observational memory record ${row.id} is superseded but no live head was found`),
+      );
+    }
+    current = locked;
+  }
+  return current;
 }
