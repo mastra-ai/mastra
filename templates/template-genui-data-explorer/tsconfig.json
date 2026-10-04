@@ -13,5 +13,5 @@
     "types": ["node"],
     "outDir": "dist"
   },
-  "include": ["data-sources/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "data-sources/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }

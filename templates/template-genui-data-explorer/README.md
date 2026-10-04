@@ -24,18 +24,18 @@ churn. The same approach could be adapted to other domains:
 These are adaptation ideas, not bundled datasets or supported analyses. Each needs its own data
 source and metric definitions.
 
-**Current status:** the runnable implementation provides the synthetic dataset and deterministic
-analytics and a usable data-source interface described below. The Mastra agent, CopilotKit interface,
-and persistent analytical workspace are planned additions. There is no chat or visual explorer to
-launch yet.
+**Current status:** the runnable implementation includes the synthetic dataset, deterministic
+analytics, and a Mastra agent with a validated analytical workflow. A local HTTP endpoint streams
+progress and verified source facts. CopilotKit, charts and the persistent visual workspace are planned
+additions; the current endpoint uses NDJSON rather than the official AG-UI transport.
 
 ## Prerequisites
 
 - Node.js 24.15 or later and NPM. The built-in SQLite API is a release candidate in Node 24.
 - A checkout containing `templates/template-genui-data-explorer`. This candidate is not yet published
   in the Mastra template catalog.
-- No API keys, provider accounts, or environment variables are required for the current data demo.
-  `.env.example` records this; copying it does not require adding credentials.
+- Data commands and deterministic tests need no provider credentials. Interactive questions require a
+  server-side `OPENAI_API_KEY`; `.env.example` documents the optional model and local server settings.
 - A writable local directory for the SQLite file, which defaults to `.data/sales.sqlite`. No external
   database service is needed. Both data commands accept `-- --path /path/to/sales.sqlite` to select
   another file. `-- --source sales` explicitly selects the registered example source.
@@ -54,7 +54,43 @@ launch yet.
    - Run `npm run data:inspect` to see bookings, conversion, growth, and churn for the last 12 months
      of the saved dataset, plus historical pipeline and a three-month forecast scenario.
    - The output is JSON in the terminal. It includes source-owned, date-aware example requests for the planned
-     conversational explorer; the current CLI does not accept natural-language questions.
+     conversational explorer. The data CLI returns deterministic results; the local analytical endpoint
+     accepts natural-language questions.
+
+## Ask an analytical question
+
+After initializing the dataset, set `OPENAI_API_KEY` in `.env` and run `npm start`. This launches the
+local endpoint at `http://127.0.0.1:4111/analysis`; it does not call the provider until a question arrives.
+The default model is `openai/gpt-4.1-mini`, configurable with `ANALYSIS_MODEL` as an OpenAI model ID.
+Ordinary interactive questions incur provider usage. Required tests use a deterministic model and
+never make paid requests. Live benchmarks are not implemented or run by startup.
+
+```bash
+curl http://127.0.0.1:4111/analysis \
+  -H 'Content-Type: application/json' \
+  -d '{"threadId":"demo","workspaceId":"demo","requestId":"question-1","baseRevision":0,"question":"Compare customer churn over the last 12 complete months and bookings growth against the matching previous year."}'
+```
+
+The stream reports planning, validation, reads and verification before one terminal outcome. Completed
+facts include request, workspace, trace, workflow run, query and result IDs; source/dataset/metric
+versions; effective requests; completeness and calculation checks; and the SQL and bound parameters
+actually executed by SQLite. Explanations are composed from verified operands, so model prose cannot
+introduce unverified numbers. Relative periods use the saved dataset clock; unsupported historical
+coverage returns an unavailable result instead of invented zero sales. Descriptive facts cannot
+establish why a change occurred.
+
+Each workspace allows one active analysis. Runs have at most eight combined model/tool steps,
+1,024 generated tokens per model response, a five-second read deadline, a 60-second overall deadline,
+and limits of 1,000 returned records across all collections and 1 MiB per source result. Only explicitly retryable read errors can retry,
+once within the original read deadline; paid model calls never automatically retry. Incomplete,
+malformed or oversized connector data cannot become verified totals. SQLite reads run in disposable
+processes: cancellation/deadlines kill the process and await its close before releasing the workspace.
+Other adapters must honor `context.signal`; a remote adapter that ignores it may still run remotely,
+but its late output is discarded. Cancel a streamed request by disconnecting its client.
+
+Successful results remain available through `DataExplorer.lastComplete(workspaceId)` in the current
+process, including after later failures. This is temporary runtime state; durable workspace recovery
+and revision conflict handling belong to the planned visual workspace.
 
 ## Try it out
 
@@ -72,7 +108,7 @@ launch yet.
 - Open the project in your coding agent and describe an adaptation: “Adapt this data explorer for
   order fulfillment. Define the data and metrics needed to explore delivery times by location,
   and plan how GenUI could switch between trends, comparisons, and order details. Explore the code
-  and propose a plan before making changes.” The agent and UI still need to be implemented.
+  and propose a plan before making changes.” The visual interface remains planned work.
 - Replace the synthetic Sales example with another dataset and explicit metric definitions. The
   current starting points are `scripts/schema.ts`, `scripts/generate.ts`, and the metric modules
   in `data-sources/sales/`. The data-source interface and explicit registration below are usable now;
@@ -80,32 +116,40 @@ launch yet.
 
 ## Replace the data source
 
-`data-sources/source.ts` defines the read-only `DataSource` contract: `describe()`, `execute(request)`,
+`data-sources/source.ts` defines shared Zod schemas and the read-only `DataSource` contract:
+`describe()`, `execute(request, context)`,
 and `close()`. Each source declares its own metadata, version, coverage, capabilities, accepted fields
-and filters, and example requests. Metric IDs are source-owned strings; a custom source does not
+and filters, and example requests. Descriptors declare the metric version; capabilities must have unique IDs and
+explicit `calculation: "total" | "percentage"` semantics. Percentage capabilities use percent units;
+total capabilities use non-percent units.
+Metric IDs are source-owned strings; a custom source does not
 need Sales metrics, SQLite, or a synthetic dataset. Results contain a value, units, numerator and
 denominator where relevant, an unavailable reason, the executed request, and source/dataset/metric
 provenance. Optional details carry the Sales example's rows, forecast assumptions and churn breakdowns.
+Each available result includes actual redacted `provenance.operations` with `kind`, `statement` and
+`parameters`. SQLite records SQL; non-SQL connectors describe their own read operations without
+fabricating SQL. Unsupported coverage may honestly return no executed operations.
 `provenance.asOf` describes dataset freshness; historical snapshot dates and applied filters remain
 in the cloned `result.request`.
 
 Implement your source under `data-sources/<your-source>/`, then replace the explicit registration in
-`scripts/sources.ts` and its `defaultSourceId`. For example, after implementing `CustomSource`:
+`data-sources/sources.ts` and its `defaultSourceId`. Runtime and setup share these registrations;
+`scripts/sources.ts` adds optional operational preparation. For example, after implementing `CustomSource`:
 
 ```ts
 export const defaultSourceId = "custom";
-export const sources: readonly OperationalSource[] = [
+export const sources: readonly SourceRegistration[] = [
   {
     id: "custom",
     open: async (settings) => {
-      const { CustomSource } = await import("../data-sources/custom/source.ts");
+      const { CustomSource } = await import("./custom/source.ts");
       return new CustomSource(settings);
     },
   },
 ];
 ```
 
-Keep the `OperationalSource` declaration and `prepareSource` helper in that file when replacing its
+Keep the `OperationalSource` declaration and `prepareSource` helper in `scripts/sources.ts` when adapting its
 registration; the example above replaces only the registration section. Settings are a source-owned
 record rather than a mandatory database path. The CLI's optional `--path` setting is interpreted by
 Sales; a replacement source defines and validates its own configuration. Add an optional `prepare`
@@ -116,18 +160,17 @@ initializes or opens unselected or disabled Sales registrations. Unknown, remove
 duplicate source IDs fail explicitly, with no automatic fallback.
 
 The generic registry and inspection consumer under `data-sources/` have no Sales or script imports.
-`scripts/sources.ts` is the current **CLI composition point**, with lazy factories and preparation;
-a future application supplies its own registrations through the same runtime contract without
-importing operational scripts. After replacing the registration, you can remove
+`data-sources/sources.ts` is the shared runtime registration point. `scripts/sources.ts` adds CLI
+preparation, while the analytical runtime consumes registrations without importing operational scripts. After replacing the registration, you can remove
 `data-sources/sales/` and the unused Sales initialization/generation/schema scripts, plus their
 Sales-specific tests. The generic CLI does not contain a Sales switch or a fixed Sales report.
 `tests/fixtures/reference-source.ts` demonstrates a non-SQL replacement in tests without shipping
 another production connector.
 
-This delivered subset covers source selection, metadata/capabilities, validated read-only Sales
-requests, normalized results, provenance and resource ownership. It does not claim agent/workflow
-integration, remote pagination, result persistence, general network connectors, or execution
-deadlines/cancellation. Those remain later work.
+The delivered source and analytical paths cover selection, metadata/capabilities, validated read-only
+requests, normalized verified results, actual operation provenance, bounded execution and resource
+ownership. Remote production connectors and durable visual-workspace persistence remain future work.
+The connector contract rejects incomplete pagination rather than publishing partial totals.
 
 ## Sample dataset
 
@@ -206,8 +249,8 @@ Operational entry points, initialization, schema creation, and synthetic generat
 `openSales` opens a read-only connection with extension loading disabled. The separate initializer
 owns all writes. Do not pass untrusted database paths or expose the SQLite handle to an agent. The
 Sales adapter validates its advertised typed requests, rejecting unsupported or extra fields rather
-than silently ignoring them. The future analytical workflow will add execution budgets and query
-deadline/cancellation enforcement.
+than silently ignoring them. The analytical workflow enforces execution budgets and deadlines;
+Sales native reads run in disposable processes for actual deadline/cancellation termination.
 
 ## Persistence and recovery
 
@@ -236,18 +279,22 @@ npm run build
 
 Use `npm run format` to apply oxfmt formatting. All configuration and dependencies are local to
 this template. Strict TypeScript covers application code, operational scripts, and tests. The build
-emits source modules to `dist/data-sources/` and operational scripts to `dist/scripts/`, excluding tests.
+emits runtime modules to `dist/src/`, source adapters to `dist/data-sources/`, and operational scripts
+to `dist/scripts/`, excluding tests.
 All test setup, fixtures, and test configuration are under `tests/`. Plain Vitest
-tests verify data calculations and persistence. The official `@mastra/evals/vitest` reporter and
-setup are configured for future Mastra evaluations; the current checks do not execute agent or paid
-model evaluations.
+tests verify data calculations, dataset persistence and real Mastra agent/tool/workflow execution
+with a deterministic model provider. Integration proofs include native SQLite cancellation,
+connector recovery and local HTTP streaming. The official `@mastra/evals/vitest` reporter and setup
+are configured; no live or paid model evaluations run in these checks. The HTTP proof needs permission
+to open a loopback listener in restricted environments.
 
 ## Dependency licenses
 
 The data layer uses Node.js standard libraries (Node.js MIT; bundled SQLite public domain).
 `@mastra/core` and `@mastra/evals` (Apache-2.0) use `"latest"` in `dependencies`, following the Mastra
-template contribution convention. The current data demo uses their official test integration;
-the Mastra agent runtime is planned. Development dependencies are TypeScript 5.9.3 (Apache-2.0),
+template contribution convention. The analytical runtime uses Mastra agents, tools, workflows and
+RequestContext; tests use the official eval reporter. Zod 4.6.5 (MIT) is the direct shared schema
+dependency. Development dependencies are TypeScript 5.9.3 (Apache-2.0),
 Vitest 4.1.0, `@types/node` 24.19.1, and oxfmt 0.71.0 (MIT). The standalone NPM lockfile records exact
 resolved versions for all packages; `npm ci` reproduces those versions.
 
@@ -258,3 +305,23 @@ exploration with Mastra and CopilotKit. Official acceptance and catalog publicat
 to maintainer review.
 
 [Want to contribute?](./CONTRIBUTING.md)
+
+The analytical runtime factory is `createExplorer()` in `src/mastra/index.ts`. It resolves the registered
+source once, registers the actual Mastra agent/workflow, and accepts a developer-configured model.
+Requests cannot override source IDs, database paths, identity, model or budgets. The local endpoint
+requires JSON and rejects foreign Origins and nonlocal Hosts before any model execution.
+
+A replacement adapter must return the executed request and matching source, dataset, metric and clock
+provenance. Capability-bound schemas verify the declared calculation: totals have no denominator and
+use safe integer numerators; percent ratios also expose a nonnegative safe integer
+denominator and compute `numerator / denominator × 100`. Zero denominators return an unavailable
+value with a reason. The generic workflow validates schemas, identity, versions, periods, filters,
+units, completeness and calculation operands before publishing facts. All record collections share
+the row budget. Explanations use checked operands and trusted versioned capability descriptions;
+result-supplied narrative assumptions are excluded from verified result details. Other detail values
+remain source data and cannot be rendered as checked explanatory prose. Return `complete: false` for
+partial pagination, never a full aggregate. Throw `SourceError(code, safeMessage, retryable)` for typed
+failures; only transient `rate-limit`/`source-unavailable` reads may retry. Keep credentials out of
+messages and operation evidence. Implement deadline/cancellation handling and resource cleanup in
+the adapter. The independent non-SQL fixture under `tests/fixtures/` proves the same public path;
+it is contract evidence rather than a bundled CRM integration.

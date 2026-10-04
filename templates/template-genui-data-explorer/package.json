@@ -12,11 +12,13 @@
     "format:check": "oxfmt --check --config .oxfmtrc.json .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest run --config tests/vitest.config.ts tests/unit",
-    "test:integration": "vitest run --config tests/vitest.config.ts tests/integration"
+    "test:integration": "vitest run --config tests/vitest.config.ts tests/integration",
+    "start": "node --env-file-if-exists=.env scripts/serve.ts"
   },
   "dependencies": {
     "@mastra/core": "latest",
-    "@mastra/evals": "latest"
+    "@mastra/evals": "latest",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "24.19.1",

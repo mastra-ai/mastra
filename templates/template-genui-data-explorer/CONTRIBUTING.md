@@ -19,5 +19,5 @@ metric semantics need documented definitions and boundary assertions. Test sourc
 unsupported requests and cleanup through observable behavior. Preserve existing complete
 datasets on initialization failures; destructive automatic resets are outside the data contract.
 
-The README describes the delivered data layer and its current scope. Keep examples and claims
+The README describes the delivered data and analytical runtime and their current scope. Keep examples and claims
 aligned with observable behavior. Never commit provider credentials or real customer records.

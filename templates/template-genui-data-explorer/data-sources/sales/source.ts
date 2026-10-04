@@ -1,3 +1,5 @@
+import { runReadProcess } from "../read-process.ts";
+import type { SourceExecutionContext, SourceOperation } from "../source.ts";
 import type { AnalysisRequest, AnalysisResult, DataSource, SourceDescriptor } from "../source.ts";
 import type { DatasetMetadata, Filters, MetricResult, Period, Stage } from "./contracts.ts";
 import { validateFilters } from "./contracts.ts";
@@ -12,41 +14,48 @@ const capabilities: SourceDescriptor["capabilities"] = [
     metric: "bookings",
     description: "Closed-won contract value, counted once.",
     unit: "USD cents",
+    calculation: "total",
     fields: ["period", "filters"],
-    filters: opportunityFilters,
+    filters: [...opportunityFilters],
   },
   {
     metric: "conversion",
     description: "Closed-deal win rate: won / (won + lost).",
     unit: "percent",
+    calculation: "percentage",
     fields: ["period", "filters"],
-    filters: opportunityFilters,
+    filters: [...opportunityFilters],
   },
   {
     metric: "growth",
     description: "Bookings growth against matching earlier-year dates.",
     unit: "percent",
+    calculation: "percentage",
     fields: ["period", "baseline", "filters"],
-    filters: opportunityFilters,
+    filters: [...opportunityFilters],
   },
   {
     metric: "pipeline",
     description: "Open opportunity values known as of a UTC date.",
     unit: "USD cents",
+    calculation: "total",
     fields: ["asOf", "filters"],
-    filters: opportunityFilters,
+    filters: [...opportunityFilters],
   },
   {
     metric: "forecast",
-    description: "Illustrative fixed-weight open-pipeline scenario, with known bookings separate.",
+    description:
+      "Illustrative fixed-weight scenario; not calibrated or guaranteed revenue. Known bookings are separate.",
     unit: "USD cents",
+    calculation: "total",
     fields: ["asOf", "horizon", "filters"],
-    filters: opportunityFilters,
+    filters: [...opportunityFilters],
   },
   {
     metric: "customerChurn",
     description: "First full account cancellation in the opening cohort; reactivation separate.",
     unit: "percent",
+    calculation: "percentage",
     fields: ["period"],
     filters: [],
   },
@@ -54,6 +63,7 @@ const capabilities: SourceDescriptor["capabilities"] = [
     metric: "revenueChurn",
     description: "Opening-cohort gross MRR losses, capped per account at opening MRR.",
     unit: "percent",
+    calculation: "percentage",
     fields: ["period"],
     filters: [],
   },
@@ -111,11 +121,13 @@ function requestFilters(value: unknown): Filters {
 }
 
 export class SalesSource implements DataSource {
+  readonly #path: string;
   readonly #connection;
   readonly #metadata: DatasetMetadata;
   readonly #descriptor: SourceDescriptor;
 
   constructor(path: string) {
+    this.#path = path;
     this.#connection = openSales(path);
     this.#metadata = this.#connection.metadata;
     const { coverage, ...metadata } = this.#metadata;
@@ -129,6 +141,7 @@ export class SalesSource implements DataSource {
       coverage,
       asOf: metadata.asOf,
       metadata: { ...metadata, synthetic: true },
+      metricVersion: metadata.metrics,
       capabilities,
       examples: [
         {
@@ -159,7 +172,31 @@ export class SalesSource implements DataSource {
     return this.#descriptor;
   }
 
-  async execute(request: AnalysisRequest): Promise<AnalysisResult> {
+  async execute(
+    request: AnalysisRequest,
+    context?: SourceExecutionContext,
+  ): Promise<AnalysisResult> {
+    const execution = context ?? {
+      signal: new AbortController().signal,
+      deadline: Date.now() + 5000,
+      maxRows: 1000,
+      maxBytes: 1048576,
+      requestId: "inspection",
+      queryId: "inspection",
+      traceId: "inspection",
+    };
+    return runReadProcess(
+      new URL(
+        import.meta.url.endsWith(".ts") ? "./read-worker.ts" : "./read-worker.js",
+        import.meta.url,
+      ),
+      { path: this.#path, request, maxRows: execution.maxRows, maxBytes: execution.maxBytes },
+      execution,
+    );
+  }
+
+  /** Worker-only synchronous implementation; never exposed as a model tool. */
+  executeRead(request: AnalysisRequest): AnalysisResult {
     if (!request || typeof request !== "object" || Array.isArray(request))
       throw new Error("An analytical request is required.");
     const capability = capabilities.find((entry) => entry.metric === request.metric);
@@ -171,7 +208,35 @@ export class SalesSource implements DataSource {
     if (Object.keys(request).some((key) => !allowed.has(key)))
       throw new Error(`Unsupported fields for Sales metric '${request.metric}'.`);
     const filters = requestFilters(request.filters);
-    const db = this.#connection.db;
+    const operations: SourceOperation[] = [];
+    const db = new Proxy(this.#connection.db, {
+      get(target, key) {
+        if (key !== "prepare") {
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return (sql: string) => {
+          const statement = target.prepare(sql);
+          return new Proxy(statement, {
+            get(prepared, method) {
+              const value = Reflect.get(prepared, method, prepared);
+              if (method === "get" || method === "all")
+                return (...parameters: (string | number | bigint | null)[]) => {
+                  operations.push({
+                    kind: "sql",
+                    statement: sql,
+                    parameters: parameters.map((value) =>
+                      typeof value === "bigint" ? Number(value) : value,
+                    ),
+                  });
+                  return value.apply(prepared, parameters);
+                };
+              return typeof value === "function" ? value.bind(prepared) : value;
+            },
+          });
+        };
+      },
+    });
     const metadata = this.#metadata;
     let result: MetricResult;
     let details: AnalysisResult["details"];
@@ -260,6 +325,7 @@ export class SalesSource implements DataSource {
         asOf: metadata.asOf,
         coverage: metadata.coverage,
         complete: true,
+        operations,
       },
     };
   }

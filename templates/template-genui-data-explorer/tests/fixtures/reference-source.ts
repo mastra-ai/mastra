@@ -20,6 +20,7 @@ export class ReferenceSource implements DataSource {
       title: "Independent reference",
       version: "reference-v1",
       datasetVersion: "hand-facts-v1",
+      metricVersion: "hand-metrics-v1",
       coverage: { start: "2024-10-01", end: "2026-10-01" },
       asOf: "2026-09-30",
       metadata: { synthetic: true },
@@ -28,6 +29,7 @@ export class ReferenceSource implements DataSource {
           metric: "bookings",
           description: "Won contract value",
           unit: "USD cents",
+          calculation: "total",
           fields: ["period"],
           filters: [],
         },
@@ -35,6 +37,7 @@ export class ReferenceSource implements DataSource {
           metric: "conversion",
           description: "Closed-deal win rate",
           unit: "percent",
+          calculation: "percentage",
           fields: ["period"],
           filters: [],
         },
@@ -90,7 +93,15 @@ export class ReferenceSource implements DataSource {
         datasetVersion: "hand-facts-v1",
         metricVersion: "hand-metrics-v1",
         asOf: "2026-09-30",
+        coverage: { start: "2024-10-01", end: "2026-10-01" },
         complete: true,
+        operations: [
+          {
+            kind: "read",
+            statement: "Read hand-authored complete deal cohort",
+            parameters: [request.period.start, request.period.end],
+          },
+        ],
       },
     };
   }
