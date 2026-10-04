@@ -132,7 +132,7 @@ There is no OM-level lock that makes observation activation and reflection rollo
 
 Status key: **proven** = reproduced by a probe; **source-read** = follows from reading the code but not probed; **hypothesis** = plausible from the code, to be decided by a test.
 
-### P1. Reflection rollover strands buffered chunks (main, proven)
+### P1. Reflection rollover strands buffered chunks (main, proven; fixed in PR 1)
 
 - **Mechanism:** `createReflectionGeneration` doesn't copy `bufferedObservationChunks` or `lastBufferedAtTime`. Chunks waiting on the old head are left on a retired record and never activated. Breaks invariants 2 and 3.
 - **Adapters:** omitted in all seven (InMemory, LibSQL, PostgreSQL, MySQL, MongoDB, OracleDB, Convex).
@@ -174,7 +174,7 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 - **Why it's new:** on main, step 0 waits for the buffer op before reflecting, so this path doesn't exist there.
 - **Evidence:** reproduced with real `om.buffer()` and InMemory storage (`__tests__/buffer-write-generation.test.ts` on #22078).
 
-### P4. Observation activation commits to a retired generation (main, proven)
+### P4. Observation activation commits to a retired generation (main, proven; fixed in PR 1)
 
 - **Mechanism:**
   1. `activate()` re-fetches the head.
@@ -186,13 +186,13 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 - **Evidence:** reproduced with real OM on InMemory, LibSQL, and live PostgreSQL (PG's observation swap doesn't take the reflection's advisory lock), and end to end with two overlapping `Agent.generate()` calls using separate `Memory` instances on one LibSQL thread. It behaves the same on #22078 and on main.
 - **Frequency:** unmeasured.
 
-### P5. The swap drops a concurrently appended chunk (main, source-read)
+### P5. The swap drops a concurrently appended chunk (main, proven; fixed in PR 1)
 
 - **Mechanism:** InMemory (`inmemory.ts` `swapBufferedToActive`), OracleDB (`observational-buffering.ts`), and Convex (`omSwapBuffered`) write back what's left of the chunk list the caller read.
 - **Mitigation:** in-process only, via the activation wait (and #22078's `pendingChunkWrites`). Across processes there is none.
 - **Related:** MongoDB, OracleDB, and Convex don't dedupe a retried append by `cycleId`, so a retry stores the chunk twice.
 
-### P6. Sync reflection uses a stale snapshot (main, source-read)
+### P6. Sync reflection uses a stale snapshot (main, proven; fixed in PR 1)
 
 - **Mechanism:**
   1. Sync reflection reads `activeObservations` before the Reflector call.
@@ -202,19 +202,19 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 - **Effect:** duplicated work and P1-style quality cost rather than permanent loss.
 - **Contrast:** buffered reflection activation re-reads the record in the adapter and keeps unreflected lines.
 
-### P7. Cross-process work has no coordination (main, by design)
+### P7. Cross-process work has no coordination (main, by design; storage lifecycle fixed in PR 1)
 
 All in-process coordination (static maps, registry) is invisible to other processes. Durable flags are hints, and adapter locking differs (see the table above).
 
-### H1. Activation can move the cursor backward; a retried append can re-add an activated chunk (main, proven)
+### H1. Activation can move the cursor backward; a retried append can re-add an activated chunk (main, proven; fixed in PR 1)
 
 Activation sets the cursor to the last activated chunk's `lastObservedAt` unconditionally. A chunk appended after a sync observation already passed its range could move the cursor **backward**. `cycleId` dedup only checks the current list, so a retried append after activation re-adds the chunk.
 
-### H2. Sync observation commit can overwrite a concurrent activation (main, proven)
+### H2. Sync observation commit can overwrite a concurrent activation (main, proven; fixed in PR 1)
 
 `updateActiveObservations` replaces `activeObservations` wholesale with text built from an earlier head read. Text appended by a concurrent activation in between is overwritten. A prefix check can't detect this safely: resource scope rewrites the middle of the text when it merges a same-day `<thread>` section (`observation-strategies/base.ts` `replaceOrAppendThreadSection`).
 
-### H3. Sync observation patches the thread cursor and end marker before (and regardless of) the commit (main, proven)
+### H3. Sync observation patches the thread cursor and end marker before (and regardless of) the commit (main, proven; fixed in PR 1)
 
 `sync.ts` and `resource-scoped.ts` patch the thread's `lastObservedMessageCursor` (and per-thread `lastObservedAt`) before `updateActiveObservations`, and `base.ts` emits the completion end marker after it without checking where the commit landed. `filterObservedMessages` removes live messages on that basis, so an aborted commit, or one that landed on a retired record, still removes context. A P4 variant.
 
@@ -229,7 +229,8 @@ Oracle's shared OM suite failed two cursor round-trip tests under a non-UTC host
 ### Smaller notes
 
 - A buffered reflection written to a record that has since been retired is discarded: wasted Reflector work, no coverage loss.
-- LibSQL's head query orders by `generationCount DESC` only, so with duplicate rows for one generation (which exist in some databases, see PG's `om-generation-concurrency.test.ts`) its head is nondeterministic. PostgreSQL orders `generationCount DESC, createdAt ASC, id ASC`.
+- LibSQL's head query ordered by `generationCount DESC` only, so with duplicate rows for one generation (which exist in some databases, see PG's `om-generation-concurrency.test.ts`) its head was nondeterministic. PR 1 gives every adapter PostgreSQL's order, `generationCount DESC, createdAt ASC, id ASC`.
+- **LibSQL interactive transactions and `SQLITE_BUSY` (pre-existing; fixed for OM in PR 1).** `@libsql/client` local clients use a pool of connections over a synchronous driver. A write transaction held open across `await`s makes any other write in the same process, on another pooled connection, block the event loop until `busy_timeout` and then fail with `SQLITE_BUSY` (`database is locked` / `cannot commit transaction - SQL statements in progress`). On `main`, OM appends and pending-token writes racing `saveMessages` on one file database fail this way (62 errors in a 40+40-write repro). A durable agent with OM on a LibSQL file hit it every turn on PR 1's first, transactional LibSQL adapter. PR 1's LibSQL OM writes never hold a transaction open (see the per-adapter primitive). **Not fixed:** LibSQL's other interactive transactions (for example `deleteMessages`, thread cloning) can still fail this way against concurrent same-process writes.
 
 ## Direction (approved)
 
@@ -255,7 +256,7 @@ Correctness lives at the storage boundary, because that's the only thing every p
 - `setPendingMessageTokens` and `setBufferingObservationFlag` on a retired id go to the head. The other flag writes (`setObservingFlag`, `setReflectingFlag`, `setBufferingReflectionFlag`) are hints and still write the row they name. `updateBufferedReflection` deliberately stays on the row it names: its `reflectedObservationLineCount` counts lines of that row's text, so moving it to the head would cut the wrong lines at swap time. A buffered reflection written to a retired row is discarded with it (wasted work, no coverage loss).
 - The successor copies `config`, `metadata`, and `observedTimezone` from the stored row.
 
-**Per-adapter primitive:** InMemory: no `await` inside a critical section. LibSQL: client write lock + write transaction. PostgreSQL and MySQL: transaction + `SELECT … FOR UPDATE` on the target row by id (PG keeps its advisory lock for generation creation). MongoDB: single-document conditional updates only (identical on standalone and replica sets); rollover fences the old document with a small `pendingSuccessor` payload, inserts the successor (its unique `id` index makes that idempotent), then clears the old document's chunks; any reader that finds a fenced head without a successor rolls it forward. OracleDB: transaction + `lockOMRow` (`SELECT … FOR UPDATE` by id); the column arrives through the memory-schema repeatable migration (schema version 2), and the backfill also runs on every `OracleStore.init()` because unchanged repeatable migrations are skipped. Convex: one server mutation per operation, including rollover and initialize. Convex users must redeploy functions after upgrading.
+**Per-adapter primitive:** InMemory: no `await` inside a critical section. LibSQL: no interactive transaction (see the `SQLITE_BUSY` note above). Each write reads its row, computes, and writes with a statement whose condition matches every column as read, retrying (at most 10 times) when another process changed the row; rollover is one atomic `batch` (guarded retire, then an insert that only fires if the retire applied); the client write lock still orders writes within a process. PostgreSQL and MySQL: transaction + `SELECT … FOR UPDATE` on the target row by id (PG keeps its advisory lock for generation creation). MongoDB: single-document conditional updates only (identical on standalone and replica sets); rollover fences the old document with a small `pendingSuccessor` payload, inserts the successor (its unique `id` index makes that idempotent), then clears the old document's chunks; any reader that finds a fenced head without a successor rolls it forward. OracleDB: transaction + `lockOMRow` (`SELECT … FOR UPDATE` by id); the column arrives through the memory-schema repeatable migration (schema version 2), and the backfill also runs on every `OracleStore.init()` because unchanged repeatable migrations are skipped. Convex: one server mutation per operation, including rollover and initialize. Convex users must redeploy functions after upgrading.
 
 **Memory layer:** activation retries on `retired` and only removes messages from the live `MessageList` after a head commit; sync and resource-scoped commits pass `expectedActiveObservations`, recompose against the fresh head on conflict, and patch the thread cursor and emit the end marker only after a successful head commit; reflection side effects (suppression, `notifyReflectionCommitted`, end marker) run only when the reflection applied; a skipped append isn't indexed and emits no end marker.
 
@@ -269,6 +270,17 @@ Implementation notes (PR 1):
 - **Recall hints after a move.** Observation groups are indexed with the record id they were written to. After rollover moves a chunk, that hint names the retired record; `findGroupTimeline` (`tools/om-observations.ts`) treats the hint as a primary-key read and falls back to scanning generations for the group, which finds it once, on the head.
 - **Convex duplicates the lifecycle rules.** The server module is bundled into the user's Convex deployment and can't import `@mastra/core` at runtime, so `server/observational-memory.ts` carries copies of the covered-chunk, max-cursor, reflection-text, and append-only rules; a parity test (`server/observational-memory.test.ts`) checks they decide exactly like the core helpers. Its canonical head helper reads the top two rows of `by_lookup_key` and, on a generation tie, all tied rows, because that index orders ties by `_creationTime`, not the canonical order. Convex's shared storage suite needs a live deployment (`CONVEX_TEST_URL`), so Convex is covered by server-mutation unit tests against a mocked ctx, not end to end.
 - **Async-buffer chunks are the only chunk producer** (`git grep "updateBufferedObservations("` under `packages/memory/src`), so the `lastObservedAt = max message time + 1ms` convention behind the covered-chunk rule holds for every stored chunk.
+
+Status after PR 1 (base = `main` at `6a721a8e`, probes run in a separate base worktree with base builds; all model calls mocked):
+
+| Problem           | Evidence on `main`                                                                                                                                                                                                                            | Evidence on PR 1                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1, P6            | Real OM, gated Reflector, 3 consecutive rollovers (InMemory, LibSQL): the observation activated during the Reflector call is missing from the new head and a chunk buffered during it stays on the retired record, its message never observed | The new head holds the reflection, the activated observation, and the moved chunk; the chunk activates on the head; no unobserved messages                             |
+| P4, H3            | Activation paused across a rollover (InMemory, LibSQL, PG), a failed sync commit, a PG rollover holding the old row, two overlapping `Agent.generate()` calls: 8 of 11 checks find the actor without the source and the fact                  | 11/11: the swap reports `retired` (PG: waits on the rollover's row lock) and activation retries on the head; a failed sync commit leaves the source in the next prompt |
+| P5, H1, dedup, P7 | Two OS processes on one LibSQL file and one PG schema, 250 jittered append/activate/rollover iterations, 3 seeds: 2173 violations (chunks lost or stranded on retired records, chunks activated twice on PG)                                  | 0 violations; exactly one live record per key                                                                                                                          |
+| Durable agents    | —                                                                                                                                                                                                                                             | `createDurableAgent` + OM on a LibSQL file, 16 iterations across buffering, 2 activations, and 2 rollovers: every actor prompt holds every user fact                   |
+
+Per adapter, the shared lifecycle tests and two-store races fail on the `main` adapter (LibSQL 7/8, PG 8/9, MySQL 7/9, MongoDB 23/23, Oracle 10/11, Convex 26 server tests) and pass on PR 1. Not proven: Convex end to end (no local backend), a real multi-worker Inngest run, mixed-version deployments, real-world frequency, and BEAM impact. P2 and P3 belong to #22078 and are closed in PR 3.
 
 ### D2. Per-thread/resource commit queue (PR 2)
 
@@ -313,7 +325,6 @@ Related history:
 
 ## Open questions
 
-- Whether H1 and H2 actually fail on `main` (the shared conformance tests record it per adapter; the contract closes both either way).
 - How much P1 actually costs in fidelity and question answerability (needs a source-aligned comparison, not provenance-window sizes), and whether fixing it measurably changes BEAM scores. Measure this on states created or replayed through the new code; rescanning old snapshots will still show the 620 historical strandings.
 
 ## Tests that cover this area
@@ -321,4 +332,7 @@ Related history:
 - `stores/_test-utils/src/domains/memory/observational-memory.ts`: shared OM conformance suite, run by every adapter.
 - `stores/pg/src/storage/domains/memory/om-generation-concurrency.test.ts`: PG cross-connection generation creation.
 - `__tests__/threshold-activation-tail.test.ts`: post-activation tail observation (#25060).
+- `stores/_test-utils/src/domains/memory/observational-memory.ts` C1–C17: the PR 1 lifecycle contract (rollover carry-forward and text rules, retired targets, append dedup and covered chunks, stored-list activation, cursor monotonicity, liveness marker, canonical head, deterministic initialization).
+- `stores/_test-utils/src/domains/memory/observational-memory-concurrency.ts`: six two-store races (25 iterations each, invariant-checked), run per networked adapter by `stores/<adapter>/src/storage/domains/memory/om-lifecycle-concurrency.test.ts` (LibSQL with the second store in a child process), next to each adapter's `supersededBy` upgrade, backfill-vs-rollover, and adapter-specific tests (MongoDB crash recovery and roll-forward, Oracle timestamp binds, LibSQL same-process writes).
+- `__tests__/lifecycle-safety.test.ts`: memory-layer behavior on retired and conflicting commits (P4, P6, H2, H3, reflection not applied, covered appends).
 - The probes for P2 and P4 live outside the repo and are ported into the stack as regression tests: the ready+late rollover probe and the activation-vs-reflection probe matrix including the two-agent LibSQL repro.
