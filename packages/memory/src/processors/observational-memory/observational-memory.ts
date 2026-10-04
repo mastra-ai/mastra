@@ -1578,7 +1578,8 @@ export class ObservationalMemory {
    */
   private createUnobservedMessage(message: MastraDBMessage): MastraDBMessage | null {
     const unobservedParts = getUnobservedParts(message);
-    if (unobservedParts.length === 0) return null;
+    // OM lifecycle markers written after the boundary (e.g. a later buffering cycle's markers) are not content.
+    if (unobservedParts.every(part => (part as { type?: string })?.type?.startsWith('data-om-'))) return null;
 
     return {
       ...message,
