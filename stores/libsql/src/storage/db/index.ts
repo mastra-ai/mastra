@@ -27,6 +27,12 @@ export type LibSQLDomainBaseConfig = {
   /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
   storageIsolationKey?: unknown;
   /**
+   * The client is a Turso embedded replica (`syncUrl`): reads are served from the local
+   * replica, so a write that conflicts with another instance's change syncs before retrying.
+   * @internal Set by `LibSQLStore`.
+   */
+  embeddedReplica?: boolean;
+  /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
    */

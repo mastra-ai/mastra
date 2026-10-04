@@ -225,3 +225,68 @@ describe('LibSQL observational memory writes alongside other writes in the same 
     }
   }, 60_000);
 });
+
+describe('LibSQL observational memory guarded writes', () => {
+  it.each([true, false])(
+    'retry after a concurrent change and sync first only on an embedded replica (embeddedReplica: %s)',
+    async embeddedReplica => {
+      const db = tempDbUrl();
+      const raw = createClient({ url: db.url });
+      let injected = false;
+      let syncs = 0;
+      const client = {
+        execute: async (statement: Parameters<typeof raw.execute>[0]) => {
+          const result = await raw.execute(statement);
+          const sql = typeof statement === 'string' ? statement : statement.sql;
+          // Another instance changes the row between this read and the guarded write.
+          if (!injected && sql.startsWith(`SELECT * FROM "${OM_TABLE}" WHERE id = ?`)) {
+            injected = true;
+            await raw.execute({
+              sql: `UPDATE "${OM_TABLE}" SET "updatedAt" = '2000-01-01T00:00:00.000Z' WHERE id = ?`,
+              args: [String(result.rows[0]!.id)],
+            });
+          }
+          return result;
+        },
+        batch: raw.batch.bind(raw),
+        transaction: raw.transaction.bind(raw),
+        close: () => raw.close(),
+        sync: async () => {
+          syncs++;
+        },
+        get closed() {
+          return raw.closed;
+        },
+        get protocol() {
+          return raw.protocol;
+        },
+      };
+      try {
+        const store = new MemoryLibSQL({ client: client as never, embeddedReplica });
+        await store.init();
+        const record = await store.initializeObservationalMemory({
+          threadId: 'sync-thread',
+          resourceId: 'sync-resource',
+          scope: 'thread',
+          config: {},
+        });
+        injected = false;
+        await store.updateActiveObservations({
+          id: record.id,
+          observations: '- fact',
+          tokenCount: 1,
+          lastObservedAt: new Date('2026-01-01T00:00:00.000Z'),
+          expectedActiveObservations: '',
+        });
+
+        expect(injected).toBe(true);
+        expect(syncs).toBe(embeddedReplica ? 1 : 0);
+        const head = (await store.getObservationalMemory('sync-thread', 'sync-resource'))!;
+        expect(head.activeObservations).toBe('- fact');
+      } finally {
+        raw.close();
+        db.cleanup();
+      }
+    },
+  );
+});
