@@ -157,12 +157,14 @@ export class MemoryLibSQL extends MemoryStorage {
   };
 
   #client: Client;
+  #embeddedReplica: boolean;
   #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
     this.#client = client;
+    this.#embeddedReplica = config.embeddedReplica === true;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
   }
 
@@ -1892,6 +1894,8 @@ export class MemoryLibSQL extends MemoryStorage {
       for (let i = 0; i < OM_MAX_CAS_ATTEMPTS; i++) {
         const result = await attempt();
         if (result !== OM_CAS_CONFLICT) return result;
+        // An embedded replica reads locally; pull the other instance's write before re-reading.
+        if (this.#embeddedReplica) await this.#client.sync?.();
       }
       throw new MastraError({
         id: createStorageErrorId('LIBSQL', operation, 'CONFLICT'),
@@ -1927,14 +1931,6 @@ export class MemoryLibSQL extends MemoryStorage {
         args: [lookupKey],
       }),
     );
-  }
-
-  async #readOMHead(executor: Transaction | Client, lookupKey: string): Promise<ObservationalMemoryRecord | null> {
-    const result = await executor.execute({
-      sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY ${OM_HEAD_ORDER} LIMIT 1`,
-      args: [lookupKey],
-    });
-    return result.rows?.[0] ? this.parseOMRow(result.rows[0]) : null;
   }
 
   /** The live row a lifecycle write aimed at `row` lands on: the row itself while live, otherwise the head. */
@@ -2090,7 +2086,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      return await this.#readOMHead(this.#client, lookupKey);
+      return (await this.#readOMHeadRow(lookupKey))?.record ?? null;
     } catch (error) {
       throw new MastraError(
         {
@@ -2203,7 +2199,7 @@ export class MemoryLibSQL extends MemoryStorage {
       };
 
       return await this.#write('initializeObservationalMemory', async () => {
-        const existing = await this.#readOMHead(this.#client, lookupKey);
+        const existing = (await this.#readOMHeadRow(lookupKey))?.record ?? null;
         if (existing) return existing;
         // Insert-if-absent: a concurrent initializer (any process) inserts the same id.
         const inserted = await this.#client.execute({
@@ -2244,7 +2240,7 @@ export class MemoryLibSQL extends MemoryStorage {
           ],
         });
         if (inserted.rowsAffected === 1) return record;
-        return (await this.#readOMHead(this.#client, lookupKey)) ?? record;
+        return (await this.#readOMHeadRow(lookupKey))?.record ?? record;
       });
     } catch (error) {
       throw new MastraError(
