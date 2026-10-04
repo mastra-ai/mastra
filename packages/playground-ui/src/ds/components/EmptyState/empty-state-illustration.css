@@ -1,0 +1,20 @@
+@keyframes empty-state-swing {
+  0% {
+    rotate: 0deg;
+  }
+  18% {
+    rotate: 8deg;
+  }
+  40% {
+    rotate: -5.5deg;
+  }
+  62% {
+    rotate: 3deg;
+  }
+  82% {
+    rotate: -1.2deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}

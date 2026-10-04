@@ -46,19 +46,19 @@ export function EmptyState({
     <div
       data-tone={tone}
       className={cn(
-        'group/empty-state flex flex-col items-center justify-center px-4 py-6 text-center',
+        'group/empty-state flex max-w-full flex-col items-center justify-center px-4 py-6 text-center',
         'transition-opacity duration-normal ease-out-custom',
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && (
         <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
           {descriptionSlot}
         </Txt>
       )}
-      {actionSlot && <div className="mt-4">{actionSlot}</div>}
+      {actionSlot && <div className="mt-4 max-w-full">{actionSlot}</div>}
     </div>
   );
 

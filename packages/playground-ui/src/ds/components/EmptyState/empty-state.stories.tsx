@@ -122,7 +122,7 @@ const illustrations = [
 export const AllIllustrations: Story = {
   parameters: { layout: 'padded' },
   render: () => (
-    <div className="grid grid-cols-4 gap-8">
+    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
       {illustrations.map(([illustration, title]) => (
         <EmptyState
           key={illustration}
@@ -139,7 +139,7 @@ export const AllIllustrations: Story = {
 export const ErrorIllustrations: Story = {
   parameters: { layout: 'padded' },
   render: () => (
-    <div className="grid grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
       <EmptyState
         tone="error"
         iconSlot={<EmptyStateIllustration name="disconnected" />}
@@ -151,8 +151,8 @@ export const ErrorIllustrations: Story = {
         tone="error"
         iconSlot={<EmptyStateIllustration name="locked" />}
         titleSlot="Couldn’t load API keys"
-        descriptionSlot="You don’t have access to this. Ask an organization admin."
-        actionSlot={<Button>Retry</Button>}
+        descriptionSlot="Your session expired. Sign in again to continue."
+        actionSlot={<Button>Sign in</Button>}
       />
       <EmptyState
         tone="error"
@@ -160,6 +160,20 @@ export const ErrorIllustrations: Story = {
         titleSlot="Couldn’t load requests"
         descriptionSlot="Too many requests. Wait a moment and try again."
         actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="server-error" />}
+        titleSlot="Couldn’t load deploys"
+        descriptionSlot="The server returned an error. Try again in a moment."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="not-a-member" />}
+        titleSlot="Couldn’t load API keys"
+        descriptionSlot="You’re not a member of this organization."
+        actionSlot={<Button>Go to your organization</Button>}
       />
     </div>
   ),
