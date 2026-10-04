@@ -4,6 +4,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
+import { getOMLockKey, runOMCommit } from '../commit-queue';
 import { omDebug, omError } from '../debug';
 import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
 import {
@@ -450,38 +451,50 @@ export abstract class ObservationStrategy {
   } | null> {
     let { processed, composedFrom, target } = opts;
     for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
-      const input = {
-        id: target.id,
-        observations: processed.observations,
-        tokenCount: processed.observationTokens,
-        lastObservedAt: processed.lastObservedAt,
-        observedMessageIds: processed.observedMessageIds,
-        expectedActiveObservations: composedFrom,
-      };
-      // Cores older than commitActiveObservations only offer the void-returning write.
-      const result =
-        typeof this.storage.commitActiveObservations === 'function'
+      // Inside the queue slot, compose against the head as it is now, so in-process writers
+      // never conflict; the conditional write still guards against other processes.
+      const result = await this.runCommit(async () => {
+        // Never the record a clear left behind: a new record created since is not this lineage.
+        const head = await getLineageHead(this.storage, target);
+        if (!head) return null;
+        if (head.id !== target.id || (head.activeObservations ?? '') !== composedFrom) {
+          if (this.headCoversCycle(head, opts.cycleMessageIds)) {
+            omDebug(`[OM:observe] head ${head.id} already covers this cycle's messages; skipping the duplicate commit`);
+            target = head;
+            return { applied: true as const, alreadyCovered: true as const };
+          }
+          target = head;
+          composedFrom = head.activeObservations ?? '';
+          processed = await opts.recompose(head);
+        }
+        const input = {
+          id: target.id,
+          observations: processed.observations,
+          tokenCount: processed.observationTokens,
+          lastObservedAt: processed.lastObservedAt,
+          observedMessageIds: processed.observedMessageIds,
+          expectedActiveObservations: composedFrom,
+        };
+        // Cores older than commitActiveObservations only offer the void-returning write.
+        return typeof this.storage.commitActiveObservations === 'function'
           ? await this.storage.commitActiveObservations(input)
           : (await this.storage.updateActiveObservations(input), { applied: true as const });
-      if (result.applied) return { processed, record: target };
-
-      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); recomposing against the head`);
-      if (attempt === MAX_HEAD_COMMIT_RETRIES) break;
-      const head = await getLineageHead(this.storage, target);
-      if (!head) return null;
-      if (this.headCoversCycle(head, opts.cycleMessageIds)) {
-        omDebug(`[OM:observe] head ${head.id} already covers this cycle's messages; skipping the duplicate commit`);
+      });
+      if (!result) return null;
+      if ('alreadyCovered' in result) {
         // Nothing of ours landed; what follows (reflection snapshot, token counts) reads the head.
-        const headText = head.activeObservations ?? '';
         return {
-          processed: { ...processed, observations: headText, observationTokens: head.observationTokenCount },
-          record: head,
+          processed: {
+            ...processed,
+            observations: target.activeObservations ?? '',
+            observationTokens: target.observationTokenCount,
+          },
+          record: target,
           alreadyCovered: true,
         };
       }
-      target = head;
-      composedFrom = head.activeObservations ?? '';
-      processed = await opts.recompose(head);
+      if (result.applied) return { processed, record: target };
+      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); retrying against the head`);
     }
     return null;
   }
@@ -490,6 +503,12 @@ export abstract class ObservationStrategy {
     if (cycleMessageIds.length === 0) return false;
     const headIds = new Set(Array.isArray(head.observedMessageIds) ? head.observedMessageIds : []);
     return cycleMessageIds.every(id => headIds.has(id));
+  }
+
+  /** Runs one storage commit in this thread's (or resource's) slot of the process-wide commit queue. */
+  protected runCommit<T>(op: () => Promise<T>): Promise<T> {
+    const { threadId, resourceId, record } = this.opts;
+    return runOMCommit(getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId), op);
   }
 
   protected async indexObservationGroups(

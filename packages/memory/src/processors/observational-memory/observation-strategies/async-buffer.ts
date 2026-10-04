@@ -168,30 +168,37 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
     let appendAttempts = 0;
+    let targetId = record.id;
     const appendResult = await withRetry(
       () => {
         appendAttempts++;
-        const input = {
-          id: record.id,
-          chunk: {
-            cycleId: this.cycleId,
-            observations: processed.observations,
-            tokenCount: processed.observationTokens,
-            messageIds: processed.observedMessageIds,
-            messageTokens,
-            lastObservedAt: processed.lastObservedAt,
-            suggestedContinuation: processed.suggestedContinuation,
-            currentTask: processed.currentTask,
-            threadTitle: processed.threadTitle,
-            extractedValues: processed.extractedValues,
-            extractionFailures: processed.extractionFailures,
-          },
-          lastBufferedAtTime: processed.lastObservedAt,
-        };
-        // Cores older than appendBufferedObservations only offer the void-returning write.
-        return typeof this.storage.appendBufferedObservations === 'function'
-          ? this.storage.appendBufferedObservations(input)
-          : this.storage.updateBufferedObservations(input).then(() => ({ persisted: true, recordId: input.id }));
+        // Each attempt takes its own queue slot (no slot is held across retry backoff) and
+        // targets the head as it is when the slot runs.
+        return this.runCommit(async () => {
+          const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+          if (head) targetId = head.id;
+          const input = {
+            id: targetId,
+            chunk: {
+              cycleId: this.cycleId,
+              observations: processed.observations,
+              tokenCount: processed.observationTokens,
+              messageIds: processed.observedMessageIds,
+              messageTokens,
+              lastObservedAt: processed.lastObservedAt,
+              suggestedContinuation: processed.suggestedContinuation,
+              currentTask: processed.currentTask,
+              threadTitle: processed.threadTitle,
+              extractedValues: processed.extractedValues,
+              extractionFailures: processed.extractionFailures,
+            },
+            lastBufferedAtTime: processed.lastObservedAt,
+          };
+          // Cores older than appendBufferedObservations only offer the void-returning write.
+          return typeof this.storage.appendBufferedObservations === 'function'
+            ? this.storage.appendBufferedObservations(input)
+            : this.storage.updateBufferedObservations(input).then(() => ({ persisted: true, recordId: input.id }));
+        });
       },
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );

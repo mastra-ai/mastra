@@ -1,5 +1,6 @@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
 import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
@@ -52,10 +53,7 @@ export class BufferingCoordinator {
   }
 
   getLockKey(threadId: string | null | undefined, resourceId: string | null | undefined): string {
-    if (this.scope === 'resource' && resourceId) {
-      return `resource:${resourceId}`;
-    }
-    return `thread:${threadId ?? 'unknown'}`;
+    return getOMLockKey(this.scope, threadId, resourceId);
   }
 
   isAsyncObservationEnabled(): boolean {
@@ -117,7 +115,9 @@ export class BufferingCoordinator {
     if (record.isBufferingObservation) {
       if (isOpActiveInProcess(record.id, 'bufferingObservation')) return false;
       omDebug(`[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale, clearing`);
-      storage?.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+      if (storage) {
+        void runOMCommit(lockKey, () => storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
+      }
     }
 
     const bufferKey = this.getObservationBufferKey(lockKey);
@@ -152,7 +152,7 @@ export class BufferingCoordinator {
     scope: 'thread' | 'resource',
     timeoutMs = 30000,
   ): Promise<void> {
-    const lockKey = scope === 'resource' && resourceId ? `resource:${resourceId}` : `thread:${threadId ?? 'unknown'}`;
+    const lockKey = getOMLockKey(scope, threadId, resourceId);
     const obsKey = `obs:${lockKey}`;
     const reflKey = `refl:${lockKey}`;
 
