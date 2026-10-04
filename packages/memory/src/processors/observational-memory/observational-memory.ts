@@ -25,6 +25,7 @@ import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
+import { runOMCommit } from './commit-queue';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   getObservationContextPrompt,
@@ -2413,7 +2414,7 @@ ${formattedMessages}
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
     registerOp(record.id, 'bufferingObservation');
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+    runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, true, currentTokens)).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
@@ -2437,7 +2438,7 @@ ${formattedMessages}
         }
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
-        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+        runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
           omError('[OM] Failed to clear buffering observation flag', err);
         });
       });
@@ -2900,7 +2901,7 @@ ${formattedMessages}
     const bufKey = this.buffering.getObservationBufferKey(lockKey);
 
     BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-    await this.storage.setBufferingObservationFlag(recordId, false, 0).catch(() => {});
+    await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(recordId, false, 0)).catch(() => {});
 
     if (activatedMessageIds && activatedMessageIds.length > 0) {
       this.buffering.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
@@ -3456,7 +3457,7 @@ ${formattedMessages}
 
     // Clear stale flag if it was set by a crashed process (non-blocking)
     if (record.isBufferingObservation) {
-      await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+      await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
     }
 
     if (existingOp) {
@@ -3473,7 +3474,7 @@ ${formattedMessages}
     registerOp(opRecordId, 'bufferingObservation');
     inMemoryRecord.isBufferingObservation = true;
     inMemoryRecord.lastBufferedAtTokens = currentTokens;
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+    runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, true, currentTokens)).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
@@ -3612,7 +3613,9 @@ ${formattedMessages}
       }
 
       // Update the boundary tokens in storage + in-memory cache for interval tracking
-      await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
+      await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, newTokens)).catch(
+        () => {},
+      );
       flagCleared = true;
       setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
@@ -3637,7 +3640,7 @@ ${formattedMessages}
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
         setBufferingState(false);
-        await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+        await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
       }
     }
   }
@@ -3708,7 +3711,9 @@ ${formattedMessages}
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
           );
           BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-          await this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+          await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, 0)).catch(
+            () => {},
+          );
         }
       }
     }
@@ -3789,49 +3794,57 @@ ${formattedMessages}
     // Re-fetch to get latest chunks after any completed buffering. Activation commits only to
     // the head generation: if a reflection retires the record between this read and the swap,
     // storage reports `retired` and nothing was activated, so re-read the head and retry.
+    // Each attempt reads the head and swaps inside one queue slot, so in-process reflections and
+    // appends can't interleave; storage still reports `retired` if another process retires it.
+    const commitKey = this.buffering.getLockKey(threadId, resourceId);
     let freshRecord: ObservationalMemoryRecord | null = null;
     let freshChunks: BufferedObservationChunk[] = [];
     let activationResult: SwapBufferedToActiveResult | undefined;
     for (let attempt = 0; attempt <= MAX_ACTIVATION_RETIRED_RETRIES; attempt++) {
-      freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-      if (!freshRecord) {
-        return { activated: false, record };
-      }
-      freshChunks = getBufferedChunks(freshRecord);
-      if (!freshChunks.length) {
-        return { activated: false, record };
-      }
+      const swapped = await runOMCommit(commitKey, async () => {
+        const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+        if (!head) return null;
+        const chunks = getBufferedChunks(head);
+        if (!chunks.length) return null;
 
-      // Calculate activation parameters (use per-record override if set)
-      const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
-      const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-      const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
+        // Calculate activation parameters (use per-record override if set)
+        const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(head));
+        const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
+        const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-      // Prefer the live pending count; the persisted one is written at the end of the
-      // previous step and misses anything added since (e.g. a large tool-result batch).
-      const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-      const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
+        // Prefer the live pending count; the persisted one is written at the end of the
+        // previous step and misses anything added since (e.g. a large tool-result batch).
+        const totalChunkMessageTokens = chunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+        const currentPendingTokens = livePendingTokens ?? (head.pendingMessageTokens || totalChunkMessageTokens);
 
-      const forceMaxActivation = !!(
-        this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
-      );
+        const forceMaxActivation = !!(
+          this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
+        );
 
-      // Storage adapters decrement the persisted pending count during the swap. Keep
-      // that base aligned with the live count used to select chunks so the returned
-      // record reflects the unactivated tail rather than the previous step's count.
-      if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
-        await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
-      }
+        // Storage adapters decrement the persisted pending count during the swap. Keep
+        // that base aligned with the live count used to select chunks so the returned
+        // record reflects the unactivated tail rather than the previous step's count.
+        if (head.pendingMessageTokens !== currentPendingTokens) {
+          await this.storage.setPendingMessageTokens(head.id, currentPendingTokens);
+        }
 
-      // Perform the swap
-      activationResult = await this.storage.swapBufferedToActive({
-        id: freshRecord.id,
-        activationRatio,
-        messageTokensThreshold,
-        currentPendingTokens,
-        forceMaxActivation,
-        bufferedChunks: freshChunks,
+        // Perform the swap
+        const result = await this.storage.swapBufferedToActive({
+          id: head.id,
+          activationRatio,
+          messageTokensThreshold,
+          currentPendingTokens,
+          forceMaxActivation,
+          bufferedChunks: chunks,
+        });
+        return { head, chunks, result };
       });
+      if (!swapped) {
+        return { activated: false, record };
+      }
+      freshRecord = swapped.head;
+      freshChunks = swapped.chunks;
+      activationResult = swapped.result;
       if (!activationResult.retired) break;
       omDebug(`[OM:activate] record ${freshRecord.id} was retired by a reflection; retrying on the head`);
     }
@@ -3840,7 +3853,10 @@ ${formattedMessages}
     }
 
     // Clear buffering flag
-    await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
+    const swappedRecordId = freshRecord.id;
+    await runOMCommit(commitKey, () => this.storage.setBufferingObservationFlag(swappedRecordId, false)).catch(
+      () => {},
+    );
     unregisterOp(freshRecord.id, 'bufferingObservation');
 
     // Fetch updated record for marker emission
@@ -4227,12 +4243,17 @@ ${formattedMessages}
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       const newRecordId = crypto.randomUUID();
-      const committedRecord = await this.storage.createReflectionGeneration({
-        currentRecord: record,
-        reflection: reflectResult.observations,
-        tokenCount: reflectionTokenCount,
-        newRecordId,
-      });
+      const committedRecord = await runOMCommit(
+        this.buffering.getLockKey(threadId, resourceId),
+        () =>
+          this.storage.createReflectionGeneration({
+            currentRecord: record,
+            reflection: reflectResult.observations,
+            tokenCount: reflectionTokenCount,
+            newRecordId,
+          }),
+        { priority: 'reflection' },
+      );
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
       if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
