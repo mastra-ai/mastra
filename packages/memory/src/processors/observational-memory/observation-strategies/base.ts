@@ -4,6 +4,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
+import { getOMLockKey, runOMCommit } from '../commit-queue';
 import { omDebug, omError } from '../debug';
 import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
 import {
@@ -429,25 +430,39 @@ export abstract class ObservationStrategy {
   }): Promise<{ processed: ProcessedObservation; record: ObservationalMemoryRecord } | null> {
     let { processed, composedFrom, target } = opts;
     for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
-      const result = await this.storage.updateActiveObservations({
-        id: target.id,
-        observations: processed.observations,
-        tokenCount: processed.observationTokens,
-        lastObservedAt: processed.lastObservedAt,
-        observedMessageIds: processed.observedMessageIds,
-        expectedActiveObservations: composedFrom,
+      // Inside the queue slot, compose against the head as it is now, so in-process writers
+      // never conflict; the conditional write still guards against other processes.
+      const result = await this.runCommit(async () => {
+        // Never the record a clear left behind: a new record created since is not this lineage.
+        const head = await getLineageHead(this.storage, target);
+        if (!head) return null;
+        if (head.id !== target.id || (head.activeObservations ?? '') !== composedFrom) {
+          target = head;
+          composedFrom = head.activeObservations ?? '';
+          processed = await opts.recompose(head);
+        }
+        return (
+          (await this.storage.updateActiveObservations({
+            id: target.id,
+            observations: processed.observations,
+            tokenCount: processed.observationTokens,
+            lastObservedAt: processed.lastObservedAt,
+            observedMessageIds: processed.observedMessageIds,
+            expectedActiveObservations: composedFrom,
+          })) ?? { applied: true as const }
+        );
       });
-      if (!result || result.applied) return { processed, record: target };
-
-      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); recomposing against the head`);
-      if (attempt === MAX_HEAD_COMMIT_RETRIES) break;
-      const head = await getLineageHead(this.storage, target);
-      if (!head) return null;
-      target = head;
-      composedFrom = head.activeObservations ?? '';
-      processed = await opts.recompose(head);
+      if (!result) return null;
+      if (result.applied) return { processed, record: target };
+      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); retrying against the head`);
     }
     return null;
+  }
+
+  /** Runs one storage commit in this thread's (or resource's) slot of the process-wide commit queue. */
+  protected runCommit<T>(op: () => Promise<T>): Promise<T> {
+    const { threadId, resourceId, record } = this.opts;
+    return runOMCommit(getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId), op);
   }
 
   protected async indexObservationGroups(

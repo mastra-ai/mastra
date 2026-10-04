@@ -215,7 +215,6 @@ describe('activation commits only to the head generation', () => {
   it('keeps the source or its observation in the actor context when a reflection overlaps step-0 activation (P4)', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
-    const otherOm = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
     const ids = await setupThread(storage);
     const t0 = ids.t0;
     const source = message(
@@ -261,14 +260,16 @@ describe('activation commits only to the head generation', () => {
       await release.promise;
       return originalSwap(input);
     });
-    vi.spyOn(otherOm.reflector, 'call').mockResolvedValue({ observations: '- compressed earlier knowledge' } as Awaited<
-      ReturnType<typeof otherOm.reflector.call>
-    >);
-
     const step = turn.step(0).prepare();
     await entered.promise;
+    // Another process reflects while the swap is in flight. (An in-process reflection would wait
+    // behind the swap in the commit queue; another process never sees that queue.)
     const record = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
-    await otherOm.reflector.maybeReflect({ record, observationTokens: 5_000, threadId: ids.threadId });
+    await storage.createReflectionGeneration({
+      currentRecord: record,
+      reflection: '- compressed earlier knowledge',
+      tokenCount: 5,
+    });
     release.resolve();
     const context = await step;
 
@@ -284,7 +285,6 @@ describe('activation commits only to the head generation', () => {
     expect(head.activeObservations).toContain(SECRET);
     expect(system).toContain(SECRET);
     await om.settled();
-    await otherOm.settled();
   });
 });
 

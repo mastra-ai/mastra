@@ -13,6 +13,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
+import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
 import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import {
@@ -784,7 +785,7 @@ export class ReflectorRunner {
    */
   private async doAsyncBufferedReflection(
     record: ObservationalMemoryRecord,
-    _bufferKey: string,
+    bufferKey: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
@@ -807,7 +808,7 @@ export class ReflectorRunner {
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-    BufferingCoordinator.reflectionBufferCycleIds.set(_bufferKey, cycleId);
+    BufferingCoordinator.reflectionBufferCycleIds.set(bufferKey, cycleId);
 
     const fullObservations = currentRecord.activeObservations ?? '';
     const allLines = fullObservations.split('\n');
@@ -897,13 +898,30 @@ export class ReflectorRunner {
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
     );
 
-    await this.storage.updateBufferedReflection({
-      id: currentRecord.id,
-      reflection: reflectResult.observations,
-      tokenCount: reflectionTokenCount,
-      inputTokenCount: sliceTokenEstimate,
-      reflectedObservationLineCount,
-    });
+    // `reflectedObservationLineCount` counts lines of this record's text, so the buffered
+    // reflection is only valid on this record. If a reflection retired it meanwhile, discard.
+    const saved = await runOMCommit(
+      this.buffering.getLockKey(currentRecord.threadId, currentRecord.resourceId),
+      async () => {
+        const head = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
+        if (head?.id !== currentRecord.id) return false;
+        await this.storage.updateBufferedReflection({
+          id: currentRecord.id,
+          reflection: reflectResult.observations,
+          tokenCount: reflectionTokenCount,
+          inputTokenCount: sliceTokenEstimate,
+          reflectedObservationLineCount,
+        });
+        return true;
+      },
+    );
+    if (!saved) {
+      omDebug(
+        `[OM:reflect] doAsyncBufferedReflection: record ${currentRecord.id} is no longer the head; discarding the buffered reflection`,
+      );
+      BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+      return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
+    }
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
     );
@@ -1049,11 +1067,16 @@ export class ReflectorRunner {
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
     const newRecordId = crypto.randomUUID();
-    const swapped = await this.storage.swapBufferedReflectionToActive({
-      currentRecord: freshRecord,
-      tokenCount: combinedTokenCount,
-      newRecordId,
-    });
+    const swapped = await runOMCommit(
+      lockKey,
+      () =>
+        this.storage.swapBufferedReflectionToActive({
+          currentRecord: freshRecord,
+          tokenCount: combinedTokenCount,
+          newRecordId,
+        }),
+      { priority: 'reflection' },
+    );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
       // The record was retired by another reflection, or its observations were rewritten
       // after this read. Nothing changed; the next turn re-evaluates against the head.
@@ -1428,12 +1451,17 @@ export class ReflectorRunner {
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       const newRecordId = crypto.randomUUID();
-      const committedRecord = await this.storage.createReflectionGeneration({
-        currentRecord: record,
-        reflection: reflectResult.observations,
-        tokenCount: reflectionTokenCount,
-        newRecordId,
-      });
+      const committedRecord = await runOMCommit(
+        this.buffering.getLockKey(record.threadId, record.resourceId),
+        () =>
+          this.storage.createReflectionGeneration({
+            currentRecord: record,
+            reflection: reflectResult.observations,
+            tokenCount: reflectionTokenCount,
+            newRecordId,
+          }),
+        { priority: 'reflection' },
+      );
       if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
         // Another reflection retired this record, or its observations were rewritten while the
         // Reflector ran. Nothing was committed: skip the commit side effects and close the
