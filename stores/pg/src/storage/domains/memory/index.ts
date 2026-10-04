@@ -2468,7 +2468,9 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#getLatestOMRow(this.#db.readClient, tableName, lookupKey);
+      // The head drives lifecycle writes and their retries; a lagging read replica would hand
+      // back a retired head and exhaust them, so read it from the primary.
+      const result = await this.#getLatestOMRow(this.#db.client, tableName, lookupKey);
       if (!result) return null;
       return this.parseOMRow(result);
     } catch (error) {
