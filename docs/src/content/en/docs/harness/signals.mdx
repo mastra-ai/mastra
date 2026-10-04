@@ -63,7 +63,7 @@ In the default agent loop, accepted pending messages and signals interrupt a mod
 
 At the start of each step, Mastra batches pending input before per-step input processors (`processInputStep`) run. Messages and signals already queued when the first step starts join its first model request instead of receiving a separate response.
 
-Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
+Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. If the run reaches `maxSteps`, queued input may be saved without a response. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
 
 Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
 
