@@ -99,4 +99,102 @@ describe('fetchWithRetry', () => {
     await fetchWithRetry('https://example.com', opts);
     expect(mockFetch).toHaveBeenCalledWith('https://example.com', opts);
   });
+
+  it('rejects an already-aborted signal without fetching or scheduling a retry', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    mockFetch.mockRejectedValue(controller.signal.reason);
+
+    const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+    const rejection = expect(promise).rejects.toBe(controller.signal.reason);
+    await flush();
+    await rejection;
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('preserves a custom cancellation reason when aborting an in-flight fetch', async () => {
+    const controller = new AbortController();
+    const reason = { message: 'Cancelled by caller' };
+    mockFetch.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
+        }),
+    );
+
+    const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+    const rejection = expect(promise).rejects.toBe(reason);
+    controller.abort(reason);
+    mockFetch.mockRejectedValue(reason);
+    await flush();
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['network failure', 'HTTP 503'])('interrupts backoff after %s and cleans up', async failure => {
+    const controller = new AbortController();
+    const reason = new DOMException('Cancelled during backoff', 'AbortError');
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    if (failure === 'network failure') {
+      mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    } else {
+      mockFetch.mockResolvedValue(new Response('', { status: 503 }));
+    }
+
+    const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+    const rejection = expect(promise).rejects.toBe(reason);
+    // Let fetch settle and enter backoff without advancing the clock.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort(reason);
+    const pendingTimersAfterAbort = vi.getTimerCount();
+    mockFetch.mockRejectedValue(reason);
+    await flush();
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(pendingTimersAfterAbort).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('stops when the retry predicate aborts the request before backoff', async () => {
+    const controller = new AbortController();
+    const reason = new Error('Cancelled in retry predicate');
+    mockFetch.mockResolvedValue(new Response('', { status: 503 }));
+
+    const promise = fetchWithRetry('https://example.com', { signal: controller.signal }, 3, {
+      shouldRetryResponse: () => {
+        controller.abort(reason);
+        return true;
+      },
+    });
+    const rejection = expect(promise).rejects.toBe(reason);
+    await flush();
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps normal backoff timing with a signal and removes its listener after waiting', async () => {
+    const controller = new AbortController();
+    const addListener = vi.spyOn(controller.signal, 'addEventListener');
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const ok = new Response('ok');
+    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(ok);
+
+    const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toBe(ok);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    const listener = addListener.mock.calls.find(([type]) => type === 'abort')?.[1];
+    expect(listener).toBeDefined();
+    expect(removeListener).toHaveBeenCalledWith('abort', listener);
+    controller.abort();
+    await expect(promise).resolves.toBe(ok);
+  });
 });
