@@ -247,7 +247,8 @@ export function createObservationalMemoryConcurrencyTests({
           const key = newKey();
           const chunk = chunkAt('carried', 100);
           const snapshot = await seed(key, [chunk]);
-          const appended = `${snapshot.activeObservations}\n- committed-${randomUUID()}`;
+          const tail = `- committed-${randomUUID()}`;
+          const appended = `${snapshot.activeObservations}\n${tail}`;
           const [, commit] = await Promise.all([
             stores.a.createReflectionGeneration({ currentRecord: snapshot, reflection: '- reflected', tokenCount: 5 }),
             stores.b.updateActiveObservations({
@@ -262,10 +263,11 @@ export function createObservationalMemoryConcurrencyTests({
           expect(current.generationCount).toBe(1);
           if (commit && commit.applied) {
             // Committed before the rollover: the rollover keeps the appended tail.
-            expect(current.activeObservations).toContain(appended.slice(snapshot.activeObservations.length).trim());
+            expect(current.activeObservations).toContain(tail);
             expect(new Date(current.lastObservedAt!).getTime()).toBe(at(50).getTime());
           } else {
             expect(commit).toEqual({ applied: false, reason: 'retired' });
+            expect(current.activeObservations).not.toContain(tail);
           }
         }
       },
