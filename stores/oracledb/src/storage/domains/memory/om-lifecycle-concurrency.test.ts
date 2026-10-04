@@ -167,7 +167,7 @@ describeIntegration('OracleDB observational memory supersededBy upgrade, backfil
   });
 
   it('a backfill racing a rollover always leaves exactly one live record', async () => {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 25; i++) {
       const key = { threadId: `race-${randomUUID()}`, resourceId: 'race-resource' };
       // Two live rows, as left by a pre-M3 process: generation 0 was never marked superseded.
       await memory.insertObservationalMemoryRecord(row(key, `${key.threadId}-0`, 0, at(0)));
