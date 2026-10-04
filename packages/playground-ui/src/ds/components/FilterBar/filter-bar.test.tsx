@@ -399,10 +399,7 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(true);
         expect(preexisting.hasAttribute('data-shine')).toBe(false);
 
-        // jsdom has no AnimationEvent: build one with the name the browser would report.
-        const end = new Event('animationend', { bubbles: true });
-        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
-        fireEvent(committed, end);
+        fireEvent.animationEnd(committed, { animationName: 'filter-bar-chip-shine' });
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 

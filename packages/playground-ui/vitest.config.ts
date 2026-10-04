@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     name: 'unit:packages/playground-ui',
     environment: 'node',
-    setupFiles: ['./src/test/vitest-setup.ts'],
+    setupFiles: ['./src/test/jsdom-animation-event.ts', './src/test/vitest-setup.ts'],
     // Must stay above the 3s Testing Library async timeout set in vitest-setup.ts.
     testTimeout: 15000,
     env: { TZ: 'UTC' },
