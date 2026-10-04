@@ -33,20 +33,22 @@ export function EmptyStateIllustration({ name }: { name: EmptyStateIllustrationN
   const Art = artByName[name];
 
   return (
-    <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" data-illustration={name} className="block size-30">
-      <mask id={`${id}-frame`} maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
-        <circle cx="60" cy="60" r="60" fill="white" />
-      </mask>
-      <g mask={`url(#${id}-frame)`}>
-        <Art id={id} />
-      </g>
-      <circle cx="60" cy="60" r="60" fill={`url(#${id}-glow)`} fillOpacity="0.09" />
-      <defs>
-        <linearGradient id={`${id}-glow`} x1="60" y1="0" x2="60" y2="120" gradientUnits="userSpaceOnUse">
-          <stop stopColor="currentColor" />
-          <stop offset="1" stopColor="currentColor" stopOpacity="0.4" />
-        </linearGradient>
-      </defs>
-    </svg>
+    <div className="group/illustration mb-5 text-foreground group-data-[tone=error]/empty-state:text-destructive-indicator">
+      <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" data-illustration={name} className="block size-30">
+        <mask id={`${id}-frame`} maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
+          <circle cx="60" cy="60" r="60" fill="white" />
+        </mask>
+        <g mask={`url(#${id}-frame)`}>
+          <Art id={id} />
+        </g>
+        <circle cx="60" cy="60" r="60" fill={`url(#${id}-glow)`} fillOpacity="0.09" />
+        <defs>
+          <linearGradient id={`${id}-glow`} x1="60" y1="0" x2="60" y2="120" gradientUnits="userSpaceOnUse">
+            <stop stopColor="currentColor" />
+            <stop offset="1" stopColor="currentColor" stopOpacity="0.4" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
   );
 }

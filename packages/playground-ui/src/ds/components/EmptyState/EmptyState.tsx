@@ -1,7 +1,5 @@
 import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
-import { EmptyStateIllustration } from './empty-state-illustration';
-import type { EmptyStateIllustrationName } from './empty-state-illustration';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
@@ -17,23 +15,9 @@ const iconColorByTone: Record<EmptyStateTone, string> = {
   error: 'text-destructive-foreground',
 };
 
-const illustrationColorByTone: Record<EmptyStateTone, string> = {
-  default: 'text-foreground',
-  error: 'text-destructive-indicator',
-};
-
-type EmptyStateMedia =
-  | {
-      /** Defaults to the tone's icon, always rendered at 20px. Pass `null` to render no icon. */
-      iconSlot?: React.ReactNode;
-      illustration?: never;
-    }
-  | {
-      iconSlot?: never;
-      illustration: EmptyStateIllustrationName;
-    };
-
-export type EmptyStateProps = EmptyStateMedia & {
+export type EmptyStateProps = {
+  /** Defaults to the tone's icon. A bare icon renders at 20px; pass `<EmptyStateIllustration />` for artwork. Pass `null` to render no icon. */
+  iconSlot?: React.ReactNode;
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
@@ -51,7 +35,6 @@ export type EmptyStateProps = EmptyStateMedia & {
 export function EmptyState({
   tone = 'default',
   iconSlot = defaultIconByTone[tone],
-  illustration,
   titleSlot,
   descriptionSlot,
   actionSlot,
@@ -59,30 +42,23 @@ export function EmptyState({
   as: HeadingTag = 'h3',
   variant = 'inline',
 }: EmptyStateProps) {
-  const illustrated = illustration !== undefined;
-
   const content = (
     <div
+      data-tone={tone}
       className={cn(
-        'flex flex-col items-center justify-center px-4 py-6 text-center',
+        'group/empty-state flex flex-col items-center justify-center px-4 py-6 text-center',
         'transition-opacity duration-normal ease-out-custom',
         className,
       )}
     >
-      {illustrated ? (
-        <div className={cn('group/illustration mb-8', illustrationColorByTone[tone])}>
-          <EmptyStateIllustration name={illustration} />
-        </div>
-      ) : (
-        iconSlot && <div className={cn('mb-3 [&_svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>
-      )}
+      {iconSlot && <div className={cn('mb-3 [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && (
-        <Txt variant="caption" tone="muted" className={cn('max-w-md wrap-anywhere', illustrated ? 'mt-0.5' : 'mt-1.5')}>
+        <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
           {descriptionSlot}
         </Txt>
       )}
-      {actionSlot && <div className={illustrated ? 'mt-5' : 'mt-4'}>{actionSlot}</div>}
+      {actionSlot && <div className="mt-4">{actionSlot}</div>}
     </div>
   );
 

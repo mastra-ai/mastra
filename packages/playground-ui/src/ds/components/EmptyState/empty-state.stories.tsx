@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Inbox } from 'lucide-react';
 import { Button } from '../Button';
+import { EmptyStateIllustration } from './empty-state-illustration';
 import { EmptyState } from './EmptyState';
 
 const meta: Meta<typeof EmptyState> = {
@@ -90,7 +91,7 @@ export const ErrorTone: Story = {
 
 export const Illustrated: Story = {
   args: {
-    illustration: 'traces',
+    iconSlot: <EmptyStateIllustration name="traces" />,
     titleSlot: 'No traces yet',
     descriptionSlot: 'Traces appear here when your agents run.',
     actionSlot: <Button>Open setup</Button>,
@@ -100,7 +101,7 @@ export const Illustrated: Story = {
 export const IllustratedError: Story = {
   args: {
     tone: 'error',
-    illustration: 'logs',
+    iconSlot: <EmptyStateIllustration name="logs" />,
     titleSlot: 'Couldn’t load logs',
     descriptionSlot: 'The request timed out. Try again in a moment.',
     actionSlot: <Button>Retry</Button>,
@@ -125,7 +126,7 @@ export const AllIllustrations: Story = {
       {illustrations.map(([illustration, title]) => (
         <EmptyState
           key={illustration}
-          illustration={illustration}
+          iconSlot={<EmptyStateIllustration name={illustration} />}
           titleSlot={title}
           descriptionSlot="Deploy a project to see its history here."
           actionSlot={<Button>View projects</Button>}
@@ -141,21 +142,21 @@ export const ErrorIllustrations: Story = {
     <div className="grid grid-cols-3 gap-8">
       <EmptyState
         tone="error"
-        illustration="disconnected"
+        iconSlot={<EmptyStateIllustration name="disconnected" />}
         titleSlot="Couldn’t load logs"
         descriptionSlot="Check your connection and try again."
         actionSlot={<Button>Retry</Button>}
       />
       <EmptyState
         tone="error"
-        illustration="locked"
+        iconSlot={<EmptyStateIllustration name="locked" />}
         titleSlot="Couldn’t load API keys"
         descriptionSlot="You don’t have access to this. Ask an organization admin."
         actionSlot={<Button>Retry</Button>}
       />
       <EmptyState
         tone="error"
-        illustration="rate-limited"
+        iconSlot={<EmptyStateIllustration name="rate-limited" />}
         titleSlot="Couldn’t load requests"
         descriptionSlot="Too many requests. Wait a moment and try again."
         actionSlot={<Button>Retry</Button>}
