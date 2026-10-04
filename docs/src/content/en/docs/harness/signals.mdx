@@ -61,6 +61,8 @@ When the thread has a running agent stream, `sendMessage()` becomes new input in
 
 In the default agent loop, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
 
+At the start of each step, Mastra batches pending input before per-step input processors (`processInputStep`) run. Messages and signals already queued when the first step starts join its first model request instead of receiving a separate response.
+
 Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
 
 Interrupted requests count toward `maxSteps`. The next request requires remaining steps and a run that hasn't been cancelled. If the step budget is exhausted, signals may be saved to history without an answer. Mastra doesn't extend the budget or start another run to answer them.
