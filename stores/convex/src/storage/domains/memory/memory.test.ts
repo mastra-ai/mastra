@@ -1,5 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/memory';
-import { TABLE_MESSAGES, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+  TABLE_THREADS,
+  getObservationalMemoryGeneration0Id,
+} from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ConvexAdminClient } from '../../client';
@@ -470,8 +475,8 @@ describe('MemoryConvex observational memory', () => {
     expect(records[0]?.createdAt).toBeInstanceOf(Date);
   });
 
-  it('initializeObservationalMemory inserts a serialized record and returns generation zero', async () => {
-    const { calls, memory } = createMemoryDomain(() => undefined);
+  it('initializeObservationalMemory sends a deterministic generation-0 record to omInitialize', async () => {
+    const { calls, memory } = createMemoryDomain(request => (request as { record: unknown }).record);
 
     const record = await memory.initializeObservationalMemory({
       threadId: null,
@@ -482,8 +487,9 @@ describe('MemoryConvex observational memory', () => {
     });
 
     expect(calls).toHaveLength(1);
+    expect(record.id).toBe(getObservationalMemoryGeneration0Id('resource:resource-1'));
     expect(calls[0]).toMatchObject({
-      op: 'insert',
+      op: 'omInitialize',
       tableName: OM_TABLE,
       record: {
         id: record.id,
@@ -512,6 +518,19 @@ describe('MemoryConvex observational memory', () => {
     expect(record.createdAt).toBeInstanceOf(Date);
   });
 
+  it('initializeObservationalMemory returns the existing record when the key is already initialized', async () => {
+    const { memory } = createMemoryDomain(() => storedOMDoc({ id: 'existing', generationCount: 2 }));
+
+    const record = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    expect(record).toMatchObject({ id: 'existing', generationCount: 2, activeObservations: 'some observations' });
+  });
+
   it('setObservingFlag patches the record and throws when it does not exist', async () => {
     const { calls, memory } = createMemoryDomain(request => request.op === 'patch');
 
@@ -535,11 +554,15 @@ describe('MemoryConvex observational memory', () => {
     await memory.setBufferingObservationFlag('om-1', true, 1234);
     await memory.setBufferingObservationFlag('om-1', false);
 
+    // A server mutation, so a retired id is redirected to the head inside the transaction.
     expect(calls[0]).toMatchObject({
-      op: 'patch',
-      record: { isBufferingObservation: true, lastBufferedAtTokens: 1234 },
+      op: 'omSetBufferingObservationFlag',
+      id: 'om-1',
+      isBuffering: true,
+      lastBufferedAtTokens: 1234,
     });
-    expect((calls[1] as { record: Record<string, unknown> }).record).not.toHaveProperty('lastBufferedAtTokens');
+    expect(calls[1]).toMatchObject({ op: 'omSetBufferingObservationFlag', isBuffering: false });
+    expect(calls[1]).not.toHaveProperty('lastBufferedAtTokens');
   });
 
   it('setPendingMessageTokens rejects invalid token counts before calling storage', async () => {
@@ -549,7 +572,7 @@ describe('MemoryConvex observational memory', () => {
     expect(calls).toHaveLength(0);
 
     await memory.setPendingMessageTokens('om-1', 42);
-    expect(calls[0]).toMatchObject({ op: 'patch', record: { pendingMessageTokens: 42 } });
+    expect(calls[0]).toMatchObject({ op: 'omSetPendingMessageTokens', id: 'om-1', tokenCount: 42 });
   });
 
   it('updateActiveObservations emits an atomic omUpdateActive request', async () => {
@@ -658,8 +681,16 @@ describe('MemoryConvex observational memory', () => {
     expect(result).toEqual(serverResult);
   });
 
-  it('createReflectionGeneration inserts the next generation built from the current record', async () => {
-    const { calls, memory } = createMemoryDomain(() => undefined);
+  it('createReflectionGeneration sends the snapshot to omCreateReflectionGeneration and parses the new generation', async () => {
+    const { calls, memory } = createMemoryDomain(request =>
+      storedOMDoc({
+        id: (request as { newId: string }).newId,
+        originType: 'reflection',
+        generationCount: 4,
+        activeObservations: 'the reflection',
+        observationTokenCount: 42,
+      }),
+    );
 
     const currentRecord = {
       id: 'om-1',
@@ -690,23 +721,26 @@ describe('MemoryConvex observational memory', () => {
       currentRecord,
       reflection: 'the reflection',
       tokenCount: 42,
+      newRecordId: 'om-next',
     });
 
+    // The server builds the generation from the stored record; the client sends only the snapshot.
     expect(calls[0]).toMatchObject({
-      op: 'insert',
+      op: 'omCreateReflectionGeneration',
       tableName: OM_TABLE,
-      record: {
-        id: record.id,
+      newId: 'om-next',
+      reflection: 'the reflection',
+      tokenCount: 42,
+      now: expect.any(String),
+      currentRecord: {
+        id: 'om-1',
         lookupKey: 'resource:resource-1',
-        originType: 'reflection',
-        generationCount: 4,
-        activeObservations: 'the reflection',
-        observationTokenCount: 42,
-        totalTokensObserved: 900,
-        lastReflectionAt: expect.any(String),
-        metadata: JSON.stringify({ custom: true }),
+        generationCount: 3,
+        activeObservations: 'old observations',
+        observationTokenCount: 100,
       },
     });
+    expect(record.id).toBe('om-next');
     expect(record).toMatchObject({
       originType: 'reflection',
       generationCount: 4,
@@ -716,6 +750,16 @@ describe('MemoryConvex observational memory', () => {
       metadata: { custom: true },
     });
     expect(record.id).not.toBe(currentRecord.id);
+  });
+
+  it('createReflectionGeneration returns the snapshot when the server created nothing', async () => {
+    const { memory: reader } = createMemoryDomain(() => storedOMDoc());
+    const currentRecord = (await reader.getObservationalMemory(null, 'resource-1'))!;
+    const { memory } = createMemoryDomain(() => null);
+
+    const record = await memory.createReflectionGeneration({ currentRecord, reflection: 'r', tokenCount: 1 });
+
+    expect(record).toBe(currentRecord);
   });
 
   it('swapBufferedReflectionToActive sends the serialized current record and parses the new generation', async () => {
