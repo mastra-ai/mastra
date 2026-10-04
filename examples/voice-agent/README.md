@@ -28,6 +28,8 @@ At the end of the call a single deterministic **reconciliation** pass (`finalize
 
 The "CRM" is in-memory and seeded with three customers. Try: **Shane Thomas, 555-0142** (has a visit booked already), Sam Bhagwat (555-0177), Abhi Aiyer (555-0163). In-area zips include `94103` and `94110`; `90210` is out of area.
 
+Customer lookup results are reused throughout a call. The agent should only retry when the caller supplies new or corrected identifying information, not after an address or ZIP-code update. An unmatched caller is captured as a lead, inspection request, or callback for office follow-up: this demo has no customer-creation tool, so only a matched customer can receive a confirmed booking. The agent finishes necessary tool calls before asking its next question, then waits for the caller.
+
 ## Agent vs. workflow entrypoint
 
 Both workers wire the same audio pipeline and the same brand; they differ only in how a turn becomes a reply.
@@ -128,7 +130,7 @@ Open Studio, point it at `http://localhost:4111`, and open the **Meridian Trades
 Things to try (the four scenarios run on the **agent worker**):
 
 - **Lead:** "Hi, I'm after a quote to repaint my hallway and stairs." — Jordan qualifies the trade and scope, then captures the lead and reads back a reference number.
-- **Roof inspection, in area:** "I'd like someone to look at my roof. The address is 12 Market Street, zip nine four one zero three." — Jordan runs the service-area check, it passes, and books the inspection.
+- **Roof inspection, in area:** "I'd like someone to look at my roof. The address is 12 Market Street, zip nine four one zero three." — Jordan checks the service area and captures an inspection request for office follow-up; a confirmed booking requires an existing customer record.
 - **Roof inspection, out of area:** give zip **90210** instead — Jordan apologizes that it's outside the service area and offers a callback.
 - **Callback:** "Can someone just call me back about a fence?" — Jordan takes a name, number, and reason.
 - **Returning caller / scheduling:** "Hi, it's Shane Thomas, five five five, zero one four two." — account lookup plus scheduling, with filler speech while tools run.
