@@ -729,3 +729,29 @@ describe('observation markers land on an observed message', () => {
     },
   );
 });
+
+describe('observed messages that later receive OM markers', () => {
+  it('are not sent to the Observer again when only OM markers follow the observation boundary', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage);
+    const ids = await setupThread(storage);
+    const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
+    const at = new Date(ids.t0.getTime() + 1_000);
+    const observedThenBuffered = message(ids.threadId, ids.resourceId, 'observed', 'seen', at, 'assistant');
+    const withNewContent = message(ids.threadId, ids.resourceId, 'continued', 'seen', at, 'assistant');
+    for (const msg of [observedThenBuffered, withNewContent]) {
+      msg.content.parts.push(
+        { type: 'data-om-observation-start', data: { cycleId: 'c1', operationType: 'observation' } } as any,
+        { type: 'data-om-observation-end', data: { cycleId: 'c1', operationType: 'observation' } } as any,
+        { type: 'data-om-buffering-start', data: { cycleId: 'b1', operationType: 'observation' } } as any,
+        { type: 'data-om-buffering-end', data: { cycleId: 'b1', operationType: 'observation' } } as any,
+      );
+    }
+    withNewContent.content.parts.push({ type: 'text', text: 'NEW_CONTENT' });
+
+    const unobserved = om.getUnobservedMessages([observedThenBuffered, withNewContent], record);
+
+    expect(unobserved.map(m => m.id)).toEqual(['continued']);
+    expect(JSON.stringify(unobserved[0]!.content.parts)).toContain('NEW_CONTENT');
+  });
+});
