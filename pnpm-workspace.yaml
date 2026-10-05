@@ -526,6 +526,14 @@ overrides:
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
   'basic-ftp@<6.2.1': 6.2.1
+  # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
+  # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
+  # fast-xml-parser 5.10.1, style-to-object 1.0.11).
+  'modern-tar@<0.7.7': 0.7.7
+  '@opentelemetry/configuration>yaml': 2.9.1
+  'smol-toml@<1.9.0': 1.9.0
+  'strnum@<2.4.2': 2.4.2
+  'inline-style-parser@<0.2.9': 0.2.9
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false
