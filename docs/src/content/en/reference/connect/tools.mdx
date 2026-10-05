@@ -15,7 +15,7 @@ import { tools } from '@mastra/connect'
 
 export const opsAgent = new Agent({
   name: 'ops',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: tools(),
 })
 ```
@@ -170,7 +170,7 @@ The resolver also exposes three methods for manual control:
 - `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
 - `disconnect()` closes MCP transports owned by this resolver and clears its cached snapshot.
 
-Errors fall into three groups:
+Errors fall into four groups:
 
 - Configuration errors (missing project ID or token, a malformed provider ID, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw when you call `tools()`.
 - An `integrations` key that matches no provider logs a warning and is ignored. An unknown tool key in `allowTools` or `disallowTools` logs a warning and skips that provider when its tools load.

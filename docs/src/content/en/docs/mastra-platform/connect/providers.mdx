@@ -17,7 +17,7 @@ A provider is a service you can connect to your project, identified by a provide
 | `discord` | <ProviderLogo slug="discord" /> Discord | Tools, channel |
 | `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai | Tools |
 | `github` | <ProviderLogo slug="github" mono /> GitHub | Tools |
-| `google-analytics` | <ProviderLogo slug="google-analytics" /> Google Analytics | Tools (coming soon) |
+| `google-analytics` | <ProviderLogo slug="google-analytics" /> Google Analytics | Tools |
 | `google-calendar` | <ProviderLogo slug="google-calendar" /> Google Calendar | Tools |
 | `google-docs` | <ProviderLogo slug="google-docs" /> Google Docs | Tools |
 | `google-drive` | <ProviderLogo slug="google-drive" /> Google Drive | Tools |
@@ -70,12 +70,12 @@ A **Sending access** key fails to connect. Mastra checks a new key by listing yo
 ```typescript
 tools({
   integrations: {
-    resend: { allowTools: ['resend_send_email', 'resend_get_email', 'resend_list_emails'] },
+    resend: { allowTools: ['resend_send_email'] },
   },
 })
 ```
 
-`resend_send_email` retries a failed send up to three times only when the call includes an `idempotency_key`. Without one it doesn't retry, so a network error can't send the same email twice. Tell the agent to set a key, such as the order ID, when duplicates matter.
+`resend_send_email` retries a failed send up to three times only when the call includes an `idempotency_key`. Without one it doesn't retry automatically, but a retry elsewhere in your app can still duplicate an email that failed after Resend accepted it. When duplicates matter, tell the agent to set a stable key per logical email, such as `confirmation/order-1234`. Resend answers a reused key with the original response, and rejects a reused key with a different payload with a `409`.
 
 If a send fails with a `proxy_error` and status `403`, check that the `from` address uses a domain verified in Resend.
 

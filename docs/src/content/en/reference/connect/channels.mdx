@@ -10,7 +10,7 @@ packages:
 Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
+import { Mastra } from '@mastra/core'
 import { channels } from '@mastra/connect'
 
 export const mastra = new Mastra({
@@ -102,15 +102,15 @@ Each value in `integrations` is a `ChannelsIntegrationOptions`:
 
 The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
 
-- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap.
+- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
 - `getRoutes()`: the union of API routes for every non-disabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
 - `invalidate()`: drops the cached snapshot; the next resolution fetches fresh.
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
-- `disconnect()`: clears the cached snapshot.
+- `disconnect()`: clears the cached snapshot, with the same effect as `invalidate()`. It doesn't tear down providers, sessions, or credentials.
 
 Providers without an active connection don't appear in the resolved map. Their routes stay mounted and begin working once a connection is attached.
 
-Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed provider ID) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, ambiguity, credential sync failure) are downgraded to warn-and-skip.
+Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed provider ID) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `integrations.<id>.connectionId` pins the choice. A failed background refresh also warns and keeps serving the cached snapshot; only an explicit `refresh()` rejects.
 
 ## Errors
 

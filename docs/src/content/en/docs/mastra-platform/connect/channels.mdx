@@ -30,7 +30,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`channels()` returns a promise. It creates a provider for each channel before `Mastra` starts. Their webhook routes exist from the first request. A provider starts working when the project gets an active connection for it, without a redeploy.
+`channels()` returns a promise. It creates a provider for each channel before `Mastra` starts. Their webhook routes exist from the first request. A provider starts working when the project gets an active connection for it, without a redeploy. A missing project ID or platform token makes the awaited call throw, which stops app startup. See the [errors table](/reference/connect/channels#errors) in the reference.
 
 The providers come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, which `@mastra/connect` installs for you.
 
@@ -45,9 +45,12 @@ channels({
       providerOptions: { applicationId: process.env.DISCORD_APPLICATION_ID },
     },
     telegram: { disabled: true },
+    'slack-channels': { connectionId: 'sla_01ABC...' },
   },
 })
 ```
+
+The Slack key is `'slack-channels'`, matching the connection's provider ID. `slack` is the tools provider and isn't a valid key here.
 
 See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `disabled` to leave one out.
 
@@ -65,7 +68,7 @@ const connected = tools()
 export const assistant = new Agent({
   name: 'assistant',
   instructions: 'You help the team from Slack and Discord.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: async ({ requestContext }) => {
     const channel = requestContext?.get('channel') as ChannelContext | undefined
     const all = await connected()

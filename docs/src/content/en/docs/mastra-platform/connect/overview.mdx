@@ -46,7 +46,7 @@ Your app authenticates to the platform with an access token. Create one for the 
 mastra auth tokens create my-app
 ```
 
-The CLI suggests saving it as `MASTRA_API_TOKEN`. `@mastra/connect` reads it from `MASTRA_PLATFORM_ACCESS_TOKEN` instead. Add the token and your project ID to the app's environment:
+Save it as `MASTRA_PLATFORM_ACCESS_TOKEN`, the name `@mastra/connect` reads. The CLI suggests `MASTRA_API_TOKEN`, which `@mastra/connect` ignores. Add the token and your project ID to the app's environment:
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=your-token
@@ -66,7 +66,7 @@ import { tools } from '@mastra/connect'
 export const opsAgent = new Agent({
   name: 'ops',
   instructions: 'You help the team track work in Linear.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: tools(),
 })
 ```
