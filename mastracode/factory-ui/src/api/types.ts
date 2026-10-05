@@ -162,7 +162,9 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;
