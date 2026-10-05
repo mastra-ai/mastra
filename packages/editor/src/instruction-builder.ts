@@ -37,11 +37,12 @@ export async function resolveInstructionBlocks(
 ): Promise<string> {
   const segments: string[] = [];
 
-  // Batch-fetch all prompt block ref IDs to avoid N+1 queries
+  // Batch-fetch the referenced blocks to avoid N+1 queries. Skip references gated off by their own rules.
   const blockIds = Array.from(
     new Set(
       blocks
         .filter((b): b is Extract<AgentInstructionBlock, { type: 'prompt_block_ref' }> => b.type === 'prompt_block_ref')
+        .filter(b => !b.rules || evaluateRuleGroup(b.rules, context))
         .map(b => b.id),
     ),
   );

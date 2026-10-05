@@ -150,17 +150,30 @@ describe('resolveInstructionBlocks', () => {
 
   describe('per-usage rules on prompt_block_ref', () => {
     // Runtime slot with a shared stored default as fallback. The stored block has no rules of its own.
+    // An empty userPrompt counts as missing.
     const slotWithFallback: AgentInstructionBlock[] = [
       { type: 'text', content: 'Follow the platform safety policy.' },
       {
         type: 'prompt_block',
         content: '{{userPrompt}}',
-        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'exists' }] },
+        rules: {
+          operator: 'AND',
+          conditions: [
+            { field: 'userPrompt', operator: 'exists' },
+            { field: 'userPrompt', operator: 'not_equals', value: '' },
+          ],
+        },
       },
       {
         type: 'prompt_block_ref',
         id: 'shared-default-user-prompt',
-        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+        rules: {
+          operator: 'OR',
+          conditions: [
+            { field: 'userPrompt', operator: 'not_exists' },
+            { field: 'userPrompt', operator: 'equals', value: '' },
+          ],
+        },
       },
     ];
 
@@ -187,6 +200,35 @@ describe('resolveInstructionBlocks', () => {
     it('uses the fallback ref when userPrompt is absent', async () => {
       const result = await resolveInstructionBlocks(slotWithFallback, {}, { promptBlocksStorage: storage });
       expect(result).toBe('Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.');
+    });
+
+    it('uses the fallback ref when userPrompt is an empty string', async () => {
+      const result = await resolveInstructionBlocks(
+        slotWithFallback,
+        { userPrompt: '' },
+        { promptBlocksStorage: storage },
+      );
+      expect(result).toBe('Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.');
+    });
+
+    it('does not fetch a reference whose own rules fail', async () => {
+      const getByIdResolved = storage.getByIdResolved.bind(storage);
+      storage.getByIdResolved = async (id, options) => {
+        if (id === 'unreachable') throw new Error('storage unavailable');
+        return getByIdResolved(id, options);
+      };
+      const blocks: AgentInstructionBlock[] = [
+        { type: 'text', content: 'Base.' },
+        {
+          type: 'prompt_block_ref',
+          id: 'unreachable',
+          rules: { operator: 'AND', conditions: [{ field: 'beta', operator: 'equals', value: true }] },
+        },
+        { type: 'prompt_block_ref', id: 'shared-default-user-prompt' },
+      ];
+
+      const result = await resolveInstructionBlocks(blocks, { beta: false }, { promptBlocksStorage: storage });
+      expect(result).toBe('Base.\n\nAnswer in a friendly, balanced style.');
     });
 
     it('requires both the ref rules and the stored block rules to pass', async () => {

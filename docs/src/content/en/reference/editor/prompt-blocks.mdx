@@ -110,18 +110,36 @@ await editor.agent.update({
     {
       type: 'prompt_block',
       content: '{{userPrompt}}',
-      rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'exists' }] },
+      rules: {
+        operator: 'AND',
+        conditions: [
+          { field: 'userPrompt', operator: 'exists' },
+          { field: 'userPrompt', operator: 'not_equals', value: '' },
+        ],
+      },
     },
     {
       type: 'prompt_block_ref',
       id: 'default-user-prompt',
-      rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+      rules: {
+        operator: 'OR',
+        conditions: [
+          { field: 'userPrompt', operator: 'not_exists' },
+          { field: 'userPrompt', operator: 'equals', value: '' },
+        ],
+      },
     },
   ],
 })
 ```
 
-When the request context contains `userPrompt`, the agent receives that value. Otherwise, it receives the published `default-user-prompt` block. The stored block doesn't need to know about `userPrompt`.
+When the request context contains a non-empty `userPrompt`, the agent receives that value. Otherwise, it receives the published `default-user-prompt` block. The stored block doesn't need to know about `userPrompt`.
+
+:::note
+
+The `exists` operator treats an empty string as present. The extra `''` conditions make an empty `userPrompt` use the fallback too.
+
+:::
 
 ## Programmatic API
 
