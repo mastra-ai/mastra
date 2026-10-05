@@ -438,15 +438,15 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   const [scopeStyle, contentStyle] = await Promise.all([
     scopeInner.evaluate(element => {
       const style = getComputedStyle(element);
-      return { borderColor: style.borderColor, backgroundImage: style.backgroundImage };
+      return { borderColor: style.borderColor, backgroundColor: style.backgroundColor };
     }),
     contentInner.evaluate(element => {
       const style = getComputedStyle(element);
-      return { borderColor: style.borderColor, backgroundImage: style.backgroundImage };
+      return { borderColor: style.borderColor, backgroundColor: style.backgroundColor };
     }),
   ]);
   expect(scopeStyle.borderColor).not.toBe(contentStyle.borderColor);
-  expect(scopeStyle.backgroundImage).not.toBe(contentStyle.backgroundImage);
+  expect(scopeStyle.backgroundColor).not.toBe(contentStyle.backgroundColor);
 
   // Clicking that same scope on the canvas applies the same selection model.
   await page.getByRole('button', { name: 'Close scope details' }).click();
