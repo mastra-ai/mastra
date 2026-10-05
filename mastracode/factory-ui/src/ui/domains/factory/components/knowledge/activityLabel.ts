@@ -1,24 +1,23 @@
 import type { KnowledgeActivityEvent } from '../../services/knowledge';
 
+const ACTION_VERBS: Record<string, string> = {
+  create: 'new',
+  edit: 'updated',
+  delete: 'deleted',
+  restore: 'restored',
+  move: 'moved',
+  merge: 'merged',
+  promote: 'promoted',
+  demote: 'demoted',
+  stamp: 'stamped',
+  rebind: 'rebound',
+  skip: 'skipped',
+};
+
 export function knowledgeActivityLabel(event: KnowledgeActivityEvent): string {
-  switch (event.action) {
-    case 'record-created':
-      return 'new record';
-    case 'record-deleted':
-      return 'deleted record';
-    case 'record-restored':
-      return 'restored record';
-    case 'record-rescoped':
-      return 'moved record';
-    case 'node-created':
-      return 'new node';
-    case 'node-updated':
-      return 'updated node';
-    case 'node-merged':
-      return 'merged node';
-    default:
-      return event.action.replaceAll('-', ' ');
-  }
+  const verb = ACTION_VERBS[event.action];
+  if (verb && (event.recordType === 'record' || event.recordType === 'node')) return `${verb} ${event.recordType}`;
+  return event.action.replaceAll('-', ' ');
 }
 
 export const KNOWLEDGE_ACTIVITY_TRUNCATED =
