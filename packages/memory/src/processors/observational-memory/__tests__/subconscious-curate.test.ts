@@ -3,6 +3,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -95,6 +96,42 @@ describe('Subconscious observation curator', () => {
       'resource:user-42 (Project Atlas): Store durable Project Atlas launch decisions at resource scope.',
     );
     expect(instructions).not.toContain('This description must not be visible to the current curator.');
+  });
+
+  it('gives the curator only Knowledge tools, never the main agent tool set', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const { context, extractor } = fixture(knowledge);
+    const mainAgent = new Agent({
+      id: 'main',
+      name: 'Main',
+      instructions: 'main',
+      model: 'openai/test',
+      tools: { shell_exec: createTool({ id: 'shell_exec', description: 'run', execute: async () => 'ok' }) },
+    });
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
+    });
+
+    await extractor.onExtracted!({ ...context, mainAgent });
+
+    await vi.waitFor(() => expect(curatorAgent).toBeDefined());
+    expect(Object.keys(await curatorAgent!.listTools()).sort()).toEqual([
+      'knowledge_append',
+      'knowledge_browse',
+      'knowledge_create',
+      'knowledge_merge_nodes',
+      'knowledge_read',
+      'knowledge_remove',
+      'knowledge_rename_node',
+      'knowledge_rescope',
+      'knowledge_search',
+      'knowledge_set_node_kind',
+      'knowledge_update_node',
+      'knowledge_write_node_content',
+      'knowledge_write_node_description',
+    ]);
   });
 
   it('surfaces structural scope descriptions reachable from the curator frontier', async () => {
