@@ -22,7 +22,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';

@@ -1,4 +1,4 @@
-import { useTraceSpans } from '@mastra/react/hooks';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';

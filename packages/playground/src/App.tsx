@@ -2,7 +2,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
-import { createFetchWithRefresh } from '@mastra/react/hooks';
+import { createFetchWithRefresh } from '@mastra/react/hooks/auth';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';

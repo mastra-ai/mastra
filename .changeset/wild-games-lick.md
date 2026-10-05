@@ -3,4 +3,4 @@
 '@mastra/react': patch
 ---
 
-Data hooks now come from `@mastra/react/hooks`. Existing public imports from `@mastra/playground-ui` keep working.
+Data hooks now come from the `@mastra/react/hooks/<domain>` entries. Existing public imports from `@mastra/playground-ui` keep working.

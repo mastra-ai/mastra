@@ -1,5 +1,5 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useExecuteTool, useTool } from '@mastra/react/hooks';
+import { useExecuteTool, useTool } from '@mastra/react/hooks/tools';
 import type { ExecuteTool } from '../../hooks/use-tool-run';
 import { ToolDrawerBody } from './tool-drawer-body';
 

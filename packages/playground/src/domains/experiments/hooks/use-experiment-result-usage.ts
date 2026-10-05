@@ -1,4 +1,4 @@
-import { useTraceSpans, useTraceUsage } from '@mastra/react/hooks';
+import { useTraceSpans, useTraceUsage } from '@mastra/react/hooks/traces';
 
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 

@@ -2,7 +2,7 @@ import type { McpToolInfo } from '@mastra/client-js';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
-import { useExecuteMCPTool } from '@mastra/react/hooks';
+import { useExecuteMCPTool } from '@mastra/react/hooks/mcps';
 import { useMcpAppHtml } from '../hooks/use-mcp-app-html';
 import { getAppResourceUri, isSuspendedResult } from '../utils/mcp-tool-result';
 import { ToolPlayground } from '@/domains/tools/components/tool-playground';

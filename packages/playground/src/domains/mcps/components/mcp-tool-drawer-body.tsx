@@ -1,5 +1,5 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useMCPServerTool } from '@mastra/react/hooks';
+import { useMCPServerTool } from '@mastra/react/hooks/mcps';
 import { McpToolPlayground } from './mcp-tool-playground';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ToolDrawerContent } from '@/domains/tools/components/tool-drawer/tool-drawer-content';

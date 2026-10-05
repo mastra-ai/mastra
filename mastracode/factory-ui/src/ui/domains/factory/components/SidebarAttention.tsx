@@ -151,7 +151,7 @@ export function SidebarAttention() {
             ) : items.length > 0 ? (
               <ScrollArea maxHeight="20rem">
                 <ScrollAreaViewport className="px-3.5 py-1.5">
-                  <ul className="divide-border/50 divide-y">
+                  <ul className="divide-border divide-y">
                     {items.map((item, index) => (
                       <li
                         key={item.key}

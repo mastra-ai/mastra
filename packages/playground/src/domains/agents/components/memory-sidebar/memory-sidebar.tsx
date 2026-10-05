@@ -8,7 +8,7 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks';
+import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -55,7 +55,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border bg-muted text-foreground' : 'border-border/40 text-muted-foreground/50',
+            enabled ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground/50',
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
@@ -272,7 +272,7 @@ export function MemorySidebarBody({
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
                 ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
-                : 'state-layer m-1 rounded-xl border border-border/40 bg-muted',
+                : 'state-layer m-1 rounded-xl border border-surface-rim bg-muted',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >

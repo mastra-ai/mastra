@@ -8,7 +8,7 @@ import {
   useAgentRunsKpiMetrics,
   useModelCostKpiMetrics,
   useTotalTokensKpiMetrics,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/metrics';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics(useMetricsFilters());
