@@ -20,6 +20,17 @@ export function isInline(candidate: FileCandidate): candidate is InlineFileCandi
   return type === 'dataUri' || type === 'raw';
 }
 
+/**
+ * Decoded size of base64 data, computed without decoding it, so a file over its
+ * limit is never loaded. `undefined` for a percent-encoded data URL, whose size
+ * is only checked once decoded.
+ */
+export function base64SizeOf(data: string): number | undefined {
+  const { isDataUri, base64Content } = parseDataUri(data);
+  if (isDataUri && !BASE64_DATA_URI.test(data)) return undefined;
+  return Buffer.byteLength(base64Content.replace(/\s+/g, ''), 'base64');
+}
+
 export function decodeInline(data: string, file: FileUploadFailureDetails): Result<Buffer> {
   const { isDataUri, base64Content } = parseDataUri(data);
   if (isDataUri && !data.includes(',')) return invalidData(file);

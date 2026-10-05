@@ -553,6 +553,58 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes).toHaveLength(1);
     });
 
+    it('checks the size before decoding: badly encoded data over the limit is too large, not invalid', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent } = createHarness(sandbox, { maxFileSize: () => 4 });
+
+      const result = await agent.generate(
+        [userMessage(file('data:text/plain;base64,notbase64!!!notbase64!!!', 'notes.txt', 'text/plain'))],
+        { memory: MEMORY },
+      );
+
+      expect(result.tripwire?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE,
+        fileName: 'notes.txt',
+        mimeType: 'text/plain',
+        size: 18,
+        maxFileSize: 4,
+      });
+      expect(writes).toEqual([]);
+    });
+
+    it('reports the decoded size of line-wrapped base64, not the size of the text', async () => {
+      const { sandbox } = createFakeSandbox();
+      const { agent } = createHarness(sandbox, { maxFileSize: () => 2999 });
+      const wrapped = Buffer.alloc(3000)
+        .toString('base64')
+        .replace(/.{76}/g, line => `${line}\n`);
+
+      const result = await agent.generate(
+        [userMessage(file(`data:application/octet-stream;base64,${wrapped}`, 'blob.bin', 'application/octet-stream'))],
+        {
+          memory: MEMORY,
+        },
+      );
+
+      expect(result.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE, size: 3000 });
+    });
+
+    it('still refuses a percent-encoded data URL over the limit', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent } = createHarness(sandbox, { maxFileSize: () => 5 });
+
+      const result = await agent.generate(
+        [userMessage(file('data:text/plain,hello%20world', 'hello.txt', 'text/plain'))],
+        {
+          memory: MEMORY,
+        },
+      );
+
+      expect(result.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE, size: 11 });
+      expect(writes).toEqual([]);
+    });
+
     it('defaults to 10 MB', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox);
