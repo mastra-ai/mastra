@@ -99,15 +99,18 @@ tools({
 
 Some providers serve their tools from a hosted Model Context Protocol (MCP) server instead of a generated toolset. `tools()` loads those tools from the provider at runtime, so tool keys take the form `<provider-id>_<tool-name>` and can change without a package upgrade. [Providers](/docs/mastra-platform/connect/providers#mcp-providers) lists them.
 
-Every MCP tool requires [tool approval](/docs/agents/human-in-the-loop) by default, because the provider controls the tool list. List the tools an agent may run without approval in `autoApproveTools`:
+Tools run without [tool approval](/docs/agents/human-in-the-loop) unless you ask for it. Set `requireApproval` on a provider to make the agent pause for a human before risky calls. Pass `true` to cover every tool from that provider, or list tool keys:
 
 ```typescript
 tools({
   integrations: {
-    'neon-mcp': { autoApproveTools: ['neon-mcp_list_projects'] },
+    'neon-mcp': { requireApproval: ['neon-mcp_run_sql'] },
+    'robinhood-mcp': { requireApproval: true },
   },
 })
 ```
+
+`requireApproval` works on any provider, not just MCP ones. A misspelled tool key in the list fails resolution with an error instead of being ignored, so a typo can't silently drop an approval gate.
 
 ## Pass tools at call time
 

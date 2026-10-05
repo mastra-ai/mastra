@@ -99,10 +99,10 @@ Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
     isOptional: true,
   },
   {
-    name: 'autoApproveTools',
-    type: 'string[]',
+    name: 'requireApproval',
+    type: 'boolean | string[]',
     description:
-      "MCP tool keys that may run without tool approval. Every other discovered MCP tool requires approval regardless of the server's annotations. An unknown name skips the provider with a warning.",
+      'Tool-approval policy for this provider, applied to discovered MCP tools and generated HTTP tools alike. Tools require no approval by default. Pass true to require approval for every tool from this provider, or an array of tool keys to require approval only for those. An unknown name in the array fails resolution with an invalid_options error, so a typo never silently widens access.',
     isOptional: true,
   },
   {
@@ -199,7 +199,7 @@ Beyond the generated toolsets, the resolver discovers any connected provider tha
 
 The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the provider's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the provider is detached, or `disconnect()` is called.
 
-Every discovered MCP tool requires tool approval by default. The provider controls the tool list and the tool annotations, so Mastra doesn't trust annotations to mark a tool as safe. Use `autoApproveTools` to list the tool keys an agent may run unattended, for example `neon: { autoApproveTools: ['neon_list_projects'] }`.
+Discovered MCP tools follow the same approval policy as generated tools: none require approval unless `requireApproval` asks for it, for example `'neon-mcp': { requireApproval: ['neon-mcp_run_sql'] }`. Passing the removed `autoApproveTools` key throws an `invalid_options` error at call time.
 
 ## Environment variables
 
