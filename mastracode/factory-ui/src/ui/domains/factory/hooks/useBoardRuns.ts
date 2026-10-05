@@ -9,6 +9,8 @@ import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
+const PREPARING_SESSION_LABEL = 'Preparing session…';
+
 /** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
   factoryProjectId,
@@ -17,7 +19,7 @@ export function useBoardRuns({
   factoryProjectId: string;
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
-  const { start, enabled, repositories } = useStartFactoryRun();
+  const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const intakeConfig = useIntakeConfigQuery();
   const navigate = useNavigate();
   const [repositorySelection, setRepositorySelection] = useState<{
@@ -72,7 +74,7 @@ export function useBoardRuns({
   };
 
   const openOrCreateSession = async (item: WorkItem) => {
-    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    if (!beginPreparingItem(item.id, PREPARING_SESSION_LABEL)) return;
     try {
       const refreshed = await refreshItem(item.id);
       if (!refreshed) return;
@@ -146,7 +148,8 @@ export function useBoardRuns({
     repositorySelection,
     selectRepository,
     closeRepositorySelection: () => setRepositorySelection(undefined),
-    preparingFor: (itemId: string): string | undefined => preparingItems[itemId],
+    preparingFor: (itemId: string): string | undefined =>
+      preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? PREPARING_SESSION_LABEL : undefined),
     openThread,
     refreshItem,
     openOrCreateSession,

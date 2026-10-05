@@ -1,8 +1,4 @@
-/**
- * Stage moves are multi-second server evaluations. While one is in flight the
- * card must announce where it is going ("Moving to Planning…") instead of
- * silently waiting, and drop the status once the server answers.
- */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -235,7 +231,15 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return { ...renderWithProviders(<RouterProvider router={router} />), router };
+  return {
+    ...renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+    ),
+    router,
+  };
 }
 
 function stubJiraCandidate() {
@@ -1304,6 +1308,54 @@ describe('Board card pending states', () => {
 
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
+
+  it('refuses a drop that would start a run while automation holds the card, but allows a resting lane', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'pending',
+              attempts: 0,
+              failureOccurrence: 0,
+              source: null,
+              failureCode: null,
+              canRetry: true,
+              lastError: null,
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    await within(card).findByText('Starting an automated run…');
+    const dropInto = (stage: string) => {
+      const column = screen.getByTestId(`board-column-${stage}`);
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(card, { dataTransfer });
+      fireEvent.dragOver(column, { dataTransfer });
+      fireEvent.drop(column, { dataTransfer });
+    };
+
+    dropInto('planning');
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(within(card).getByText('Starting an automated run…')).toBeVisible();
+    expect(transitionRequests).toEqual([]);
+
+    dropInto('review');
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
   });
 
   it('creates a manual work item in the selected active column', async () => {

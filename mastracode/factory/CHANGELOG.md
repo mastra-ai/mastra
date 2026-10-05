@@ -1,5 +1,27 @@
 # @mastra/factory
 
+## 0.19.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`a74c4f0`](https://github.com/mastra-ai/mastra/commit/a74c4f0391a5ff91552fbb9d76a6a4830c0a546a)]:
+  - @mastra/code-sdk@1.11.0-alpha.5
+
+## 0.19.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b2433eb`](https://github.com/mastra-ai/mastra/commit/b2433eb8d90597295de0327c3756d7a2b83a65ff)]:
+  - @mastra/code-sdk@1.11.0-alpha.4
+
+## 0.19.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726), [`20c9a8c`](https://github.com/mastra-ai/mastra/commit/20c9a8cb991473e8644598ab8b1e5ee61cc6865b)]:
+  - @mastra/core@1.75.0-alpha.3
+  - @mastra/code-sdk@1.11.0-alpha.3
+
 ## 0.19.2-alpha.2
 
 ### Patch Changes

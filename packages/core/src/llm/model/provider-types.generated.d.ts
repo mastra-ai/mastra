@@ -264,7 +264,7 @@ export type ProviderModelsMap = {
     'whisper-large-v3',
     'whisper-large-v3-turbo',
   ];
-  readonly blueclaw: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.6-27B'];
+  readonly blueclaw: readonly ['Qwen3.8-27B'];
   readonly zai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -720,7 +720,6 @@ export type ProviderModelsMap = {
     'inference-net/schematron-v2-turbo',
     'inflatebot/MN-12B-Mag-Mell-R1',
     'kimi-k2-instruct-fast',
-    'kitani/clover-1-150b',
     'lightonai/LightOnOCR-2-1B',
     'liquid/lfm-2.5-2.6b',
     'longcat-2.0',
@@ -946,6 +945,7 @@ export type ProviderModelsMap = {
     'sakana/fugu-max',
     'sakana/fugu-ultra',
     'sakana/fugu-ultra-v1.1',
+    'sakana/sakana-namazu',
     'sarvam-105b',
     'shisa-ai/shisa-v2-llama3.3-70b',
     'shisa-ai/shisa-v2.1-llama3.3-70b',
@@ -1218,7 +1218,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.3-Flash',
   ];
-  readonly subconscious: readonly ['subconscious/glm-5.2', 'subconscious/tim-qwen3.6-27b'];
+  readonly subconscious: readonly ['subconscious/deepseek-v4.1-flash-marathon', 'subconscious/glm-5.3-marathon'];
   readonly zeldoc: readonly ['zdev'];
   readonly databricks: readonly [
     'databricks-claude-haiku-4-5',
@@ -1257,6 +1257,7 @@ export type ProviderModelsMap = {
     'umans-deepseek-v4-flash-0731',
     'umans-deepseek-v4.1-flash',
     'umans-flash',
+    'umans-glm-5.3',
     'umans-glm-5.3-flash',
     'umans-kimi-k3',
     'umans-qwen3.6-35b-a3b',
@@ -1267,6 +1268,7 @@ export type ProviderModelsMap = {
     'umans-deepseek-v4-flash-0731',
     'umans-deepseek-v4.1-flash',
     'umans-flash',
+    'umans-glm-5.3',
     'umans-glm-5.3-flash',
     'umans-kimi-k3',
   ];
@@ -1607,6 +1609,7 @@ export type ProviderModelsMap = {
     'inference.net/glm-5.3',
     'inference.net/glm-5.3-flash',
     'inference.net/llama-3.2-11b-instruct',
+    'luminal/deepseek-ai/DeepSeek-V4.1-Flash',
     'meta-contributor/muse-spark-1.2-contributor',
     'meta-contributor/muse-spark-1.3-contributor',
     'meta/muse-spark-1.1',
@@ -3156,7 +3159,13 @@ export type ProviderModelsMap = {
     'thinkingmachines/Inkling-NVFP4',
     'zai-org/GLM-5.3-Flash',
   ];
-  readonly coralbricks: readonly ['deepseek-v4.1-flash-fast-fp4', 'glm-5.3-flash-fp4', 'glm-5.3-fp4'];
+  readonly coralbricks: readonly [
+    'deepseek-v4.1-flash-fast',
+    'deepseek-v4.1-flash-fast-fp4',
+    'glm-5.3-fast',
+    'glm-5.3-flash-fp4',
+    'glm-5.3-fp4',
+  ];
   readonly 'routing-run': readonly [
     'claude-opus-4-8',
     'claude-sonnet-4-6',
@@ -4421,6 +4430,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-pro',
     'deepseek/deepseek-v4-pro-0813',
     'deepseek/deepseek-v4.1-flash',
+    'deepseek/deepseek-v4.1-flash-fast',
     'fireworks/ember-1',
     'fish-audio/s1',
     'fish-audio/s2-pro',
@@ -5237,6 +5247,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-7',
     'claude-opus-4-8',
     'claude-opus-5',
+    'claude-opus-5-5',
     'claude-sonnet-4-5',
     'claude-sonnet-4-6',
     'claude-sonnet-5',
@@ -5999,6 +6010,7 @@ export type ProviderModelsMap = {
     'fireworks_ai/gpt-oss-120b',
     'flexai/DeepSeek-V4-Flash-0731',
     'flexai/DeepSeek-V4.1-Flash',
+    'flexai/Step-3.7-Flash',
     'flexai/gpt-oss-120b',
     'flexai/gpt-oss-20b',
     'google/gemini-2.5-flash-image',
@@ -6804,6 +6816,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-5-5',
     'codestral-2508',
     'custom',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
     'deepseek-v3.2',
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -7220,7 +7233,6 @@ export type ProviderModelsMap = {
     'claude-sonnet-4',
     'claude-sonnet-5',
     'codestral-2508',
-    'deepseek-r1-0528',
     'deepseek-v3.2',
     'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
@@ -7239,13 +7251,10 @@ export type ProviderModelsMap = {
     'gemma-4-26b-a4b-it',
     'gemma-4-31b-it',
     'glm-4.7-flash',
-    'glm-5',
-    'glm-5-turbo',
     'glm-5.1',
     'glm-5.2',
     'glm-5.3',
     'glm-5.3-flash',
-    'glm-5v-turbo',
     'gpt-4.1',
     'gpt-4.1-mini',
     'gpt-4.1-nano',
@@ -7266,7 +7275,6 @@ export type ProviderModelsMap = {
     'gpt-oss-20b',
     'gpt-oss-safeguard-120b',
     'hermes-4-405b',
-    'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k3',
@@ -7305,7 +7313,6 @@ export type ProviderModelsMap = {
     'qwen3-coder-30b-a3b-instruct',
     'qwen3-coder-next',
     'qwen3-vl-235b-a22b',
-    'qwen3.5-122b-a10b',
     'qwen3.5-397b-a17b',
     'qwen3.5-9b',
     'qwen3.6-27b',
