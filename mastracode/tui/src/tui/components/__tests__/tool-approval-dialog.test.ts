@@ -218,6 +218,21 @@ describe('ToolApprovalDialogComponent.render', () => {
     ]);
   });
 
+  it('shows control characters in model arguments as visible escapes instead of sending them to the terminal', () => {
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'execute_command',
+      args: { command: 'echo hi\x1b[2J\x1b]8;;https://x.test\x07\r\nrm -rf\tbuild' },
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const rendered = dialog.render(120).join('\n');
+    expect(rendered).not.toMatch(/\x1b\[2J|\x1b\]|\x07|\r/);
+    const lines = rendered.split('\n').map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toContain('▎   command: echo hi\\x1b[2J\\x1b]8;;https://x.test\\x07');
+    expect(lines).toContain('▎   rm -rf  build');
+  });
+
   it('shows long and multi-line arguments in full, wrapped, when showTarget is set', () => {
     const command = `node -e "${'x'.repeat(150)}"\necho done`;
     const dialog = new ToolApprovalDialogComponent({

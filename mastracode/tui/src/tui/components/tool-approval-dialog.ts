@@ -19,6 +19,18 @@ import { card } from './surface.js';
 /** Long argument values (e.g. file contents) stop after this many lines until expanded with Ctrl+E. */
 const TARGET_MAX_LINES = 40;
 
+/**
+ * Arguments come from the model, so control characters must not reach the terminal: escape sequences could
+ * restyle, move or clear what the card shows. They're shown as visible \xNN escapes (the card shows exactly
+ * what gets approved); newlines stay, CRLF becomes a newline and tabs become spaces.
+ */
+function escapeControls(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+}
+
 export type ApprovalAction =
   | { type: 'approve' }
   | { type: 'decline' }
@@ -118,12 +130,13 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
    */
   private targetArgRows(width: number): string[] {
     const args = this.args;
-    if (args === null || args === undefined || typeof args !== 'object') return [String(args ?? '(none)')];
+    if (args === null || args === undefined || typeof args !== 'object')
+      return [escapeControls(String(args ?? '(none)'))];
     const entries = Object.entries(args as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined);
     if (entries.length === 0) return ['(none)'];
     const rows: string[] = [];
     for (const [key, value] of entries) {
-      const text = `${key}: ${typeof value === 'string' ? value : safeStringify(value)}`;
+      const text = escapeControls(`${key}: ${typeof value === 'string' ? value : safeStringify(value)}`);
       const wrapped = text.split('\n').flatMap(line => (line ? wrapTextWithAnsi(line, Math.max(10, width)) : ['']));
       if (this.expanded || wrapped.length <= TARGET_MAX_LINES) {
         rows.push(...wrapped);
