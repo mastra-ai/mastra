@@ -377,8 +377,6 @@ The ready+late probe (P2, `ready-late-rollover.test.ts`) and `buffer-write-gener
 
 ## PR stack
 
-| #   | Branch | Base                          | Scope                      |
-| --- | ------ | ----------------------------- | -------------------------- |
 | #   | PR     | Branch                        | Base                       | Scope                                                                    |
 | --- | ------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------ |
 | 1   | #25906 | `fix/om-lossless-rollover`    | `main`                     | D1: storage contract, `supersededBy`, all seven adapters, memory callers |
@@ -400,7 +398,6 @@ Related history:
 
 - Messages saved with a `createdAt` at or before the cursor (clock skew between instances, out-of-order writes) are treated as observed by `getUnobservedMessages` without ever reaching the Observer. Pre-existing; the fuzz uses strictly increasing timestamps and does not cover it.
 - `startAsyncBufferedObservation` (the `triggerAsyncBuffering` path) sets the stored `isBufferingObservation` flag at call time, before it waits on its predecessor, so the predecessor's later "flag off" write leaves the flag false while this op runs. Same-process activation then skips its buffering wait, and another process may buffer the same messages. Pre-existing; the stored flag is a hint, not a lock.
-
 - How much P1 actually costs in fidelity and question answerability (needs a source-aligned comparison, not provenance-window sizes), and whether fixing it measurably changes BEAM scores. Measure this on states created or replayed through the new code; rescanning old snapshots will still show the 620 historical strandings.
 - Config overrides across processes: `updateObservationalMemoryConfig` writes by id with no liveness check, so an override written while another process rolls the record over stays on the retired row. Fixing it needs the contract-item-5 redirect for config writes in every adapter.
 - H4 follow-up: the guard returns `observed: false` without correcting the stale `pendingMessageTokens`. The processor recounts it at the end of each step; on the `observe()` API path nothing does, so each call re-runs `prepare()` (in resource scope, a listing of every thread's messages) until something rewrites the count. Cost only, no context loss.

@@ -295,6 +295,7 @@ describe('Long session: observation and reflection lifecycle', () => {
     storage = createInMemoryStorage();
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
   });

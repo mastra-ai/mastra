@@ -12,6 +12,7 @@ const BC = BufferingCoordinator as any;
 function clearAllStaticState(): void {
   BC.asyncBufferingOps.clear();
   BC.lastBufferedBoundary.clear();
+  BC.observationBoundaryOwners.clear();
   BC.lastBufferedAtTime.clear();
   BC.reflectionBufferCycleIds.clear();
 }
@@ -28,7 +29,7 @@ describe('BufferingCoordinator static map cleanup', () => {
       const obsBufKey = `obs:${lockKey}`;
       const reflBufKey = `refl:${lockKey}`;
 
-      BC.lastBufferedBoundary.set(obsBufKey, 1000);
+      BC.setObservationBoundary(obsBufKey, 1000, Symbol('op'));
       BC.lastBufferedBoundary.set(reflBufKey, 2000);
       BC.lastBufferedAtTime.set(obsBufKey, new Date());
       BC.asyncBufferingOps.set(obsBufKey, Promise.resolve());
@@ -47,6 +48,7 @@ describe('BufferingCoordinator static map cleanup', () => {
       // All entries should be removed
       expect(BC.lastBufferedAtTime.has(obsBufKey)).toBe(false);
       expect(BC.lastBufferedBoundary.has(obsBufKey)).toBe(false);
+      expect(BC.observationBoundaryOwners.has(obsBufKey)).toBe(false);
       expect(BC.lastBufferedBoundary.has(reflBufKey)).toBe(false);
       expect(BC.asyncBufferingOps.has(obsBufKey)).toBe(false);
       expect(BC.asyncBufferingOps.has(reflBufKey)).toBe(false);
@@ -61,6 +63,7 @@ describe('BufferingCoordinator static map cleanup', () => {
       // Seed some state
       BC.lastBufferedAtTime.set(obsBufKey, new Date());
       BC.lastBufferedBoundary.set(obsBufKey, 'boundary-value');
+      BC.observationBoundaryOwners.set(obsBufKey, Symbol('op'));
 
       const coordinator = new BufferingCoordinator({
         observationConfig: { messageTokens: 30000 } as any,
@@ -75,6 +78,7 @@ describe('BufferingCoordinator static map cleanup', () => {
       // so the next buffer cycle isn't suppressed or delayed
       expect(BC.lastBufferedAtTime.has(obsBufKey)).toBe(false);
       expect(BC.lastBufferedBoundary.has(obsBufKey)).toBe(false);
+      expect(BC.observationBoundaryOwners.has(obsBufKey)).toBe(false);
     });
   });
 });
