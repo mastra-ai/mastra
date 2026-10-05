@@ -164,7 +164,7 @@ describe('queryOptions override', () => {
     });
   });
 
-  describe('MastraQueryOptions type', () => {
+  describe('when typing MastraQueryOptions', () => {
     it('is a Partial of the exact TanStack UseQueryOptions', () => {
       expectTypeOf<MastraQueryOptions<string, number>>().toEqualTypeOf<
         Partial<UseQueryOptions<string, Error, number, QueryKey>>

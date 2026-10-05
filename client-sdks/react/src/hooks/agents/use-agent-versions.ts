@@ -1,4 +1,3 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   ListAgentVersionsParams,
   CreateAgentVersionParams,
@@ -8,6 +7,7 @@ import type {
   ActivateAgentVersionResponse,
   DeleteAgentVersionResponse,
 } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery, useMutation, useQueryClient, skipToken } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';

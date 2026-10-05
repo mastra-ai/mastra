@@ -1,9 +1,9 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type { MastraClient } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
 import { isUnauthenticatedError, useCurrentUser } from '../auth';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface UseExistingConnectionsOptions {
   /**

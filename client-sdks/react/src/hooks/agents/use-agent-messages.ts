@@ -1,5 +1,5 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraClient } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import type { InfiniteData, QueryKey } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';

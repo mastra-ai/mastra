@@ -1,7 +1,7 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type { MastraClient, StreamBackgroundTasksParams } from '@mastra/client-js';
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';

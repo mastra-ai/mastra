@@ -1,9 +1,9 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type { MastraClient } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 type TraceFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 

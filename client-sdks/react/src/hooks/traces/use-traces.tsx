@@ -3,8 +3,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { is403ForbiddenError } from '../query-utils';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 import type { TraceListMode } from './types';
 

@@ -2,8 +2,8 @@ import type { MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 
 import { useInView } from '../shared/use-in-view';
 import type { LogRecord } from './types';

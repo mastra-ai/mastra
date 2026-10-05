@@ -1,4 +1,3 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   ListScorerVersionsParams,
   CreateScorerVersionParams,
@@ -8,6 +7,7 @@ import type {
   ActivateScorerVersionResponse,
   DeleteScorerVersionResponse,
 } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';

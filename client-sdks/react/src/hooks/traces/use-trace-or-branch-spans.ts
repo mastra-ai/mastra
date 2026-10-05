@@ -1,5 +1,5 @@
-import type { TraceListMode, LightSpanRecord } from './types';
 import type { MastraQueryOptions } from '../shared/query-options';
+import type { TraceListMode, LightSpanRecord } from './types';
 import { useBranch } from './use-branch';
 import type { BranchResponse } from './use-branch';
 import { useTraceSpans } from './use-trace-spans';

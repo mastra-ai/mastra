@@ -68,7 +68,7 @@ Options are spread, not merged. Keep these effects in mind:
 - **Hooks don't guard on empty ids.** A hook fetches as soon as it mounts, even if an id is `undefined` or `''`. Pass `enabled` yourself when an id may be missing:
 
   ```tsx
-  const { data } = useAgent({ agentId, queryOptions: { enabled: Boolean(agentId) } });
+  const { data } = useAgent({ agentId, queryOptions: { enabled: Boolean(agentId) } })
   ```
 - **Workspace hooks keep their compatibility check.** Workspace query hooks stay disabled when the server or client doesn't support workspaces, even if you pass `enabled: true`.
 - **`queryKey` and `queryFn` change cache identity.** Overriding them stops the hook from sharing cache entries with other hooks that use the default key.

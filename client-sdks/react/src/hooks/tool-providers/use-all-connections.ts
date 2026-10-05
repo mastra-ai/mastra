@@ -2,8 +2,8 @@ import type { MastraClient } from '@mastra/client-js';
 import { useQueries } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
 import { isUnauthenticatedError, useCurrentUser } from '../auth';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { useToolProviders } from './use-tool-providers';
 

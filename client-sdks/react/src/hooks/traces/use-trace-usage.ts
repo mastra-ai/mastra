@@ -1,9 +1,9 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type { GetMetricBreakdownResponse } from '@mastra/core/storage';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
 import { getOrCreate } from '../shared/map';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { TraceUsageSummary } from './types';
 
 const INPUT_TOKEN_METRIC = 'mastra_model_total_input_tokens';

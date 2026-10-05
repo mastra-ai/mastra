@@ -3,8 +3,8 @@ import type { UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-que
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 
 const SCORES_PER_PAGE = 25;

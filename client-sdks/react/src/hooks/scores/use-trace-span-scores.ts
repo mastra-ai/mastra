@@ -1,9 +1,9 @@
-import type { UseQueryResult } from '@tanstack/react-query';
 import type { ListScoresResponse } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 15_000;
 
