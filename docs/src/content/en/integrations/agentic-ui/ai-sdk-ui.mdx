@@ -1360,6 +1360,26 @@ The pattern uses:
       tools: { nestedAgentTool },
     })
     ```
+
+    Enable `includeSubAgentMetadata` on the chat route so the stream includes the `data-tool-agent` parts.
+
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { chatRoute } from '@mastra/ai-sdk'
+    import { forecastAgent } from './agents/forecast-agent'
+
+    export const mastra = new Mastra({
+      agents: { forecastAgent },
+      server: {
+        apiRoutes: [
+          chatRoute({
+            path: '/chat/:agentId',
+            includeSubAgentMetadata: true,
+          }),
+        ],
+      },
+    })
+    ```
   </TabItem>
 
   <TabItem value="frontend" label="Frontend">
