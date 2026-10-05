@@ -21,7 +21,8 @@ for (const provider of readdirSync(providersRoot)) {
     const src = readFileSync(join(dir, f), 'utf8');
     const idMatch = src.match(/id:\s*['"`]([a-z0-9_]+)['"`]/i);
     if (!idMatch) continue;
-    const schemaMatch = src.match(/export const \w+InputSchema\s*=\s*z\.object\(\{/);
+    // `z.object({` may be line-broken by the formatter (`z\n  .object({`).
+    const schemaMatch = src.match(/export const \w+InputSchema\s*=\s*z\s*\n?\s*\.object\(\{/);
     if (!schemaMatch) {
       schemas.set(idMatch[1], null);
       continue;
@@ -82,10 +83,17 @@ for (const f of readdirSync(scenariosRoot)) {
   for (const m of src.matchAll(/call(?:<[^>]*>)?\(\s*['"]([a-z0-9_]+)['"]\s*,\s*([^\s{])/g)) {
     if (schemas.get(m[1]) !== undefined) skippedNonLiteral++;
   }
-  const re = /call(?:<[^>]*>)?\(\s*['"]([a-z0-9_]+)['"]\s*,\s*\{/g;
+  // Three call-site shapes feed a tool an object literal:
+  //   call('tool_id', {...})                       — direct calls
+  //   ['tool_id', {...}]                           — runReadBatch tuples
+  //   probeTool(call, tools, 'label', 'tool_id', {...})
+  // Tuple matches are gated on the id existing in the schema map, so
+  // unrelated ['string', {...}] arrays never produce findings.
+  const re =
+    /(?:call(?:<[^>]*>)?\(\s*['"]([a-z0-9_]+)['"]|\[\s*['"]([a-z0-9_]+)['"]|probeTool\([^)]*?['"]([a-z0-9_]+)['"])\s*,\s*\{/g;
   let m;
   while ((m = re.exec(src))) {
-    const toolId = m[1];
+    const toolId = m[1] ?? m[2] ?? m[3];
     const schema = schemas.get(toolId);
     if (schema === undefined) continue; // unknown id — covered by audit-coverage
     if (schema === null) {

@@ -26,7 +26,7 @@ export const supabaseScenario: Scenario = {
       ...(await runReadBatch(
         call,
         [
-          ['supabase_list_auth_users', { page: 1, perPage: 5 }],
+          ['supabase_list_auth_users', { page: 1, per_page: 5 }],
           ['supabase_list_storage_buckets', {}],
         ],
         tools,

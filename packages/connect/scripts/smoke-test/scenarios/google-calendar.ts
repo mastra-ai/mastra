@@ -44,7 +44,7 @@ export const googleCalendarScenario: Scenario = {
       const cal = await call<{ id: string }>('google_calendar_create_calendar', {
         summary: `${runId} smoke calendar`,
         description: 'Automated @mastra/connect smoke test. Safe to delete.',
-        timeZone: 'UTC',
+        time_zone: 'UTC',
       });
       calendarId = cal.id;
       steps.push(makeStep('create calendar', 'google_calendar_create_calendar', 'pass', calendarId));
@@ -109,7 +109,7 @@ export const googleCalendarScenario: Scenario = {
           await call('google_calendar_remove_attendee', {
             calendarId,
             eventId,
-            email: `smoke+${runId}@mastra-smoke.invalid`,
+            attendeeEmail: `smoke+${runId}@mastra-smoke.invalid`,
           });
           steps.push(makeStep('remove attendee', 'google_calendar_remove_attendee', 'pass'));
         } catch (error) {
@@ -306,12 +306,10 @@ export const googleCalendarScenario: Scenario = {
         const now = Date.now();
         await call('google_calendar_import_event', {
           calendarId,
-          event: {
-            summary: `${runId} imported`,
-            start: { dateTime: new Date(now + 3 * 60 * 60 * 1000).toISOString(), timeZone: 'UTC' },
-            end: { dateTime: new Date(now + 4 * 60 * 60 * 1000).toISOString(), timeZone: 'UTC' },
-            iCalUID: `smoke-${runId}@mastra`,
-          },
+          summary: `${runId} imported`,
+          start: { dateTime: new Date(now + 3 * 60 * 60 * 1000).toISOString(), timeZone: 'UTC' },
+          end: { dateTime: new Date(now + 4 * 60 * 60 * 1000).toISOString(), timeZone: 'UTC' },
+          iCalUID: `smoke-${runId}@mastra`,
         });
         steps.push(makeStep('import event', 'google_calendar_import_event', 'pass'));
       } catch (error) {

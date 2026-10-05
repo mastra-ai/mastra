@@ -65,7 +65,7 @@ export const jiraScenario: Scenario = {
           ['jira_get_myself', {}],
           ['jira_list_statuses', { projectId: project.id }],
           ['jira_list_priorities', {}],
-          ['jira_list_users', { maxResults: 5 }],
+          ['jira_list_users', { query: 'a', maxResults: 5 }],
           ['jira_list_fields', {}],
           ['jira_list_project_components', { projectIdOrKey: project.key }],
           ['jira_list_project_versions', { projectIdOrKey: project.key }],

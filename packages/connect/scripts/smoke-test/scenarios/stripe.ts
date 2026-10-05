@@ -461,7 +461,7 @@ export const stripeScenario: Scenario = {
       if (tools['stripe_get_credit_note']) {
         steps.push(
           await probeTool(call, tools, 'read credit note', 'stripe_get_credit_note', {
-            credit_note_id: `cn_smoke_${runId}`,
+            id: `cn_smoke_${runId}`,
           }),
         );
       }

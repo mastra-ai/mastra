@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep Snowflake scenario: Snowflake's exposed surface is mostly listing
@@ -23,19 +23,63 @@ export const snowflakeScenario: Scenario = {
         call,
         [
           ['snowflake_list_warehouses', {}],
-          ['snowflake_list_databases', {}],
-          ['snowflake_list_schemas', {}],
-          ['snowflake_list_tables', {}],
-          ['snowflake_list_views', {}],
-          ['snowflake_list_columns', {}],
-          ['snowflake_list_stages', {}],
-          ['snowflake_list_streams', {}],
-          ['snowflake_list_tasks', {}],
           ['snowflake_list_users', {}],
           ['snowflake_list_roles', {}],
         ],
         tools,
       )),
+    );
+
+    // Scoped list tools require a real database/schema/table; derive them
+    // from the account inventory, falling back to the SNOWFLAKE shared
+    // database every account ships with.
+    let database = 'SNOWFLAKE';
+    let schemaName = 'ACCOUNT_USAGE';
+    let tableName: string | undefined;
+    try {
+      const dbs = await call<{ databases?: Array<{ name?: string }> }>('snowflake_list_databases', {});
+      const first = dbs.databases?.find(d => d.name);
+      if (first?.name) database = first.name;
+      steps.push(makeStep('list databases', 'snowflake_list_databases', 'pass', database));
+    } catch (error) {
+      steps.push(makeStep('list databases', 'snowflake_list_databases', 'fail', errorMessage(error)));
+    }
+    try {
+      const schemas = await call<{ schemas?: Array<{ name?: string }> }>('snowflake_list_schemas', { database });
+      const first = schemas.schemas?.find(s => s.name);
+      if (first?.name) schemaName = first.name;
+      steps.push(makeStep('list schemas', 'snowflake_list_schemas', 'pass', `${database}.${schemaName}`));
+    } catch (error) {
+      steps.push(makeStep('list schemas', 'snowflake_list_schemas', 'fail', errorMessage(error)));
+    }
+    try {
+      const tables = await call<{ tables?: Array<{ name?: string }> }>('snowflake_list_tables', {
+        database,
+        schema: schemaName,
+      });
+      tableName = tables.tables?.find(t => t.name)?.name;
+      steps.push(makeStep('list tables', 'snowflake_list_tables', 'pass', tableName ?? '(no tables)'));
+    } catch (error) {
+      steps.push(makeStep('list tables', 'snowflake_list_tables', 'fail', errorMessage(error)));
+    }
+    steps.push(
+      ...(await runReadBatch(
+        call,
+        [
+          ['snowflake_list_views', { database_name: database, schema_name: schemaName }],
+          ['snowflake_list_stages', { database }],
+          ['snowflake_list_streams', { database }],
+          ['snowflake_list_tasks', { database }],
+        ],
+        tools,
+      )),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list columns', 'snowflake_list_columns', {
+        database,
+        schema: schemaName,
+        table: tableName ?? 'SMOKE_NO_TABLE',
+      }),
     );
 
     let statementHandle: string | undefined;

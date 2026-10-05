@@ -531,12 +531,12 @@ async function runReadOnly(
   // tool only has to return without throwing to count as "wired correctly".
   const reads: Array<[string, unknown]> = [
     ['linear_list_users', { first: 5 }],
-    ['linear_list_issues', { first: 5, teamId }],
-    ['linear_search_issues', { term: 'mastra', first: 5 }],
+    ['linear_list_issues', { first: 5, filter: { team: { id: { eq: teamId } } } }],
+    ['linear_search_issues', { term: 'mastra', limit: 5 }],
     ['linear_list_projects', { first: 5 }],
-    ['linear_list_cycles', { first: 5, teamId }],
+    ['linear_list_cycles', { first: 5, filter: { team: { id: { eq: teamId } } } }],
     ['linear_list_issue_labels', { first: 5 }],
-    ['linear_list_workflow_states', { first: 5, teamId }],
+    ['linear_list_workflow_states', { first: 5, filter: { team: { id: { eq: teamId } } } }],
     ['linear_list_attachments', { first: 5 }],
     ['linear_get_viewer', {}],
     ['linear_get_team', { id: teamId }],

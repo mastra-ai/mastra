@@ -29,7 +29,7 @@ export const anthropicScenario: Scenario = {
       ...(await runReadBatch(
         call,
         [
-          ['anthropic_get_model', { modelId }],
+          ['anthropic_get_model', { model_id: modelId }],
           ['anthropic_list_files', { limit: 5 }],
           ['anthropic_list_message_batches', { limit: 5 }],
         ],

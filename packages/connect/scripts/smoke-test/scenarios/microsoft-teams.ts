@@ -40,7 +40,7 @@ export const microsoftTeamsScenario: Scenario = {
           ['microsoft_teams_get_team', { teamId: team.id }],
           ['microsoft_teams_list_channels', { teamId: team.id }],
           ['microsoft_teams_list_team_members', { teamId: team.id }],
-          ['microsoft_teams_list_chats', { top: 5 }],
+          ['microsoft_teams_list_chats', {}],
         ],
         tools,
       )),
@@ -165,7 +165,7 @@ export const microsoftTeamsScenario: Scenario = {
     steps.push(
       await probeTool(call, tools, 'create chat message', 'microsoft_teams_create_chat_message', {
         chatId: '19:smoke@thread.v2',
-        content: `smoke ${runId}`,
+        body: { contentType: 'text', content: `smoke ${runId}` },
       }),
     );
     steps.push(await probeTool(call, tools, 'get chat', 'microsoft_teams_get_chat', { id: '19:smoke@thread.v2' }));

@@ -29,7 +29,7 @@ export const workosScenario: Scenario = {
           ['workos_list_users', { limit: 5 }],
           ['workos_list_directories', { limit: 5 }],
           ['workos_list_connections', { limit: 5 }],
-          ['workos_list_events', { limit: 5 }],
+          ['workos_list_events', { events: ['user.created'], limit: 5 }],
           ['workos_list_invitations', { limit: 5 }],
         ],
         tools,
@@ -84,8 +84,8 @@ export const workosScenario: Scenario = {
     if (userId && tools['workos_create_organization_membership']) {
       try {
         const membership = await call<{ id: string }>('workos_create_organization_membership', {
-          organizationId,
-          userId,
+          organization_id: organizationId,
+          user_id: userId,
         });
         membershipId = membership.id;
         steps.push(makeStep('create membership', 'workos_create_organization_membership', 'pass', membershipId));
@@ -97,8 +97,8 @@ export const workosScenario: Scenario = {
     if (membershipId && tools['workos_update_organization_membership']) {
       try {
         await call('workos_update_organization_membership', {
-          organizationMembershipId: membershipId,
-          roleSlug: 'member',
+          membership_id: membershipId,
+          role_slug: 'member',
         });
         steps.push(makeStep('update membership', 'workos_update_organization_membership', 'pass'));
       } catch (error) {

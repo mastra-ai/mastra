@@ -99,8 +99,8 @@ export const resendScenario: Scenario = {
     let contactId: string | undefined;
     try {
       const contact = await call<{ id: string }>('resend_create_contact', {
-        audience_id: audienceId,
         body: {
+          audience_id: audienceId,
           email: `smoke+${runId}@mastra-smoke.invalid`,
           first_name: 'Mastra',
           last_name: 'Smoke',

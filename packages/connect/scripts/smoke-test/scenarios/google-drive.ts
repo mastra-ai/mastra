@@ -26,8 +26,8 @@ export const googleDriveScenario: Scenario = {
         call,
         [
           ['google_drive_get_about', {}],
-          ['google_drive_list_drives', { pageSize: 5 }],
-          ['google_drive_list_files_non_unified', { pageSize: 5 }],
+          ['google_drive_list_drives', { limit: 5 }],
+          ['google_drive_list_files_non_unified', { limit: 5 }],
           ['google_drive_get_changes_start_page_token', {}],
         ],
         tools,

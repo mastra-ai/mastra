@@ -26,7 +26,7 @@ export const incidentIoScenario: Scenario = {
     }
 
     // ---- pick an existing incident so we can hang follow-ups/actions on it ----
-    const incidents = await call<{ items?: Array<{ id?: string }> }>('incident_io_list_incidents', { pageSize: 1 });
+    const incidents = await call<{ items?: Array<{ id?: string }> }>('incident_io_list_incidents', { page_size: 1 });
     const incidentId = incidents.items?.[0]?.id;
     if (!incidentId) {
       steps.push(makeStep('pick incident', 'incident_io_list_incidents', 'skip', 'No incidents visible to the token.'));
@@ -39,33 +39,26 @@ export const incidentIoScenario: Scenario = {
       ...(await runReadBatch(
         call,
         [
-          ['incident_io_list_users', { pageSize: 5 }],
-          ['incident_io_list_teams', { pageSize: 5 }],
+          ['incident_io_list_users', { page_size: 5 }],
+          ['incident_io_list_teams', { page_size: 5 }],
           ['incident_io_list_severities', {}],
           ['incident_io_list_incident_types', {}],
           ['incident_io_list_incident_statuses', {}],
           ['incident_io_list_incident_roles', {}],
-          ['incident_io_list_schedules', { pageSize: 5 }],
-          ['incident_io_list_catalog_types', { pageSize: 5 }],
+          ['incident_io_list_schedules', { page_size: 5 }],
+          ['incident_io_list_catalog_types', {}],
           ['incident_io_list_catalog_resources', {}],
-          ['incident_io_list_catalog_entries', { pageSize: 5 }],
-          ['incident_io_list_follow_ups', { pageSize: 5 }],
-          ['incident_io_list_actions', { pageSize: 5 }],
-          ['incident_io_list_alerts', { pageSize: 5 }],
-          ['incident_io_list_alert_tags', { pageSize: 5 }],
-          ['incident_io_list_incident_alerts', { incident_id: incidentId, pageSize: 5 }],
-          ['incident_io_list_incident_participants', { incident_id: incidentId, pageSize: 5 }],
-          ['incident_io_list_incident_participant_workloads', { pageSize: 5 }],
-          ['incident_io_list_incident_timeline_items', { incident_id: incidentId, pageSize: 5 }],
+          ['incident_io_list_follow_ups', { page_size: 5 }],
+          ['incident_io_list_actions', { page_size: 5 }],
+          ['incident_io_list_alerts', { page_size: 5 }],
+          ['incident_io_list_alert_tags', { page_size: 5 }],
+          ['incident_io_list_incident_alerts', { incident_id: incidentId, page_size: 5 }],
+          ['incident_io_list_incident_participants', { incident_id: incidentId }],
+          ['incident_io_list_incident_participant_workloads', { incident_id: incidentId }],
+          ['incident_io_list_incident_timeline_items', { incident_id: incidentId, page_size: 5 }],
           ['incident_io_list_incident_timestamps', {}],
-          ['incident_io_list_incident_updates', { incident: incidentId, pageSize: 5 }],
-          ['incident_io_list_postmortem_documents', { pageSize: 5 }],
-          ['incident_io_list_schedule_entries', { pageSize: 5 }],
-          ['incident_io_list_schedule_overrides', { pageSize: 5 }],
-          ['incident_io_list_schedule_replicas', { pageSize: 5 }],
-          ['incident_io_list_schedule_sync_rules', { pageSize: 5 }],
-          ['incident_io_list_user_notification_methods', { pageSize: 5 }],
-          ['incident_io_list_user_notification_rules', { pageSize: 5 }],
+          ['incident_io_list_incident_updates', { incident_id: incidentId, page_size: 5 }],
+          ['incident_io_list_postmortem_documents', { page_size: 5 }],
         ],
         tools,
       )),
@@ -92,16 +85,16 @@ export const incidentIoScenario: Scenario = {
       schedules,
       alerts,
     ] = await Promise.all([
-      safeList('incident_io_list_users', { pageSize: 1 }),
-      safeList('incident_io_list_teams', { pageSize: 1 }),
+      safeList('incident_io_list_users', { page_size: 1 }),
+      safeList('incident_io_list_teams', { page_size: 1 }),
       safeList('incident_io_list_severities', {}),
       safeList('incident_io_list_incident_statuses', {}),
       safeList('incident_io_list_incident_types', {}),
       safeList('incident_io_list_incident_roles', {}),
       safeList('incident_io_list_incident_timestamps', {}),
-      safeList('incident_io_list_catalog_types', { pageSize: 1 }),
-      safeList('incident_io_list_schedules', { pageSize: 1 }),
-      safeList('incident_io_list_alerts', { pageSize: 1 }),
+      safeList('incident_io_list_catalog_types', {}),
+      safeList('incident_io_list_schedules', { page_size: 1 }),
+      safeList('incident_io_list_alerts', { page_size: 1 }),
     ]);
 
     const userId = users.items?.[0]?.id;
@@ -116,6 +109,46 @@ export const incidentIoScenario: Scenario = {
     const alertId = alerts.items?.[0]?.id;
 
     const probeId = (id: string | undefined, fallback: string) => id ?? fallback;
+
+    // Reads that require a parent id; probe with a synthetic one when the
+    // workspace has no such resource (404 still proves endpoint routing).
+    steps.push(
+      await probeTool(call, tools, 'list catalog entries', 'incident_io_list_catalog_entries', {
+        catalog_type_id: probeId(catalogTypeId, `catalog-type-smoke-${runId}`),
+      }),
+    );
+    const scheduleProbeId = probeId(scheduleId, `schedule-smoke-${runId}`);
+    steps.push(
+      await probeTool(call, tools, 'list schedule entries', 'incident_io_list_schedule_entries', {
+        schedule_id: scheduleProbeId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list schedule overrides', 'incident_io_list_schedule_overrides', {
+        schedule_id: scheduleProbeId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list schedule replicas', 'incident_io_list_schedule_replicas', {
+        schedule_id: scheduleProbeId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list schedule sync rules', 'incident_io_list_schedule_sync_rules', {
+        schedule_id: scheduleProbeId,
+      }),
+    );
+    const userProbeId = probeId(userId, `01000000-0000-0000-0000-${runId.padEnd(12, '0').slice(-12)}`);
+    steps.push(
+      await probeTool(call, tools, 'list user notification methods', 'incident_io_list_user_notification_methods', {
+        user_id: userProbeId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list user notification rules', 'incident_io_list_user_notification_rules', {
+        user_id: userProbeId,
+      }),
+    );
 
     if (tools['incident_io_get_incident']) {
       try {

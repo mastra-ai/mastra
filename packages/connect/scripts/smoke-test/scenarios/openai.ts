@@ -29,9 +29,9 @@ export const openaiScenario: Scenario = {
       ...(await runReadBatch(
         call,
         [
-          ['openai_get_model', { modelId }],
+          ['openai_get_model', { model: modelId }],
           ['openai_list_files', { limit: 5 }],
-          ['openai_list_batches', { limit: 5 }],
+          ['openai_list_batches', {}],
           ['openai_list_fine_tuning_jobs', { limit: 5 }],
           ['openai_list_vector_stores', { limit: 5 }],
         ],

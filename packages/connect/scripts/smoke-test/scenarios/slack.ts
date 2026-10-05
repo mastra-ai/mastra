@@ -29,7 +29,7 @@ export const slackScenario: Scenario = {
         call,
         [
           ['slack_get_team_info', {}],
-          ['slack_list_users', { limit: 5 }],
+          ['slack_list_users', {}],
           ['slack_list_channels', { limit: 5 }],
           ['slack_list_user_groups', {}],
           ['slack_list_custom_emoji', {}],
