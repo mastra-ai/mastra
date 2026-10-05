@@ -105,10 +105,18 @@ export async function executeStep(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = globalThis.crypto.randomUUID();
+  // Nested workflows get their own child run per repeated occurrence so the child's
+  // operation ids (which include its run id) don't repeat. Loop iterations derive the
+  // id deterministically so a restarted or replayed iteration finds the same child run.
+  const loopIteration = executionContext.loopIteration;
   const nestedRunId =
-    step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined
-      ? globalThis.crypto.randomUUID()
-      : undefined;
+    step.component !== 'WORKFLOW'
+      ? undefined
+      : executionContext.foreachIndex !== undefined
+        ? globalThis.crypto.randomUUID()
+        : loopIteration !== undefined && loopIteration > 1
+          ? `${runId}-iter-${loopIteration}`
+          : undefined;
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
@@ -332,11 +340,19 @@ export async function executeStep(
   const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
   const delay = executionContext.retryConfig.delay ?? 0;
 
+  // One-shot steps keep the legacy id. Repeated occurrences also include the run id so
+  // occurrences inside different nested child runs (e.g. foreach within a foreach item) differ.
+  const legacyRetryOperationId = `workflow.${workflowId}.step.${step.id}`;
+  const retryOperationId =
+    scopeOperationId(legacyRetryOperationId, executionContext) === legacyRetryOperationId
+      ? legacyRetryOperationId
+      : scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}`, executionContext);
+
   // Use executeStepWithRetry to handle retry logic
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
   const stepRetryResult = await engine.executeStepWithRetry(
-    scopeOperationId(`workflow.${workflowId}.step.${step.id}`, executionContext),
+    retryOperationId,
     async () => {
       if (validationError) {
         throw validationError;

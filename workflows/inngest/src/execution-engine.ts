@@ -602,7 +602,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const derivedNestedRunId =
       executionContext.foreachIndex !== undefined
         ? `${executionContext.runId}-foreach-${executionContext.foreachIndex}`
-        : executionContext.runId;
+        : executionContext.loopIteration !== undefined && executionContext.loopIteration > 1
+          ? `${executionContext.runId}-iter-${executionContext.loopIteration}`
+          : executionContext.runId;
 
     const invokeOperationId = scopeOperationId(
       `workflow.${executionContext.workflowId}.step.${step.id}`,

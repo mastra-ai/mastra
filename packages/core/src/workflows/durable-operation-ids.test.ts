@@ -289,6 +289,60 @@ describe('durable operation ids — repeated occurrences (issue #24044)', () => 
     expect(duplicatesOf(suspendIds)).toEqual([]);
 
     expect((await run.resume({ step: 'gated', resumeData: { ok: true } })).status).toBe('success');
+    const resumeIds = recorder.take();
+    expect(duplicatesOf(resumeIds)).toEqual([]);
+
+    // Across legs, only the re-entered loop container, the suspended occurrence (iteration 2)
+    // and the entry completion repeat; every other occurrence gets ids the first leg never used.
+    const shared = suspendIds.filter(id => resumeIds.includes(id));
+    expect(
+      shared.filter(
+        id => !id.includes('.iter.2') && !id.endsWith('.stepUpdate.entry-end') && !id.endsWith('.loop.0.span.start'),
+      ),
+    ).toEqual([]);
+    expect(resumeIds.some(id => id.includes('.iter.3'))).toBe(true);
+  });
+
+  it('emits unique ids for a nested workflow used as a dountil body', async () => {
+    const recorder = recordAllOperationIds();
+    const child = createWorkflow({ id: 'occ-loop-child', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(incStep(), async ({ inputData }) => inputData.n % 2 === 0)
+      .commit();
+    const workflow = createWorkflow({ id: 'occ-loop-parent', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(child, async ({ inputData }) => inputData.n >= 6)
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'occ-loop-parent': workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: { n: 0 } });
+    expect(result.status).toBe('success');
+    const ids = recorder.take();
+    expect(ids.some(id => id.includes('-iter-2.'))).toBe(true);
+    // The legacy one-shot retry id carries no run id; each child run is its own
+    // memoization scope (an invoked function on Inngest), so it may repeat across them.
+    expect(duplicatesOf(ids.filter(id => id !== 'workflow.occ-loop-child.step.inc'))).toEqual([]);
+  });
+
+  it('emits unique ids for a foreach nested inside a foreach item workflow', async () => {
+    const recorder = recordAllOperationIds();
+    const child = createWorkflow({ id: 'occ-fe-child', inputSchema: z.array(ioSchema), outputSchema: z.array(ioSchema) })
+      .foreach(incStep())
+      .commit();
+    const workflow = createWorkflow({
+      id: 'occ-fe-parent',
+      inputSchema: z.array(z.array(ioSchema)),
+      outputSchema: z.array(z.array(ioSchema)),
+    })
+      .foreach(child)
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'occ-fe-parent': workflow } });
+
+    const result = await (await workflow.createRun()).start({
+      inputData: [
+        [{ n: 0 }, { n: 1 }],
+        [{ n: 0 }, { n: 1 }],
+      ],
+    });
+    expect(result.status).toBe('success');
     expect(duplicatesOf(recorder.take())).toEqual([]);
   });
 });
