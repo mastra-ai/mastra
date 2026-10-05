@@ -269,7 +269,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           events: [
             {
               id: 'activity-1',
-              action: 'record-created',
+              action: 'create',
               recordType: 'record',
               recordId: 'rec-1',
               scope: ['org:proof', `resource:${projectId}`],

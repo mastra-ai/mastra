@@ -401,7 +401,7 @@ function ImportRunLink({
   onOpen: (importerId: string, runId: string) => void;
 }) {
   return (
-    <Button variant="ghost" size="xs" className="ml-1" onClick={() => onOpen(importerId, runId)}>
+    <Button variant="ghost" size="sm" className="ml-1" onClick={() => onOpen(importerId, runId)}>
       {importerId}
     </Button>
   );
@@ -515,9 +515,9 @@ function ActivityPanel({
               {event.sourceId && event.importRunId ? (
                 <ImportRunLink importerId={event.sourceId} runId={event.importRunId} onOpen={onOpenRun} />
               ) : event.sourceType ? (
-                <span className="text-icon3 ml-2">{event.sourceType}</span>
+                <span className="text-muted-foreground ml-2">{event.sourceType}</span>
               ) : null}
-              <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
+              <div className="text-muted-foreground mt-1 text-xs">{event.scope.join(' → ')}</div>
             </div>
             <time className="text-muted-foreground shrink-0 text-xs" dateTime={event.createdAt}>
               {new Date(event.createdAt).toLocaleString()}
