@@ -20,19 +20,16 @@ type ElementTxtProps<T extends TextElement> = TextStyleProps & {
 } & Omit<ComponentPropsWithoutRef<T>, keyof TextStyleProps | 'as' | 'ref'>;
 
 /** Typography for text elements. Controls and layout containers own their markup. */
-export function Txt<T extends TextElement = 'p'>({
-  as,
-  className,
-  variant = 'body',
-  tone,
-  font,
-  ...props
-}: ElementTxtProps<T>) {
+export function Txt<T extends TextElement = 'p'>({ as, className, variant, tone, font, ...props }: ElementTxtProps<T>) {
   return useRender({
     defaultTagName: as ?? 'p',
     props: {
       ...props,
-      className: cn(textStyle({ variant, tone, font }), className),
+      className: cn(
+        textStyle({ variant: variant ?? 'body', tone, font }),
+        variant === undefined && (as === 'strong' || as === 'b') && 'font-bold',
+        className,
+      ),
     },
   });
 }

@@ -164,6 +164,8 @@ Shared components own their typography. Use their existing size and semantic var
 
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
 
+`Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
+
 `Txt` renders text elements: headings, paragraphs, inline text, labels, and timestamps. Use `Code` for preformatted code. `Txt` cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
 
 ```tsx
