@@ -1,31 +1,17 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import React from 'react';
+import { GrainFill } from '@/ds/components/GrainFill';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 
-const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; classes: string }> = {
-  success: {
-    icon: <LightbulbIcon />,
-    classes: 'bg-success-subtle border-success-edge text-success-subtle-foreground',
-  },
-  destructive: {
-    icon: <OctagonAlertIcon />,
-    classes: 'bg-destructive-subtle border-destructive-edge text-destructive-subtle-foreground',
-  },
-  warning: {
-    icon: <TriangleAlertIcon />,
-    classes: 'bg-warning-subtle border-warning-edge text-warning-subtle-foreground',
-  },
-  info: {
-    icon: <InfoIcon />,
-    classes: 'bg-info-subtle border-info-edge text-info-subtle-foreground',
-  },
-  note: {
-    icon: <FileTextIcon />,
-    classes: 'bg-muted border-border text-foreground',
-  },
+const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; iconClass: string }> = {
+  success: { icon: <LightbulbIcon />, iconClass: 'text-success-indicator' },
+  destructive: { icon: <OctagonAlertIcon />, iconClass: 'text-destructive-indicator' },
+  warning: { icon: <TriangleAlertIcon />, iconClass: 'text-warning-foreground' },
+  info: { icon: <InfoIcon />, iconClass: 'text-info-indicator' },
+  note: { icon: <FileTextIcon />, iconClass: 'text-muted-foreground' },
 };
 
 export interface NoticeRootProps {
@@ -38,53 +24,54 @@ export interface NoticeRootProps {
 }
 
 export function NoticeRoot({ variant, title, icon, action, children, className }: NoticeRootProps) {
-  const { icon: defaultIcon, classes } = variantConfig[variant];
-  const resolvedIcon = icon ?? defaultIcon;
+  const { icon: defaultIcon, iconClass } = variantConfig[variant];
+  const glyph = (
+    <span className={cn('flex h-[1lh] shrink-0 items-center [&>svg]:size-icon-sm', iconClass)}>
+      {icon ?? defaultIcon}
+    </span>
+  );
 
-  if (!title) {
-    return (
-      <div
-        className={cn(
-          '@container relative rounded-2xl border p-3 text-body',
-          'animate-in duration-200 fade-in-0 slide-in-from-top-2',
-          classes,
-          className,
-        )}
-      >
-        <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:gap-2">
-          <div className="flex min-w-0 flex-1 items-start gap-2 [&>svg]:size-4">
-            <span className="flex h-[1lh] shrink-0 items-center [&>svg]:size-4">{resolvedIcon}</span>
-            {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
-            {children && <div className="min-w-0 flex-1 wrap-anywhere">{children}</div>}
-          </div>
-          {action && <div className="@md:-my-1 [&>button]:w-full @md:[&>button]:w-auto">{action}</div>}
-        </div>
-      </div>
-    );
-  }
+  const lastRow = action ? 'action' : children ? 'message' : 'title';
 
   return (
     <div
       className={cn(
-        '@container relative flex flex-col gap-3 rounded-2xl border p-3',
+        'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl bg-card p-3 shadow-raised',
         'animate-in duration-200 fade-in-0 slide-in-from-top-2',
-        classes,
         className,
       )}
     >
-      <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
-        {resolvedIcon}
-        {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <Txt as="span" variant="column" className="truncate leading-none tracking-wide uppercase">
-          {title}
+      {variant !== 'note' && (
+        <GrainFill
+          tone={variant}
+          width={464}
+          height={200}
+          className="absolute inset-y-0 left-0 -z-10 w-116 mask-r-from-34%"
+        />
+      )}
+      {title && (
+        <Txt as="div" variant="subheading" tone="ink" className="flex min-w-0 items-start gap-2">
+          <span className="min-w-0 flex-1 truncate">{title}</span>
+          {lastRow === 'title' && glyph}
         </Txt>
-      </div>
-      {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
-      {(children || action) && (
-        <div className="flex min-w-0 flex-col gap-3 wrap-anywhere">
-          {children}
-          {action && <div className="self-start @md:hidden">{action}</div>}
-        </div>
+      )}
+      {children && (
+        <Txt
+          as="div"
+          variant={title ? 'caption' : 'body-sm'}
+          tone={title ? 'muted' : 'ink'}
+          className="flex min-w-0 items-end gap-2"
+        >
+          {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
+          <div className="flex min-w-0 flex-1 flex-col gap-2 wrap-anywhere">{children}</div>
+          {lastRow === 'message' && glyph}
+        </Txt>
+      )}
+      {action && (
+        <Txt as="div" variant="label" className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0">{action}</div>
+          {glyph}
+        </Txt>
       )}
     </div>
   );

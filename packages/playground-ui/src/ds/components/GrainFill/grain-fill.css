@@ -1,0 +1,59 @@
+[data-grain-tone='warning'] {
+  --grain-ink: var(--warning-indicator);
+  --grain-surface: var(--warning-subtle);
+}
+
+[data-grain-tone='destructive'] {
+  --grain-ink: var(--destructive-indicator);
+  --grain-surface: var(--destructive-subtle);
+}
+
+[data-grain-tone='info'] {
+  --grain-ink: var(--info-indicator);
+  --grain-surface: var(--info-subtle);
+}
+
+[data-grain-tone='success'] {
+  --grain-ink: var(--success-indicator);
+  --grain-surface: var(--success-subtle);
+}
+
+[data-grain-tone='color'] {
+  --grain-surface: color-mix(in oklab, var(--grain-ink) 22%, var(--card));
+}
+
+[data-grain-tone] {
+  --grain-back: color-mix(in oklab, var(--grain-ink) 16%, var(--grain-surface));
+  --grain-1: color-mix(in oklab, var(--grain-ink) 8%, var(--grain-surface));
+  --grain-2: var(--grain-surface);
+  --grain-3: color-mix(in oklab, var(--grain-surface) 75%, var(--card));
+  --grain-4: color-mix(in oklab, var(--grain-surface) 50%, var(--card));
+  --grain-5: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
+
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+[data-grain-tone][data-ready] {
+  opacity: 1;
+}
+
+html.light [data-grain-tone] {
+  --grain-back: var(--grain-surface);
+  --grain-1: color-mix(in oklab, var(--grain-surface) 55%, var(--card));
+  --grain-2: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
+  --grain-3: var(--card);
+  --grain-4: var(--card);
+  --grain-5: var(--card);
+}
+
+html.light [data-grain-tone='color'] {
+  --grain-surface: color-mix(in oklab, var(--grain-ink) 18%, var(--card));
+}
+
+html.light [data-grain-tone='info'] {
+  --grain-1: color-mix(in oklab, var(--grain-surface) 75%, var(--card));
+  --grain-2: color-mix(in oklab, var(--grain-surface) 50%, var(--card));
+  --grain-3: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
+}
