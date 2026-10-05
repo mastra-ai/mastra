@@ -9,7 +9,7 @@ import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 const imageSvg =
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" fill="#d8ede3"/><circle cx="160" cy="80" r="48" fill="#326b50"/><path d="m136 80 16 16 32-32" fill="none" stroke="#d8ede3" stroke-width="8"/></svg>';
 
-function AttachmentFocusChat({ factory = false }: { factory?: boolean }) {
+function AttachmentFocusChat({ factory = false, hiddenPanel = false }: { factory?: boolean; hiddenPanel?: boolean }) {
   return (
     <div className="flex h-dvh flex-col bg-background">
       <ChatShell className="flex-1">
@@ -51,6 +51,14 @@ function AttachmentFocusChat({ factory = false }: { factory?: boolean }) {
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
+          {hiddenPanel && (
+            // Match the closed WorkspaceFilesSurface geometry: opacity and inert do not contain overflow.
+            <div
+              aria-hidden
+              inert
+              className="pointer-events-none absolute top-3 right-3 h-80 w-72 translate-x-[calc(100%+0.75rem)] scale-98 opacity-0"
+            />
+          )}
         </ChatShell.Stage>
       </ChatShell>
     </div>
@@ -95,3 +103,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Studio: Story = {};
 export const Factory: Story = { args: { factory: true } };
+
+export const FactoryHiddenPanel: Story = {
+  args: { factory: true, hiddenPanel: true },
+  play: async context => {
+    await meta.play(context);
+    const document = context.canvasElement.ownerDocument;
+    const stage = context.canvasElement.querySelector<HTMLDivElement>('[data-slot="message-scroller"]');
+    if (!stage) throw new Error('Chat must render inside a stage');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    stage.scrollLeft = 100;
+    await expect(stage.scrollLeft).toBe(0);
+  },
+};

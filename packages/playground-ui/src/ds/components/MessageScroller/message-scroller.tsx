@@ -746,8 +746,8 @@ export const MessageScroller = React.forwardRef<HTMLDivElement, MessageScrollerP
       <div
         ref={mergeRefs(setRootElement, ref)}
         data-slot="message-scroller"
-        // The viewport owns scrolling and clipping; the stage only positions it and its overlays.
-        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col', className)}
+        // Contain translated overlays without creating a second scroll container.
+        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col overflow-clip', className)}
         {...props}
       />
     );
