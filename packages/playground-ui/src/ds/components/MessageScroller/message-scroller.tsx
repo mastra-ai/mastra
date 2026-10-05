@@ -746,7 +746,8 @@ export const MessageScroller = React.forwardRef<HTMLDivElement, MessageScrollerP
       <div
         ref={mergeRefs(setRootElement, ref)}
         data-slot="message-scroller"
-        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col overflow-hidden', className)}
+        // The viewport owns scrolling and clipping; the stage only positions it and its overlays.
+        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col', className)}
         {...props}
       />
     );
@@ -863,7 +864,12 @@ export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrol
         data-slot="message-scroller-item"
         data-message-id={messageId}
         data-scroll-anchor={scrollAnchor ? 'true' : 'false'}
-        className={cn('min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]', className)}
+        // content-visibility contains painting. Reserve room for a 2px outline + 2px offset,
+        // and compensate with negative margins so message alignment and spacing stay unchanged.
+        className={cn(
+          '-m-1 min-w-0 shrink-0 p-1 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]',
+          className,
+        )}
         {...props}
       />
     );
