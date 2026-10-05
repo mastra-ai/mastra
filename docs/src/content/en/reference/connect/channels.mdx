@@ -7,7 +7,7 @@ packages:
 
 # channels()
 
-Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and credential-less, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
+Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -108,7 +108,7 @@ The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver con
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
 - `disconnect()`: clears the cached snapshot.
 
-Providers without an active connection don't appear in the resolved map; their routes stay mounted and begin working once a connection is attached.
+Providers without an active connection don't appear in the resolved map. Their routes stay mounted and begin working once a connection is attached.
 
 Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed provider ID) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, ambiguity, credential sync failure) are downgraded to warn-and-skip.
 

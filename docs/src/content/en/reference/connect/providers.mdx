@@ -1,6 +1,6 @@
 ---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset shipped in @mastra/connect: provider IDs and the full tool list per provider."
+description: "Every generated provider toolset included in @mastra/connect: provider IDs and the full tool list per provider."
 packages:
   - "@mastra/connect"
 ---
@@ -9,11 +9,11 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` ships generated toolsets for 24 providers (925 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` includes generated toolsets for 24 providers (925 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
-Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package, so the exact list depends on the installed `@mastra/connect` version; this page reflects the version it shipped with.
+Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
-MCP providers — Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, and Sanity — serve their tools from their hosted MCP servers at runtime and are not listed here. See [MCP providers](/docs/mastra-platform/providers#mcp-providers) for the list and links to each provider's MCP documentation.
+MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, and Sanity) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/docs/mastra-platform/providers#mcp-providers) for the list and links to each provider's MCP documentation.
 
 | Provider | Provider ID | Tools |
 | - | - | - |
