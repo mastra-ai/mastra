@@ -348,6 +348,12 @@ export interface MastraCodeConfig {
    * TUI settings file never leaks into server sessions. Default: false.
    */
   disableSettingsOmSeed?: boolean;
+  /**
+   * Disable model-pack resolution from settings.json. Server hosts that do not
+   * offer packs set this so host pack state never drives server sessions.
+   * Default: false.
+   */
+  disableModelPacks?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -781,7 +787,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   const memory =
-    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, config?.settingsPath));
+    config?.memory === false
+      ? undefined
+      : (config?.memory ??
+        getDynamicMemory(storage, vector, config?.settingsPath, { disableModelPacks: config?.disableModelPacks }));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
@@ -908,8 +917,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     const persistedStateKeys = [
       'thinkingLevel',
       'notifications',
-      THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-      PACK_FALLBACK_STATE_KEY,
+      ...(config?.disableModelPacks ? [] : [THREAD_ACTIVE_MODEL_PACK_ID_KEY, PACK_FALLBACK_STATE_KEY]),
     ] as const;
     for (const key of persistedStateKeys) {
       const value = metadata?.[key];
@@ -1156,7 +1164,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    model: ctx => getDynamicModel(ctx, config?.settingsPath, { disableModelPacks: config?.disableModelPacks }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1244,7 +1252,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Input-lane notice ONLY (no processAPIError — see the class doc): the
       // runner walks input processors first in runProcessAPIError, so an
       // input-lane processAPIError would rotate before transient retries run.
-      new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
+      new AccountStartNoticeProcessor({
+        credentialStore: authStorage,
+        settingsPath: config?.settingsPath,
+        disableModelPacks: config?.disableModelPacks,
+      }),
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
@@ -1304,6 +1316,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Same settings file getDynamicModel reads (model: above) so the pack
         // cascade the processor announces matches the chain core will walk.
         settingsPath: config?.settingsPath,
+        disableModelPacks: config?.disableModelPacks,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
@@ -1403,7 +1416,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
-  const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
+  const effectiveDefaults = resolveModelDefaults(
+    config?.disableModelPacks
+      ? { ...globalSettings, models: { ...globalSettings.models, activeModelPackId: null } }
+      : globalSettings,
+    builtinPacks,
+  );
   const activeProviderId = effectiveDefaults.build?.split('/')[0];
   const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
     ? undefined

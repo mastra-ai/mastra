@@ -513,7 +513,9 @@ function resolveAccountRoute(
   args: Pick<RoutingProcessorArgs, 'requestContext'>,
   settingsPath?: string,
   explicit?: { packId: string; modelId: string },
+  disableModelPacks = false,
 ): AccountRoute | null {
+  if (disableModelPacks) return null;
   const controller = getRoutingController(args);
   const state = controller?.getState?.();
   const pending = state?.mastracodePendingPackFallback as
@@ -631,6 +633,7 @@ export class AccountRotationProcessor implements Processor {
       credentialStore: RotationCredentialStore;
       maxProcessorRetries: number;
       settingsPath?: string;
+      disableModelPacks?: boolean;
     },
   ) {}
 
@@ -686,8 +689,13 @@ export class AccountRotationProcessor implements Processor {
     const active = getRequestActiveAccount(args, store, providerId);
     const route =
       currentPack && typeof cascadeModelId === 'string'
-        ? resolveAccountRoute(args, this.options.settingsPath, { packId: currentPack.packId, modelId: cascadeModelId })
-        : resolveAccountRoute(args, this.options.settingsPath);
+        ? resolveAccountRoute(
+            args,
+            this.options.settingsPath,
+            { packId: currentPack.packId, modelId: cascadeModelId },
+            this.options.disableModelPacks,
+          )
+        : resolveAccountRoute(args, this.options.settingsPath, undefined, this.options.disableModelPacks);
 
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
@@ -784,6 +792,10 @@ export class AccountRotationProcessor implements Processor {
    * no active pack or the pack has no fallback chain.
    */
   private async getPackCascade(args: ProcessAPIErrorArgs): Promise<PackCascade | null> {
+    if (this.options.disableModelPacks) {
+      args.state.packCascade = null;
+      return null;
+    }
     if (args.state.packCascade !== undefined) {
       return (args.state.packCascade as PackCascade | null) ?? null;
     }
@@ -945,7 +957,12 @@ export class AccountRotationProcessor implements Processor {
     // durable. A failure here must not strand a provider-global account
     // switch with no durable fallback state — the start-notice processor
     // re-applies routing when the retried request begins on the target pack.
-    const targetRoute = resolveAccountRoute(args, this.options.settingsPath, { packId: to.packId, modelId: toModelId });
+    const targetRoute = resolveAccountRoute(
+      args,
+      this.options.settingsPath,
+      { packId: to.packId, modelId: toModelId },
+      this.options.disableModelPacks,
+    );
     if (targetRoute) {
       // Deployed requests must hop on the tenant store: activating the target
       // pack's preferred account on the host registry would mutate a local
@@ -1015,7 +1032,13 @@ export class AccountRotationProcessor implements Processor {
 export class AccountStartNoticeProcessor implements Processor {
   readonly id = 'mastracode-account-start-notice' as const;
 
-  constructor(private readonly options: { credentialStore: CredentialStore; settingsPath?: string }) {}
+  constructor(
+    private readonly options: {
+      credentialStore: CredentialStore;
+      settingsPath?: string;
+      disableModelPacks?: boolean;
+    },
+  ) {}
 
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     if (args.state.startNoticeEmitted) return args.messageList;
@@ -1025,7 +1048,7 @@ export class AccountStartNoticeProcessor implements Processor {
     // the constructor's storage.
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
 
-    const route = resolveAccountRoute(args, this.options.settingsPath);
+    const route = resolveAccountRoute(args, this.options.settingsPath, undefined, this.options.disableModelPacks);
     if (route) {
       const switched = await applyPreferredAccountRoute(args, store, this.options.settingsPath, route);
       if (switched || getRouteTargetAccountId(this.options.settingsPath, route) !== undefined) {

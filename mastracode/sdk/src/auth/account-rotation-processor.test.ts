@@ -669,6 +669,21 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     },
   );
 
+  it('ignores pack account preferences when model packs are disabled', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const { settingsPath, requestContext } = makeSharedFileRoute(seeded, seeded.accountB.id);
+    const input = makeInputArgs({ requestContext });
+
+    await new AccountStartNoticeProcessor({
+      credentialStore: seeded.storage,
+      settingsPath,
+      disableModelPacks: true,
+    }).processInput(input as never);
+
+    expect(getRequestAccountSelection(requestContext, PROVIDER)).toBeUndefined();
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+  });
+
   it.each([false, true])(
     'recovers a removed in-flight selection without refreshing the survivor (reloaded: %s)',
     async reloaded => {
@@ -1267,6 +1282,25 @@ describe('pack-fallback parts', () => {
     expect(args.writer.custom.mock.invocationCallOrder.at(-1)!).toBeLessThan(
       args.setState.mock.invocationCallOrder.at(-1)!,
     );
+  });
+
+  it('does not enter the pack cascade when model packs are disabled', async () => {
+    const seeded = await makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+      disableModelPacks: true,
+    });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    const first = await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    const second = await processor.processAPIError({ ...args, error: apiError(429) } as never);
+
+    expect(first.retry).toBe(true);
+    expect(second.retry).toBe(false);
+    expect(args.state.packCascade).toBeNull();
+    expect(args.writer.custom.mock.calls.map(call => call[0].type)).not.toContain(PACK_FALLBACK_PART_TYPE);
   });
 
   it('re-evaluates subscription routing when a fallback pack lands', async () => {

@@ -477,6 +477,32 @@ describe('settings.json OM seeding', () => {
     }
   });
 
+  it('uses mode defaults without the active pack when disableModelPacks is set', async () => {
+    const { loadSettings, resolveModelDefaults } = await import('./onboarding/settings.js');
+    const baseSettings = vi.mocked(loadSettings)();
+    const modeDefaults = {
+      build: 'anthropic/claude-fable-5',
+      plan: 'openai/gpt-5.4-mini',
+      fast: 'google/gemini-3.5-flash',
+    };
+    vi.mocked(loadSettings).mockReturnValue({
+      ...baseSettings,
+      models: { ...baseSettings.models, activeModelPackId: 'openai', modeDefaults },
+    });
+    const { createMastraCode } = await import('./index.js');
+
+    try {
+      await createMastraCode({ cwd: '/tmp/project-no-packs', disableModelPacks: true });
+
+      expect(resolveModelDefaults).toHaveBeenCalledWith(
+        expect.objectContaining({ models: expect.objectContaining({ activeModelPackId: null, modeDefaults }) }),
+        expect.any(Array),
+      );
+    } finally {
+      vi.mocked(loadSettings).mockReturnValue(baseSettings);
+    }
+  });
+
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {
     const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
     vi.mocked(resolveOmRoleModel).mockReturnValue('openai/gpt-5-mini');

@@ -333,6 +333,17 @@ describe('getDynamicModel fallback chain', () => {
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
   });
 
+  it('returns only the primary model when model packs are disabled', () => {
+    seedSettings({ anthropic: 'openai' });
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'), undefined, {
+      disableModelPacks: true,
+    });
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
   it('truncates the chain at a fallback pack that lacks the session mode model', () => {
     seedSettings({ anthropic: 'custom:empty' });
     const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));

@@ -823,9 +823,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ vector: vector as any });
 
-    // Third argument is the settings path threaded through for pack-driven
-    // observational-memory resolution; no `settingsPath` was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined);
+    // The settings path and model-pack option are threaded through for
+    // observational-memory resolution; neither was configured here.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
+      disableModelPacks: undefined,
+    });
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
@@ -1366,6 +1368,31 @@ describe('createMastraCode', () => {
     expect(controllerSubscribeMock).toHaveBeenCalled();
     expect(controllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
     expect(controllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+  });
+
+  it('does not restore model pack state when model packs are disabled', async () => {
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    controllerListThreadsMock.mockResolvedValue([
+      {
+        id: 'thread-1',
+        metadata: {
+          activeModelPackId: 'openai',
+          mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai' },
+          cavemanObservations: true,
+        },
+      },
+    ]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disableModelPacks: true });
+
+    expect(controllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+    expect(controllerSetStateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ activeModelPackId: expect.anything() }),
+    );
+    expect(controllerSetStateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ mastracodePendingPackFallback: expect.anything() }),
+    );
   });
 
   it('restores an explicit false caveman observation setting at startup', async () => {

@@ -28,6 +28,7 @@ function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
   settingsPath?: string,
+  options?: { disableModelPacks?: boolean },
 ): GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
@@ -36,10 +37,11 @@ function resolveOmRoleModelForRequest(
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
-  // for observational memory as it does for the main model.
-  const settings = loadSettings(settingsPath);
+  // for observational memory as it does for the main model. Server hosts that
+  // disable packs own these settings elsewhere and must not read settings.json.
+  const settings = options?.disableModelPacks ? undefined : loadSettings(settingsPath);
   const roleOverride =
-    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+    role === 'observer' ? settings?.models?.observerModelOverride : settings?.models?.reflectorModelOverride;
   if (roleOverride) return resolveModel(roleOverride, resolveOptions);
 
   const pendingState = state?.mastracodePendingPackFallback as
@@ -53,8 +55,8 @@ function resolveOmRoleModelForRequest(
     pendingState.toPackId.length > 0
       ? pendingState.toPackId
       : undefined;
-  const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
-  if (typeof packId === 'string' && packId.length > 0) {
+  const packId = pendingPackId ?? state?.activeModelPackId ?? settings?.models?.activeModelPackId;
+  if (settings && typeof packId === 'string' && packId.length > 0) {
     const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
     if (chained) return chained;
   }
@@ -145,7 +147,12 @@ export function hasSubconsciousTools(vector: MastraVector | undefined, state: Ma
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector, settingsPath?: string) {
+export function getDynamicMemory(
+  storage: MastraCompositeStore,
+  vector?: MastraVector,
+  settingsPath?: string,
+  options?: { disableModelPacks?: boolean },
+) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
@@ -156,9 +163,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   // Bound here so the configured settings path reaches role overrides and pack
   // memory-model resolution.
   const getObserverModel = ({ requestContext }: { requestContext: RequestContext }) =>
-    resolveOmRoleModelForRequest('observer', requestContext, settingsPath);
+    resolveOmRoleModelForRequest('observer', requestContext, settingsPath, options);
   const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
-    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath);
+    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath, options);
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;

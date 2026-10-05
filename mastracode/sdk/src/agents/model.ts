@@ -315,6 +315,7 @@ export function listResolvableModePacks(settings: ReturnType<typeof loadSettings
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
+  options?: { disableModelPacks?: boolean },
 ): ResolvedModel | ModelWithRetries[] {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
@@ -324,7 +325,7 @@ export function getDynamicModel(
         mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
       }
     | undefined;
-  const pendingState = controllerState?.mastracodePendingPackFallback;
+  const pendingState = options?.disableModelPacks ? undefined : controllerState?.mastracodePendingPackFallback;
   const pendingFallback =
     pendingState &&
     (pendingState.threadId === undefined ||
@@ -352,6 +353,7 @@ export function getDynamicModel(
   const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   const primary = resolveModel(modelId, resolveOptions);
+  if (options?.disableModelPacks) return primary;
 
   const settings = loadSettings(settingsPath);
   // `models?` tolerates partial settings mocks; loaded settings always carry it.

@@ -109,6 +109,7 @@ async function createMemoryConfig(
   projectScope: 'thread' | 'resource' = 'thread',
   vector?: unknown,
   settingsPath?: string,
+  options?: { disableModelPacks?: boolean },
 ) {
   vi.resetModules();
   memoryConstructorMock.mockClear();
@@ -122,6 +123,7 @@ async function createMemoryConfig(
     storage as never,
     vector as never,
     settingsPath,
+    options,
   )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
@@ -513,6 +515,30 @@ describe('pack-driven OM models (A11)', () => {
       { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' },
     );
     expect(resolveModelMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores settings pack memory models when model packs are disabled', async () => {
+    loadSettingsMock.mockReturnValue({
+      models: { activeModelPackId: 'anthropic', observerModelOverride: 'openai/gpt-5-mini' },
+    });
+    resolvePackMemoryModelChainMock.mockReturnValue([{ id: 'anthropic:memory', model: { modelId: 'pack-memory' } }]);
+    const { config, requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        activeModelPackId: 'anthropic',
+        observerModelId: 'google/gemini-3.5-flash',
+      },
+      'thread',
+      undefined,
+      '/custom/settings.json',
+      { disableModelPacks: true },
+    );
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'google/gemini-3.5-flash',
+    });
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+    expect(resolvePackMemoryModelChainMock).not.toHaveBeenCalled();
   });
 
   it('lets an explicit role override win over the pack OM chain', async () => {
