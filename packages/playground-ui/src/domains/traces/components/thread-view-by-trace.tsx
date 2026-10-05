@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks';
+import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useQueries } from '@tanstack/react-query';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';

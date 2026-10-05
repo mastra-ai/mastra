@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
-import { useAgentMessages } from '@mastra/react/hooks';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

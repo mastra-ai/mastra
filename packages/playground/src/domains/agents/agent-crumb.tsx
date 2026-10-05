@@ -1,5 +1,5 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
-import { useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
 import { useParams } from 'react-router';
 import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 

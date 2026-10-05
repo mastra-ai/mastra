@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { getShortId } from '@mastra/playground-ui/components/Text';
-import { useExperimentTrace } from '@mastra/react/hooks';
+import { useExperimentTrace } from '@mastra/react/hooks/experiments';
 import { EyeIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatTraceSpans } from '../utils/format-trace-spans';

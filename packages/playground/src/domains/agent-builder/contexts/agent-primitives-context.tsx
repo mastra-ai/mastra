@@ -1,14 +1,10 @@
 import type { MastraClient, StoredSkillResponse } from '@mastra/client-js';
-import type { StoredAgent } from '@mastra/react/hooks';
-import {
-  useWorkflows,
-  useStoredWorkspaces,
-  useTools,
-  useCurrentUser,
-  useAgents,
-  useStoredAgent,
-  useStoredSkills,
-} from '@mastra/react/hooks';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
+import { useAgents, useStoredAgent, useStoredSkills } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
+import { useTools } from '@mastra/react/hooks/tools';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { AvailableWorkspace } from '../hooks/use-agent-builder-tool';

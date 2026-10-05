@@ -1,4 +1,4 @@
-import { useDatasetExperiment } from '@mastra/react/hooks';
+import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';

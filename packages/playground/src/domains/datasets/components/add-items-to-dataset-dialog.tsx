@@ -16,7 +16,7 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations, useDatasets } from '@mastra/react/hooks';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
 
 export interface AddItemsToDatasetDialogProps {
@@ -128,7 +128,7 @@ export function AddItemsToDatasetDialog({
               <div className="space-y-2">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="h-full bg-success-indicator transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>

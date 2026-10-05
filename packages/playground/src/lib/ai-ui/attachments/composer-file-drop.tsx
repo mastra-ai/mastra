@@ -23,7 +23,7 @@ export const ComposerFileDrop = ({ disabled, children }: { disabled?: boolean; c
       disabled={disabled}
     >
       {error && (
-        <p role="alert" className="text-ui-sm">
+        <p role="alert" className="text-caption">
           {error}
         </p>
       )}

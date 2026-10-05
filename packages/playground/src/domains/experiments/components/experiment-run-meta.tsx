@@ -5,8 +5,8 @@ import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cos
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
-import type { ExperimentMetrics } from '@mastra/react/hooks';
-import { useScoresByExperimentId } from '@mastra/react/hooks';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { type ReactNode, useMemo } from 'react';
 
 export interface ExperimentRunMetaProps {

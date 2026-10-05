@@ -2,7 +2,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/pla
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';

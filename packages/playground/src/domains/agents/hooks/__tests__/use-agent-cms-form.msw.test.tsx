@@ -1,6 +1,6 @@
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
-import { useAgentVersions } from '@mastra/react/hooks';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

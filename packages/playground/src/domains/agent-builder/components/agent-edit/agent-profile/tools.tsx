@@ -1,4 +1,4 @@
-import { useAllProviderTools, useToolProviders } from '@mastra/react/hooks';
+import { useAllProviderTools, useToolProviders } from '@mastra/react/hooks/tool-providers';
 import { useMemo, useState } from 'react';
 import type { AgentTool } from '../../../types/agent-tool';
 import { ToolGrid, ToolListEmptyState } from './tool-grid';
