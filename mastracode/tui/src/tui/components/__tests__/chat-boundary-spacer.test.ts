@@ -243,13 +243,13 @@ describe('ChatBoundarySpacer', () => {
     ]).map(line => stripAnsi(line).trimEnd());
 
     expect(lines).toEqual([
-      expect.stringMatching(/^╭─+╮$/),
-      expect.stringMatching(/^│ \$ \/tmp\/work +│$/),
-      expect.stringMatching(/^├─+┤$/),
-      expect.stringMatching(/^│ ✓ Listing later commits +\d+ms │$/),
-      expect.stringMatching(/^│ ✓ Searching for stdin changes +\d+ms │$/),
-      expect.stringMatching(/^│ ✓ Reading changesets +\d+ms │$/),
-      expect.stringMatching(/^╰─+╯$/),
+      expect.stringMatching(/^▄+$/),
+      expect.stringMatching(/^  \$ \/tmp\/work *$/),
+      expect.stringMatching(/^ *$/),
+      expect.stringMatching(/^  ✓ Listing later commits +\d+ms$/),
+      expect.stringMatching(/^  ✓ Searching for stdin changes +\d+ms$/),
+      expect.stringMatching(/^  ✓ Reading changesets +\d+ms$/),
+      expect.stringMatching(/^▀+$/),
     ]);
   });
   it('sizes a quiet shell box to its widest row, between a narrow default and the full width', () => {
@@ -405,7 +405,7 @@ describe('ChatBoundarySpacer', () => {
     const whileStreaming = render();
     // The root box stays exactly as it was; the new box is only added below it
     expect(whileStreaming.slice(0, beforeCall.length)).toEqual(beforeCall);
-    expect(whileStreaming.filter(line => line.startsWith('╭'))).toHaveLength(2);
+    expect(whileStreaming.filter(line => line.startsWith('▄'))).toHaveLength(2);
     expect(whileStreaming.some(line => line.includes('$ /tmp'))).toBe(true);
     expect(whileStreaming.some(line => /writing command \(2\.4k chars\)/.test(line))).toBe(true);
     expect(whileStreaming.join('\n')).not.toMatch(/python3|\.\.\./);
@@ -435,7 +435,7 @@ describe('ChatBoundarySpacer', () => {
     plain.updateArgs({ command: 'cat file.ts' }, false);
     const withPlain = renderRoot();
     expect(withPlain).toHaveLength(beforePlain.length + 1);
-    expect(withPlain.filter(line => line.startsWith('╭'))).toHaveLength(1);
+    expect(withPlain.filter(line => line.startsWith('▄'))).toHaveLength(1);
     plain.stopLiveUpdates();
   });
 });

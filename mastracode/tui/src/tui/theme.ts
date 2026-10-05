@@ -394,8 +394,8 @@ export const darkTheme: ThemeColors = {
   toolBorderPending: '#52525b', // Zinc-600 dim grey for pending
   toolBorderSuccess: '#52525b', // Zinc-600 dim grey for success
   toolBorderError: '#ef4444', // Red for error
-  toolTitle: '#fb923c', // Amber for tool names
-  toolArgs: '#ffe4c4', // Bisque (warm cream) for tool arguments
+  toolTitle: '#d9d9dc', // Same as secondary: tool calls sit a step behind message text
+  toolArgs: '#d9d9dc',
   toolOutput: '#d4d4d8',
   textHighlight: '#c084fc', // Lavender for inline code, headings, links
   // Error display

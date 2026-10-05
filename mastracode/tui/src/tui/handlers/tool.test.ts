@@ -266,11 +266,11 @@ describe('quiet shell description streaming', () => {
     handleToolInputDelta(ctx, 'call-1', '{"command":"gh run view 123 --log-failed | grep FAIL"');
     await flushParser();
     expect(render()).not.toContain('gh run view');
-    expect(render()).toMatch(/│ \S writing command \(40 chars\) /);
+    expect(render()).toMatch(/  \S writing command \(40 chars\) /);
 
     handleToolInputDelta(ctx, 'call-1', ',"description":"Drilling into the failed CI job"}');
     await flushParser();
-    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
+    expect(render()).toMatch(/  \S Drilling into the failed CI job /);
     expect(render()).not.toContain('gh run view');
 
     handleToolInputEnd(ctx, 'call-1');
@@ -278,7 +278,7 @@ describe('quiet shell description streaming', () => {
       command: 'gh run view 123 --log-failed | grep FAIL',
       description: 'Drilling into the failed CI job',
     });
-    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
+    expect(render()).toMatch(/  \S Drilling into the failed CI job /);
     expect(render()).not.toContain('gh run view');
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
@@ -292,16 +292,16 @@ describe('quiet shell description streaming', () => {
       stripAnsi(ctx.state.chatContainer.render(100).join('\n'))
         .split('\n')
         .map(line => line.trimEnd())
-        .find(line => /^│ \S /.test(line) && !line.startsWith('│ $'));
+        .find(line => /^  \S /.test(line) && !line.startsWith('  $'));
 
     handleToolInputStart(ctx, 'call-1', 'execute_command');
     handleToolInputDelta(ctx, 'call-1', '{"description":"Drilling in');
     await flushParser();
-    expect(row()).toMatch(/^│ \S Drilling in +\d+s │$/);
+    expect(row()).toMatch(/^  \S Drilling in +\d+s$/);
 
     handleToolInputDelta(ctx, 'call-1', 'to the failed CI job","command":"gh run');
     await flushParser();
-    expect(row()).toMatch(/^│ \S Drilling into the failed CI job +\d+s │$/);
+    expect(row()).toMatch(/^  \S Drilling into the failed CI job +\d+s$/);
     handleToolInputEnd(ctx, 'call-1');
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
@@ -318,7 +318,7 @@ describe('quiet shell description streaming', () => {
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('git status');
 
     handleToolInputEnd(ctx, 'call-1');
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/│ \S git status /);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/  \S git status /);
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
 
@@ -366,7 +366,8 @@ describe('quiet shell description streaming', () => {
       expect(frames[i]!.length, `frame ${i}`).toBeGreaterThanOrEqual(frames[i - 1]!.length);
     }
     const final = stripAnsi(frames.at(-1)!.join('\n'));
-    expect(final.match(/╭/g)).toHaveLength(4);
+    // One shaded panel per directory group, each opened by a row of ▄
+    expect(final.split('\n').filter(line => /^\s*▄+\s*$/.test(line))).toHaveLength(4);
   }, 20_000);
 
   it('marks a shell call failed from its live exit record when the result text does not say', () => {
