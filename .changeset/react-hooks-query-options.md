@@ -1,5 +1,5 @@
 ---
-'@mastra/react': major
+'@mastra/react': patch
 ---
 
 **Every data hook now accepts `queryOptions`**
