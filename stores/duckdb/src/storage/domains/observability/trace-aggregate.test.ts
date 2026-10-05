@@ -15,6 +15,15 @@ function placeholders(sql: string): number {
   return sql.match(/\?/g)?.length ?? 0;
 }
 
+/** Inlines positional values into the SQL so tests can check each one lands at its placeholder. */
+function render(compiled: { sql: string; values: unknown[] }): string {
+  let index = 0;
+  return compiled.sql.replace(/\?/g, () => {
+    const value = compiled.values[index++];
+    return typeof value === 'string' ? `'${value}'` : String(value);
+  });
+}
+
 describe('DuckDB trace aggregate compiler', () => {
   it('selects from the same candidate population as trace queries', () => {
     const compiled = compileDuckDBTraceAggregate(
@@ -129,7 +138,7 @@ describe('DuckDB trace aggregate compiler', () => {
     expect(compiled.sql).not.toContain('usage');
   });
 
-  it('joins usage per trace, deduplicating metricId and pruning by the lower time bound only', () => {
+  it('joins usage per trace, pruning metric rows by the lower time bound only', () => {
     const compiled = compileDuckDBTraceAggregate(
       planTraceAggregate(
         parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['tokens.total.sum', 'cost.avg'] }),
@@ -137,34 +146,66 @@ describe('DuckDB trace aggregate compiler', () => {
       ),
     );
 
-    const usage = compiled.sql.slice(compiled.sql.indexOf('usage_rows AS'), compiled.sql.indexOf('facts AS'));
-    expect(usage).toContain('FROM metric_events m');
-    expect(usage).toContain('QUALIFY row_number() OVER (PARTITION BY m.metricId ORDER BY m.timestamp) = 1');
-    expect(usage).toContain('m.traceId IN (SELECT traceId FROM candidates)');
-    expect(usage).toContain('m.timestamp >= CAST(? AS TIMESTAMP)');
-    expect(usage).not.toMatch(/timestamp </);
-    expect(usage).toContain('m.organizationId = ?');
-    expect(usage).toContain('m.resourceId = ?');
-    expect(usage).not.toContain('org-a');
-    expect(usage).not.toContain('mastra_model');
-    expect(compiled.sql).toContain('LEFT JOIN usage u ON u.traceId = r.traceId');
-    expect(compiled.sql).toContain('CAST(sum(t0 + t1) AS DOUBLE)');
-    expect(compiled.sql).toContain(
-      'CAST(count_if(covered) AS DOUBLE) / NULLIF(count_if(usageBearing), 0) AS costCoverage',
+    const sql = render(compiled);
+    const between = (from: string, to: string) => sql.slice(sql.indexOf(from), sql.indexOf(to));
+    // candidates is read once, into the narrow base_facts.
+    expect(sql.match(/FROM candidates/g)).toHaveLength(1);
+    expect(between('base_facts AS', 'usage_bounds AS')).toContain('FROM candidates r');
+    const bounds = between('usage_bounds AS', 'usage_rows AS');
+    expect(bounds).toContain('traceId IN (SELECT traceId FROM base_facts)');
+    expect(bounds).toContain(`timestamp >= CAST('${TIME_RANGE.from}' AS TIMESTAMP)`);
+    expect(bounds).toContain(`organizationId = 'org-a'`);
+    expect(bounds).toContain(`resourceId = 'res-1'`);
+    const rows = between('usage_rows AS', 'usage AS');
+    expect(rows).toContain('m.timestamp >= (SELECT minTs FROM usage_bounds)');
+    expect(rows).toContain('m.timestamp <= (SELECT maxTs FROM usage_bounds)');
+    expect(rows).toContain('m.traceId IN (SELECT traceId FROM base_facts)');
+    expect(rows).toContain(`m.organizationId = 'org-a'`);
+    expect(rows).toContain(
+      `CASE WHEN m.name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens')`,
     );
-    expect(compiled.values).toEqual(expect.arrayContaining(['mastra_model_input_cache_read_tokens', 'org-a', 'res-1']));
+    // No upper bound from the request: only the exact range of qualifying rows.
+    expect(between('usage_bounds AS', 'LEFT JOIN usage')).not.toContain(`'${TIME_RANGE.to}'`);
+    expect(compiled.sql).not.toContain('org-a');
+    expect(compiled.sql).not.toContain('mastra_model');
+    expect(sql).toContain('LEFT JOIN usage u ON u.traceId = b.traceId');
+    expect(sql).toContain('CAST(sum(t0 + t1) AS DOUBLE)');
+    expect(sql).toContain('CAST(count_if(covered) AS DOUBLE) / NULLIF(count_if(usageBearing), 0) AS costCoverage');
     expect(placeholders(compiled.sql)).toBe(compiled.values.length);
   });
 
-  it('binds usage parameters in placeholder order alongside where, having, and interval values', () => {
+  it('dedupes metric rows only when metricId is not known to be unique', () => {
+    const tokensPlan = plan({ measures: ['tokens.input.sum'] });
+
+    expect(compileDuckDBTraceAggregate(tokensPlan).sql).toContain('SELECT DISTINCT ON (m.metricId) m.traceId');
+    expect(compileDuckDBTraceAggregate(tokensPlan, { metricIdsUnique: true }).sql).not.toContain('DISTINCT ON');
+  });
+
+  it('reads no cost columns for token-only plans', () => {
+    const sql = compileDuckDBTraceAggregate(plan({ measures: ['tokens.input.sum', 'tokens.output.avg'] })).sql;
+
+    for (const column of [
+      'estimatedCost',
+      'costUnit',
+      'costMetadata',
+      'json_type',
+      'costRow',
+      'traceCost',
+      'unitMin',
+    ]) {
+      expect(sql).not.toContain(column);
+    }
+  });
+
+  it('binds placeholders in text order with metadata dimensions, scope, having, and interval', () => {
     const compiled = compileDuckDBTraceAggregate(
       planTraceAggregate(
         parseTraceAggregateRequest({
           timeRange: TIME_RANGE,
           where: { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } },
-          groupBy: ['entityName'],
+          groupBy: ['metadata.region'],
           interval: '1h',
-          measures: ['cost.sum', 'tokens.input.sum'],
+          measures: ['cost.sum', 'tokens.input.sum', 'countDistinct.metadata.team'],
           having: { op: 'gt', left: { path: 'tokens.input.sum' }, right: { literal: 10 } },
           orderBy: { field: 'cost.sum', direction: 'desc' },
         }),
@@ -173,12 +214,14 @@ describe('DuckDB trace aggregate compiler', () => {
     );
 
     expect(placeholders(compiled.sql)).toBe(compiled.values.length);
-    const usageStart = placeholders(compiled.sql.slice(0, compiled.sql.indexOf('usage_rows AS')));
-    expect(compiled.values.slice(usageStart, usageStart + 2)).toEqual([
-      'mastra_model_total_input_tokens',
-      'mastra_model_total_output_tokens',
-    ]);
-    expect(compiled.values.slice(usageStart + 6, usageStart + 8)).toEqual([TIME_RANGE.from, 'org-a']);
+    const sql = render(compiled);
+    const baseFacts = sql.slice(sql.indexOf('base_facts AS'), sql.indexOf('usage_bounds AS'));
+    expect(baseFacts).toContain(`'$."region"'`);
+    expect(baseFacts).toContain(`'$."team"'`);
+    const usage = sql.slice(sql.indexOf('usage_bounds AS'), sql.indexOf('LEFT JOIN usage'));
+    expect(usage).toContain(`timestamp >= CAST('${TIME_RANGE.from}' AS TIMESTAMP)`);
+    expect(usage).toContain(`name = 'mastra_model_input_cache_read_tokens'`);
+    expect(usage).not.toContain(`'$."region"'`);
     expect(compiled.values.slice(-4)).toEqual([10, 101, 100, 100]);
   });
 });
