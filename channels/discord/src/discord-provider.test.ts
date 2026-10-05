@@ -121,6 +121,21 @@ function stubGuild(guildId: string, present: boolean) {
     );
 }
 
+/** Stub one `GET /users/@me/guilds` page: guild ids, or a failure status. */
+function stubBotGuilds(idsOrError: string[] | { status: number }) {
+  const interceptor = mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: '/api/v10/users/@me/guilds?limit=200', method: 'GET' });
+  if (Array.isArray(idsOrError)) {
+    interceptor.reply(
+      200,
+      idsOrError.map(id => ({ id, name: `Guild ${id}` })),
+    );
+  } else {
+    interceptor.reply(idsOrError.status, { message: 'oops', code: 0 });
+  }
+}
+
 /** Persistently stub the guild command PUT, capturing every payload. */
 function stubGuildCommands(guildId: string, appId: string = APP.applicationId): () => Record<string, unknown>[] {
   const calls: Record<string, unknown>[] = [];
@@ -380,6 +395,92 @@ describe('DiscordProvider.activateGuild — lazy activation (first interaction)'
     const store = new DiscordInstallStore(storage, 'k');
     const byGuild = await store.getByGuildId(GUILD);
     expect(byGuild?.agentId).toBe('agent-1');
+  });
+});
+
+describe('DiscordProvider — pending-install reconcile (invite completed in another tab)', () => {
+  it('snapshots the bot’s guild membership on the pending install', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([GUILD]); // a guild the bot was already in when the invite was issued
+
+    await provider.connect('agent-1');
+
+    const pending = await provider.getInstallation('agent-1');
+    expect(pending).toMatchObject({ status: 'pending', guildSnapshot: [GUILD] });
+  });
+
+  it('activates the install off listInstallations when exactly one guild appeared since the invite', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]); // snapshot: bot in no guilds at invite time
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD]); // operator finished the invite in another tab
+    stubGuildCommands(GUILD); // activation registers the new guild's commands
+    const installs = await provider.listInstallations();
+
+    expect(installs).toHaveLength(1);
+    expect(installs[0]).toMatchObject({ agentId: 'agent-1', status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+    const full = await provider.getInstallation('agent-1');
+    expect(full).toMatchObject({ status: 'active', guildIds: [GUILD] });
+    // The reconcile baseline is spent once a guild is confirmed.
+    expect(full?.guildSnapshot).toBeUndefined();
+  });
+
+  it('stays pending when multiple guilds appeared (ambiguous diff), keeping the snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD, OTHER_GUILD]);
+    const installs = await provider.listInstallations();
+
+    expect(installs[0]).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+  });
+
+  it('stays pending when the same new guild could belong to two pending installs', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2');
+
+    stubBotGuilds([GUILD]); // one new guild, two possible claimants — can't tell whose
+    const installs = await provider.listInstallations();
+
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('stays pending when the membership listing fails (reconcile is best-effort)', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds({ status: 500 });
+    const installs = await provider.listInstallations();
+
+    expect(installs[0]).toMatchObject({ status: 'pending' });
+  });
+
+  it('skips the guild fetch entirely when no pending install carries a snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, true);
+    stubGuildCommands(GUILD);
+    await provider.connect('agent-1', { guildId: GUILD }); // eager bind — active, no snapshot
+
+    // No stubBotGuilds registered: an unexpected fetch would throw under
+    // disableNetConnect and surface as a reconcile warning + unchanged list.
+    const installs = await provider.listInstallations();
+    expect(installs[0]).toMatchObject({ status: 'active' });
   });
 });
 

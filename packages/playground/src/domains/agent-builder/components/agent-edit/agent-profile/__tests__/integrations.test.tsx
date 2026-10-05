@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Integrations } from '../integrations';
 import { server } from '@/test/msw-server';
@@ -80,8 +80,14 @@ describe('Integrations tab', () => {
     installRadixDomShims();
   });
 
+  beforeEach(() => {
+    // The oauth connect result opens a new tab; jsdom's window.open is unimplemented.
+    vi.spyOn(window, 'open').mockImplementation(() => window);
+  });
+
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     editPageState.canPublishToChannel = false;
   });
 

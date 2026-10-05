@@ -57,7 +57,7 @@ describe('ChannelDialog (default platform)', () => {
     vi.restoreAllMocks();
   });
 
-  it('handles oauth result by redirecting to authorizationUrl', async () => {
+  it('handles oauth result by opening the authorization URL in a new tab and closing the dialog', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({
@@ -68,25 +68,48 @@ describe('ChannelDialog (default platform)', () => {
       ),
     );
 
-    // Stub window.location.href assignment.
-    const originalHref = window.location.href;
-    const hrefSetter = vi.fn();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: new Proxy(window.location, {
-        set(_target, prop, value) {
-          if (prop === 'href') {
-            hrefSetter(value);
-            return true;
-          }
-          return true;
-        },
-        get(target, prop) {
-          // @ts-expect-error indexed access
-          return target[prop];
-        },
-      }),
+    // New tab (not a same-tab redirect) keeps this studio tab alive so the
+    // installations query refetches on focus-return after the OAuth flow.
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
+    const onOpenChange = vi.fn();
+
+    render(
+      <Wrapper>
+        <ChannelDialog
+          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          agentId="agent-1"
+          open
+          onOpenChange={onOpenChange}
+        />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://oauth.example.com/authorize?id=abc',
+        '_blank',
+        'noopener,noreferrer',
+      );
     });
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a popup-blocked toast when the oauth tab cannot be opened', async () => {
+    server.use(
+      http.post('*/api/channels/discord/connect', () =>
+        HttpResponse.json({
+          type: 'oauth',
+          authorizationUrl: 'https://oauth.example.com/authorize?id=abc',
+          installationId: 'inst-1',
+        }),
+      ),
+    );
+
+    vi.spyOn(window, 'open').mockImplementation(() => null);
 
     render(
       <Wrapper>
@@ -101,13 +124,7 @@ describe('ChannelDialog (default platform)', () => {
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
     await waitFor(() => {
-      expect(hrefSetter).toHaveBeenCalledWith('https://oauth.example.com/authorize?id=abc');
-    });
-
-    // Restore so other tests are unaffected.
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { href: originalHref },
+      expect(toastErrorMock).toHaveBeenCalledWith('Popup blocked — please allow popups and try again');
     });
   });
 

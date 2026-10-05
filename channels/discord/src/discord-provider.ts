@@ -17,6 +17,7 @@ import type { DiscordAdapter } from '@chat-adapter/discord';
 import {
   buildInviteUrl,
   guildHealthCheck,
+  listBotGuildIds,
   registerGlobalCommands,
   registerGuildCommands,
   validateApp,
@@ -361,6 +362,17 @@ export class DiscordProvider implements ChannelProvider {
     }
 
     // Invite flow: persist pending, hand back the OAuth2 bot-invite URL.
+    // Snapshot the bot's current guild membership first so the install can be
+    // reconciled once the operator finishes the invite in another tab (see
+    // #reconcilePendingInstallations) — without it, activation waits for the
+    // first inbound interaction. Best-effort: a failed listing (or a bot in
+    // more guilds than we page) just falls back to lazy activation.
+    let guildSnapshot: string[] | undefined;
+    try {
+      guildSnapshot = (await listBotGuildIds(app.botToken, this.#apiBaseUrl())) ?? undefined;
+    } catch (err) {
+      console.warn('[Discord] Could not snapshot guild membership for pending install:', err);
+    }
     const pending: DiscordInstallation = {
       id: installationId,
       agentId,
@@ -371,6 +383,7 @@ export class DiscordProvider implements ChannelProvider {
       commands: commands.length ? commands : undefined,
       commandVersions: existing?.commandVersions,
       installedAt,
+      guildSnapshot,
     };
     await store.save(pending);
     // Global commands don't need a guild — register once now (best-effort).
@@ -426,6 +439,7 @@ export class DiscordProvider implements ChannelProvider {
 
     if (!known) installation.guildIds.push(guildId);
     installation.status = 'active';
+    delete installation.guildSnapshot; // the reconcile baseline is spent once a guild is confirmed
     await store.save(installation);
     // Register this newly-seen guild's commands (best-effort, hash-skipped).
     const app = await store.getAppConfig();
@@ -458,8 +472,55 @@ export class DiscordProvider implements ChannelProvider {
   /** List installations (public info only — no secrets). */
   async listInstallations(): Promise<ChannelInstallationInfo[]> {
     const store = await this.#getStore();
+    await this.#reconcilePendingInstallations(store);
     const installations = await store.list();
     return installations.map(toInstallationInfo);
+  }
+
+  /**
+   * Activate pending installs whose invite has since been completed.
+   *
+   * The invite URL carries no `redirect_uri` (the app would have to allowlist
+   * every operator origin), so nothing calls back when the operator authorizes
+   * the bot — and a pending install has no adapter, so no interaction or
+   * gateway event can reach it either. Instead, each pending install carries a
+   * {@link DiscordInstallation.guildSnapshot} taken when the invite was issued;
+   * here we diff it against the bot's current membership. Exactly **one** guild
+   * appearing since the snapshot — and claimed by no other pending install — is
+   * the authorized guild, and the install activates through the same serialized
+   * {@link activateGuild} path as a first interaction. Anything ambiguous
+   * (zero or multiple new guilds, membership unknown, shared-app races) stays
+   * pending and retries on the next list. Best-effort: failures log and never
+   * break the listing.
+   */
+  async #reconcilePendingInstallations(store: DiscordInstallStore): Promise<void> {
+    try {
+      const pending = (await store.list()).filter(i => i.status === 'pending' && i.guildSnapshot);
+      if (!pending.length) return;
+      const app = await store.getAppConfig();
+      if (!app) return;
+      const current = await listBotGuildIds(app.botToken, this.#apiBaseUrl());
+      if (!current) return; // membership unknown (too many guilds to page) — stay pending
+
+      const diffs: Array<{ installation: DiscordInstallation; newGuilds: string[] }> = [];
+      const claims = new Map<string, number>();
+      for (const installation of pending) {
+        const snapshot = new Set(installation.guildSnapshot);
+        const newGuilds = current.filter(id => !snapshot.has(id));
+        diffs.push({ installation, newGuilds });
+        for (const id of newGuilds) claims.set(id, (claims.get(id) ?? 0) + 1);
+      }
+      for (const { installation, newGuilds } of diffs) {
+        const guildId = newGuilds.length === 1 ? newGuilds[0]! : undefined;
+        if (!guildId || claims.get(guildId)! > 1) continue; // ambiguous — wait for an interaction
+        const activated = await this.activateGuild(installation.webhookId, guildId);
+        // Bring the adapter (and gateway, if enabled) up now rather than on the
+        // first webhook hit, matching the eager-bind path.
+        if (activated) await this.#activateInstallation(activated);
+      }
+    } catch (err) {
+      console.warn('[Discord] Pending-install reconcile failed (will retry on next list):', err);
+    }
   }
 
   /** The full installation for an agent (no secrets live on it), or `null`. */

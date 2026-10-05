@@ -291,4 +291,15 @@ export interface DiscordInstallation {
   commandVersions?: Record<string, string>;
   /** When the installation was created. */
   installedAt: Date;
+  /**
+   * The bot's guild ids at the moment a pending invite was issued. Lets
+   * {@link DiscordProvider.listInstallations} reconcile the install after the
+   * operator completes the invite in another tab: exactly one guild appearing
+   * since the snapshot is the authorized guild, so the install activates
+   * without waiting for a first interaction. `undefined` when the snapshot
+   * couldn't be taken (or the bot is in too many guilds to page) — the install
+   * then activates only via the first interaction, as before. Cleared on
+   * activation.
+   */
+  guildSnapshot?: string[];
 }

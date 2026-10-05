@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConnectChannelMessage } from '../connect-channel-message';
 import { server } from '@/test/msw-server';
 
@@ -53,6 +53,7 @@ describe('ConnectChannelMessage', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('renders nothing when agentId is missing', () => {
@@ -97,15 +98,9 @@ describe('ConnectChannelMessage', () => {
     expect(badge?.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('shows "Continue with Slack" and triggers the OAuth redirect when configured but not yet connected', async () => {
+  it('shows "Continue with Slack" and opens the OAuth URL in a new tab when configured but not yet connected', async () => {
     let connectCalled = false;
-    const originalLocation = window.location;
-    const locationStub = { href: 'http://localhost/start' };
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: locationStub,
-    });
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -135,13 +130,7 @@ describe('ConnectChannelMessage', () => {
       expect(connectCalled).toBe(true);
     });
     await waitFor(() => {
-      expect(locationStub.href).toBe('https://slack.example/oauth');
-    });
-
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: originalLocation,
+      expect(openSpy).toHaveBeenCalledWith('https://slack.example/oauth', '_blank', 'noopener,noreferrer');
     });
   });
 
@@ -175,14 +164,8 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Manage');
   });
 
-  it('does not navigate after the connect mutation settles with an error', async () => {
-    const originalLocation = window.location;
-    const locationStub = { href: 'http://localhost/start' };
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: locationStub,
-    });
+  it('does not open an OAuth tab after the connect mutation settles with an error', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -201,12 +184,6 @@ describe('ConnectChannelMessage', () => {
 
     // Waiting on the label revert, not a sleep, keeps the failed-mutation state update inside act.
     await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
-    expect(locationStub.href).toBe('http://localhost/start');
-
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: originalLocation,
-    });
+    expect(openSpy).not.toHaveBeenCalled();
   });
 });
