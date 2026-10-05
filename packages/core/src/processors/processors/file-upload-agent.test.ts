@@ -154,7 +154,6 @@ describe('FILE_UPLOAD_ERROR_CODES', () => {
       NO_WRITE_CAPABILITY: 'NO_WRITE_CAPABILITY',
       INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
       INVALID_FILTER: 'INVALID_FILTER',
-      UNSUPPORTED_FILE_SOURCE: 'UNSUPPORTED_FILE_SOURCE',
       INVALID_FILE_DATA: 'INVALID_FILE_DATA',
       FILE_TOO_LARGE: 'FILE_TOO_LARGE',
       UPLOAD_FAILED: 'UPLOAD_FAILED',
@@ -436,18 +435,16 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       { memory: MEMORY },
     );
 
-    expect(asked).toContainEqual({ fileName: 'notes.txt', mimeType: 'text/plain', extension: 'txt', source: 'inline' });
+    expect(asked).toContainEqual({ fileName: 'notes.txt', mimeType: 'text/plain', extension: 'txt' });
     expect(asked).toContainEqual({
       fileName: 'report.pdf',
       mimeType: 'application/pdf',
       extension: 'pdf',
-      source: 'inline',
     });
     expect(asked).toContainEqual({
       fileName: 'Data.CSV',
       mimeType: 'application/octet-stream',
       extension: 'csv',
-      source: 'inline',
     });
     expect(filePartsIn(prompts.at(-1))).toMatchObject([{ mediaType: 'text/plain', filename: 'notes.txt' }]);
     expect(writes[0]!.map(written => written.path)).toEqual([
@@ -588,9 +585,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         memory: MEMORY,
       });
 
-      expect(received).toEqual([
-        { fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf', source: 'inline' },
-      ]);
+      expect(received).toEqual([{ fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf' }]);
     });
 
     it.each([
@@ -698,12 +693,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const remoteBytes = Buffer.from('%PDF remote report');
     let server: Server;
     let baseUrl: string;
-    let requests: string[];
 
     beforeEach(async () => {
-      requests = [];
       server = createServer((request, response) => {
-        requests.push(request.url ?? '');
         const found = request.url === '/report.pdf';
         response.writeHead(found ? 200 : 404, { 'Content-Type': 'application/pdf' });
         response.end(found ? remoteBytes : 'Not found');
@@ -731,74 +723,29 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes[0]![0]!.content).toEqual(bytes);
     });
 
-    it('aborts with UNSUPPORTED_FILE_SOURCE, without downloading it, when the filter accepts a file sent as an http URL', async () => {
+    it.each([
+      ['an http URL', () => new URL(`${baseUrl}/report.pdf`)],
+      ['a provider file ID', () => 'file-abc123'],
+    ])('leaves a file sent as %s to the model, without asking the filter or uploading it', async (_label, data) => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox);
-
-      const result = await agent.generate(
-        [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
-        { memory: MEMORY },
-      );
-
-      expect(result.tripwire?.metadata).toEqual({
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.UNSUPPORTED_FILE_SOURCE,
-        fileName: 'report.pdf',
-        mimeType: 'application/pdf',
-      });
-      expect(requests).toEqual([]);
-      expect(prompts).toEqual([]);
-      expect(writes).toEqual([]);
-    });
-
-    it('tells the filter where each file comes from, so URLs can be left to the model', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const sources: Array<[string | undefined, string]> = [];
+      const asked: Array<string | undefined> = [];
       const { agent } = createHarness(sandbox, {
-        filter: ({ fileName, source }) => {
-          sources.push([fileName, source]);
-          return source === 'inline';
+        filter: ({ fileName }) => {
+          asked.push(fileName);
+          return true;
         },
       });
       const bytes = Buffer.from('inline bytes');
 
       const result = await agent.generate(
-        [
-          userMessage(
-            file(bytes, 'inline.txt', 'text/plain'),
-            file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'),
-            file('file-abc123', 'provider.pdf', 'application/pdf'),
-          ),
-        ],
+        [userMessage(file(bytes, 'inline.txt', 'text/plain'), file(data(), 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
 
       expect(result.tripwire).toBeUndefined();
-      expect(sources).toContainEqual(['inline.txt', 'inline']);
-      expect(sources).toContainEqual(['report.pdf', 'url']);
-      expect(sources).toContainEqual(['provider.pdf', 'providerFileId']);
+      expect(asked).toContain('inline.txt');
+      expect(asked).not.toContain('report.pdf');
       expect(writes.flat().map(written => written.content)).toEqual([bytes]);
-    });
-
-    it.each([
-      ['a cloud storage URL', new URL('gs://bucket/report.pdf')],
-      ['a provider file id', 'file-abc123'],
-    ])('aborts with UNSUPPORTED_FILE_SOURCE for %s', async (_label, data) => {
-      const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox);
-
-      const result = await agent.generate([userMessage(file(data, 'report.pdf', 'application/pdf'))], {
-        memory: MEMORY,
-      });
-
-      expect(result.tripwire?.metadata).toEqual({
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.UNSUPPORTED_FILE_SOURCE,
-        fileName: 'report.pdf',
-        mimeType: 'application/pdf',
-      });
-      expect(prompts).toEqual([]);
-      expect(writes).toEqual([]);
     });
 
     it('aborts with INVALID_FILE_DATA when inline data is not base64', async () => {
@@ -837,9 +784,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       const uploaded = writes[0]![0]!.path;
       expect(uploaded).toMatch(uploadedPath('\\.pdf'));
-      expect(received).toEqual([
-        { fileName: undefined, mimeType: 'application/pdf', extension: undefined, source: 'inline' },
-      ]);
+      expect(received).toEqual([{ fileName: undefined, mimeType: 'application/pdf', extension: undefined }]);
       expect(textsIn(prompts.at(-1))[0]).toContain('name: unnamed file');
       const stored = (await recall()).find(message => message.role === 'user');
       expect(stored?.content.metadata?.fileUploads).toEqual([

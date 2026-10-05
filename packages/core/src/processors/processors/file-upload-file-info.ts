@@ -1,12 +1,3 @@
-import { categorizeFileData } from '../../agent/message-list/prompt/image-utils';
-
-/**
- * Where the bytes of a file are. Only `inline` files can be uploaded: the
- * processor never downloads a URL, so a server-side request can't be pointed at
- * an internal address.
- */
-export type FileUploadSource = 'inline' | 'url' | 'providerFileId';
-
 /** What the processor knows about a file before reading its bytes. Passed to `filter` and `maxFileSize`. */
 export interface FileUploadFileInfo {
   /** Name the file was sent with; `undefined` when it has none. */
@@ -15,28 +6,10 @@ export interface FileUploadFileInfo {
   mimeType: string;
   /** Lower-cased extension without the dot; `undefined` when the file has no name or no extension. */
   extension?: string;
-  /** `inline` for bytes sent with the message, `url` for a link, `providerFileId` for a model provider's file ID. */
-  source: FileUploadSource;
 }
 
-export function fileInfoOf({
-  fileName,
-  mimeType,
-  data,
-}: {
-  fileName?: string;
-  mimeType: string;
-  data: unknown;
-}): FileUploadFileInfo {
-  return { fileName, mimeType: normalizeMimeType(mimeType), extension: extensionOf(fileName), source: sourceOf(data) };
-}
-
-export function sourceOf(data: unknown): FileUploadSource {
-  if (data instanceof URL) return 'url';
-  if (typeof data !== 'string') return 'inline';
-  const { type } = categorizeFileData(data);
-  if (type === 'url' || type === 'providerFileId') return type;
-  return 'inline';
+export function fileInfoOf({ fileName, mimeType }: { fileName?: string; mimeType: string }): FileUploadFileInfo {
+  return { fileName, mimeType: normalizeMimeType(mimeType), extension: extensionOf(fileName) };
 }
 
 /** Lower-cased extension of the last path segment, without the dot. */

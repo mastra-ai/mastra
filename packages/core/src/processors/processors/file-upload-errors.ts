@@ -12,8 +12,6 @@ export const FILE_UPLOAD_ERROR_CODES = {
   INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
   /** `filter` threw, or returned something other than `true` or `false`. */
   INVALID_FILTER: 'INVALID_FILTER',
-  /** A file to upload isn't inline data: a URL or a provider file ID is never fetched. */
-  UNSUPPORTED_FILE_SOURCE: 'UNSUPPORTED_FILE_SOURCE',
   /** Inline file data could not be decoded. */
   INVALID_FILE_DATA: 'INVALID_FILE_DATA',
   /** A file is larger than the limit returned by `maxFileSize`. */

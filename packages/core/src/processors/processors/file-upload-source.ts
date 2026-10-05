@@ -1,19 +1,23 @@
-import { parseDataUri } from '../../agent/message-list/prompt/image-utils';
+import { categorizeFileData, parseDataUri } from '../../agent/message-list/prompt/image-utils';
 import { describeFile, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
 import type { FileUploadFailureDetails, Result } from './file-upload-errors';
-import { sourceOf } from './file-upload-file-info';
+import type { FileCandidate } from './file-upload-messages';
 
 const BASE64 = /^[A-Za-z0-9+/_-]*={0,2}$/;
 const BASE64_DATA_URI = /^data:[^,]*;base64,/i;
 
-/** The inline data of a file. A URL or a provider file ID is never fetched, so it can't be uploaded. */
-export function inlineDataOf(data: unknown, file: FileUploadFailureDetails): Result<string> {
-  if (typeof data === 'string' && sourceOf(data) === 'inline') return ok(data);
-  return failed(
-    FILE_UPLOAD_ERROR_CODES.UNSUPPORTED_FILE_SOURCE,
-    `${describeFile(file.fileName)} can only be uploaded from inline data.`,
-    file,
-  );
+/** A file whose bytes were sent with the message, as base64 or a data URL. */
+export type InlineFileCandidate = FileCandidate & { data: string };
+
+/**
+ * The processor only handles files sent inline. A URL or a provider file ID is
+ * never fetched, so a server-side request can't be pointed at an internal
+ * address: the file stays in the message and the model receives it as usual.
+ */
+export function isInline(candidate: FileCandidate): candidate is InlineFileCandidate {
+  if (typeof candidate.data !== 'string') return false;
+  const { type } = categorizeFileData(candidate.data);
+  return type === 'dataUri' || type === 'raw';
 }
 
 export function decodeInline(data: string, file: FileUploadFailureDetails): Result<Buffer> {

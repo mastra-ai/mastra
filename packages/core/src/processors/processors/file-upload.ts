@@ -13,6 +13,8 @@ import { collectCandidates, listNewMessages, markRejected, markUploaded } from '
 import type { FileCandidate } from './file-upload-messages';
 import { prepareFiles } from './file-upload-prepare';
 import type { FileUploadMaxFileSize, PreparedFile } from './file-upload-prepare';
+import { isInline } from './file-upload-source';
+import type { InlineFileCandidate } from './file-upload-source';
 import { hasWriteCapability, writeFilesToSandbox } from './file-upload-writer';
 
 export { FILE_UPLOAD_ERROR_CODES } from './file-upload-errors';
@@ -128,7 +130,7 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
 
   // The sandbox is checked even when there is nothing to upload, so a broken setup shows on the first call.
   private async upload(
-    candidates: FileCandidate[],
+    candidates: InlineFileCandidate[],
     requestContext: RequestContext,
     abortSignal?: AbortSignal,
   ): Promise<Result<void>> {
@@ -156,7 +158,9 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
   }
 }
 
-const newFiles = (messageList: MessageList): FileCandidate[] => collectCandidates(listNewMessages(messageList));
+// Only files sent inline are handled; links stay in the message for the model.
+const newFiles = (messageList: MessageList): InlineFileCandidate[] =>
+  collectCandidates(listNewMessages(messageList)).filter(isInline);
 
 // A workspace without any sandbox can never work: say so when the app starts, not on the first call.
 function assertSandboxConfigured(workspace: AnyWorkspace | undefined): void {

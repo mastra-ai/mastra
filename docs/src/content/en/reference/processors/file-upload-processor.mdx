@@ -186,13 +186,6 @@ const fileUpload = new FileUploadProcessor({
       'Extension of the file name, in lower case and without the dot. Undefined when the file has no name or no extension.',
     isOptional: true,
   },
-  {
-    name: 'source',
-    type: "'inline' | 'url' | 'providerFileId'",
-    description:
-      'Where the bytes are: `inline` for data sent with the message, `url` for a link, `providerFileId` for a file ID of a model provider. Only `inline` files can be uploaded.',
-    isOptional: false,
-  },
 ]}
 />
 
@@ -202,18 +195,7 @@ The size isn't part of it, because it's only known once the data is decoded.
 
 The processor only looks at messages added during the current request, with the `user` or `signal` role. It never checks or changes messages recalled from memory, and it ignores files produced by the assistant. A file already stored in a thread reaches the model as it did before you added the processor.
 
-Only files sent inline, as binary, base64, or a data URL, are uploaded. The processor never downloads a URL: a request made by the server could reach an internal address. A file the filter accepts that is a URL or a provider file ID stops the turn with `UNSUPPORTED_FILE_SOURCE`.
-
-To send such files to the model instead, reject them in the filter:
-
-```typescript
-import { FileUploadProcessor } from '@mastra/core/processors'
-
-const fileUpload = new FileUploadProcessor({
-  workspace,
-  filter: ({ source, mimeType }) => source === 'inline' && !mimeType.startsWith('image/'),
-})
-```
+Only files sent inline, as binary, base64, or a data URL, are uploaded. A file sent as a URL or a provider file ID stays in the message and reaches the model as usual, and `filter` isn't called for it. The processor never downloads a URL, so a request made by the server can't be pointed at an internal address.
 
 ## Upload location
 
@@ -326,7 +308,6 @@ The tripwire metadata has this shape:
 | `NO_WRITE_CAPABILITY` | The sandbox has neither `writeFiles` nor `executeCommand` |
 | `INVALID_MAX_FILE_SIZE` | `maxFileSize` threw, or returned something other than a non-negative number |
 | `INVALID_FILTER` | `filter` threw, or returned something other than `true` or `false` |
-| `UNSUPPORTED_FILE_SOURCE` | A file to upload is a URL or a provider file ID instead of inline data |
 | `INVALID_FILE_DATA` | The inline data of a file to upload can't be decoded |
 | `FILE_TOO_LARGE` | A file to upload is larger than its limit |
 | `UPLOAD_FAILED` | Writing to the sandbox failed |

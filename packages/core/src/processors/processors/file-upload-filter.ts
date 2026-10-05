@@ -9,7 +9,6 @@ export type FileUploadFilter = (file: FileUploadFileInfo) => boolean | Promise<b
 interface FilterableFile {
   fileName?: string;
   mimeType: string;
-  data: unknown;
 }
 
 /** Keeps the files the filter accepts; without a filter, every file is kept. */
@@ -24,10 +23,7 @@ export async function selectFiles<T extends FilterableFile>(
 }
 
 // `filter` is user code: an answer that is not a boolean must stop the turn, not decide for it.
-async function askFilter(
-  filter: FileUploadFilter,
-  { fileName, mimeType, data }: FilterableFile,
-): Promise<Result<boolean>> {
+async function askFilter(filter: FileUploadFilter, { fileName, mimeType }: FilterableFile): Promise<Result<boolean>> {
   const invalid = (cause: string) =>
     failed(
       FILE_UPLOAD_ERROR_CODES.INVALID_FILTER,
@@ -35,7 +31,7 @@ async function askFilter(
       { fileName, mimeType, cause },
     );
   try {
-    const verdict: unknown = await filter(fileInfoOf({ fileName, mimeType, data }));
+    const verdict: unknown = await filter(fileInfoOf({ fileName, mimeType }));
     return typeof verdict === 'boolean' ? ok(verdict) : invalid(String(verdict));
   } catch (error) {
     return invalid(describeError(error));
