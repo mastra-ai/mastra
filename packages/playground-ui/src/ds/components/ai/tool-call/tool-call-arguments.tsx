@@ -5,7 +5,6 @@ import type { ToolArgumentsInput } from './tool-presentation';
 
 export interface ToolCallArgumentsProps extends ToolArgumentsInput {
   'data-testid'?: string;
-  /** Keep file contents complete when the user must review an approval. */
   showFullContent?: boolean;
 }
 

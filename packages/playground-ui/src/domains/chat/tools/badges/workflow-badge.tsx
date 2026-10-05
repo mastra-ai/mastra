@@ -9,8 +9,8 @@ import { LoadingBadge } from '@/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import {
   WorkflowGraph,
@@ -28,7 +28,7 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useLinkComponent } from '@/lib/framework';
 
-export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface WorkflowBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   workflowId: string;
   result?: any;
   isStreaming?: boolean;

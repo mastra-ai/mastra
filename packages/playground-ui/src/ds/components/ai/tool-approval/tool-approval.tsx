@@ -1,4 +1,5 @@
 import { Check, ShieldCheck, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Activity, ActivityContent, ActivityHeader, ActivityIcon, ActivityTrigger } from '../activity';
 import { presentTool, ToolCallArguments } from '../tool-call';
@@ -7,22 +8,19 @@ import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 
-interface ApprovalDecisionProps {
-  onApprove: () => void;
-  onDecline: () => void;
-  disabled?: boolean;
-  status?: 'approved' | 'declined';
-  toolName?: string;
-  autoFocus?: boolean;
-}
+type ToolApprovalDecision = 'approved' | 'declined';
 
 const approvalStates = {
   pending: { label: 'Approval required', variant: 'warning', icon: ShieldCheck },
   approved: { label: 'Approved', variant: 'success', icon: Check },
   declined: { label: 'Declined', variant: 'neutral', icon: X },
-} satisfies Record<string, { label: string; variant: BadgeVariant; icon: typeof Check }>;
+} satisfies Record<'pending' | ToolApprovalDecision, { label: string; variant: BadgeVariant; icon: LucideIcon }>;
 
-function ApprovalStatus({ status }: Pick<ToolApprovalProps, 'status'>) {
+export interface ToolApprovalStatusProps {
+  status?: ToolApprovalDecision;
+}
+
+export function ToolApprovalStatus({ status }: ToolApprovalStatusProps) {
   const { label, variant, icon: StatusIcon } = approvalStates[status ?? 'pending'];
   return (
     <span role="status" className="inline-flex shrink-0">
@@ -33,15 +31,21 @@ function ApprovalStatus({ status }: Pick<ToolApprovalProps, 'status'>) {
   );
 }
 
-function ApprovalActions({
+export interface ToolApprovalActionsProps {
+  onApprove: () => void;
+  onDecline: () => void;
+  disabled?: boolean;
+  toolName?: string;
+  autoFocus?: boolean;
+}
+
+export function ToolApprovalActions({
   onApprove,
   onDecline,
   disabled = false,
-  status,
   toolName,
   autoFocus = false,
-}: ApprovalDecisionProps) {
-  if (status) return null;
+}: ToolApprovalActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -70,42 +74,14 @@ function ApprovalActions({
   );
 }
 
-export interface ToolApprovalProps extends ApprovalDecisionProps {
+export interface ToolApprovalProps extends ToolApprovalActionsProps, ToolApprovalStatusProps {
   toolName: string;
-  /** Inline omits the activity frame when the tool already has its own details. */
-  variant?: 'default' | 'inline';
-  /** Full arguments, rendered with the same tool details used by Studio. */
   args?: unknown;
-  /** Inline only: set false when ToolApproval.Status is already in the tool header. */
-  showStatus?: boolean;
   /** Custom details replace the default argument renderer. */
   children?: ReactNode;
 }
 
-export function ToolApproval({
-  toolName,
-  variant = 'default',
-  args,
-  children,
-  showStatus = true,
-  ...actions
-}: ToolApprovalProps) {
-  const content = (
-    <>
-      {children ?? <ToolCallArguments toolName={toolName} args={args} showFullContent />}
-      <ApprovalActions toolName={toolName} {...actions} />
-    </>
-  );
-
-  if (variant === 'inline') {
-    return (
-      <div className="flex min-w-0 flex-col gap-2" role="group" aria-label={`Tool approval for ${toolName}`}>
-        {showStatus && <ApprovalStatus status={actions.status} />}
-        {content}
-      </div>
-    );
-  }
-
+export function ToolApproval({ toolName, args, status, children, ...actions }: ToolApprovalProps) {
   const { icon: ToolIcon } = presentTool(toolName, args);
 
   return (
@@ -118,26 +94,13 @@ export function ToolApproval({
           <Txt as="span" variant="caption" tone="muted" font="mono" className="min-w-0 break-all">
             {toolName}
           </Txt>
-          <ApprovalStatus status={actions.status} />
+          <ToolApprovalStatus status={status} />
         </ActivityHeader>
       </ActivityTrigger>
-      <ActivityContent>{content}</ActivityContent>
+      <ActivityContent>
+        {children ?? <ToolCallArguments toolName={toolName} args={args} showFullContent />}
+        {!status && <ToolApprovalActions toolName={toolName} {...actions} />}
+      </ActivityContent>
     </Activity>
-  );
-}
-
-/** Shared approval UI; Status is the header slot for an existing tool activity. */
-ToolApproval.Status = ApprovalStatus;
-
-/** @deprecated Use ToolApprovalProps and ToolApproval with variant="inline". */
-export type ToolApprovalActionsProps = ApprovalDecisionProps;
-
-/** @deprecated Use ToolApproval with variant="inline". Kept for existing consumers. */
-export function ToolApprovalActions(props: ToolApprovalActionsProps) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <ApprovalStatus status={props.status} />
-      <ApprovalActions {...props} />
-    </div>
   );
 }

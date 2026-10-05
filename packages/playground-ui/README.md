@@ -23,9 +23,9 @@ export function SaveButton() {
 
 ### Tool approvals
 
-`ToolApproval` owns the approval prompt, actions, and decision status in both Factory and Studio.
-The default presentation uses the shared activity layout and renders full tool arguments, including
-file previews. Use `variant="inline"` when the tool already has a detail container.
+`ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
+with its decision status, the full tool arguments (file previews included), and the Approve and
+Decline actions.
 
 ```tsx
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
@@ -38,23 +38,24 @@ import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval'
   onApprove={approve}
   onDecline={decline}
 />;
+```
 
-// Inside an existing tool detail body; omit args when they are already displayed.
-<ToolApproval variant="inline" toolName="write_file" onApprove={approve} onDecline={decline} />;
+A tool that already renders its own activity composes the parts instead: `ToolApprovalStatus` beside
+the tool name, `ToolApprovalActions` in the details while the request is pending.
+
+```tsx
+import { ToolApprovalActions, ToolApprovalStatus } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<>
+  <ActivityHeadline icon={icon} label={label} badges={<ToolApprovalStatus status={decision} />} />
+  {!decision && <ToolApprovalActions toolName="write_file" onApprove={approve} onDecline={decline} />}
+</>;
 ```
 
 The consumer owns submission, error feedback, and the optional `approved` or `declined` status.
-Status appears beside the tool name. Pending requests stay expanded so their controls remain visible.
-A decision removes the actions; Studio details can then collapse while retaining the status in the header.
-Clearing the decision restores the controls for retry. `ToolApproval.Status` is the shared header slot
-for existing tool activities; pair it with `showStatus={false}` on the inline body.
-`disabled` blocks both decisions without implying server confirmation. `autoFocus` opts into
-focusing Approve on mount. Custom `children` replace the default argument preview.
-
-All variants and Studio integration examples live under **AI / Tool Approval** in Storybook.
-`ToolApprovalActions` is deprecated; use `ToolApproval` with `variant="inline"` instead.
-Studio's internal `ToolApprovalBadge` adapter selects the streaming, generate, or network callback
-and keeps all tool kinds expanded while a decision is pending.
+A decision removes the actions; clearing it restores them for a retry. `disabled` blocks both
+decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
+`children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
 
 ### Semantic color tokens
 

@@ -3,9 +3,8 @@ import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ActivityHeadline } from '@/ds/components/ai/activity';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import {
   hasToolArguments,
@@ -26,7 +25,7 @@ function formatArgs(args: Record<string, unknown> | string): { pretty: string; p
   }
 }
 
-export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
@@ -87,15 +86,10 @@ export const ToolBadge = ({
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="tool-badge"
-      header={badges => (
-        <ActivityHeadline
-          badges={badges}
-          icon={<ToolIcon aria-hidden />}
-          label={label}
-          detail={detail}
-          description={description}
-        />
-      )}
+      icon={<ToolIcon aria-hidden />}
+      title={label}
+      detail={detail}
+      description={description}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -107,7 +101,7 @@ export const ToolBadge = ({
           <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
-      initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
+      initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}
     >
       {hasBody && (
         <>

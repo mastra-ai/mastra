@@ -19,15 +19,6 @@ const meta = {
   },
   argTypes: {
     toolName: { description: 'Tool name shown in the heading and accessible action names.' },
-    variant: {
-      description: 'Use inline inside existing tool details; the default includes the activity frame.',
-      control: 'radio',
-      options: ['default', 'inline'],
-    },
-    showStatus: {
-      description: 'Inline only: set false when ToolApproval.Status is in the existing header.',
-      control: 'boolean',
-    },
     args: { description: 'Full tool arguments, rendered as shared tool details or a file preview.', control: 'object' },
     disabled: { description: 'Blocks both decisions while the consumer is busy.', control: 'boolean' },
     status: {
@@ -50,7 +41,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One approval component for Factory and Studio. The default uses the shared activity layout and tool argument preview; inline fits an existing tool detail body. Actions and decision status belong to the component. Pending requests stay expanded; ToolApproval.Status keeps the decision beside the tool name when Studio details are collapsed. Consumers own requests, errors, and status (including optimistic updates and rollback). ToolApprovalActions remains a deprecated compatibility export. Studio integration examples below use the real tool badge and routing provider with callback spies; transport behavior is covered by application tests.',
+          'One approval component for Factory and Studio. ToolApproval frames a standalone request in the shared activity layout with the tool argument preview. Tools that already have their own activity compose the parts instead: ToolApprovalStatus beside the tool name, ToolApprovalActions in the details. Pending requests stay expanded; a decision removes the actions and the status stays visible when Studio details are collapsed. Consumers own requests, errors, and status (including optimistic updates and rollback). Studio integration examples below use the real tool badge and routing provider with callback spies; transport behavior is covered by application tests.',
       },
     },
   },
@@ -114,7 +105,6 @@ export const LongToolName: Story = {
 };
 
 export const WithoutDetails: Story = { args: { args: undefined } };
-export const Inline: Story = { args: { variant: 'inline', args: undefined }, play: Pending.play };
 
 function InteractiveApproval(props: ToolApprovalProps) {
   const [status, setStatus] = useState<ToolApprovalProps['status']>();

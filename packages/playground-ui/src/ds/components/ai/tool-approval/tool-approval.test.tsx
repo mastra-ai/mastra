@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ToolApproval, ToolApprovalActions } from './tool-approval';
+import { ToolApproval } from './tool-approval';
 
 const noop = () => {};
 
 afterEach(cleanup);
 
-describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
+describe('ToolApproval', () => {
   it('dispatches decisions with tool-specific accessible labels', () => {
     const onApprove = vi.fn();
     const onDecline = vi.fn();
-    render(<ToolApproval variant={variant} toolName="write_file" onApprove={onApprove} onDecline={onDecline} />);
+    render(<ToolApproval toolName="write_file" onApprove={onApprove} onDecline={onDecline} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve write_file' }));
     fireEvent.click(screen.getByRole('button', { name: 'Decline write_file' }));
@@ -21,18 +21,17 @@ describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
   });
 
   it.each(['approved', 'declined'] as const)('announces %s and removes decision controls', status => {
-    render(<ToolApproval variant={variant} toolName="write_file" status={status} onApprove={noop} onDecline={noop} />);
+    render(<ToolApproval toolName="write_file" status={status} onApprove={noop} onDecline={noop} />);
 
     expect(screen.getByRole('status').textContent?.toLowerCase()).toBe(status);
     expect(screen.queryByRole('button', { name: 'Approve write_file' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Decline write_file' })).toBeNull();
-    expect(screen.queryByText('Approval required')).toBeNull();
   });
 
-  it('blocks decisions while busy and allows a retry when the consumer clears pending', () => {
+  it('blocks decisions while busy and allows a retry once the consumer is idle', () => {
     const onApprove = vi.fn();
     const onDecline = vi.fn();
-    const props = { variant, toolName: 'write_file', onApprove, onDecline };
+    const props = { toolName: 'write_file', onApprove, onDecline };
     const { rerender } = render(<ToolApproval {...props} disabled />);
 
     for (const button of screen.getAllByRole<HTMLButtonElement>('button')) {
@@ -48,7 +47,7 @@ describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
   });
 
   it('restores decisions when the consumer rolls back a status', () => {
-    const props = { variant, toolName: 'write_file', onApprove: vi.fn(), onDecline: vi.fn() };
+    const props = { toolName: 'write_file', onApprove: vi.fn(), onDecline: vi.fn() };
     const { rerender } = render(<ToolApproval {...props} status="approved" />);
 
     rerender(<ToolApproval {...props} />);
@@ -60,13 +59,7 @@ describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
   it('keeps the full arguments available for review', () => {
     const content = `${'A long file body. '.repeat(180)}End of requested change.`;
     render(
-      <ToolApproval
-        variant={variant}
-        toolName="write_file"
-        args={{ path: 'src/agent.ts', content }}
-        onApprove={noop}
-        onDecline={noop}
-      />,
+      <ToolApproval toolName="write_file" args={{ path: 'src/agent.ts', content }} onApprove={noop} onDecline={noop} />,
     );
 
     expect(screen.getByText(/End of requested change/).textContent).toContain(content);
@@ -74,13 +67,7 @@ describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
 
   it('allows custom details to replace the argument preview', () => {
     render(
-      <ToolApproval
-        variant={variant}
-        toolName="write_file"
-        args={{ path: 'hidden.ts' }}
-        onApprove={noop}
-        onDecline={noop}
-      >
+      <ToolApproval toolName="write_file" args={{ path: 'hidden.ts' }} onApprove={noop} onDecline={noop}>
         <p>Custom review details</p>
       </ToolApproval>,
     );
@@ -88,11 +75,4 @@ describe.each(['default', 'inline'] as const)('ToolApproval (%s)', variant => {
     expect(screen.getByText('Custom review details')).not.toBeNull();
     expect(screen.queryByText(/hidden.ts/)).toBeNull();
   });
-});
-
-it('preserves the legacy actions export with generic accessible names', () => {
-  const onApprove = vi.fn();
-  render(<ToolApprovalActions onApprove={onApprove} onDecline={noop} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-  expect(onApprove).toHaveBeenCalledOnce();
 });

@@ -6,8 +6,8 @@ import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
@@ -30,7 +30,7 @@ type ToolMessage = {
 
 export type AgentMessage = TextMessage | ToolMessage;
 
-export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface AgentBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
   messages: AgentMessage[];
   metadata?: MessageMetadata;
