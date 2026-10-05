@@ -18,6 +18,7 @@ import { BufferingCoordinator } from '../buffering-coordinator';
 import { filterObservedMessages } from '../message-utils';
 import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { ObservationalMemory } from '../observational-memory';
+import { isOpActiveInProcess } from '../operation-registry';
 
 const SECRET = 'ACTIVATED_FACT_7c1e';
 
@@ -836,6 +837,83 @@ describe('observation markers never cover content the cycle did not observe', ()
   });
 });
 
+describe('markers on already marked messages', () => {
+  const marker = (type: string, cycleId: string) => ({ type, data: { cycleId, operationType: 'observation' } });
+  const shape = (m: MastraDBMessage) => m.content.parts.map(p => (p.type === 'text' ? p.text.split(' ')[0] : p.type));
+
+  it('a stored message that already has an end marker gets the new markers right after the newly observed parts', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 100 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const asked = message(ids.threadId, ids.resourceId, 'tr-q', 'question', at(1));
+    const answered = message(ids.threadId, ids.resourceId, 'tr-a', 'OLD '.repeat(200), at(2), 'assistant');
+    answered.content.parts.push(
+      marker('data-om-observation-start', 'c0') as any,
+      marker('data-om-observation-end', 'c0') as any,
+      { type: 'text', text: 'NEW '.repeat(300) },
+    );
+    await storage.saveMessages({ messages: [asked, answered] });
+    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      // Another instance's running turn appends to the same message while the Observer runs.
+      const stored = (await storage.listMessagesById({ messageIds: [answered.id] })).messages[0]!;
+      stored.content.parts.push({ type: 'text', text: 'GROWN part' });
+      await storage.saveMessages({ messages: [stored] });
+      return { observations: '- new answer' } as Awaited<ReturnType<typeof om.observer.call>>;
+    });
+
+    const stored = (await storage.listMessages({ threadId: ids.threadId, perPage: false })).messages;
+    const result = await om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages: stored });
+
+    expect(result.observed).toBe(true);
+    const after = (await storage.listMessagesById({ messageIds: [answered.id] })).messages[0]!;
+    expect(shape(after)).toEqual([
+      'OLD',
+      'data-om-observation-start',
+      'data-om-observation-end',
+      'NEW',
+      'data-om-observation-start',
+      'data-om-observation-end',
+      'GROWN',
+    ]);
+  });
+
+  it("resource scope: no marker lands on another thread's message that still has unobserved parts", async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { scope: 'resource', messageTokens: 100 });
+    const resourceId = randomUUID();
+    const current = await setupThread(storage, resourceId);
+    const other = await setupThread(storage, resourceId);
+    const at = (s: number) => new Date(other.t0.getTime() + s * 1_000);
+    // The other thread's answer was observed mid-loop, then gained a part. Its cursor is past the
+    // answer, so this cycle only reads the user message that followed.
+    const answer = message(other.threadId, resourceId, 'ot-a', 'ANSWER '.repeat(50), at(1), 'assistant');
+    answer.content.parts.push(
+      marker('data-om-observation-start', 'c0') as any,
+      marker('data-om-observation-end', 'c0') as any,
+      { type: 'text', text: 'UNOBSERVED tail' },
+    );
+    const followUp = message(other.threadId, resourceId, 'ot-q', 'follow '.repeat(1_000), at(3));
+    await storage.saveMessages({ messages: [answer, followUp] });
+    const thread = (await storage.getThreadById({ threadId: other.threadId }))!;
+    await storage.updateThread({
+      id: other.threadId,
+      title: thread.title ?? '',
+      metadata: setThreadOMMetadata(thread.metadata, { lastObservedAt: at(2).toISOString() }),
+    });
+    const prompt = message(current.threadId, resourceId, 'cur-q', 'hello '.repeat(150), at(4));
+    vi.spyOn(om.observer, 'callMultiThread').mockResolvedValue({
+      results: new Map([[other.threadId, { observations: '- follow-up observed' }]]),
+    } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
+
+    const result = await om.observe({ threadId: current.threadId, resourceId, messages: [prompt] });
+
+    expect(result.observed).toBe(true);
+    const after = (await storage.listMessagesById({ messageIds: [answer.id] })).messages[0]!;
+    expect(shape(after)).toEqual(['ANSWER', 'data-om-observation-start', 'data-om-observation-end', 'UNOBSERVED']);
+  });
+});
+
 describe('concurrent buffer() calls', () => {
   it('queued behind the same op run one after another, so new messages are buffered once', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
@@ -868,5 +946,73 @@ describe('concurrent buffer() calls', () => {
     const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
     expect(observerCall).toHaveBeenCalledTimes(2);
     expect((head.bufferedObservationChunks ?? []).map(c => c.messageIds)).toEqual([['cb-1'], ['cb-2']]);
+  });
+
+  it('keep a later buffer() registered when the processor-path op ahead of it finishes', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const first = message(ids.threadId, ids.resourceId, 'pp-1', 'buffer me '.repeat(60), at(1));
+    const second = message(ids.threadId, ids.resourceId, 'pp-2', 'and me '.repeat(60), at(2));
+    await storage.saveMessages({ messages: [first, second] });
+    const turnRecord = { ...(await om.getOrCreateRecord(ids.threadId, ids.resourceId)) };
+    const internals = om as any;
+    const lockKey = internals.buffering.getLockKey(ids.threadId, ids.resourceId);
+    const bufferKey = internals.buffering.getObservationBufferKey(lockKey);
+    const gate = deferred();
+    let registeredDuringSecond: boolean | undefined;
+    const observerCall = vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      if (observerCall.mock.calls.length === 1) await gate.promise;
+      else registeredDuringSecond = BufferingCoordinator.asyncBufferingOps.has(bufferKey);
+      return { observations: '- buffered' } as Awaited<ReturnType<typeof om.observer.call>>;
+    });
+
+    // The processor path starts an op; buffer() queues behind it.
+    await internals.startAsyncBufferedObservation({ ...turnRecord }, ids.threadId, [first], lockKey, undefined, 1_000);
+    await vi.waitFor(() => expect(observerCall).toHaveBeenCalledTimes(1));
+    const queued = om.buffer({
+      ...ids,
+      record: { ...turnRecord },
+      messages: [first, second],
+      skipMinimumTokenCheck: true,
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    gate.resolve();
+    await queued;
+
+    expect(observerCall).toHaveBeenCalledTimes(2);
+    expect(registeredDuringSecond).toBe(true);
+  });
+
+  it('release the in-flight registration under the id they took it with, even after a rollover', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const messages = [message(ids.threadId, ids.resourceId, 'rb-1', 'buffer me '.repeat(60), at(1))];
+    await storage.saveMessages({ messages });
+    // The turn cached generation 0; another process reflects before this buffer call runs.
+    const turnRecord = { ...(await om.getOrCreateRecord(ids.threadId, ids.resourceId)) };
+    const head = await storage.createReflectionGeneration({
+      currentRecord: turnRecord,
+      reflection: '- reflected',
+      tokenCount: 2,
+    });
+    expect(head.id).not.toBe(turnRecord.id);
+    let activeDuringObserver: Record<string, boolean> = {};
+    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      activeDuringObserver = {
+        turn: isOpActiveInProcess(turnRecord.id, 'bufferingObservation'),
+        head: isOpActiveInProcess(head.id, 'bufferingObservation'),
+      };
+      return { observations: '- buffered' } as Awaited<ReturnType<typeof om.observer.call>>;
+    });
+
+    await om.buffer({ ...ids, record: turnRecord, messages, skipMinimumTokenCheck: true });
+
+    expect(activeDuringObserver.turn).toBe(true);
+    expect(isOpActiveInProcess(turnRecord.id, 'bufferingObservation')).toBe(false);
+    expect(isOpActiveInProcess(head.id, 'bufferingObservation')).toBe(false);
   });
 });
