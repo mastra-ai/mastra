@@ -4,13 +4,8 @@ import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } f
 
 const accessToken = 'platform-secret-token';
 
-function client(fetchImpl: typeof fetch, factoryIdentity?: 'installation') {
-  return new PlatformApiClient({
-    baseUrl: 'https://platform.example.com/',
-    accessToken,
-    fetchImpl,
-    factoryIdentity,
-  });
+function client(fetchImpl: typeof fetch) {
+  return new PlatformApiClient({ baseUrl: 'https://platform.example.com/', accessToken, fetchImpl });
 }
 
 afterEach(() => {
@@ -121,27 +116,6 @@ describe('PlatformApiClient', () => {
     expect(fetchImpl.mock.calls[0]?.[1]).not.toHaveProperty('credentials');
   });
 
-  it('opts Factory writes into installation identity while preserving the server-resolved actor for audit', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
-      );
-
-    await client(fetchImpl, 'installation').request(
-      'POST',
-      '/v1/server/github/repos/acme/app/pulls',
-      {},
-      {
-        actingUserId: 'user-42',
-      },
-    );
-
-    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({
-      'x-acting-user-id': 'user-42',
-      'x-mastra-factory-identity': 'installation',
-    });
-  });
   it('returns manual redirect locations without following them', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
