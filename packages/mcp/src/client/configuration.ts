@@ -1232,7 +1232,12 @@ To fix this you have three different options:
       }
 
       for (const [toolName, definition] of Object.entries(definitions)) {
-        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        try {
+          tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        } catch (error) {
+          // The client already logged which tool was skipped and why.
+          if (!(error instanceof MastraError && error.id === 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA')) throw error;
+        }
       }
     }
 

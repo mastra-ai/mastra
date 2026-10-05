@@ -77,6 +77,35 @@ type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
+const SCHEMA_MAP_KEYWORDS = [
+  '$defs',
+  'definitions',
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  'dependencies',
+] as const;
+const SCHEMA_ARRAY_KEYWORDS = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'] as const;
+const SCHEMA_KEYWORDS = [
+  'additionalProperties',
+  'unevaluatedProperties',
+  'additionalItems',
+  'unevaluatedItems',
+  'items',
+  'contains',
+  'propertyNames',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contentSchema',
+] as const;
+const JSON_SCHEMA_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
  * Only schema-bearing keywords are walked, so deeply nested annotation data such as
@@ -86,29 +115,6 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   const seen = new Set<object>();
   let nodes = 0;
   const stack = [{ value: schema, depth: 0 }];
-  const schemaMapKeywords = [
-    '$defs',
-    'definitions',
-    'properties',
-    'patternProperties',
-    'dependentSchemas',
-    'dependencies',
-  ];
-  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
-  const schemaKeywords = [
-    'additionalProperties',
-    'unevaluatedProperties',
-    'additionalItems',
-    'unevaluatedItems',
-    'items',
-    'contains',
-    'propertyNames',
-    'not',
-    'if',
-    'then',
-    'else',
-    'contentSchema',
-  ];
 
   while (stack.length > 0) {
     const { value, depth } = stack.pop()!;
@@ -124,20 +130,96 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
     }
 
     const record = value as Record<string, unknown>;
-    for (const keyword of schemaMapKeywords) {
+    for (const keyword of SCHEMA_MAP_KEYWORDS) {
       const schemas = record[keyword];
       if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
         for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
       }
     }
-    for (const keyword of schemaArrayKeywords) {
+    for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
       const schemas = record[keyword];
       if (Array.isArray(schemas)) {
         for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
       }
     }
-    for (const keyword of schemaKeywords) {
+    for (const keyword of SCHEMA_KEYWORDS) {
       if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Finds structural errors in a server-supplied input schema that strict model providers
+ * reject for the whole request, e.g. a misplaced `required` array under `properties`.
+ * Checks the shape of schema-bearing and structural keywords rather than the full
+ * meta-schema, because Ajv-compiled validators need code generation, which Cloudflare
+ * Workers forbid. Schemas beyond the complexity bounds are left to
+ * getJsonSchemaComplexityError.
+ */
+function getJsonSchemaShapeError(schema: unknown): string | undefined {
+  if (!isPlainObject(schema)) return '/: input schema must be a JSON object';
+
+  const seen = new Set<object>();
+  let nodes = 0;
+  const stack: { value: unknown; path: string; depth: number }[] = [{ value: schema, path: '', depth: 0 }];
+
+  while (stack.length > 0) {
+    const { value, path, depth } = stack.pop()!;
+    if (typeof value === 'boolean') continue;
+    if (!isPlainObject(value)) return `${path || '/'}: must be a JSON Schema object or boolean`;
+    if (seen.has(value)) continue;
+    seen.add(value);
+
+    nodes += 1;
+    if (depth > MAX_JSON_SCHEMA_DEPTH || nodes > MAX_JSON_SCHEMA_NODES) return undefined;
+
+    const push = (child: unknown, childPath: string) => stack.push({ value: child, path: childPath, depth: depth + 1 });
+
+    if (value.type !== undefined) {
+      const types = Array.isArray(value.type) ? value.type : [value.type];
+      if (types.length === 0 || types.some(type => typeof type !== 'string' || !JSON_SCHEMA_TYPES.has(type))) {
+        return `${path}/type: must be a JSON Schema type name or an array of them`;
+      }
+    }
+    if (
+      value.required !== undefined &&
+      (!Array.isArray(value.required) || value.required.some(name => typeof name !== 'string'))
+    ) {
+      return `${path}/required: must be an array of strings`;
+    }
+    if (value.enum !== undefined && !Array.isArray(value.enum)) {
+      return `${path}/enum: must be an array`;
+    }
+
+    for (const keyword of SCHEMA_MAP_KEYWORDS) {
+      const schemas = value[keyword];
+      if (schemas === undefined) continue;
+      if (!isPlainObject(schemas)) return `${path}/${keyword}: must be an object`;
+      for (const [key, child] of Object.entries(schemas)) {
+        // draft-07 `dependencies` entries may also be arrays of property names.
+        if (keyword === 'dependencies' && Array.isArray(child)) {
+          if (child.some(name => typeof name !== 'string')) {
+            return `${path}/${keyword}/${key}: must be a schema or an array of strings`;
+          }
+          continue;
+        }
+        push(child, `${path}/${keyword}/${key}`);
+      }
+    }
+    for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
+      const schemas = value[keyword];
+      if (schemas === undefined || (keyword === 'items' && !Array.isArray(schemas))) continue;
+      const nonEmpty = keyword === 'allOf' || keyword === 'anyOf' || keyword === 'oneOf';
+      if (!Array.isArray(schemas) || (nonEmpty && schemas.length === 0)) {
+        return `${path}/${keyword}: must be a ${nonEmpty ? 'non-empty ' : ''}array of schemas`;
+      }
+      schemas.forEach((child, index) => push(child, `${path}/${keyword}/${index}`));
+    }
+    for (const keyword of SCHEMA_KEYWORDS) {
+      if (value[keyword] === undefined || (keyword === 'items' && Array.isArray(value[keyword]))) continue;
+      push(value[keyword], `${path}/${keyword}`);
     }
   }
 
@@ -1396,6 +1478,31 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    // A malformed input schema makes strict providers reject the whole tools array, so the
+    // tool is dropped here instead of breaking every request that includes its siblings.
+    const inputSchema: unknown = tool.inputSchema;
+    const inputSchemaError = getJsonSchemaShapeError(
+      isPlainObject(inputSchema) && 'jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema,
+    );
+    if (inputSchemaError) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
+      this.log(
+        'warning',
+        `Skipping MCP tool "${tool.name}" with an invalid input schema: ${inputSchemaError}`,
+        details,
+      );
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaError}`,
+          details,
+        });
+      }
+      return undefined;
+    }
+
     try {
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;

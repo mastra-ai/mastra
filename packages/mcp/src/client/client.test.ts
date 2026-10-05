@@ -3620,3 +3620,98 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     expect(transport.close).toHaveBeenCalledOnce();
   });
 });
+
+describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () => {
+  function createClientWithTools(tools: unknown[]) {
+    const client = new InternalMastraMCPClient({
+      name: 'schema-test-server',
+      server: { url: new URL('http://localhost:1/mcp') },
+    });
+    vi.spyOn((client as any).client as Client, 'listTools').mockResolvedValue({ tools } as any);
+    const warn = vi.spyOn((client as any).logger, 'warn');
+    return { client, warn };
+  }
+
+  const validTool = {
+    name: 'get_candles',
+    inputSchema: { type: 'object', properties: { coin: { type: 'string' } }, required: ['coin'] },
+  };
+
+  it('skips a tool whose required list is nested under properties and keeps its siblings', async () => {
+    const { client, warn } = createClientWithTools([
+      validTool,
+      {
+        name: 'get_l2_book',
+        inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+      },
+    ]);
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "get_l2_book" with an invalid input schema'),
+      expect.objectContaining({
+        serverName: 'schema-test-server',
+        toolName: 'get_l2_book',
+        reason: '/properties/required: must be a JSON Schema object or boolean',
+      }),
+    );
+  });
+
+  it.each([
+    ['boolean root', true],
+    ['array root', [{ type: 'string' }]],
+    [
+      'deeply nested non-schema',
+      { type: 'object', properties: { a: { type: 'object', properties: { b: 'string' } } } },
+    ],
+    ['required with non-strings', { type: 'object', required: ['a', 1] }],
+    ['unknown type name', { type: 'object', properties: { a: { type: 'text' } } }],
+    ['enum that is not an array', { type: 'object', properties: { a: { enum: 'x' } } }],
+    ['empty anyOf', { type: 'object', properties: { a: { anyOf: [] } } }],
+    ['properties that is not an object', { type: 'object', properties: [] }],
+    ['non-schema behind a jsonSchema wrapper', { jsonSchema: { type: 'object', properties: { a: 1 } } }],
+  ])('skips a tool with a %s input schema', async (_, inputSchema) => {
+    const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+  });
+
+  it.each([
+    ['a property named required', { type: 'object', properties: { required: { type: 'boolean' } } }],
+    ['boolean subschemas', { type: 'object', properties: { a: true }, additionalProperties: false }],
+    ['draft-07 tuple items', { type: 'object', properties: { a: { type: 'array', items: [{ type: 'string' }] } } }],
+    ['draft-07 property dependencies', { type: 'object', dependencies: { a: ['b'], c: { required: ['d'] } } }],
+    ['nullable type arrays', { type: 'object', properties: { a: { type: ['string', 'null'] } } }],
+    ['refs into $defs', { type: 'object', properties: { a: { $ref: '#/$defs/A' } }, $defs: { A: { type: 'string' } } }],
+    ['unknown extension keywords', { type: 'object', 'x-vendor': ['anything'], properties: {} }],
+  ])('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
+    const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['ok']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('terminates on self-referencing schema objects', async () => {
+    const node: Record<string, unknown> = { type: 'object' };
+    node.properties = { self: node };
+    const { client } = createClientWithTools([{ name: 'cyclic', inputSchema: node }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['cyclic']);
+  });
+
+  it('rejects explicit hydration of an invalid definition with a dedicated error', () => {
+    const { client } = createClientWithTools([]);
+
+    expect(() =>
+      client.toolFromDefinition({
+        definition: {
+          name: 'get_l2_book',
+          inputSchema: { type: 'object', properties: { required: ['coin'] } } as any,
+          server: { name: 'schema-test-server' },
+        },
+      }),
+    ).toThrow(expect.objectContaining({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' }));
+  });
+});
