@@ -157,7 +157,7 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
 
 ### Handle output validation failures
 
-When a result doesn't match `outputSchema`, Mastra logs a warning and returns a validation error object instead of the result, so the model sees the call as failed. For tools whose side effects have already happened by the time the result is produced, set `outputValidation: 'warn'`. Mastra still logs the mismatch but returns the real result unchanged, so the model doesn't retry an order that was already placed.
+When a result doesn't match `outputSchema`, Mastra logs a warning and returns a validation error object instead of the result. The model then treats the call as failed and may retry it. For tools whose side effects have already happened by the time the result is produced, set `outputValidation: 'warn'`. Mastra still logs the mismatch, but it returns the real result unchanged, which keeps the model from retrying an order that was already placed.
 
 ```typescript title="src/mastra/tools/place-order-tool.ts"
 export const placeOrderTool = createTool({
