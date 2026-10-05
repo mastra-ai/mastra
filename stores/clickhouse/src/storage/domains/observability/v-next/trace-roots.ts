@@ -208,10 +208,14 @@ async function listTraceRows<TSpan>(
         -- Deferred join: pick the page's sort keys from a narrow sort, then
         -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
         -- own lazy materialization, so sorting SELECT * directly would carry
-        -- every matching row's payload columns through the sort.
+        -- every matching row's payload columns through the sort. The filter is
+        -- applied again on the re-read: a dedupeKey can have unmerged versions
+        -- (in different endedAt partitions) and only a matching one may win.
         SELECT ${projection.innerSelect}
         FROM ${TABLE_TRACE_ROOTS} r
-        WHERE (r.startedAt, r.traceId, r.dedupeKey) IN (
+        ${appendWhere(
+          whereClause,
+          `(r.startedAt, r.traceId, r.dedupeKey) IN (
           SELECT startedAt, traceId, dedupeKey
           FROM ${TABLE_TRACE_ROOTS} r
           ${whereClause}
@@ -219,7 +223,8 @@ async function listTraceRows<TSpan>(
           LIMIT 1 BY dedupeKey
           LIMIT {limit:UInt32}
           OFFSET {offset:UInt32}
-        )
+        )`,
+        )}
         ORDER BY ${orderClause}, dedupeKey ASC
         LIMIT 1 BY dedupeKey
       )

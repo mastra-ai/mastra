@@ -518,10 +518,15 @@ export async function listBranches(
         -- Deferred join: pick the page's sort keys from a narrow sort, then
         -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
         -- own lazy materialization, so sorting SELECT * directly would carry
-        -- every matching branch's payload columns through the sort.
+        -- every matching branch's payload columns through the sort. The filter
+        -- is applied again on the re-read: a dedupeKey can have unmerged
+        -- versions (in different endedAt partitions) and only a matching one
+        -- may win.
         SELECT *
         FROM ${TABLE_TRACE_BRANCHES} b
-        WHERE (b.spanType, b.startedAt, b.traceId, b.dedupeKey) IN (
+        ${appendWhere(
+          whereClause,
+          `(b.spanType, b.startedAt, b.traceId, b.dedupeKey) IN (
           SELECT b.spanType, b.startedAt, b.traceId, b.dedupeKey
           FROM ${TABLE_TRACE_BRANCHES} b
           ${whereClause}
@@ -529,7 +534,8 @@ export async function listBranches(
           LIMIT 1 BY b.dedupeKey
           LIMIT {limit:UInt32}
           OFFSET {offset:UInt32}
-        )
+        )`,
+        )}
         ORDER BY b.${sortField} ${sortDirection}, b.dedupeKey ASC
         LIMIT 1 BY b.dedupeKey
       )

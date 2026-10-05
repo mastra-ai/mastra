@@ -636,21 +636,22 @@ LIMIT ${limit}`,
 /**
  * Fetches the metadata/input payloads for page-mode rows. Looks rows up by the
  * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
- * granules are read. Root rows are immutable per (traceId, spanId), so this
- * second read returns the same payload the candidate row came from.
+ * granules are read. A root can have unmerged versions in different `endedAt`
+ * partitions, so `endedAt` is part of the key: the payload comes from the same
+ * version as the candidate row.
  */
 export function compileClickHouseTraceRootPayloads(
-  keys: Array<{ traceId: string; rootSpanId: string; startedAt: string }>,
+  keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const tuples = keys.map(
     key =>
-      `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')})`,
+      `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
   return {
     query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input
 FROM ${TABLE_TRACE_ROOTS}
-WHERE (startedAt, traceId, spanId) IN (${tuples.join(', ')})
+WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
     query_params: parameters.params,
   };
@@ -921,6 +922,7 @@ export async function queryTraces(
             traceId: String(row.traceId),
             rootSpanId: String(row.rootSpanId),
             startedAt: asIsoTimestamp(row.startedAt),
+            endedAt: asIsoTimestamp(row.endedAt),
           })),
         ),
       );

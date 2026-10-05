@@ -898,11 +898,12 @@ describe('ClickHouse advanced trace query', () => {
         }),
       }),
     );
-    expect(query.mock.calls[1]![0].query).toContain('WHERE (startedAt, traceId, spanId) IN (');
+    expect(query.mock.calls[1]![0].query).toContain('WHERE (startedAt, traceId, spanId, endedAt) IN (');
     expect(Object.values(query.mock.calls[1]![0].query_params)).toEqual([
       '2026-01-01 10:00:00.000',
       'trace-c',
       'root-trace-c',
+      '2026-01-01 10:00:01.000',
     ]);
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-c', metadata: { customer: { id: 'customer-1' }, count: 2 } }],

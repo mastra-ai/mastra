@@ -768,8 +768,6 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       // one batch; repeated updates to the same span apply in order.
       if (args.records.length === 0) return;
 
-      const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
-      const finalClause = engine.startsWith('ReplacingMergeTree') ? 'FINAL' : '';
       const keyParams: Record<string, string> = {};
       const keyTuples = args.records.map((record, i) => {
         keyParams[`t_${i}`] = record.traceId;
@@ -778,9 +776,12 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       });
       const existingResult = await this.client.query({
         query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt
-                FROM ${TABLE_SPANS} ${finalClause}
+                FROM ${TABLE_SPANS}
                 WHERE (traceId, spanId) IN (${keyTuples.join(', ')})
-                ORDER BY createdAt DESC
+                -- Newest version per span, which is what ReplacingMergeTree(updatedAt)
+                -- keeps. FINAL would merge every part the batch's keys touch, which
+                -- costs far more than reading the unmerged versions and sorting them.
+                ORDER BY updatedAt DESC
                 LIMIT 1 BY traceId, spanId`,
         query_params: keyParams,
         clickhouse_settings: {
