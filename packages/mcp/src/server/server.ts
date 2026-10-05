@@ -1261,9 +1261,12 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Reads an `ui://` app resource; application resources require a protocol request. */
-  async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  async readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     const html = this.appResourceHtml.get(uri);
-    if (html === undefined) {
+    const resource = this.appResourceList.find(r => r.uri === uri);
+    if (html === undefined || !resource) {
       throw new MastraError({
         id: 'MCP_SERVER_RESOURCE_NOT_FOUND',
         domain: ErrorDomain.MCP,
@@ -1272,7 +1275,7 @@ export class MCPServer extends MCPServerBase {
         details: { uri },
       });
     }
-    return { contents: [{ uri, text: html }] };
+    return { contents: [this.resourceContents(resource, { text: html })] };
   }
 
   /** Lists `ui://` app resources; application resources require a protocol request. */
