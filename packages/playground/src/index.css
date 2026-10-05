@@ -132,40 +132,6 @@ th:has(header) {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
 
-  /*
-   * One diagonal light sweep across the landing greeting, timed to land once the
-   * suggested prompts have finished staggering in (last chip ≈ 540ms + 420ms).
-   */
-  /* With a 300% image, 100% → 0% moves the centered band once across the box, left to right. */
-  @keyframes starter-shimmer {
-    from {
-      background-position: 100% 0;
-    }
-    to {
-      background-position: 0% 0;
-    }
-  }
-  .starter-shimmer {
-    --shimmer-base: var(--color-muted-foreground);
-    --shimmer-highlight: var(--color-foreground);
-    color: transparent;
-    background-image: linear-gradient(
-      115deg,
-      var(--shimmer-base) 42%,
-      var(--shimmer-highlight) 50%,
-      var(--shimmer-base) 58%
-    );
-    background-size: 300% 100%;
-    background-position: 100% 0;
-    background-repeat: no-repeat;
-    background-clip: text;
-    -webkit-background-clip: text;
-    animation: starter-shimmer 1100ms ease-in-out 1000ms both;
-  }
-  .starter-shimmer-ink {
-    --shimmer-base: var(--color-foreground);
-    --shimmer-highlight: var(--color-muted-foreground);
-  }
 
   /*
    * Agent builder "Your agent is ready" panel — a polished, finite light pass.
@@ -248,7 +214,6 @@ th:has(header) {
     .starter-heading,
     .starter-prompt,
     .starter-chip,
-    .starter-shimmer,
     .ready-stage::before,
     .ready-stage-content {
       animation: none;
