@@ -95,9 +95,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     return true;
   }
 
-  /** Fenced writes need multi-document transactions, so only replica sets and sharded clusters fence. */
-  supportsRunFencing(): boolean {
-    return this.#connector.transactionsSupported;
+  /**
+   * Fenced writes need multi-document transactions, so only replica sets and
+   * sharded clusters fence. Rejects while the deployment can't be probed.
+   */
+  supportsRunFencing(): Promise<boolean> {
+    return this.#connector.probeTransactions();
   }
 
   private async getCollection(name: string) {
@@ -107,7 +110,6 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
-    await this.#connector.supportsTransactions();
   }
 
   #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {

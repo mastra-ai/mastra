@@ -24,8 +24,8 @@ describe.skipIf(!process.env.MONGODB_REPLICA_SET_URL)('MongoDB run fencing', () 
   });
 
   it('declares fencing on a replica set', async () => {
-    expect((await store.getStore('workflows'))?.supportsRunFencing()).toBe(true);
-    expect((await store.getStore('memory'))?.supportsRunFencing()).toBe(true);
+    expect(await (await store.getStore('workflows'))?.supportsRunFencing()).toBe(true);
+    expect(await (await store.getStore('memory'))?.supportsRunFencing()).toBe(true);
   });
 
   createRunFencingTests({ storage: store });

@@ -416,6 +416,19 @@ describe('storage-backed ExecutionFence', () => {
     await fence.settle(async () => {});
   });
 
+  it("fails, instead of using the pubsub lease, while the store can't tell whether it fences", async () => {
+    const { workflowsStore } = await stores();
+    const pubsub = new EventEmitterPubSub();
+    vi.spyOn(workflowsStore, 'supportsRunFencing').mockRejectedValueOnce(new Error('probe failed'));
+
+    await expect(storageClaim(workflowsStore, 'run-1', 'acquire', pubsub)).rejects.toThrow('probe failed');
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
+
+    const fence = await storageClaim(workflowsStore, 'run-1', 'acquire', pubsub);
+    expect(fence.generation).toBe(1);
+    await fence.settle(async () => {});
+  });
+
   it('acquire conflicts while another execution holds a live claim', async () => {
     vi.useFakeTimers();
     const { workflowsStore } = await stores();

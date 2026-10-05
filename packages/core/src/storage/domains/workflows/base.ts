@@ -29,8 +29,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * run it writes.
    *
    * Adapters that return true must pass the run-fencing conformance suite.
+   * An adapter that has to probe its backend to know returns a promise, and
+   * rejects when the probe fails: it must never answer false and later true.
    */
-  supportsRunFencing(): boolean {
+  supportsRunFencing(): boolean | Promise<boolean> {
     return false;
   }
 

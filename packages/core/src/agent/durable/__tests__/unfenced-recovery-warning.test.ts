@@ -38,7 +38,7 @@ function textModel() {
   }) as unknown as LanguageModelV2;
 }
 
-function unfenced(store: { supportsRunFencing(): boolean }) {
+function unfenced(store: { supportsRunFencing(): boolean | Promise<boolean> }) {
   vi.spyOn(store, 'supportsRunFencing').mockReturnValue(false);
 }
 
@@ -125,6 +125,16 @@ describe('DurableAgent warns about stores that cannot fence run writes', () => {
 
     expect(warnings()).toEqual([expect.stringContaining('the memory store (InMemoryMemory)')]);
     await pubsub.close();
+  });
+
+  it("does not warn about a store that can't tell yet whether it fences", async () => {
+    const storage = new InMemoryStore();
+    vi.spyOn(storage.stores.workflows!, 'supportsRunFencing').mockRejectedValue(new Error('probe failed'));
+    const { agents, warnings } = setup({ storage, recovery: 'auto' });
+
+    await agents['agent-a']!.recoverActiveRuns();
+
+    expect(warnings()).toEqual([]);
   });
 
   it('does not warn for runs when recovery is not auto, or when every store can fence', async () => {

@@ -110,7 +110,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
     describe('ownership', () => {
       it('claims an unowned run at generation 1', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         expect(await workflows.getRunOwnership({ runId })).toBeNull();
 
@@ -133,7 +133,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('refuses to claim a live run without force, and takes it over with force', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         await claimed(runId, 'owner-a');
 
@@ -147,7 +147,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('claims a run whose lease expired without force', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const first = await workflows.claimRunOwnership({ runId, ownerId: 'owner-a', leaseMs: SHORT_LEASE_MS });
         expect(first.acquired).toBe(true);
@@ -161,7 +161,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('lets exactly one of several concurrent claims win', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const results = await Promise.all(
           Array.from({ length: 8 }, (_, i) => claim(runId, `owner-${i}`).catch(error => ({ error }))),
@@ -175,7 +175,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('lets exactly one of several concurrent forced claims that saw the same generation win', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         await claimed(runId, 'owner-a');
 
@@ -190,7 +190,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('refuses a claim whose expected generation is stale', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         await claimed(runId, 'owner-a');
 
@@ -200,7 +200,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('renews only while the claim is current, even after the lease expired', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const first = await workflows.claimRunOwnership({ runId, ownerId: 'owner-a', leaseMs: SHORT_LEASE_MS });
         const fenceA: RunFence = { runId, ownerId: 'owner-a', generation: first.record!.generation };
@@ -217,7 +217,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('release clears the lease and keeps the generation and owner', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
 
@@ -246,7 +246,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       // that support concurrent updates; the others don't implement them.
 
       it('accepts writes from the current claim and rejects writes from a superseded one', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const concurrent = workflows.supportsConcurrentUpdates();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
@@ -314,7 +314,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it("accepts the released owner's writes until the run is claimed again", async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
         await workflows.releaseRunOwnership(fenceA);
@@ -340,7 +340,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('fences writes made inside a run fence scope with the fence of the run they write', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const concurrent = workflows.supportsConcurrentUpdates();
         const runId = `run-${randomUUID()}`;
         const otherRunId = `run-${randomUUID()}`;
@@ -390,7 +390,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('leaves writes without a fence unchanged', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         await claimed(runId, 'owner-a');
 
@@ -399,7 +399,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       });
 
       it('never lets a superseded writer overwrite the new owner, even while racing the takeover', async ctx => {
-        if (!workflows.supportsRunFencing()) return ctx.skip();
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
 
@@ -457,7 +457,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('raises monotonically', async ctx => {
-      if (!memory.supportsRunFencing()) return ctx.skip();
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
       const runId = `run-${randomUUID()}`;
 
       expect(await memory.raiseRunFence(fence(runId, 2))).toBe(true);
@@ -468,7 +468,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('accepts writes from the current fence and rejects writes from an older one', async ctx => {
-      if (!memory.supportsRunFencing()) return ctx.skip();
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       const fenceA = fence(runId, 1);
       await memory.raiseRunFence(fenceA);
@@ -527,7 +527,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('fences writes made inside a run fence scope with the scope fence for this store', async ctx => {
-      if (!memory.supportsRunFencing()) return ctx.skip();
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       const fenceA = fence(runId, 1);
       const fenceB = fence(runId, 2);
@@ -561,7 +561,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('fences observational memory content writes made inside a run fence scope', async ctx => {
-      if (!memory.supportsRunFencing() || !memory.supportsObservationalMemory) return ctx.skip();
+      if (!(await memory.supportsRunFencing()) || !memory.supportsObservationalMemory) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       const fenceA = fence(runId, 1);
       const fenceB = fence(runId, 2);
@@ -625,7 +625,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('leaves writes without a fence unchanged', async ctx => {
-      if (!memory.supportsRunFencing()) return ctx.skip();
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       await memory.raiseRunFence(fence(runId, 1));
       const thread = createSampleThread();
@@ -637,7 +637,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     });
 
     it('never lets a superseded writer overwrite the new owner, even while racing the takeover', async ctx => {
-      if (!memory.supportsRunFencing()) return ctx.skip();
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       const fenceA = fence(runId, 1);
       await memory.raiseRunFence(fenceA);

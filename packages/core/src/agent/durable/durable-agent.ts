@@ -1964,7 +1964,7 @@ export class DurableAgent<
         error,
       });
     }
-    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto') this.#warnIfUnfenced(store, 'memory');
+    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto') await this.#warnIfUnfenced(store, 'memory');
     try {
       await fence.coverMemory(store);
     } catch (error) {
@@ -1975,10 +1975,14 @@ export class DurableAgent<
 
   /**
    * Warn, once per store, that a store recovery relies on can't fence run
-   * writes (#23734). Returns whether it can't.
+   * writes (#23734). Returns whether it can't. A store that can't tell yet
+   * isn't warned about: claims on it fail until it can.
    */
-  #warnIfUnfenced(store: WorkflowsStorage | MemoryStorage | undefined, domain: 'workflows' | 'memory'): boolean {
-    if (!store || supportsRunFencing(store)) return false;
+  async #warnIfUnfenced(
+    store: WorkflowsStorage | MemoryStorage | undefined,
+    domain: 'workflows' | 'memory',
+  ): Promise<boolean> {
+    if (!store || (await supportsRunFencing(store).catch(() => true))) return false;
     if (unfencedStoresWarned.has(store)) return true;
     unfencedStoresWarned.add(store);
     const consequence =
@@ -3931,8 +3935,8 @@ export class DurableAgent<
 
     // Without fencing in the workflows store nothing is fenced, memory included.
     const storage = this.#mastra?.getStorage();
-    if (!this.#warnIfUnfenced(await storage?.getStore('workflows'), 'workflows')) {
-      this.#warnIfUnfenced(await storage?.getStore('memory'), 'memory');
+    if (!(await this.#warnIfUnfenced(await storage?.getStore('workflows'), 'workflows'))) {
+      await this.#warnIfUnfenced(await storage?.getStore('memory'), 'memory');
     }
 
     let targetRunIds: string[];

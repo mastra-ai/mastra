@@ -157,9 +157,12 @@ export function resolveLeaseProvider(pubsub: PubSub | undefined): LeaseProvider 
   return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
 }
 
-/** Whether a store implements run fencing. Tolerates stores built against an older contract. */
-export function supportsRunFencing(store: WorkflowsStorage | MemoryStorage | undefined): boolean {
-  return typeof store?.supportsRunFencing === 'function' && store.supportsRunFencing();
+/**
+ * Whether a store implements run fencing. Tolerates stores built against an
+ * older contract. Rejects when the store can't tell yet.
+ */
+export async function supportsRunFencing(store: WorkflowsStorage | MemoryStorage | undefined): Promise<boolean> {
+  return typeof store?.supportsRunFencing === 'function' && (await store.supportsRunFencing());
 }
 
 /** The claim an execution holds on a run, as carried on its RequestContext. */
@@ -502,7 +505,7 @@ export class ExecutionFence implements RunFenceScope {
     logger?: IMastraLogger;
   }): Promise<ExecutionFence> {
     const { agentId, runId, mode } = args;
-    const workflowsStore = supportsRunFencing(args.workflowsStore) ? args.workflowsStore : undefined;
+    const workflowsStore = (await supportsRunFencing(args.workflowsStore)) ? args.workflowsStore : undefined;
     const backend = workflowsStore
       ? storageBackend(workflowsStore, runId)
       : leaseBackend(args.leaseProvider, agentId, runId);
@@ -651,7 +654,7 @@ export class ExecutionFence implements RunFenceScope {
    * claims and for memory stores without run fencing.
    */
   async coverMemory(store: MemoryStorage | undefined): Promise<void> {
-    if (this.generation === undefined || !supportsRunFencing(store)) return;
+    if (this.generation === undefined || !(await supportsRunFencing(store))) return;
     if (this.#lossError) throw this.#lossError;
     const fence: RunFence = { runId: this.runId, generation: this.generation, ownerId: this.executionId };
     const raised = await retryOnce(() => store!.raiseRunFence(fence), this.#details());
@@ -891,7 +894,7 @@ async function resolveRemoteBackend(
   if (!mastra) return undefined;
   if (claim.generation !== undefined) {
     const store = await mastra.getStorage()?.getStore('workflows');
-    return supportsRunFencing(store) ? storageBackend(store!, runId) : undefined;
+    return (await supportsRunFencing(store)) ? storageBackend(store!, runId) : undefined;
   }
   let agentPubsub: PubSub | undefined;
   try {

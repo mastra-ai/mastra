@@ -97,11 +97,12 @@ export class MongoDBConnector {
   }
 
   /**
-   * Returns true when the deployment supports multi-document transactions
-   * (replica set or sharded cluster). Standalone servers and custom connector
-   * handlers return false. Probed once and cached.
+   * Whether the deployment supports multi-document transactions (replica set
+   * or sharded cluster). Standalone servers and custom connector handlers
+   * don't. The answer is cached once a probe completes; a probe that fails
+   * rejects and is retried on the next call, so the answer never changes.
    */
-  async supportsTransactions(): Promise<boolean> {
+  async probeTransactions(): Promise<boolean> {
     if (this.#supportsTransactions !== undefined) {
       return this.#supportsTransactions;
     }
@@ -110,21 +111,23 @@ export class MongoDBConnector {
       this.#supportsTransactions = false;
       return false;
     }
-    try {
-      const db = await this.getConnection();
-      const hello = await db.admin().command({ hello: 1 });
-      this.#supportsTransactions = Boolean(hello.setName) || hello.msg === 'isdbgrid';
-      return this.#supportsTransactions;
-    } catch {
-      // Do not cache a transient probe failure — re-probe on the next call so a
-      // momentary outage does not permanently disable transactions on a replica set.
-      return false;
-    }
+    const db = await this.getConnection();
+    const hello = await db.admin().command({ hello: 1 });
+    this.#supportsTransactions = Boolean(hello.setName) || hello.msg === 'isdbgrid';
+    return this.#supportsTransactions;
   }
 
-  /** Whether a completed {@link supportsTransactions} probe found transaction support. */
-  get transactionsSupported(): boolean {
-    return this.#supportsTransactions === true;
+  /**
+   * Like {@link probeTransactions}, but a failed probe reads as no
+   * transaction support (and is retried on the next call), so a momentary
+   * outage degrades writes to non-atomic instead of failing them.
+   */
+  async supportsTransactions(): Promise<boolean> {
+    try {
+      return await this.probeTransactions();
+    } catch {
+      return false;
+    }
   }
 
   /**

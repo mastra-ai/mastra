@@ -106,12 +106,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
-    await this.#connector.supportsTransactions();
   }
 
-  /** Fenced writes need multi-document transactions, so only replica sets and sharded clusters fence. */
-  override supportsRunFencing(): boolean {
-    return this.#connector.transactionsSupported;
+  /**
+   * Fenced writes need multi-document transactions, so only replica sets and
+   * sharded clusters fence. Rejects while the deployment can't be probed.
+   */
+  override supportsRunFencing(): Promise<boolean> {
+    return this.#connector.probeTransactions();
   }
 
   override async raiseRunFence(fence: RunFence): Promise<boolean> {
