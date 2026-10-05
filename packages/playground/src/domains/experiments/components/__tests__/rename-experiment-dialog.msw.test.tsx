@@ -1,3 +1,4 @@
+import { useDatasetExperiment } from '@mastra/react/hooks';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -5,7 +6,6 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import { experiments } from './fixtures/experiments';
-import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 

@@ -1,8 +1,8 @@
 import { useMastraClient } from '@mastra/react';
+import { makeSSOLoginRequest } from '@mastra/react/hooks';
 import { LogInIcon, TimerOffIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { makeSSOLoginRequest } from '@/domains/auth/services/sso-login';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import type { EmptyStateProps } from '@/ds/components/EmptyState';

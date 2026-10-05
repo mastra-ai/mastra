@@ -1,6 +1,6 @@
+import { is404NotFoundError, useWorkspaceDirectory } from '@mastra/react/hooks';
 import type { ReactNode } from 'react';
 import { Panel } from 'react-resizable-panels';
-import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
 import { ROOT_PATH } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceActiveFileContent as ActiveFileBody } from './workspace-active-file';
@@ -13,7 +13,6 @@ import { WorkspaceSearchResults } from './workspace-search';
 import { WorkspaceTree as TreeBody } from './workspace-tree';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { is404NotFoundError } from '@/lib/query-utils';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { PanelGroup } from '@/lib/resize/panel-group';
 import { PanelSeparator } from '@/lib/resize/separator';

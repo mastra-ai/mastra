@@ -2,6 +2,15 @@ import { version } from '@mastra/core/package.json';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import {
+  useTemplateRepo,
+  useTemplateRepoEnvVars,
+  useStreamTemplateInstall,
+  useCreateTemplateInstallRun,
+  useAgentBuilderWorkflow,
+  useGetTemplateInstallRun,
+  useObserveStreamTemplateInstall,
+} from '@mastra/react/hooks';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -12,15 +21,6 @@ import { TemplateForm } from '@/domains/templates/template-form';
 import { TemplateInfo } from '@/domains/templates/template-info';
 import { TemplateInstallation } from '@/domains/templates/template-installation';
 import { TemplateSuccess } from '@/domains/templates/template-success';
-import {
-  useTemplateRepo,
-  useTemplateRepoEnvVars,
-  useStreamTemplateInstall,
-  useCreateTemplateInstallRun,
-  useAgentBuilderWorkflow,
-  useGetTemplateInstallRun,
-  useObserveStreamTemplateInstall,
-} from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 
 export default function Template() {

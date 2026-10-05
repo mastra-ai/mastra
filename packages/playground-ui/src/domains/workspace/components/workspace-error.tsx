@@ -1,5 +1,5 @@
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/react/hooks';
 import { Notice } from '@/ds/components/Notice';
-import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@/lib/query-utils';
 
 const statusOf = (error: unknown) => (error as { status?: number } | null)?.status;
 

@@ -1,5 +1,5 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useDatasetItem } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
+import { useDatasetItem } from '@mastra/react/hooks';
 import { useMemo } from 'react';
 
 import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';

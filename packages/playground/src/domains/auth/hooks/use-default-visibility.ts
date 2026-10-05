@@ -1,4 +1,4 @@
-import { useAuthCapabilities } from './use-auth-capabilities';
+import { useAuthCapabilities } from '@mastra/react/hooks';
 
 /**
  * Returns the default visibility for new entities based on auth state.

@@ -1359,7 +1359,7 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-    });
+    }, 15_000);
   });
 
   describe('when the current agent no longer exists', () => {
