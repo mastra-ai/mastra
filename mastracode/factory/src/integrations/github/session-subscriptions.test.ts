@@ -207,6 +207,8 @@ describe('GitHub subscription entry points', () => {
   it('exposes only repository tools without a registered GitHub refresh target', () => {
     expect(Object.keys(createGithubSubscriptionTools(authenticatedRequestContext(), githubStub))).toEqual([
       'github_upsert_factory_triage_comment',
+      'github_comment_issue',
+      'github_update_issue_labels',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
