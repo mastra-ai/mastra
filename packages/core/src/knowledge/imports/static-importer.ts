@@ -1,7 +1,8 @@
 import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
-import type { KnowledgeImporterBindingHandle } from './types';
+import type { KnowledgeCitationHost, KnowledgeCitationTarget } from './citations';
+import type { KnowledgeCitationEntity, KnowledgeCitationRef, KnowledgeImporterBindingHandle } from './types';
 
 export interface StaticKnowledgeNodeInput {
   readonly name: string;
@@ -37,7 +38,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
   scopeAddress: string;
   importRunId: string;
   assertLeaseOwned?: () => Promise<void>;
-}): Promise<StaticKnowledgeImporterOperations> {
+}): Promise<StaticKnowledgeImporterOperations & KnowledgeCitationHost> {
   const importer = input.knowledge.getImporter(input.importerId);
   if (!importer) throw new Error(`Knowledge importer ${input.importerId} is not registered`);
   const storage = await input.knowledge.getStorage();
@@ -243,7 +244,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 }
 
-class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOperations {
+class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOperations, KnowledgeCitationHost {
   readonly #knowledge: Knowledge;
   readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
@@ -259,6 +260,41 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     this.#importer = input.importer;
     this.#importRunId = input.importRunId;
     this.#assertLeaseOwned = input.assertLeaseOwned;
+  }
+
+  get source(): string {
+    return this.#importer.source;
+  }
+
+  /**
+   * Classifies a cited identity for this binding. Own-source citations are usable only when this
+   * binding still owns the node; other sources are usable only when the node is readable from this
+   * binding's resolution scopes. Hidden, deleted, and moved nodes are all `unusable`.
+   */
+  async citationTarget(ref: KnowledgeCitationRef): Promise<KnowledgeCitationTarget> {
+    await this.#assertRunActive();
+    const storage = await this.#knowledge.getStorage();
+    const binding = await storage.getNodeAddress({ source: ref.source, address: normalizeAddress(ref.address) });
+    if (!binding) return { status: 'unbound' };
+    const node = await this.#knowledge.getNode(binding.nodeId);
+    if (!node || node.deletedAt) return { status: 'unusable' };
+    const scopeIds = await storage.getNodeScopeIds(node.id);
+    const usable =
+      ref.source === this.#importer.source
+        ? isExactScope(scopeIds, this.#importer.scopeId)
+        : scopeIds.some(scopeId => this.#importer.resolutionScopeIds.includes(scopeId));
+    return usable ? { status: 'usable', nodeId: node.id } : { status: 'unusable' };
+  }
+
+  /** Writes a fetched own-source entity through ordinary binding authority; replay never duplicates records. */
+  async storeCitedEntity(address: string, entity: KnowledgeCitationEntity): Promise<string> {
+    const node = await this.upsertNode(address, { name: entity.name, metadata: entity.metadata });
+    const existing = await node.listKnowledge();
+    for (const record of entity.records ?? []) {
+      const present = existing.some(item => (record.id ? item.id === record.id : item.text === record.text));
+      if (!present) existing.push(await node.appendKnowledge(record));
+    }
+    return node.id;
   }
 
   async getNode(address: string): Promise<StaticKnowledgeNodeHandle | null> {
