@@ -132,6 +132,26 @@ describe('Knowledge', () => {
     expect(rematerialized).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
   });
 
+  it('keeps same-named scopes from different sources distinct by address across replays', async () => {
+    const scopes = [
+      { address: 'org:acme', name: 'Acme' },
+      { address: 'repo:mastra', name: 'mastra', parentAddresses: ['org:acme'] },
+      { address: 'repo:docs', name: 'docs', parentAddresses: ['org:acme'] },
+      { address: 'repo:mastra:issues:42', name: 'Issue #42', parentAddresses: ['repo:mastra'] },
+      { address: 'repo:docs:issues:42', name: 'Issue #42', parentAddresses: ['repo:docs'] },
+    ];
+    const storage = new InMemoryStore({ id: 'same-name-structure' });
+    const first = await new Knowledge({ storage, structure: { scopes } }).reconcile();
+    const replay = await new Knowledge({ storage, structure: { scopes } }).reconcile();
+
+    const mastraIssue = first.scopes['repo:mastra:issues:42'];
+    const docsIssue = first.scopes['repo:docs:issues:42'];
+    expect(mastraIssue).toBeDefined();
+    expect(docsIssue).toBeDefined();
+    expect(mastraIssue).not.toBe(docsIssue);
+    expect(replay).toMatchObject({ changed: false, scopes: first.scopes });
+  });
+
   it('coalesces concurrent lazy materialization for one concrete address', async () => {
     const storage = new InMemoryStore({ id: 'lazy-structured' });
     const domain = storage.stores.knowledge!;
