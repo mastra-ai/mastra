@@ -1096,6 +1096,7 @@ export class SessionRunEngine {
         this.#session.emit({ type: 'error', error: streamError });
         if (!(streamError instanceof AgentThreadLeaseLostError)) {
           this.retractFailedRunSuspensions({
+            threadId: state.threadId,
             runId: chunk.runId ?? this.#session.run.getRunId(),
             reason: streamError.message,
           });
@@ -1716,10 +1717,18 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
-  private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
-    if (!runId) return;
+  private retractFailedRunSuspensions({
+    threadId,
+    runId,
+    reason,
+  }: {
+    threadId: string | undefined;
+    runId: string | null;
+    reason: string;
+  }): void {
+    if (!threadId || !runId) return;
 
-    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId })) {
+    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ threadId, runId })) {
       this.#session.emit({
         type: 'tool_suspension_cancelled',
         toolCallId,
@@ -1729,14 +1738,18 @@ export class SessionRunEngine {
     }
   }
 
-  private async handleSubscribedStreamError(error: unknown): Promise<void> {
+  private async handleSubscribedStreamError(error: unknown, threadId: string | undefined): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
       if (!(streamError instanceof AgentThreadLeaseLostError)) {
-        this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+        this.retractFailedRunSuspensions({
+          threadId,
+          runId: this.#session.run.getRunId(),
+          reason: streamError.message,
+        });
       }
       await this.#session.finishAgentRun('error');
     }
@@ -1827,7 +1840,7 @@ export class SessionRunEngine {
             }
           }
         } catch (error) {
-          await this.handleSubscribedStreamError(error);
+          await this.handleSubscribedStreamError(error, threadId);
           currentRun = undefined;
         }
       }
@@ -1860,7 +1873,7 @@ export class SessionRunEngine {
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error);
+        await this.handleSubscribedStreamError(error, threadId);
       }
     }
   }
