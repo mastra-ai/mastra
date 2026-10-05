@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
+import { useShimmerDelay } from '@/ds/primitives/shimmer';
 import { cn } from '@/lib/utils';
 
 export type ChartSkeletonProps = {
@@ -30,43 +31,26 @@ function ghostValues(count: number, seed: number) {
  */
 export function ChartSkeleton({ kind, height = 210, className }: ChartSkeletonProps) {
   const id = `ghost${useId().replace(/:/g, '')}`;
+  const delay = useShimmerDelay();
   const values = ghostValues(kind === 'bar' ? 24 : 16, kind === 'bar' ? 7 : 11);
-  // A 40-unit band of light, travelling from off the left edge to off the right.
-  const gradient = (name: string, base: number, peak: number) => (
-    <linearGradient id={`${id}-${name}`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="40" y2="0">
-      <stop offset="0" stopColor="var(--foreground)" stopOpacity={base} />
-      <stop offset="0.5" stopColor="var(--foreground)" stopOpacity={peak} />
-      <stop offset="1" stopColor="var(--foreground)" stopOpacity={base} />
-      <animateTransform
-        attributeName="gradientTransform"
-        type="translate"
-        from="-40 0"
-        to="140 0"
-        dur="1.6s"
-        repeatCount="indefinite"
-      />
-    </linearGradient>
-  );
 
-  let shape;
+  // Ghost shapes at a faint fill, and a 40-unit band of light that sweeps across them (masked
+  // to the shapes), on the same clock as the text skeletons.
+  let ghost;
+  let mask;
+  let peak;
   if (kind === 'bar') {
     const slot = 100 / values.length;
-    shape = (
-      <>
-        <defs>{gradient('bar', 0.07, 0.16)}</defs>
-        {values.map((v, i) => (
-          <rect
-            key={i}
-            x={i * slot + slot * 0.15}
-            width={slot * 0.7}
-            y={100 - v * 100}
-            height={v * 100}
-            rx={0.4}
-            fill={`url(#${id}-bar)`}
-          />
-        ))}
-      </>
+    const bars = values.map((v, i) => (
+      <rect key={i} x={i * slot + slot * 0.15} width={slot * 0.7} y={100 - v * 100} height={v * 100} rx={0.4} />
+    ));
+    ghost = (
+      <g fill="var(--foreground)" fillOpacity={0.07}>
+        {bars}
+      </g>
     );
+    mask = <g fill="white">{bars}</g>;
+    peak = 0.09;
   } else {
     const step = 100 / (values.length - 1);
     const pts = values.map((v, i) => [i * step, 100 - v * 100] as const);
@@ -79,17 +63,52 @@ export function ChartSkeleton({ kind, height = 210, className }: ChartSkeletonPr
         return `C${cx},${py} ${cx},${y} ${x},${y}`;
       })
       .join(' ');
-    shape = (
+    const area = `${line} L100,100 L0,100 Z`;
+    ghost = (
       <>
-        <defs>
-          {gradient('line', 0.12, 0.3)}
-          {gradient('area', 0.025, 0.06)}
-        </defs>
-        <path d={`${line} L100,100 L0,100 Z`} fill={`url(#${id}-area)`} />
-        <path d={line} fill="none" stroke={`url(#${id}-line)`} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+        <path d={area} fill="var(--foreground)" fillOpacity={0.025} />
+        <path
+          d={line}
+          fill="none"
+          stroke="var(--foreground)"
+          strokeOpacity={0.12}
+          strokeWidth={1.75}
+          vectorEffect="non-scaling-stroke"
+        />
       </>
     );
+    mask = (
+      <>
+        <path d={area} fill="white" fillOpacity={0.2} />
+        <path d={line} fill="none" stroke="white" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      </>
+    );
+    peak = 0.18;
   }
+  const shape = (
+    <>
+      <defs>
+        <linearGradient id={`${id}-band`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="var(--foreground)" stopOpacity={0} />
+          <stop offset="0.5" stopColor="var(--foreground)" stopOpacity={peak} />
+          <stop offset="1" stopColor="var(--foreground)" stopOpacity={0} />
+        </linearGradient>
+        <mask id={`${id}-mask`} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          {mask}
+        </mask>
+      </defs>
+      {ghost}
+      <g mask={`url(#${id}-mask)`}>
+        <rect
+          width={40}
+          height={100}
+          fill={`url(#${id}-band)`}
+          className="animate-[chart-ghost-sweep_2s_infinite]"
+          style={{ animationDelay: delay }}
+        />
+      </g>
+    </>
+  );
 
   const plot = (
     <>
