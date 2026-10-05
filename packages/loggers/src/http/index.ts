@@ -180,8 +180,10 @@ export class HttpTransport extends LoggerTransport {
     while (this.logBuffer.length > 0) {
       const remaining = this.logBuffer.length;
       await this._flush();
-      // Stop if a flush made no progress so shutdown cannot spin
-      if (this.logBuffer.length >= remaining) break;
+      // Fail instead of spinning or reporting success with logs still buffered
+      if (this.logBuffer.length >= remaining) {
+        throw new Error(`Log buffer drain made no progress; ${this.logBuffer.length} logs remain buffered`);
+      }
     }
   }
 

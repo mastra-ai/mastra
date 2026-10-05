@@ -399,13 +399,17 @@ describe('HttpTransport', () => {
         expect(drainTransport.getBufferedLogs()).toHaveLength(3);
       });
 
-      it('stops draining when a flush makes no progress', async () => {
+      it('fails destroy when a flush makes no progress', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         const flushSpy = vi.spyOn(drainTransport, '_flush').mockResolvedValue(undefined);
         bufferLogs(3);
 
-        await destroy();
+        const error = await destroy();
 
         expect(flushSpy).toHaveBeenCalledTimes(1);
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.message).toMatch(/no progress/);
+        expect(drainTransport.getBufferedLogs()).toHaveLength(3);
       });
 
       it('waits for an in-flight flush before draining', async () => {
