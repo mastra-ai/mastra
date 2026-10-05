@@ -23280,7 +23280,6 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
-  scope?: ('global' | 'thread') | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Response =

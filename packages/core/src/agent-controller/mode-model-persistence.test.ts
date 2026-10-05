@@ -116,6 +116,24 @@ describe('AgentController single-model persistence across restarts', () => {
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
+  it('set changes only the in-memory model without emitting an event', async () => {
+    const { session: session1 } = await buildController(storage);
+    const thread = await session1.thread.create();
+    const events: string[] = [];
+    session1.subscribe(event => {
+      if (event.type === 'model_changed') events.push(event.modelId);
+    });
+
+    session1.model.set({ modelId: 'anthropic/claude-opus-4-6' });
+
+    expect(session1.model.get()).toBe('anthropic/claude-opus-4-6');
+    expect(events).toEqual([]);
+
+    const { session: session2 } = await buildController(storage);
+    await session2.thread.switch({ threadId: thread.id });
+    expect(session2.model.get()).toBe('openai/gpt-5.5');
+  });
+
   it('restores currentModelId on reopen', async () => {
     const { session: session1 } = await buildController(storage);
     const thread = await session1.thread.create();

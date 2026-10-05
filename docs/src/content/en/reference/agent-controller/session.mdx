@@ -551,18 +551,19 @@ if (session.model.hasSelection()) {
 }
 ```
 
-### `session.model.switch({ modelId, scope? })`
+### `session.model.set({ modelId })`
 
-Switch the session's active model. When `scope` is `'thread'` (the default), the model ID is persisted as the thread's `currentModelId` and restored with that thread. When `scope` is `'global'`, the selection changes only in the live session. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event with `{ modelId, scope }`.
+Set the active model in memory without persisting it, reporting model use, or emitting a `model_changed` event.
 
 ```typescript
-// Set for the current session only
-await session.model.switch({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  scope: 'global',
-})
+session.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+```
 
-// Persist to the current thread (default)
+### `session.model.switch({ modelId })`
+
+Switch the session's active model. The model ID is persisted as the thread's `currentModelId` and restored with that thread. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event with `{ modelId }`.
+
+```typescript
 await session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 

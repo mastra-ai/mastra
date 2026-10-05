@@ -193,9 +193,9 @@ Merges key-value pairs into the session state. Existing keys not in the payload 
 
 Switches the active mode.
 
-### `switchModel(modelId, options?)`
+### `switchModel(modelId)`
 
-Switches the session's active model. `options.scope` is `'thread'` (default) or `'global'`. Thread scope persists one current model for the active thread; switching modes doesn't change it.
+Switches the session's active model and persists it as the current model for the active thread. Switching modes doesn't change it.
 
 ### `listThreads(options?)`
 

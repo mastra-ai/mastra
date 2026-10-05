@@ -197,18 +197,15 @@ console.log(session.mode.get()) // "build"
 console.log(session.mode.resolve().instructions)
 ```
 
-Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitch-modelid-scope-modeid-), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). Thread-scoped selections are stored per mode and restored when the Session returns to that mode:
+Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitch-modelid-), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). The selection is stored as the thread's current model and remains active when the Session changes modes:
 
 ```typescript
 await session.model.switch({
   modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  scope: 'thread',
 })
 
 console.log(session.model.get())
 ```
-
-Use `scope: 'global'` for an in-memory selection that shouldn't be written to thread settings.
 
 ## Manage threads and state
 

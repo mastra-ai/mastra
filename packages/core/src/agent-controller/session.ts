@@ -1883,22 +1883,18 @@ export class SessionModel {
     const stored = currentModelId ?? legacyModeModelId;
     if (!stored || stored === this.#id) return;
     this.#id = stored;
-    this.#bus.emit({ type: 'model_changed', modelId: stored, scope: 'thread' });
+    this.#bus.emit({ type: 'model_changed', modelId: stored });
   }
 
   /**
    * Switch to a different model at runtime.
    *
-   * When `scope` is `'thread'` (the default), the selected model is persisted
-   * for the thread. Global scope only updates this in-memory session. Reports
-   * the selection to the model-use tracker and emits `model_changed`.
+   * Persists the selection for the thread, reports it to the model-use tracker,
+   * and emits `model_changed`.
    */
-  async switch({ modelId, scope = 'thread' }: { modelId: string; scope?: 'global' | 'thread' }): Promise<void> {
+  async switch({ modelId }: { modelId: string }): Promise<void> {
     this.set({ modelId });
-
-    if (scope === 'thread') {
-      await this.#store()?.set('currentModelId', modelId);
-    }
+    await this.#store()?.set('currentModelId', modelId);
 
     try {
       await Promise.resolve(this.#trackModelUse?.(modelId));
@@ -1906,7 +1902,7 @@ export class SessionModel {
       console.error('Failed to track model usage count', error);
     }
 
-    this.#bus.emit({ type: 'model_changed', modelId, scope });
+    this.#bus.emit({ type: 'model_changed', modelId });
   }
 }
 

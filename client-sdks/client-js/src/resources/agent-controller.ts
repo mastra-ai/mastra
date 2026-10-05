@@ -687,11 +687,11 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
   }
 
-  /** Switch the model. Defaults to thread scope. */
-  async switchModel(modelId: string, options?: { scope?: 'global' | 'thread' }): Promise<void> {
+  /** Switch the session model and persist it to the active thread. */
+  async switchModel(modelId: string): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
-      body: { modelId, scope: options?.scope },
+      body: { modelId },
     });
   }
 

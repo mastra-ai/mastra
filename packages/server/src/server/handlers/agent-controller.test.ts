@@ -1230,13 +1230,12 @@ describe('agent-controller routes', () => {
   });
 
   describe('SWITCH_AGENT_CONTROLLER_MODEL_ROUTE', () => {
-    it('switches the session model without a modeId', async () => {
+    it('switches the session model', async () => {
       const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
         modelId: 'anthropic/claude-opus-4-6',
-        scope: 'thread',
       } as any);
       expect(ack).toEqual({ ok: true });
 
