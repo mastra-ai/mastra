@@ -8,7 +8,13 @@ type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
+const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
+const nodePlacementSchema: JSONSchema7 = {
+  type: 'string',
+  description:
+    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+};
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
   format: 'date-time',
@@ -18,6 +24,9 @@ const dateTimeSchema: JSONSchema7 = {
 
 type KnowledgeWriteToolsMemory = {
   getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  getKnowledgeInstance?: () =>
+    | { __getVisibleStructureScopes(heldAddresses: string[]): Array<{ address: string }> }
+    | undefined;
   storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
   };
@@ -25,6 +34,8 @@ type KnowledgeWriteToolsMemory = {
 
 export interface KnowledgeWriteToolsOptions {
   scopeIds: KnowledgeScopeIds;
+  /** Host-vouched addresses of `scopeIds`, used to bound structural placement. */
+  scopeAddresses?: string[];
   sourceThreadId: string;
 }
 
@@ -40,6 +51,26 @@ function resolveWriteScopeIds(
   scope: SubconsciousScopeSelection = 'thread',
 ): KnowledgeScopeIds {
   return [options.scopeIds[scope === 'org' ? 0 : scope === 'resource' ? 1 : 2]!];
+}
+
+/**
+ * Resolve the node placement argument: a rung keeps identity placement; anything else is a
+ * structural scope address that must be inside the host-configured frontier reachable from
+ * the writer's held scopes. Structural placement is additive to the default identity rung.
+ */
+async function resolveNodePlacement(
+  memory: KnowledgeWriteToolsMemory,
+  store: KnowledgeStorage,
+  options: KnowledgeWriteToolsOptions,
+  placement: string | undefined,
+): Promise<KnowledgeScopeIds> {
+  if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
+    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection | undefined);
+  }
+  const frontier = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? []) ?? [];
+  const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
+  if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
+  return [...resolveWriteScopeIds(options), scope.scopeNodeId];
 }
 
 async function requireVisible(
@@ -77,7 +108,7 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
-          nodeScope: scopeLevelSchema,
+          nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
         },
@@ -89,12 +120,12 @@ export function createKnowledgeWriteTools(
           name: string;
           kind: string;
           text: string;
-          nodeScope?: SubconsciousScopeSelection;
+          nodeScope?: string;
           scope?: SubconsciousScopeSelection;
           when?: string;
         };
         const store = await getStore(memory);
-        const nodeScope = resolveWriteScopeIds(options, value.nodeScope);
+        const nodeScope = await resolveNodePlacement(memory, store, options, value.nodeScope);
         const recordScope = resolveWriteScopeIds(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');

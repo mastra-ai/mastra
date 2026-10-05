@@ -32,6 +32,41 @@ async function fixture(toolScopeIds = scopeIds) {
   return { memory, store, source, target, tools };
 }
 
+const heldAddresses = ['org:acme', 'resource:user-42', 'resource:user-42:thread:alpha'];
+
+async function structuralFixture() {
+  const storage = new InMemoryStore();
+  const knowledge = new Knowledge({
+    id: 'mastra',
+    storage,
+    structure: {
+      scopes: [
+        { address: 'org:acme', name: 'acme' },
+        { address: 'resource:user-42', name: 'user-42', parentAddresses: ['org:acme'] },
+        { address: 'resource:user-42:thread:alpha', name: 'alpha', parentAddresses: ['resource:user-42'] },
+        { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+        {
+          address: 'features:memory',
+          name: 'memory',
+          parentAddresses: ['features'],
+          metadata: { description: 'Memory subsystem knowledge.' },
+        },
+        { address: 'org:other', name: 'other' },
+        { address: 'other:things', name: 'things', parentAddresses: ['org:other'] },
+      ],
+    },
+  });
+  const memory = new Memory({ storage, knowledge });
+  const { scopes } = await knowledge.reconcile();
+  const store = await knowledge.getStorage();
+  const tools = createKnowledgeWriteTools(memory, {
+    scopeIds: heldAddresses.map(address => scopes[address]!),
+    scopeAddresses: heldAddresses,
+    sourceThreadId: 'alpha',
+  });
+  return { store, scopes, tools };
+}
+
 describe('Subconscious knowledge write tools', () => {
   it('keeps snapshots of all ten public input schemas', async () => {
     const { tools } = await fixture();
@@ -96,6 +131,47 @@ describe('Subconscious knowledge write tools', () => {
     expect(await store.getNode(result.node.id)).toMatchObject({ name: 'Atlas Launch' });
     expect(await store.getNodeScopeIds(result.node.id)).toEqual([scopeIds[1]]);
     expect(await store.getRecordScopeIds(result.record.id)).toEqual([scopeIds[1]]);
+  });
+
+  it('places created nodes into visible structural scopes by address', async () => {
+    const { store, scopes, tools } = await structuralFixture();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Memory Extraction',
+        kind: 'subsystem',
+        text: 'The memory subsystem extracts observations mid-conversation.',
+        nodeScope: 'features:memory',
+      },
+      {} as any,
+    )) as any;
+
+    // Structural placement is additive to the default identity rung.
+    expect(await store.getNodeScopeIds(result.node.id)).toEqual(
+      [scopes['resource:user-42:thread:alpha'], scopes['features:memory']].sort(),
+    );
+  });
+
+  it('rejects structural placement outside the curator frontier', async () => {
+    const { store, scopes, tools } = await structuralFixture();
+
+    for (const nodeScope of ['other:things', 'bogus']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope }, {} as any),
+      ).rejects.toThrow(`Structural scope is outside the curator's visible scope: ${nodeScope}`);
+    }
+    expect(await store.resolveNode({ name: 'Nope other:things', scopeIds: [scopes['other:things']!] })).toBeNull();
+  });
+
+  it('rejects structural placement without host-vouched scope addresses', async () => {
+    const { tools } = await fixture();
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'No frontier', kind: 'x', text: 'x', nodeScope: 'features:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
   });
 
   it('rolls back the node and side effects when the first record fails', async () => {
