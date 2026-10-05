@@ -6,9 +6,19 @@ import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '.
  * contact-import + topic + template + webhook + broadcast + domain CRUD plus
  * the broad read-only surface.
  *
- * The scenario never actually sends mail. send_email / send_email_batch /
- * send_broadcast go through probeTool so routing is exercised but no real
- * message is dispatched to an inbox.
+ * By default the scenario never actually sends mail: send_email /
+ * send_email_batch / send_broadcast go through probeTool so routing is
+ * exercised but no real message is dispatched to an inbox.
+ *
+ * Set MASTRA_SMOKE_RESEND_RECIPIENT to opt in to real sends. Every real send
+ * goes only to that address, from Resend's sandbox sender
+ * (onboarding@resend.dev, which Resend only delivers to the account owner's
+ * own address). This upgrades send_email, send_email_batch, get_email,
+ * share_email, list_email_attachments, update_email, and cancel_email from
+ * probes to real lifecycle calls; the update/cancel pair runs against a
+ * scheduled email that is cancelled before delivery. send_broadcast stays
+ * probe-only regardless: it dispatches to the whole audience and requires a
+ * verified from-domain.
  *
  * NOTE: Current Resend tools use a nested `{ body: {...} }` wrapper on
  * mutators and snake_case fields. ID parameters vary — see each call site.
@@ -18,6 +28,10 @@ export const resendScenario: Scenario = {
   summary: 'audience + contact + segment + property + topic + template + webhook + broadcast + domain CRUD',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
+    // Opt-in recipient for real email sends. When unset, all send/email-id
+    // tools are probed and nothing is ever dispatched.
+    const recipient = process.env.MASTRA_SMOKE_RESEND_RECIPIENT;
+    const smokeFrom = 'Mastra Smoke <onboarding@resend.dev>';
     const missing = requireTools(tools, [
       'resend_create_audience',
       'resend_create_contact',
@@ -645,8 +659,28 @@ export const resendScenario: Scenario = {
       );
     }
 
-    // ---- email sending (always probe-only to avoid mailing real recipients) ----
-    if (tools['resend_send_email']) {
+    // ---- email sending ----
+    // Probe-only by default so no real mail is ever dispatched. When
+    // MASTRA_SMOKE_RESEND_RECIPIENT is set, real sends go only to that
+    // address (from Resend's sandbox sender, which only delivers to the
+    // account owner's own address anyway).
+    let emailId: string | undefined;
+    if (recipient && tools['resend_send_email']) {
+      try {
+        const sent = await call<{ id?: string }>('resend_send_email', {
+          body: {
+            from: smokeFrom,
+            to: recipient,
+            subject: `Mastra smoke email ${runId}`,
+            html: `<p>Mastra smoke test run ${runId}. Safe to delete.</p>`,
+          },
+        });
+        emailId = sent.id;
+        steps.push(makeStep('send email', 'resend_send_email', 'pass', `to ${recipient}: ${emailId}`));
+      } catch (error) {
+        steps.push(makeStep('send email', 'resend_send_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_send_email']) {
       steps.push(
         await probeTool(call, tools, 'send email', 'resend_send_email', {
           body: {
@@ -658,7 +692,23 @@ export const resendScenario: Scenario = {
         }),
       );
     }
-    if (tools['resend_send_email_batch']) {
+    if (recipient && tools['resend_send_email_batch']) {
+      try {
+        await call('resend_send_email_batch', {
+          body: [
+            {
+              from: smokeFrom,
+              to: recipient,
+              subject: `Mastra smoke batch ${runId}`,
+              html: `<p>Mastra smoke batch run ${runId}. Safe to delete.</p>`,
+            },
+          ],
+        });
+        steps.push(makeStep('send email batch', 'resend_send_email_batch', 'pass', `to ${recipient}`));
+      } catch (error) {
+        steps.push(makeStep('send email batch', 'resend_send_email_batch', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_send_email_batch']) {
       steps.push(
         await probeTool(call, tools, 'send email batch', 'resend_send_email_batch', {
           body: [
@@ -672,14 +722,52 @@ export const resendScenario: Scenario = {
         }),
       );
     }
-    if (tools['resend_get_email']) {
+    if (emailId && tools['resend_get_email']) {
+      try {
+        await call('resend_get_email', { email_id: emailId });
+        steps.push(makeStep('read email', 'resend_get_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('read email', 'resend_get_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_get_email']) {
       steps.push(
         await probeTool(call, tools, 'read email', 'resend_get_email', {
           email_id: `email-smoke-${runId}`,
         }),
       );
     }
-    if (tools['resend_update_email']) {
+    // update/cancel only apply to scheduled emails. With a recipient opted
+    // in, run the real lifecycle against a scheduled email that is cancelled
+    // before it ever delivers. Only schedule when the cancel tool exists so
+    // the email can never actually deliver.
+    let scheduledEmailId: string | undefined;
+    if (recipient && tools['resend_send_email'] && tools['resend_cancel_email']) {
+      try {
+        const scheduled = await call<{ id?: string }>('resend_send_email', {
+          body: {
+            from: smokeFrom,
+            to: recipient,
+            subject: `Mastra smoke scheduled ${runId} — will be cancelled`,
+            html: `<p>Mastra smoke scheduled email ${runId}. Should never deliver.</p>`,
+            scheduled_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+          },
+        });
+        scheduledEmailId = scheduled.id;
+      } catch (error) {
+        log.warn('Could not create scheduled smoke email; probing update/cancel instead', errorMessage(error));
+      }
+    }
+    if (scheduledEmailId && tools['resend_update_email']) {
+      try {
+        await call('resend_update_email', {
+          email_id: scheduledEmailId,
+          body: { scheduled_at: new Date(Date.now() + 30 * 60_000).toISOString() },
+        });
+        steps.push(makeStep('update email', 'resend_update_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update email', 'resend_update_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_update_email']) {
       steps.push(
         await probeTool(call, tools, 'update email', 'resend_update_email', {
           email_id: `email-smoke-${runId}`,
@@ -687,14 +775,30 @@ export const resendScenario: Scenario = {
         }),
       );
     }
-    if (tools['resend_cancel_email']) {
+    if (scheduledEmailId && tools['resend_cancel_email']) {
+      try {
+        await call('resend_cancel_email', { email_id: scheduledEmailId });
+        steps.push(makeStep('cancel email', 'resend_cancel_email', 'pass'));
+      } catch (error) {
+        // A cancel failure means the scheduled email will really deliver.
+        log.error(`Failed to cancel scheduled smoke email ${scheduledEmailId}; it will deliver to ${recipient}`);
+        steps.push(makeStep('cancel email', 'resend_cancel_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_cancel_email']) {
       steps.push(
         await probeTool(call, tools, 'cancel email', 'resend_cancel_email', {
           email_id: `email-smoke-${runId}`,
         }),
       );
     }
-    if (tools['resend_share_email']) {
+    if (emailId && tools['resend_share_email']) {
+      try {
+        await call('resend_share_email', { email_id: emailId, body: { expires_in: '1h' } });
+        steps.push(makeStep('share email', 'resend_share_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('share email', 'resend_share_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_share_email']) {
       steps.push(
         await probeTool(call, tools, 'share email', 'resend_share_email', {
           email_id: `email-smoke-${runId}`,
@@ -702,7 +806,14 @@ export const resendScenario: Scenario = {
         }),
       );
     }
-    if (tools['resend_list_email_attachments']) {
+    if (emailId && tools['resend_list_email_attachments']) {
+      try {
+        await call('resend_list_email_attachments', { email_id: emailId, limit: 5 });
+        steps.push(makeStep('list email attachments', 'resend_list_email_attachments', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list email attachments', 'resend_list_email_attachments', 'fail', errorMessage(error)));
+      }
+    } else if (tools['resend_list_email_attachments']) {
       steps.push(
         await probeTool(call, tools, 'list email attachments', 'resend_list_email_attachments', {
           email_id: `email-smoke-${runId}`,

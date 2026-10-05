@@ -20,6 +20,17 @@ pnpm --filter @mastra/connect smoke-test --project-id prj_abc123
 
 Exit code is `0` when every scenario passes or self-skips, `1` when any scenario fails or errors. Skipped scenarios (no scenario registered, provider not attached to the project, or a scenario-level preflight) do not fail the run.
 
+### Optional opt-in environment variables
+
+Some scenarios probe side-effecting endpoints by default and only perform the real operation when explicitly opted in:
+
+| variable                          | effect when set                                                                                                                                                                                                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MASTRA_SMOKE_RESEND_RECIPIENT`   | Resend sends real test emails — only ever to this address, from Resend's sandbox sender (`onboarding@resend.dev`, deliverable only to the account owner). Upgrades `send_email`, `send_email_batch`, and the email get/share/attachments/update/cancel tools to real calls. |
+| `MASTRA_SMOKE_TWITTER_ALLOW_POST` | `=1` lets the twitter-v2 scenario publish (and then delete) a real tweet.                                                                                                                                                                                                   |
+| `MASTRA_SMOKE_TWITTER_USER_ID`    | Numeric user id for authenticated twitter-v2 operations.                                                                                                                                                                                                                    |
+| `MASTRA_SMOKE_GA_PROPERTY_ID`     | Real GA4 property (`properties/123456`) for google-analytics report reads instead of synthetic-id probes.                                                                                                                                                                   |
+
 ## What the output means
 
 Each provider block is one of:
