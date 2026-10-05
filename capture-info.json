@@ -1,0 +1,23 @@
+{
+  "issue": "PLTFRM-2478",
+  "before": "41da786907aabd7537a510a97843c4f6d4dfd20c",
+  "after": "4dcd0e9709eaecaf09f47cfa30c9897107f60877",
+  "source": "Unmodified Chromium screenshots of playground-ui Storybook stories",
+  "detail": "Layout/PageLayout Container, browser content at 8x zoom",
+  "shell": "Layout/AppShell StandardDesktop",
+  "viewports": {
+    "desktop": [
+      1440,
+      900
+    ],
+    "tablet": [
+      768,
+      1024
+    ],
+    "mobile": [
+      390,
+      844
+    ]
+  },
+  "light": "Desktop with the existing html.light theme"
+}
