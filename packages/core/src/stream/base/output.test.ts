@@ -385,9 +385,13 @@ describe('MastraModelOutput', () => {
       expect(result.spanId).toBe('mastra-agent-span-id');
     });
 
-    it('should include traceId next to runId on fullStream chunks when tracing context exists', async () => {
+    it('should include traceId on fullStream chunks when tracing context exists, except custom data chunks', async () => {
       const runId = 'test-run';
-      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+      const stream = createChunkStream([
+        { type: 'data-progress', data: { percent: 50 } } as unknown as ChunkType,
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
 
       const output = new MastraModelOutput({
         model: { modelId: 'test-model', provider: 'test', version: 'v3' },
@@ -407,9 +411,12 @@ describe('MastraModelOutput', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks.length).toBeGreaterThan(0);
-      for (const chunk of chunks) {
-        expect(chunk.runId).toBe(runId);
+      const dataChunk = chunks.find(c => c.type === 'data-progress');
+      expect(dataChunk).toEqual({ type: 'data-progress', data: { percent: 50 } });
+
+      const mastraChunks = chunks.filter(c => c.type !== 'data-progress');
+      expect(mastraChunks.length).toBeGreaterThan(0);
+      for (const chunk of mastraChunks) {
         expect(chunk.traceId).toBe('mastra-trace-id');
       }
     });

@@ -29,6 +29,7 @@ import type {
   StepTripwireData,
   ToolCallChunk,
 } from '../types';
+import { isDataChunk } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { isChunkOutputProcessed } from './output-processed';
@@ -87,7 +88,7 @@ export function persistProcessorDataChunk(
   messageId: string,
   chunk: { type: string; data?: unknown; transient?: boolean },
 ): void {
-  if (!chunk.type.startsWith('data-') || chunk.transient) return;
+  if (!isDataChunk(chunk) || chunk.transient) return;
 
   const message: MastraDBMessage = {
     id: messageId,
@@ -2138,9 +2139,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
-    // Carry the traceId next to runId so stream consumers can link chunks to their trace.
-    if (this.traceId && 'runId' in chunk && chunk.runId && !('traceId' in chunk && chunk.traceId)) {
-      (chunk as { traceId?: string }).traceId = this.traceId;
+    // Carry the traceId on every chunk Mastra produces so stream consumers can link chunks to their
+    // trace. Custom data-* chunks are left as written: their shape belongs to the user, and AI SDK
+    // UI streams forward them as-is.
+    if (this.traceId && !isDataChunk(chunk) && !chunk.traceId) {
+      chunk.traceId = this.traceId;
     }
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
