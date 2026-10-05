@@ -63,38 +63,51 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
       name: 'Curate',
       mode: 'hook',
       onExtracted: async context => {
-        if (!context.rawObservations?.trim() || !context.memory) return;
+        const { memory, observationCommitted, rawObservations } = context;
+        // Only observations from a cycle that reaches its commit are curated: a failed or skipped
+        // commit never dispatches, and the parent observation never waits on the curator.
+        if (!rawObservations?.trim() || !memory || !observationCommitted) return;
 
-        let store: KnowledgeStorage | undefined;
-        let scope: KnowledgeScope | undefined;
-        try {
-          scope = resolveCuratorScope(context);
-          store = await context.memory.getKnowledgeStore();
-
-          const agent = await createCuratorAgent(
-            context.memory,
-            getCuratorMemory(),
-            context,
-            scope,
-            config,
-            subconscious,
-            omModel,
-          );
-          const result = dispatchCuratorObservation(agent, context, config, context.rawObservations);
-
-          void result.accepted
-            .then(async accepted => {
-              if (accepted.action === 'wake') await accepted.output.consumeStream();
-            })
-            .catch(error => reportCuratorError(error, context, subconscious, store, scope))
-            .catch(error => omError(`[Subconscious:curate] failed to report curator error: ${String(error)}`));
-        } catch (error) {
-          void reportCuratorError(error, context, subconscious, store, scope).catch(reportingError =>
-            omError(`[Subconscious:curate] failed to report curator error: ${String(reportingError)}`),
-          );
-        }
+        void observationCommitted.then(committed =>
+          committed
+            ? curateCommittedObservations(memory, context, rawObservations, {
+                config,
+                subconscious,
+                getCuratorMemory,
+                omModel,
+              })
+            : undefined,
+        );
       },
     });
+  }
+}
+
+async function curateCommittedObservations(
+  memory: Memory,
+  context: ExtractorOnExtractedContext,
+  observations: string,
+  options: {
+    config: ResolvedSubconsciousAgent;
+    subconscious: ResolvedSubconsciousConfig;
+    getCuratorMemory: () => Memory;
+    omModel?: ObservationalMemoryModel;
+  },
+): Promise<void> {
+  const { config, subconscious, getCuratorMemory, omModel } = options;
+  let store: KnowledgeStorage | undefined;
+  let scope: KnowledgeScope | undefined;
+  try {
+    scope = resolveCuratorScope(context);
+    store = await memory.getKnowledgeStore();
+
+    const agent = await createCuratorAgent(memory, getCuratorMemory(), context, scope, config, subconscious, omModel);
+    const accepted = await dispatchCuratorObservation(agent, context, config, observations).accepted;
+    if (accepted.action === 'wake') await accepted.output.consumeStream();
+  } catch (error) {
+    await reportCuratorError(error, context, subconscious, store, scope).catch(reportingError =>
+      omError(`[Subconscious:curate] failed to report curator error: ${String(reportingError)}`),
+    );
   }
 }
 
