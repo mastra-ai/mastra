@@ -267,9 +267,10 @@ describe('every OM storage write runs inside a queued op', () => {
     'updateBufferedReflection',
     'setPendingMessageTokens',
     'setBufferingObservationFlag',
+    'updateObservationalMemoryConfig',
   ] as const;
 
-  it('buffer, activate, sync observe, sync reflect, and buffered reflect', async () => {
+  it('buffer, activate, sync observe, sync reflect, buffered reflect, and config override', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const ids = await setupThread(storage);
     const om = createOM(storage, { reflection: { observationTokens: 2_000, bufferActivation: 0.5 } });
@@ -345,6 +346,9 @@ describe('every OM storage write runs inside a queued op', () => {
     await om.settled();
     const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
     expect(head.activeObservations).toContain('- buffered reflection');
+
+    // Per-record config override.
+    await om.updateRecordConfig(ids.threadId, ids.resourceId, { observation: { messageTokens: 9_000 } });
 
     expect(unqueued).toEqual([]);
     expect([...called].sort()).toEqual([...GUARDED].sort());
