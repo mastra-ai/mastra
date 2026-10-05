@@ -23,7 +23,7 @@ export function SettingsPage() {
   if (factoryId && section === 'models' && location.hash === '#model-packs') {
     return (
       <Navigate
-        to={`${settingsSectionPath(factoryId, 'personal-models')}${location.search}${location.hash}`}
+        to={`${settingsSectionPath(factoryId, 'personal-models')}${location.search}#default-model`}
         replace
         state={location.state}
       />

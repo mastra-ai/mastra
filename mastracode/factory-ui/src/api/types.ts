@@ -18,7 +18,6 @@ export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
 
 import type {
   CustomProviderInfo,
-  ModelPackInfo,
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
@@ -43,7 +42,6 @@ import type {
 export type {
   ProviderInfo,
   CustomProviderInfo,
-  ModelPackInfo,
   OMConfigInfo,
   ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
@@ -76,10 +74,8 @@ export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
 }
 
-export interface ModelPacksResponse {
-  packs: ModelPackInfo[];
-  activePackId: string | null;
-  sessionPackId: string | null;
+export interface DefaultModelResponse {
+  modelId: string | null;
 }
 
 export interface OMResponse {
@@ -128,17 +124,6 @@ export interface SaveCustomProviderBody {
   previousId?: string;
 }
 
-export interface SaveModelPackBody {
-  name: string;
-  models: { build: string; plan: string; fast: string };
-}
-
-export interface ActivateModelPackBody {
-  target: 'default' | 'session';
-  resourceId?: string;
-  scope?: string;
-}
-
 export interface UpdateOMModelBody {
   resourceId: string;
   modelId: string;
@@ -177,18 +162,7 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
-
-export type ActivateModelPackResponse =
-  | { ok: true; target: 'default'; activePackId: string }
-  | { ok: true; target: 'session'; sessionPackId: string };
-
-export interface ClearDefaultModelPackResponse {
-  ok: true;
-  activePackId: null;
-}
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;
