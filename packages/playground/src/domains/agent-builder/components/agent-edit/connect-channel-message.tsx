@@ -16,7 +16,11 @@ export interface ConnectChannelMessageProps {
 export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMessageProps) {
   const { data: platforms = [], isLoading: arePlatformsLoading } = useChannelPlatforms();
   const platform = platforms.find(p => p.id === platformId);
-  const { data: installations = [] } = useChannelInstallations(platformId, agentId ?? '');
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platformId,
+    agentId: agentId ?? '',
+    queryOptions: { enabled: Boolean(platformId && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
   const { connect, isConnecting } = useConnectChannelAction(platformId);
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -1,4 +1,4 @@
-import type { StoredSkillResponse } from '@mastra/client-js';
+import type { MastraClient,StoredSkillResponse } from '@mastra/client-js';
 import type { StoredAgent } from '@mastra/react/hooks';
 import {
   useWorkflows,
@@ -16,9 +16,9 @@ import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
 import { useStarterUserMessage } from '../hooks/use-starter-user-message';
 
-type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
-type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
-type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
+type ToolsData = Awaited<ReturnType<MastraClient['listTools']>>;
+type AgentsData = Awaited<ReturnType<MastraClient['listAgents']>>;
+type WorkflowsData = Awaited<ReturnType<MastraClient['listWorkflows']>>;
 
 export interface AgentPrimitivesValue {
   agentId: string;
@@ -52,14 +52,18 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
   const { canWrite } = useBuilderAgentAccess();
   const initialUserMessage = useStarterUserMessage();
 
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(agentId, { status: 'draft' });
-  const { data: toolsData, isPending: isToolsPending } = useTools({ enabled: features.tools });
-  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent({
+    agentId: agentId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: toolsData, isPending: isToolsPending } = useTools({ queryOptions: { enabled: features.tools } });
+  const { data: agentsData, isPending: isAgentsPending } = useAgents({ queryOptions: { enabled: features.agents } });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({
-    enabled: features.workflows,
+    queryOptions: { enabled: features.workflows },
   });
   const { data: storedSkillsResponse, isPending: isSkillsPending } = useStoredSkills({
-    enabled: features.skills,
+    queryOptions: { enabled: features.skills },
   });
   const { data: workspacesData } = useStoredWorkspaces();
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();

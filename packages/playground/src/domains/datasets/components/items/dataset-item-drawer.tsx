@@ -16,10 +16,11 @@ export function DatasetItemDrawer() {
 
   // Deep links can target items beyond the pages loaded by the infinite list,
   // so fall back to fetching the item by id when it is absent from the list.
-  const { data: fetchedItem, isLoading: isFetchingItem } = useDatasetItem(
-    !listItem ? datasetId : '',
-    !listItem && itemId ? itemId : '',
-  );
+  const { data: fetchedItem, isLoading: isFetchingItem } = useDatasetItem({
+    datasetId: !listItem ? datasetId : '',
+    itemId: !listItem && itemId ? itemId : '',
+    queryOptions: { enabled: Boolean(!listItem ? datasetId : '') && Boolean(!listItem && itemId ? itemId : '') },
+  });
   const item = listItem ?? fetchedItem ?? undefined;
 
   return (

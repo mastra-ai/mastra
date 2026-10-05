@@ -1,12 +1,20 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
-export const useToolProviders = () => {
+type ToolProvidersResponse = Awaited<ReturnType<MastraClient['listToolProviders']>>;
+
+export const useToolProviders = <TData = ToolProvidersResponse>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<ToolProvidersResponse, TData> } = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['tool-providers'],
     queryFn: () => client.listToolProviders(),
+    ...queryOptions,
   });
 };
 
@@ -19,7 +27,9 @@ export interface IntegrationTool {
   providerName: string;
 }
 
-export const useAllIntegrationTools = () => {
+export const useAllIntegrationTools = ({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<IntegrationTool[]> } = {}) => {
   const client = useMastraClient();
   const { data: providersData, isLoading: isLoadingProviders } = useToolProviders();
   const providers = providersData?.providers ?? [];
@@ -43,6 +53,7 @@ export const useAllIntegrationTools = () => {
       return results;
     },
     enabled: providers.length > 0,
+    ...queryOptions,
   });
 
   return {

@@ -85,7 +85,11 @@ function ExperimentPage() {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
-  } = useDatasetExperiment(datasetId, experimentId ?? '');
+  } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
+  });
 
   const {
     data: results,
@@ -98,6 +102,7 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
   const { supportsMetrics } = useObservabilityStorageCapabilities();
@@ -105,6 +110,7 @@ function ExperimentPage() {
     experimentId,
     experimentStatus: experiment?.status,
     supportsMetrics,
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics },
   });
 
   const selection = useExperimentResultsSelection({

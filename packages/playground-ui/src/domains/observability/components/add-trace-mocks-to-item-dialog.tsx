@@ -103,8 +103,15 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
   const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
   const datasets = datasetsData?.datasets ?? [];
 
-  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems(selectedDatasetId);
-  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(selectedDatasetId, selectedItemId);
+  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems({
+    datasetId: selectedDatasetId,
+    queryOptions: { enabled: Boolean(selectedDatasetId) },
+  });
+  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem({
+    datasetId: selectedDatasetId,
+    itemId: selectedItemId,
+    queryOptions: { enabled: Boolean(selectedDatasetId) && Boolean(selectedItemId) },
+  });
   const { updateItem } = useDatasetMutations();
 
   // Whether the current editor content is a non-empty JSON array (enables submit).

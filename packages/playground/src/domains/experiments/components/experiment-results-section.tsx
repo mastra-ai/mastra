@@ -51,7 +51,11 @@ export function ExperimentResultsSection({
     [results, currentItemId],
   );
 
-  const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByExperimentId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];

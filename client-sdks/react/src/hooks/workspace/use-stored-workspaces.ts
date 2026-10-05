@@ -1,20 +1,27 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { ListStoredWorkspacesParams, ListStoredWorkspacesResponse } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 /**
  * Hook to list stored workspaces from the database.
  * These are workspaces that have been persisted via the stored workspaces API,
  * as opposed to runtime-registered workspaces from code-defined agents.
  */
-export const useStoredWorkspaces = (params?: ListStoredWorkspacesParams, options?: { enabled?: boolean }) => {
+export const useStoredWorkspaces = <TData = ListStoredWorkspacesResponse>({
+  queryOptions,
+  ...params
+}: ListStoredWorkspacesParams & {
+  queryOptions?: MastraQueryOptions<ListStoredWorkspacesResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
+  return useQuery<ListStoredWorkspacesResponse, Error, TData>({
     queryKey: ['stored-workspaces', params],
     queryFn: async (): Promise<ListStoredWorkspacesResponse> => {
       return client.listStoredWorkspaces(params);
     },
-    enabled: options?.enabled !== false,
+    ...queryOptions,
   });
 };

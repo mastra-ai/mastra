@@ -1,15 +1,22 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 /** Active Resources — number of distinct resource IDs observed in agent runs.
  *  Uses approximate `count_distinct` (HyperLogLog on ClickHouse,
  *  `approx_count_distinct` on DuckDB) so the query stays fast even on
  *  tens of millions of rows. */
-export function useActiveResourcesKpiMetrics(params: MetricsQueryFilters) {
+export function useActiveResourcesKpiMetrics<TData = Awaited<ReturnType<MastraClient['getMetricAggregate']>>>(
+  params: MetricsQueryFilters & {
+    queryOptions?: MastraQueryOptions<Awaited<ReturnType<MastraClient['getMetricAggregate']>>, TData>;
+  },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { filters, filterKey } = params;
+  const { filters, filterKey, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'active-resources-kpi', filterKey],
@@ -21,5 +28,6 @@ export function useActiveResourcesKpiMetrics(params: MetricsQueryFilters) {
         filters,
         comparePeriod: 'previous_period',
       }),
+    ...queryOptions,
   });
 }

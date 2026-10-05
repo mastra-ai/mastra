@@ -1,7 +1,8 @@
-import type { PermissionPattern } from '@mastra/client-js';
+import type { MastraClient,PermissionPattern } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { getClientQueryKey } from './get-client-query-key';
 import { isAuthenticated } from './types';
@@ -19,7 +20,11 @@ import { useAuthCapabilities } from './use-auth-capabilities';
  * RBAC isn't configured, route gating is a no-op so the pattern vocabulary is
  * not needed, and we avoid an unnecessary (and potentially 403/401) call.
  */
-export const usePermissionPatterns = () => {
+type PermissionPatternsResponse = Awaited<ReturnType<MastraClient['getPermissionPatterns']>>;
+
+export const usePermissionPatterns = ({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<PermissionPatternsResponse> } = {}) => {
   const client = useMastraClient();
   const { data: capabilities, isLoading: capabilitiesLoading, error: capabilitiesError } = useAuthCapabilities();
 
@@ -36,6 +41,7 @@ export const usePermissionPatterns = () => {
     // permissions if the pattern set is empty.
     retry: false,
     staleTime: Infinity,
+    ...queryOptions,
   });
 
   const patterns = useMemo(() => new Set<PermissionPattern>(data?.patterns ?? []), [data]);

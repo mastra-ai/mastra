@@ -1,8 +1,9 @@
-import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
-import type { UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { MastraClient,GetScorerResponse,ListScoresResponse } from '@mastra/client-js';
+import type { UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
 import { useInView } from '../shared/use-in-view';
 
@@ -19,10 +20,12 @@ export function getScoresRefetchInterval(query: { state: { error: unknown } }) {
   return SCORES_REFETCH_INTERVAL_MS;
 }
 
-type UseScoresByScorerIdProps = {
+type UseScoresByScorerIdProps<TData> = {
   scorerId: string;
   entityId?: string;
   entityType?: string;
+  /** TanStack overrides spread last; `select` defaults to the flattened, de-duplicated score list. */
+  queryOptions?: MastraInfiniteQueryOptions<ListScoresResponse, TData, readonly unknown[], number>;
 };
 
 function getScoresNextPageParam(lastPage: ListScoresResponse | undefined, _allPages: unknown, lastPageParam: number) {
@@ -44,30 +47,26 @@ function selectFlatScores(data: { pages: ListScoresResponse[] }) {
   return scores;
 }
 
-export const useScoresByScorerId = ({
+export const useScoresByScorerId = <TData = ReturnType<typeof selectFlatScores>>({
   scorerId,
   entityId,
   entityType,
-}: UseScoresByScorerIdProps): UseInfiniteQueryResult<ReturnType<typeof selectFlatScores>, Error> & {
+  queryOptions,
+}: UseScoresByScorerIdProps<TData>): UseInfiniteQueryResult<TData, Error> & {
   setEndOfListElement: ReturnType<typeof useInView>['setRef'];
 } => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  const query = useInfiniteQuery<
-    ListScoresResponse,
-    Error,
-    ReturnType<typeof selectFlatScores>,
-    readonly unknown[],
-    number
-  >({
+  const query = useInfiniteQuery<ListScoresResponse, Error, TData, readonly unknown[], number>({
     queryKey: ['scores', scorerId, entityId, entityType],
     queryFn: ({ pageParam }) =>
       client.listScoresByScorerId({ scorerId, page: pageParam, perPage: SCORES_PER_PAGE, entityId, entityType }),
     initialPageParam: 0,
     getNextPageParam: getScoresNextPageParam,
-    select: selectFlatScores,
+    select: data => selectFlatScores(data) as TData,
     refetchInterval: getScoresRefetchInterval,
+    ...queryOptions,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
@@ -110,15 +109,22 @@ export const useScorer = (scorerId: string) => {
   return { scorer, isLoading, error };
 };
 
-export const useScorers = (options?: { enabled?: boolean; requestContext?: Record<string, unknown> }) => {
-  const client = useMastraClient();
-  const requestContext = options?.requestContext;
+type ListScorersResponse = Awaited<ReturnType<MastraClient['listScorers']>>;
 
-  return useQuery({
+export const useScorers = <TData = ListScorersResponse>({
+  requestContext,
+  queryOptions,
+}: {
+  requestContext?: Record<string, unknown>;
+  queryOptions?: MastraQueryOptions<ListScorersResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
+  const client = useMastraClient();
+
+  return useQuery<ListScorersResponse, Error, TData>({
     queryKey: ['scorers', requestContext],
     queryFn: () => client.listScorers(requestContext),
     staleTime: 0,
     gcTime: 0,
-    enabled: options?.enabled ?? true,
+    ...queryOptions,
   });
 };

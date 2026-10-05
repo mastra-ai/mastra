@@ -49,7 +49,7 @@ function hasAppUi(meta: McpToolInfo['_meta']): boolean {
 
 export function McpServerToolsList({ server }: { server: McpServerInfo }) {
   const [search, setSearch] = useState('');
-  const { data: tools = {}, isLoading } = useMCPServerTools(server);
+  const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
   const { Link, paths } = useLinkComponent();
 
   const filteredTools = useMemo(() => {

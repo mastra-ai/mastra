@@ -1,7 +1,8 @@
-import type { StoredAgentSkillConfig, UpdateStoredAgentParams } from '@mastra/client-js';
+import type { StoredAgentResponse, StoredAgentSkillConfig, UpdateStoredAgentParams } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 import { useStoredAgent } from './use-stored-agents';
 
 /**
@@ -11,11 +12,21 @@ import { useStoredAgent } from './use-stored-agents';
  * snapshot. Each key is a stored skill ID and the value holds per-skill
  * overrides (description, instructions, pin, strategy).
  */
-export function useAgentSkills(agentId?: string, requestContext?: Record<string, any>) {
+export function useAgentSkills({
+  agentId,
+  requestContext,
+  queryOptions,
+}: {
+  agentId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: {
+    updateSkills?: MastraMutationOptions<StoredAgentResponse, Record<string, StoredAgentSkillConfig> | undefined>;
+  };
+} = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  const { data: agent } = useStoredAgent(agentId, { status: 'draft' });
+  const { data: agent } = useStoredAgent({ agentId, status: 'draft', queryOptions: { enabled: Boolean(agentId) } });
 
   const skills = useMemo((): Record<string, StoredAgentSkillConfig> => {
     if (!agent?.skills) return {};
@@ -43,6 +54,7 @@ export function useAgentSkills(agentId?: string, requestContext?: Record<string,
         void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       }
     },
+    ...queryOptions?.updateSkills,
   });
 
   return { skills, updateSkills };

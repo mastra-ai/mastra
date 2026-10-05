@@ -1,8 +1,6 @@
-import type { ListToolProviderConnectionsResponse } from '@mastra/client-js';
-
-import type { useToolProviders, useToolkits } from '@mastra/react/hooks';
+import type { ListToolProvidersResponse, ListToolProviderToolkitsResponse,ListToolProviderConnectionsResponse } from '@mastra/client-js';
 
 export type ConnectionItem = ListToolProviderConnectionsResponse['items'][number];
-export type ProviderItem = NonNullable<ReturnType<typeof useToolProviders>['data']>['providers'][number];
-export type ToolkitItem = NonNullable<ReturnType<typeof useToolkits>['data']>['data'][number];
+export type ProviderItem = ListToolProvidersResponse['providers'][number];
+export type ToolkitItem = ListToolProviderToolkitsResponse['data'][number];
 export type GroupedConnections = [string, ConnectionItem[]][];

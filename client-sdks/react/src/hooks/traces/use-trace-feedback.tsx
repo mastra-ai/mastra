@@ -1,15 +1,27 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 
-type UseTraceFeedbackProps = {
+type TraceFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
+
+type UseTraceFeedbackProps<TData> = {
   traceId?: string;
   page?: number;
-  enabled?: boolean;
+  queryOptions?: MastraQueryOptions<TraceFeedbackResponse, TData>;
 };
 
 /** Loads a page of trace-level feedback and stops polling when storage cannot serve feedback. */
-export const useTraceFeedback = ({ traceId = '', page, enabled = true }: UseTraceFeedbackProps) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
+  traceId = '',
+  page,
+  queryOptions,
+}: UseTraceFeedbackProps<TData>): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
   const pageNumber = page ?? 0;
   return useQuery({
@@ -19,16 +31,16 @@ export const useTraceFeedback = ({ traceId = '', page, enabled = true }: UseTrac
         filters: { traceId },
         pagination: { page: pageNumber, perPage: 10 },
       }),
-    enabled: enabled && !!traceId,
     // The API can't express "spanId is null", so trace-level records are isolated client-side.
     // Note: this runs after server-side pagination, so a page may hold fewer than `perPage` rows.
     select: data => {
       const feedback = data.feedback.filter(item => !item.spanId);
-      if (!data.pagination) return { ...data, feedback };
-      return { ...data, feedback, pagination: { ...data.pagination, total: feedback.length } };
+      if (!data.pagination) return { ...data, feedback } as TData;
+      return { ...data, feedback, pagination: { ...data.pagination, total: feedback.length } } as TData;
     },
     refetchInterval: getFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,
+    ...queryOptions,
   });
 };

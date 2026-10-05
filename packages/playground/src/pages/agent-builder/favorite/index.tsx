@@ -52,7 +52,7 @@ export default function AgentBuilderFavoritePage() {
     data: skillsData,
     isLoading: skillsLoading,
     error: skillsError,
-  } = useStoredSkills({ enabled: tab === 'skills' && features.skills });
+  } = useStoredSkills({ queryOptions: { enabled: tab === 'skills' && features.skills } });
 
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];

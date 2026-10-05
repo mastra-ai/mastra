@@ -1,5 +1,8 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { ListScoresResponse } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
 
 const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 15_000;
@@ -14,20 +17,29 @@ export function getTraceSpanScoresRefetchInterval(query: { state: { error: unkno
   return TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS;
 }
 
-type useTraceSpanScoresProps = {
+type useTraceSpanScoresProps<TData> = {
   traceId?: string;
   spanId?: string;
   page?: number;
+  queryOptions?: MastraQueryOptions<ListScoresResponse, TData>;
 };
 
-export const useTraceSpanScores = ({ traceId = '', spanId = '', page }: useTraceSpanScoresProps) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useTraceSpanScores = <TData = ListScoresResponse>({
+  traceId = '',
+  spanId = '',
+  page,
+  queryOptions,
+}: useTraceSpanScoresProps<TData>): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  return useQuery({
+  return useQuery<ListScoresResponse, Error, TData>({
     queryKey: ['trace-span-scores', traceId, spanId, page],
     queryFn: () => client.listScoresBySpan({ traceId, spanId, page: page || 0, perPage: 10 }),
-    enabled: !!traceId && !!spanId,
     refetchInterval: getTraceSpanScoresRefetchInterval,
     gcTime: 0,
     staleTime: 0,
+    ...queryOptions,
   });
 };

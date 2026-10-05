@@ -1,9 +1,11 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { MastraClient, StreamBackgroundTasksParams } from '@mastra/client-js';
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 type BackgroundTaskStreamReader = ReturnType<Awaited<ReturnType<MastraClient['streamBackgroundTasks']>>['getReader']>;
 
@@ -219,11 +221,19 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   };
 }
 
-export const useGetBackgroundTaskById = (backgroundTaskId: string, enabled: boolean = true) => {
+type BackgroundTaskResponse = Awaited<ReturnType<MastraClient['getBackgroundTask']>>;
+
+export const useGetBackgroundTaskById = <TData = BackgroundTaskResponse>({
+  backgroundTaskId,
+  queryOptions,
+}: {
+  backgroundTaskId: string;
+  queryOptions?: MastraQueryOptions<BackgroundTaskResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['background-task', backgroundTaskId],
     queryFn: () => client.getBackgroundTask(backgroundTaskId),
-    enabled,
+    ...queryOptions,
   });
 };

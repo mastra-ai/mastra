@@ -1,10 +1,23 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export const memoryStatusQueryKey = (agentId: string | undefined, threadId?: string) =>
   ['memory', 'status', agentId, threadId] as const;
 
-export function useMemoryStatus(agentId: string | undefined, threadId?: string) {
+type MemoryStatusResponse = Awaited<ReturnType<MastraClient['getMemoryStatus']>>;
+
+export function useMemoryStatus<TData = MemoryStatusResponse>({
+  agentId,
+  threadId,
+  queryOptions,
+}: {
+  agentId: string | undefined;
+  threadId?: string;
+  queryOptions?: MastraQueryOptions<MemoryStatusResponse, TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -15,5 +28,6 @@ export function useMemoryStatus(agentId: string | undefined, threadId?: string) 
             threadId,
           })
       : skipToken,
+    ...queryOptions,
   });
 }

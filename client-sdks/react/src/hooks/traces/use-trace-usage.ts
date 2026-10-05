@@ -1,6 +1,8 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { GetMetricBreakdownResponse } from '@mastra/core/storage';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { getOrCreate } from '../shared/map';
 import type { TraceUsageSummary } from './types';
 
@@ -74,15 +76,17 @@ function summarizeUsage(accumulators: Map<string, TraceUsageAccumulator>): Map<s
   return summaries;
 }
 
-export function useTraceUsage({
+export function useTraceUsage<TData = Map<string, TraceUsageSummary>>({
   traceIds,
   enabled,
   autoRefetch,
+  queryOptions,
 }: {
   traceIds: readonly string[];
   enabled: boolean;
   autoRefetch: boolean;
-}) {
+  queryOptions?: MastraQueryOptions<Map<string, TraceUsageSummary>, TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
   const uniqueTraceIds = [...new Set(traceIds)].toSorted();
   const projectUrl =
@@ -117,5 +121,6 @@ export function useTraceUsage({
     placeholderData: (previousData, previousQuery) =>
       previousQuery?.queryKey[1] === projectKey ? previousData : undefined,
     refetchInterval: enabled && autoRefetch ? 10_000 : false,
+    ...queryOptions,
   });
 }

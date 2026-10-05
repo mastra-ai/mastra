@@ -36,7 +36,7 @@ describe('useStoredScorer', () => {
     it('returns its details', async () => {
       server.use(http.get('*/api/stored/scorers/tone', () => HttpResponse.json(scorer)));
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useStoredScorer('tone'), { wrapper });
+      const { result } = renderHook(() => useStoredScorer({ scorerId: 'tone' }), { wrapper });
       await waitFor(() => expect(result.current.data?.name).toBe('Tone'));
     });
   });

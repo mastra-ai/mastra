@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { useExperimentsForDatasetFilter, type ExperimentTargetFilter } from '../experiments';
 import type { ReviewItem } from './types';
 
@@ -12,6 +13,8 @@ export interface ReviewItemsOptions extends ExperimentTargetFilter {
   /** Explicit source owned by the caller; an empty list disables discovery too. */
   experiments?: DatasetExperiment[];
   isLoadingExperiments?: boolean;
+  /** TanStack overrides spread last into the review-items query. */
+  queryOptions?: MastraQueryOptions<ReviewItem[]>;
 }
 
 /**
@@ -26,15 +29,16 @@ const useReviewItemsByStatus = (
     targetId,
     experiments: suppliedExperiments,
     isLoadingExperiments = false,
+    queryOptions,
   }: ReviewItemsOptions,
 ): UseQueryResult<ReviewItem[], Error> => {
   const client = useMastraClient();
   const hasSuppliedExperiments = suppliedExperiments !== undefined;
-  const { data: experimentsData, isLoading: isDiscoveringExperiments } = useExperimentsForDatasetFilter(
-    undefined,
-    { targetType, targetId },
-    { enabled: !hasSuppliedExperiments },
-  );
+  const { data: experimentsData, isLoading: isDiscoveringExperiments } = useExperimentsForDatasetFilter({
+    datasetId: undefined,
+    target: { targetType, targetId },
+    queryOptions: { enabled: !hasSuppliedExperiments },
+  });
   const experiments = hasSuppliedExperiments ? suppliedExperiments : experimentsData?.experiments;
   const isLoadingSource = hasSuppliedExperiments ? isLoadingExperiments : isDiscoveringExperiments;
   const scopedExperiments = experimentId ? experiments?.filter(exp => exp.id === experimentId) : experiments;
@@ -85,6 +89,7 @@ const useReviewItemsByStatus = (
     },
     enabled: Boolean(experiments),
     refetchOnWindowFocus: false,
+    ...queryOptions,
   });
 
   // The results query is disabled until experiments arrive, so its own `isLoading`

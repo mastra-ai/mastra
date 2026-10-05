@@ -24,7 +24,10 @@ export function DatasetCompareVersionToolbar({
   versionB,
   onVersionChange,
 }: DatasetCompareVersionToolbarProps) {
-  const { data: versions } = useDatasetVersions(datasetId);
+  const { data: versions } = useDatasetVersions({
+    datasetId: datasetId,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
   const options = (versions ?? []).map(v => ({
     value: String(v.version),

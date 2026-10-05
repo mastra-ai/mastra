@@ -234,10 +234,13 @@ describe('useTraceQuery', () => {
         }),
       );
       focusManager.setFocused(true);
-      const { result, rerender } = renderHook(({ interval }) => useTraceQuery({ query, refetchInterval: interval }), {
-        initialProps: { interval: 0 },
-        wrapper: makeWrapper(),
-      });
+      const { result, rerender } = renderHook(
+        ({ interval }) => useTraceQuery({ query, queryOptions: { traceQuery: { refetchInterval: interval } } }),
+        {
+          initialProps: { interval: 0 },
+          wrapper: makeWrapper(),
+        },
+      );
       await waitFor(() => expect(result.current.data).toEqual(lastTraceQueryPage.traces));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       try {
@@ -380,7 +383,7 @@ describe('useTraceQuery', () => {
           traces: useTraceQuery({ query, withQueryTrace, legacyFilters }),
           metadata: useTraceMetadataFilterFields({
             timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-02T00:00:00.000Z' },
-            enabled: withQueryTrace,
+            queryOptions: { enabled: withQueryTrace },
           }),
         }),
         { wrapper: makeWrapper() },

@@ -1,7 +1,8 @@
-import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import { useInfiniteQuery, type UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { ScheduleTriggerResponse,MastraClient } from '@mastra/client-js';
+import { useInfiniteQuery, type InfiniteData, type QueryKey, type UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 
 export type UseScheduleTriggersResult = Omit<UseInfiniteQueryResult<unknown, Error>, 'data'> & {
@@ -11,16 +12,32 @@ export type UseScheduleTriggersResult = Omit<UseInfiniteQueryResult<unknown, Err
 
 const PER_PAGE = 25;
 
-export const useScheduleTriggers = (scheduleId: string | undefined): UseScheduleTriggersResult => {
+type ListScheduleTriggersResponse = Awaited<ReturnType<MastraClient['listScheduleTriggers']>>;
+
+/** `queryOptions` spread last; the hook flattens pages itself, so `select` is not applied to `data`. */
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useScheduleTriggers = ({
+  scheduleId,
+  queryOptions,
+}: {
+  scheduleId: string | undefined;
+  queryOptions?: MastraInfiniteQueryOptions<
+    ListScheduleTriggersResponse,
+    InfiniteData<ListScheduleTriggersResponse, number | undefined>,
+    QueryKey,
+    number | undefined
+  >;
+}): UseScheduleTriggersResult => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
     queryKey: ['schedule-triggers', scheduleId],
-    enabled: !!scheduleId,
     initialPageParam: undefined as number | undefined,
     queryFn: async ({ pageParam }) => {
-      if (!scheduleId) return { triggers: [] as ScheduleTriggerResponse[] };
+      if (!scheduleId) return { triggers: [] } as unknown as ListScheduleTriggersResponse;
       return client.listScheduleTriggers(scheduleId, {
         limit: PER_PAGE,
         toActualFireAt: pageParam,
@@ -42,6 +59,7 @@ export const useScheduleTriggers = (scheduleId: string | undefined): UseSchedule
       });
       return hasActive ? 5_000 : false;
     },
+    ...queryOptions,
   });
 
   const triggers = query.data?.pages.flatMap(page => page?.triggers ?? []) ?? [];

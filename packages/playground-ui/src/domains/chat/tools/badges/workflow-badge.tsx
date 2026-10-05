@@ -51,10 +51,11 @@ export const WorkflowBadge = ({
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow({
     workflowId,
-    useEntityRequestContext('workflow', workflowId)[0],
-  );
+    requestContext: useEntityRequestContext('workflow', workflowId)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;

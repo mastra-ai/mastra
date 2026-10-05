@@ -1,38 +1,70 @@
-import type {
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   StoredPromptBlockResponse,
   CreateStoredPromptBlockParams,
-  UpdateStoredPromptBlockParams,
-} from '@mastra/client-js';
+  UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 
-export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams, requestContext?: Record<string, any>) => {
+export const useStoredPromptBlocks = <TData = ListStoredPromptBlocksResponse>({
+  requestContext,
+  queryOptions,
+  ...params
+}: ListStoredPromptBlocksParams & {
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<ListStoredPromptBlocksResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery<ListStoredPromptBlocksResponse>({
+  return useQuery<ListStoredPromptBlocksResponse, Error, TData>({
     queryKey: ['stored-prompt-blocks', params, requestContext],
     queryFn: () => client.listStoredPromptBlocks(params),
-    placeholderData: previousData => previousData,
+    placeholderData: (previousData: ListStoredPromptBlocksResponse | undefined) => previousData,
+    ...queryOptions,
   });
 };
 
-export const useStoredPromptBlock = (
-  blockId?: string,
-  options?: { status?: 'draft' | 'published' },
-  requestContext?: Record<string, any>,
-) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useStoredPromptBlock = <TData = StoredPromptBlockResponse | null>({
+  blockId,
+  status,
+  requestContext,
+  queryOptions,
+}: {
+  blockId?: string;
+  status?: 'draft' | 'published';
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<StoredPromptBlockResponse | null, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery<StoredPromptBlockResponse | null>({
-    queryKey: ['stored-prompt-block', blockId, options?.status, requestContext],
-    queryFn: () => (blockId ? client.getStoredPromptBlock(blockId).details(requestContext, options) : null),
-    enabled: Boolean(blockId),
+  return useQuery<StoredPromptBlockResponse | null, Error, TData>({
+    queryKey: ['stored-prompt-block', blockId, status, requestContext],
+    queryFn: () => (blockId ? client.getStoredPromptBlock(blockId).details(requestContext, { status }) : null),
+    ...queryOptions,
   });
 };
 
-export const useStoredPromptBlockMutations = (blockId?: string, requestContext?: Record<string, any>) => {
+type DeleteStoredPromptBlockResponse = Awaited<ReturnType<ReturnType<MastraClient['getStoredPromptBlock']>['delete']>>;
+
+export const useStoredPromptBlockMutations = ({
+  blockId,
+  requestContext,
+  queryOptions,
+}: {
+  blockId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: {
+    createStoredPromptBlock?: MastraMutationOptions<StoredPromptBlockResponse, CreateStoredPromptBlockParams>;
+    updateStoredPromptBlock?: MastraMutationOptions<StoredPromptBlockResponse, UpdateStoredPromptBlockParams>;
+    deleteStoredPromptBlock?: MastraMutationOptions<DeleteStoredPromptBlockResponse, void>;
+  };
+} = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -41,6 +73,7 @@ export const useStoredPromptBlockMutations = (blockId?: string, requestContext?:
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
     },
+    ...queryOptions?.createStoredPromptBlock,
   });
 
   const updateMutation = useMutation({
@@ -55,6 +88,7 @@ export const useStoredPromptBlockMutations = (blockId?: string, requestContext?:
         void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
       }
     },
+    ...queryOptions?.updateStoredPromptBlock,
   });
 
   const deleteMutation = useMutation({
@@ -68,6 +102,7 @@ export const useStoredPromptBlockMutations = (blockId?: string, requestContext?:
         void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
       }
     },
+    ...queryOptions?.deleteStoredPromptBlock,
   });
 
   return {

@@ -1,21 +1,31 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
 import { ROOT_ENTITY_TYPES } from './types';
 
 type EntityTypeValue = `${EntityType}`;
 
-type UseEntityNamesOptions = {
+type EntityNamesResponse = Awaited<ReturnType<MastraClient['getEntityNames']>>;
+
+type UseEntityNamesOptions<TData> = {
   entityType?: EntityTypeValue;
   rootOnly?: boolean;
+  queryOptions?: MastraQueryOptions<EntityNamesResponse, TData>;
 };
 
 function resolveEntityType(entityType: EntityTypeValue) {
   return Object.values(EntityType).find(candidate => candidate === entityType);
 }
 
-export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesOptions = {}) => {
+export const useEntityNames = <TData = EntityNamesResponse['names']>({
+  entityType,
+  rootOnly = false,
+  queryOptions,
+}: UseEntityNamesOptions<TData> = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
   // Mirror the queryFn branches so the cache key reflects what the server
@@ -27,7 +37,7 @@ export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesO
 
   return useQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: async (): Promise<EntityNamesResponse> => {
       try {
         if (entityType) {
           const resolvedEntityType = resolveEntityType(entityType);
@@ -54,8 +64,9 @@ export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesO
         return { names: [] };
       }
     },
-    select: data => data?.names ?? [],
+    select: data => (data?.names ?? []) as TData,
     retry: false,
     staleTime: DISCOVERY_STALE_TIME,
+    ...queryOptions,
   });
 };

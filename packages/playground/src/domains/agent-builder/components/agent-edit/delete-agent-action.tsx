@@ -16,7 +16,7 @@ interface UseDeleteAgentActionParams {
 const useDeleteAgentAction = ({ agentId }: UseDeleteAgentActionParams) => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { deleteStoredAgent } = useStoredAgentMutations(agentId);
+  const { deleteStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const confirm = async () => {
     try {
@@ -54,7 +54,10 @@ const DeleteAgentDialog = ({
   isPending,
   onConfirm,
 }: DeleteAgentDialogProps) => {
-  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId, { enabled: open });
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) && open },
+  });
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>

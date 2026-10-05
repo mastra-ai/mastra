@@ -1,22 +1,48 @@
-import type { CreateStoredScorerParams, UpdateStoredScorerParams } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient,CreateStoredScorerParams,UpdateStoredScorerParams } from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 
-export const useStoredScorer = (
-  scorerId?: string,
-  options?: { status?: 'draft' | 'published' },
-  requestContext?: Record<string, any>,
-) => {
+type StoredScorerResponse = Awaited<ReturnType<ReturnType<MastraClient['getStoredScorer']>['details']>>;
+type DeleteStoredScorerResponse = Awaited<ReturnType<ReturnType<MastraClient['getStoredScorer']>['delete']>>;
+
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useStoredScorer = <TData = StoredScorerResponse | null>({
+  scorerId,
+  status,
+  requestContext,
+  queryOptions,
+}: {
+  scorerId?: string;
+  status?: 'draft' | 'published';
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<StoredScorerResponse | null, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
-    queryKey: ['stored-scorer', scorerId, options?.status, requestContext],
-    queryFn: () => (scorerId ? client.getStoredScorer(scorerId).details(requestContext, options) : null),
-    enabled: Boolean(scorerId),
+  return useQuery<StoredScorerResponse | null, Error, TData>({
+    queryKey: ['stored-scorer', scorerId, status, requestContext],
+    queryFn: () => (scorerId ? client.getStoredScorer(scorerId).details(requestContext, { status }) : null),
+    ...queryOptions,
   });
 };
 
-export const useStoredScorerMutations = (scorerId?: string, requestContext?: Record<string, any>) => {
+export const useStoredScorerMutations = ({
+  scorerId,
+  requestContext,
+  queryOptions,
+}: {
+  scorerId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: {
+    createStoredScorer?: MastraMutationOptions<StoredScorerResponse, CreateStoredScorerParams>;
+    updateStoredScorer?: MastraMutationOptions<StoredScorerResponse, UpdateStoredScorerParams>;
+    deleteStoredScorer?: MastraMutationOptions<DeleteStoredScorerResponse, void>;
+  };
+} = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -26,6 +52,7 @@ export const useStoredScorerMutations = (scorerId?: string, requestContext?: Rec
       void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
       void queryClient.invalidateQueries({ queryKey: ['scorers'] });
     },
+    ...queryOptions?.createStoredScorer,
   });
 
   const updateMutation = useMutation({
@@ -40,6 +67,7 @@ export const useStoredScorerMutations = (scorerId?: string, requestContext?: Rec
         void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }
     },
+    ...queryOptions?.updateStoredScorer,
   });
 
   const deleteMutation = useMutation({
@@ -54,6 +82,7 @@ export const useStoredScorerMutations = (scorerId?: string, requestContext?: Rec
         void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }
     },
+    ...queryOptions?.deleteStoredScorer,
   });
 
   return {

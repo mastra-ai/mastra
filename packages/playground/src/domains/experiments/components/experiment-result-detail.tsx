@@ -82,19 +82,26 @@ export function ExperimentResultDetail({
     return undefined;
   };
 
-  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
+  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace({
+    traceId: featuredTraceId,
+    queryOptions: { enabled: !!featuredTraceId },
+  });
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined, enabled: withFeedback });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: featuredTraceId ?? undefined,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId },
+  });
   const { data: spanFeedback } = useSpanFeedback({
     traceId: featuredTraceId ?? undefined,
     spanId: featuredSpanId,
-    enabled: withFeedback,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId && !!featuredSpanId },
   });
   const { data: anchorSpanScores } = useTraceSpanScores({
     traceId: featuredTraceId ?? undefined,
     spanId: anchorSpan?.spanId,
     page: 0,
+    queryOptions: { enabled: !!featuredTraceId && !!anchorSpan?.spanId },
   });
 
   return (

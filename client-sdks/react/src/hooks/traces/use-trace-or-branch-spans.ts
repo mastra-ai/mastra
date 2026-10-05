@@ -1,6 +1,9 @@
 import type { TraceListMode, LightSpanRecord } from './types';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { useBranch } from './use-branch';
+import type { BranchResponse } from './use-branch';
 import { useTraceSpans } from './use-trace-spans';
+import type { TraceSpansData } from './use-trace-spans';
 
 export interface UseTraceOrBranchSpansArgs {
   traceId: string | null | undefined;
@@ -10,6 +13,14 @@ export interface UseTraceOrBranchSpansArgs {
   anchorSpanId?: string | null;
   listMode: TraceListMode;
   depth?: number;
+  /**
+   * Per-query TanStack overrides, spread last. `select` must keep the default data shape
+   * because this hook reads `.spans` from both results.
+   */
+  queryOptions?: {
+    trace?: MastraQueryOptions<TraceSpansData, TraceSpansData, (string | null | undefined)[]>;
+    branch?: MastraQueryOptions<BranchResponse, BranchResponse>;
+  };
 }
 
 export interface UseTraceOrBranchSpansResult {
@@ -34,14 +45,19 @@ export function useTraceOrBranchSpans({
   anchorSpanId,
   listMode,
   depth,
+  queryOptions,
 }: UseTraceOrBranchSpansArgs): UseTraceOrBranchSpansResult {
   const isBranches = listMode === 'branches';
 
-  const traceQuery = useTraceSpans(isBranches ? null : traceId);
+  const traceQuery = useTraceSpans({
+    traceId: isBranches ? null : traceId,
+    queryOptions: { enabled: !isBranches && !!traceId, ...queryOptions?.trace },
+  });
   const branchQuery = useBranch({
     traceId: isBranches ? traceId : null,
     spanId: isBranches ? anchorSpanId : null,
     depth,
+    queryOptions: { enabled: isBranches && !!traceId && !!anchorSpanId, ...queryOptions?.branch },
   });
 
   if (isBranches) {

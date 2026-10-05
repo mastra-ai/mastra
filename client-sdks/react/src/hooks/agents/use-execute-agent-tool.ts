@@ -1,6 +1,10 @@
 import { RequestContext } from '@mastra/core/di';
 import { useMutation } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
+
+type ExecuteAgentToolResponse = Awaited<ReturnType<ReturnType<MastraClient['getAgent']>['executeTool']>>;
 
 export interface ExecuteToolInput {
   agentId: string;
@@ -9,7 +13,9 @@ export interface ExecuteToolInput {
   playgroundRequestContext?: Record<string, any>;
 }
 
-export const useExecuteAgentTool = () => {
+export const useExecuteAgentTool = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<ExecuteAgentToolResponse, ExecuteToolInput> } = {}) => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ agentId, toolId, input, playgroundRequestContext }: ExecuteToolInput) => {
@@ -19,5 +25,6 @@ export const useExecuteAgentTool = () => {
       });
       return client.getAgent(agentId).executeTool(toolId, { data: input, requestContext });
     },
+    ...queryOptions,
   });
 };

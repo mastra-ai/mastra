@@ -1,32 +1,56 @@
-import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type {
+  CreateStoredAgentParams,
+  UpdateStoredAgentParams,
+  ListStoredAgentsParams,
+  StoredAgentResponse,
+  ListStoredAgentsResponse,
+  StoredAgentDependentsResponse,
+  DeleteStoredAgentResponse,
+} from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 import { isModelNotAllowedError } from './is-model-not-allowed';
 
-export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { enabled?: boolean }) => {
+export const useStoredAgents = <TData = ListStoredAgentsResponse>({
+  queryOptions,
+  ...params
+}: ListStoredAgentsParams & {
+  queryOptions?: MastraQueryOptions<ListStoredAgentsResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
+  const listParams = Object.keys(params).length > 0 ? params : undefined;
 
   return useQuery({
-    queryKey: ['stored-agents', params],
-    queryFn: () => client.listStoredAgents(params),
-    enabled: options?.enabled ?? true,
+    queryKey: ['stored-agents', listParams],
+    queryFn: () => client.listStoredAgents(listParams),
+    ...queryOptions,
   });
 };
 
-export const useStoredAgent = (
-  agentId?: string,
-  options?: { status?: 'draft' | 'published'; enabled?: boolean },
-  requestContext?: Record<string, any>,
-) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useStoredAgent = <TData = StoredAgentResponse | null>({
+  agentId,
+  status,
+  requestContext,
+  queryOptions,
+}: {
+  agentId?: string;
+  status?: 'draft' | 'published';
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<StoredAgentResponse | null, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  const { enabled = true, ...queryOptions } = options ?? {};
 
   return useQuery({
-    queryKey: ['stored-agent', agentId, queryOptions.status, requestContext],
+    queryKey: ['stored-agent', agentId, status, requestContext],
     queryFn: async () => {
       if (!agentId) return null;
       try {
-        return await client.getStoredAgent(agentId).details(requestContext, queryOptions);
+        return await client.getStoredAgent(agentId).details(requestContext, { status });
       } catch (error) {
         // 404 is expected for code-only agents that haven't been stored yet
         if (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 404) {
@@ -35,30 +59,48 @@ export const useStoredAgent = (
         throw error;
       }
     },
-    enabled: Boolean(agentId) && enabled,
     retry: false,
+    ...queryOptions,
   });
 };
 
-export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
+export type StoredAgent = StoredAgentResponse;
 
-export const useStoredAgentDependents = (
-  agentId?: string,
-  options?: { enabled?: boolean },
-  requestContext?: Record<string, any>,
-) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useStoredAgentDependents = <TData = StoredAgentDependentsResponse>({
+  agentId,
+  requestContext,
+  queryOptions,
+}: {
+  agentId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<StoredAgentDependentsResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  const enabled = (options?.enabled ?? true) && Boolean(agentId);
 
   return useQuery({
     queryKey: ['stored-agent-dependents', agentId, requestContext],
     queryFn: () => client.getStoredAgent(agentId!).dependents(requestContext),
-    enabled,
     retry: false,
+    ...queryOptions,
   });
 };
 
-export const useStoredAgentMutations = (agentId?: string, requestContext?: Record<string, any>) => {
+export const useStoredAgentMutations = ({
+  agentId,
+  requestContext,
+  queryOptions,
+}: {
+  agentId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: {
+    createStoredAgent?: MastraMutationOptions<StoredAgentResponse, CreateStoredAgentParams>;
+    updateStoredAgent?: MastraMutationOptions<StoredAgentResponse, UpdateStoredAgentParams>;
+    deleteStoredAgent?: MastraMutationOptions<DeleteStoredAgentResponse, void>;
+  };
+} = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -88,6 +130,7 @@ export const useStoredAgentMutations = (agentId?: string, requestContext?: Recor
       void queryClient.invalidateQueries({ queryKey: ['agent', created.id] });
     },
     onError: invalidateBuilderSettingsOnPolicyReject,
+    ...queryOptions?.createStoredAgent,
   });
 
   const updateMutation = useMutation({
@@ -106,6 +149,7 @@ export const useStoredAgentMutations = (agentId?: string, requestContext?: Recor
       }
     },
     onError: invalidateBuilderSettingsOnPolicyReject,
+    ...queryOptions?.updateStoredAgent,
   });
 
   const deleteMutation = useMutation({
@@ -123,6 +167,7 @@ export const useStoredAgentMutations = (agentId?: string, requestContext?: Recor
         queryClient.removeQueries({ queryKey: ['agent', agentId] });
       }
     },
+    ...queryOptions?.deleteStoredAgent,
   });
 
   return {

@@ -1,11 +1,20 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraClient } from '@mastra/client-js';
 import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 
-export interface UseAgentMessagesProps {
+type AgentMessagesPage = Awaited<ReturnType<MastraClient['listThreadMessages']>>;
+
+type AgentMessagesData = InfiniteData<AgentMessagesPage, string> & { messages: MastraDBMessage[] };
+
+export interface UseAgentMessagesProps<TData = AgentMessagesData> {
   threadId?: string;
   agentId: string;
   memory: boolean;
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraInfiniteQueryOptions<AgentMessagesPage, TData, QueryKey, string>;
 }
 
 const PER_PAGE = 40;
@@ -16,10 +25,13 @@ const createdAtMs = (message: MastraDBMessage) => new Date(message.createdAt).ge
 
 const byCreatedAt = (a: MastraDBMessage, b: MastraDBMessage) => createdAtMs(a) - createdAtMs(b);
 
-export const useAgentMessages = (
-  { threadId, agentId, memory }: UseAgentMessagesProps,
-  requestContext?: Record<string, any>,
-) => {
+export const useAgentMessages = <TData = AgentMessagesData>({
+  threadId,
+  agentId,
+  memory,
+  requestContext,
+  queryOptions,
+}: UseAgentMessagesProps<TData>) => {
   const client = useMastraClient();
 
   return useInfiniteQuery({
@@ -45,7 +57,7 @@ export const useAgentMessages = (
       // A full page of same-timestamp messages would re-request itself forever.
       return next === lastPageParam ? undefined : next;
     },
-    select: data => {
+    select: (data): TData => {
       const seen = new Set<string>();
       const messages = data.pages
         .flatMap(page => page.messages)
@@ -55,11 +67,12 @@ export const useAgentMessages = (
           return true;
         })
         .sort(byCreatedAt);
-      return { ...data, messages };
+      return { ...data, messages } as AgentMessagesData as TData;
     },
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
+    ...queryOptions,
   });
 };

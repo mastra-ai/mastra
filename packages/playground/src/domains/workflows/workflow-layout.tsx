@@ -50,7 +50,11 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // Match the child segment rather than searching the pathname, so a workflow whose id is
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
-  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, useEntityRequestContext('workflow', workflowId!)[0]);
+  const { isLoading: isWorkflowLoading } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: useEntityRequestContext('workflow', workflowId!)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const { hasObservability } = useHasObservability();
 
   const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';

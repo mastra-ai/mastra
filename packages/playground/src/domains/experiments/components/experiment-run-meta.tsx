@@ -35,7 +35,11 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
  * The dataset lives in the pipeline, so it is not repeated here.
  */
 export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProps) {
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
   const isActive = experiment.status === 'running' || experiment.status === 'pending';
 
   // Averages every score fetched so far, so a running experiment reflects only

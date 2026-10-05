@@ -1,7 +1,8 @@
 import type { MastraClient } from '@mastra/client-js';
-import { queryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions as tanstackQueryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 /**
  * Key, fetcher and stale policy of the `trace-spans` query. Every observer of this key must
@@ -14,7 +15,7 @@ export const traceSpansQueryOptions = (
   client: MastraClient,
   traceId: string | null | undefined,
 ): UseQueryOptions<TraceResponse, Error, TraceResponse, (string | null | undefined)[]> =>
-  queryOptions({
+  tanstackQueryOptions({
     queryKey: ['trace-spans', traceId],
     queryFn: async () => {
       if (!traceId) {
@@ -23,7 +24,6 @@ export const traceSpansQueryOptions = (
       const res = await client.getTrace(traceId);
       return res;
     },
-    enabled: !!traceId,
     // Resumed runs and delayed exports can append spans even when every known span has ended.
     staleTime: 0,
   });
@@ -39,18 +39,32 @@ export const traceSpansQueryOptions = (
  */
 export type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
 
-export function useTraceSpans(
-  traceId: string | null | undefined,
-  { passive = false }: { passive?: boolean } = {},
-): UseQueryResult<TraceSpansData> {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export function useTraceSpans<TData = TraceSpansData>({
+  traceId,
+  passive = false,
+  queryOptions,
+}: {
+  traceId: string | null | undefined;
+  passive?: boolean;
+  queryOptions?: MastraQueryOptions<TraceSpansData, TData, (string | null | undefined)[]>;
+}): UseQueryResult<TData> {
   const client = useMastraClient();
 
-  return useQuery({
-    ...traceSpansQueryOptions(client, traceId),
+  const { queryKey, queryFn, enabled, staleTime } = traceSpansQueryOptions(client, traceId);
+
+  return useQuery<TraceSpansData, Error, TData, (string | null | undefined)[]>({
+    queryKey,
+    queryFn,
+    enabled,
+    staleTime,
     // History rows share updates but leave automatic refreshes to the selected detail.
     refetchOnMount: !passive,
     refetchOnWindowFocus: !passive,
     refetchOnReconnect: !passive,
+    ...queryOptions,
   });
 }
 
@@ -69,11 +83,18 @@ export function useFetchTraceSpans(): (traceId: string) => Promise<TraceSpansDat
  * Observes the `trace-spans` query of several traces at once and projects each one with `select`.
  * Traces still loading (or failed) yield `fallback(traceId)` so the result always lines up with `traceIds`.
  */
-export function useTraceSpansQueries<T>(
-  traceIds: string[],
-  select: (traceId: string, data: TraceSpansData) => T,
-  fallback: (traceId: string) => T,
-): T[] {
+export function useTraceSpansQueries<T>({
+  traceIds,
+  select,
+  fallback,
+  queryOptions,
+}: {
+  traceIds: string[];
+  select: (traceId: string, data: TraceSpansData) => T;
+  fallback: (traceId: string) => T;
+  /** Applied to every per-trace query. */
+  queryOptions?: MastraQueryOptions<TraceSpansData, T, (string | null | undefined)[]>;
+}): T[] {
   const client = useMastraClient();
 
   return useQueries({
@@ -83,6 +104,7 @@ export function useTraceSpansQueries<T>(
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       select: (data: TraceSpansData) => select(traceId, data),
+      ...queryOptions,
     })),
     combine: results =>
       results.map((result, index) =>

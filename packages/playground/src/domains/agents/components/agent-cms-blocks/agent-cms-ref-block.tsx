@@ -47,10 +47,13 @@ const RefBlockContent = ({
   schema,
   readOnly = false,
 }: RefBlockContentProps) => {
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: block.promptBlockId,
+    queryOptions: { enabled: Boolean(block.promptBlockId) },
+  });
   const isDraft = promptBlock && !promptBlock.activeVersionId;
   const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: block.promptBlockId });
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');

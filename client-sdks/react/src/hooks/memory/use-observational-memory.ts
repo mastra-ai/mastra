@@ -1,10 +1,25 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export const observationalMemoryQueryKey = (agentId: string | undefined, threadId: string | undefined) =>
   ['memory', 'observational-memory', agentId, threadId] as const;
 
-export function useObservationalMemory(agentId: string | undefined, threadId: string | undefined, resourceId?: string) {
+type ObservationalMemoryResponse = Awaited<ReturnType<MastraClient['getObservationalMemory']>>;
+
+export function useObservationalMemory<TData = ObservationalMemoryResponse>({
+  agentId,
+  threadId,
+  resourceId,
+  queryOptions,
+}: {
+  agentId: string | undefined;
+  threadId: string | undefined;
+  resourceId?: string;
+  queryOptions?: MastraQueryOptions<ObservationalMemoryResponse, TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -23,5 +38,6 @@ export function useObservationalMemory(agentId: string | undefined, threadId: st
     // reuse the cached record instead of refiring the request; freshness still
     // comes from the explicit refetch on stream finish/observation signals.
     staleTime: 5_000,
+    ...queryOptions,
   });
 }

@@ -39,14 +39,12 @@ export const AgentChat = ({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useAgentMessages(
-    {
-      agentId: agentId,
-      threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
-      memory: memory ?? false,
-    },
-    requestContext,
-  );
+  } = useAgentMessages({
+    agentId: agentId,
+    threadId: isNewThread ? undefined : threadId!,
+    memory: memory ?? false,
+    requestContext: requestContext,
+  });
 
   // Handle scrolling to message after navigation
   useEffect(() => {

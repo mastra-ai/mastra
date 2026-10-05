@@ -1,5 +1,8 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface Vector {
   name: string;
@@ -7,7 +10,13 @@ export interface Vector {
   description?: string;
 }
 
-export function useVectors() {
+type VectorsResponse = Awaited<ReturnType<MastraClient['listVectors']>>;
+
+export function useVectors<TData = VectorsResponse>({
+  queryOptions,
+}: {
+  queryOptions?: MastraQueryOptions<VectorsResponse, TData>;
+} = {}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -17,5 +26,6 @@ export function useVectors() {
       return data;
     },
     staleTime: 30000, // Cache for 30 seconds
+    ...queryOptions,
   });
 }

@@ -1,53 +1,84 @@
-import type { SkillsShSkill } from '@mastra/client-js';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
+import type { MastraClient,SkillsShSkill } from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 
 export type { SkillsShSkill };
+
+type SearchSkillsShResponse = Awaited<ReturnType<ReturnType<MastraClient['getWorkspace']>['searchSkillsSh']>>;
+type PopularSkillsShResponse = Awaited<ReturnType<ReturnType<MastraClient['getWorkspace']>['listPopularSkillsSh']>>;
+type InstallSkillsShResponse = Awaited<ReturnType<ReturnType<MastraClient['getWorkspace']>['installSkillsSh']>>;
+type UpdateSkillsShResponse = Awaited<ReturnType<ReturnType<MastraClient['getWorkspace']>['updateSkillsSh']>>;
+type RemoveSkillsShResponse = Awaited<ReturnType<ReturnType<MastraClient['getWorkspace']>['removeSkillsSh']>>;
 
 /**
  * Search skills on skills.sh (via server proxy)
  */
-export const useSearchSkillsSh = (workspaceId: string | undefined) => {
+export const useSearchSkillsSh = ({
+  workspaceId,
+  queryOptions,
+}: {
+  workspaceId: string | undefined;
+  queryOptions?: MastraMutationOptions<SearchSkillsShResponse, string>;
+}): UseMutationResult<SearchSkillsShResponse, Error, string> => {
   const client = useMastraClient();
 
-  return useMutation({
+  return useMutation<SearchSkillsShResponse, Error, string>({
     mutationFn: (query: string) => {
       if (!workspaceId) throw new Error('Workspace ID is required');
       return client.getWorkspace(workspaceId).searchSkillsSh({ q: query, limit: 10 });
     },
+    ...queryOptions,
   });
 };
 
 /**
  * Get popular skills from skills.sh (via server proxy, cached for 5 minutes)
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const usePopularSkillsSh = (workspaceId: string | undefined) => {
+export const usePopularSkillsSh = <TData = PopularSkillsShResponse>({
+  workspaceId,
+  queryOptions,
+}: {
+  workspaceId: string | undefined;
+  queryOptions?: MastraQueryOptions<PopularSkillsShResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
+  return useQuery<PopularSkillsShResponse, Error, TData>({
     queryKey: ['skills-sh', 'popular', workspaceId],
     queryFn: () => {
       if (!workspaceId) throw new Error('Workspace ID is required');
       return client.getWorkspace(workspaceId).listPopularSkillsSh({ limit: 10, offset: 0 });
     },
     staleTime: 5 * 60 * 1000,
-    enabled: !!workspaceId,
+    ...queryOptions,
   });
 };
 
 /**
  * Preview a skill by fetching its SKILL.md (via server proxy to avoid CORS)
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useSkillPreview = (
-  workspaceId: string | undefined,
-  owner: string | undefined,
-  repo: string | undefined,
-  skillPath: string | undefined,
-  options?: { enabled?: boolean },
-) => {
+export const useSkillPreview = <TData = string>({
+  workspaceId,
+  owner,
+  repo,
+  skillPath,
+  queryOptions,
+}: {
+  workspaceId: string | undefined;
+  owner: string | undefined;
+  repo: string | undefined;
+  skillPath: string | undefined;
+  queryOptions?: MastraQueryOptions<string, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
+  return useQuery<string, Error, TData>({
     queryKey: ['skills-sh', 'preview', workspaceId, owner, repo, skillPath],
     queryFn: async () => {
       if (!workspaceId || !owner || !repo || !skillPath) {
@@ -56,8 +87,8 @@ export const useSkillPreview = (
       const { content } = await client.getWorkspace(workspaceId).previewSkillsSh({ owner, repo, path: skillPath });
       return content;
     },
-    enabled: options?.enabled !== false && !!workspaceId && !!owner && !!repo && !!skillPath,
     retry: false,
+    ...queryOptions,
   });
 };
 
@@ -132,7 +163,9 @@ export interface InstallSkillParams {
 /**
  * Install a skill by fetching from GitHub and writing to workspace filesystem.
  */
-export const useInstallSkill = () => {
+export const useInstallSkill = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<InstallSkillsShResponse, InstallSkillParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -149,6 +182,7 @@ export const useInstallSkill = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
+    ...queryOptions,
   });
 };
 
@@ -160,7 +194,9 @@ export interface UpdateSkillsParams {
 /**
  * Update installed skills by re-fetching from GitHub.
  */
-export const useUpdateSkills = () => {
+export const useUpdateSkills = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<UpdateSkillsShResponse, UpdateSkillsParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -170,6 +206,7 @@ export const useUpdateSkills = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
+    ...queryOptions,
   });
 };
 
@@ -181,7 +218,9 @@ export interface RemoveSkillParams {
 /**
  * Remove an installed skill by deleting its directory.
  */
-export const useRemoveSkill = () => {
+export const useRemoveSkill = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<RemoveSkillsShResponse, RemoveSkillParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -191,5 +230,6 @@ export const useRemoveSkill = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
+    ...queryOptions,
   });
 };
