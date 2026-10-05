@@ -848,7 +848,7 @@ describe('KnowledgePage', () => {
           events: [
             {
               id: 'activity-scope-1',
-              action: 'record-created',
+              action: 'create',
               recordType: 'record',
               recordId: 'record-1',
               scope: ['org:org-1', `resource:${FACTORY_ID}`],
@@ -1021,7 +1021,7 @@ describe('KnowledgePage', () => {
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('new record')).toBeInTheDocument();
-    expect(screen.queryByText('knowledge appended')).not.toBeInTheDocument();
+    expect(screen.queryByText('create')).not.toBeInTheDocument();
     expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Payments Service' }));
     expect(router.state.location.search).not.toContain('view=activity');
@@ -1038,7 +1038,7 @@ describe('KnowledgePage', () => {
         const cursor = new URL(request.url).searchParams.get('cursor');
         requestedCursors.push(cursor);
         const shared = {
-          action: 'record-created',
+          action: 'create',
           recordType: 'record',
           scope: ['org:org-1', `resource:${FACTORY_ID}`],
           createdAt: '2026-08-13T03:00:00.000Z',
