@@ -117,6 +117,7 @@
     "format:oxfmt": "pnpm oxfmt:format"
   },
   "engines": {
+    "node": "^22.19.0 || >=24.11.0",
     "pnpm": ">=11.0.0"
   },
   "license": "Apache-2.0",

@@ -1,7 +1,7 @@
+import { useTraceQuery } from '@mastra/react/hooks';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks';
 import { useEffect, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
-import { useTraceQuery } from './use-trace-query';
-import type { TraceQueryArgs, UseTraceQueryArgs } from './use-trace-query';
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
@@ -28,9 +28,11 @@ export function useTracesListSource({
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
+    queryOptions: {
+      traceQuery: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+      legacy: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+    },
     query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
-    refetchInterval: autoRefetch && !rolling ? 10_000 : false,
-    refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
     limit,

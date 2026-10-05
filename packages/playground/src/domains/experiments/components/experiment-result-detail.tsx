@@ -1,17 +1,15 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { useTraceSpanScores, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
-import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useSpanFeedback, useTraceFeedback, useTraceSpanScores, useExperimentTrace } from '@mastra/react/hooks';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
@@ -84,19 +82,26 @@ export function ExperimentResultDetail({
     return undefined;
   };
 
-  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
+  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace({
+    traceId: featuredTraceId,
+    queryOptions: { enabled: !!featuredTraceId },
+  });
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined, enabled: withFeedback });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: featuredTraceId ?? undefined,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId },
+  });
   const { data: spanFeedback } = useSpanFeedback({
     traceId: featuredTraceId ?? undefined,
     spanId: featuredSpanId,
-    enabled: withFeedback,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId && !!featuredSpanId },
   });
   const { data: anchorSpanScores } = useTraceSpanScores({
     traceId: featuredTraceId ?? undefined,
     spanId: anchorSpan?.spanId,
     page: 0,
+    queryOptions: { enabled: !!featuredTraceId && !!anchorSpan?.spanId },
   });
 
   return (

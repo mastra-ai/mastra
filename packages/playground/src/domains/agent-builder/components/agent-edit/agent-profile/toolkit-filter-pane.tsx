@@ -7,8 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useToolkits } from '@mastra/react/hooks';
 import { memo, useMemo, useState } from 'react';
-import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { ToolkitConnectionControl } from './toolkit-connection-control';
 import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-groups';
@@ -115,7 +115,10 @@ const ProviderToolkitSection = ({
   disabled,
   multipleAllowed,
 }: ProviderToolkitSectionProps) => {
-  const { data, isLoading } = useToolkits(provider.providerId);
+  const { data, isLoading } = useToolkits({
+    providerId: provider.providerId,
+    queryOptions: { enabled: !!provider.providerId },
+  });
 
   const toolkits = useMemo<ToolkitRow[]>(() => {
     const names = new Map<string, string>();

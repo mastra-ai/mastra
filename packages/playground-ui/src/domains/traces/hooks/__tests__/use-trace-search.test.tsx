@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { SpanType } from '@mastra/core/observability';
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { act, renderHook } from '@testing-library/react';

@@ -7,15 +7,14 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useDataset, useDatasetItemVersion, useDatasetItemVersions } from '@mastra/react/hooks';
+import type { DatasetItemVersion } from '@mastra/react/hooks';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
-import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
@@ -85,8 +84,15 @@ function DatasetItemVersionsComparePage() {
   const compareVersion = parseVersionParam(searchParams.get('compare'));
   const isDiffView = searchParams.get('view') === 'diff';
 
-  const { data: dataset, error } = useDataset(datasetId ?? '');
-  const { data: allVersions, isLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: dataset, error } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+  const { data: allVersions, isLoading } = useDatasetItemVersions({
+    datasetId: datasetId ?? '',
+    itemId: itemId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) },
+  });
 
   // URL is the source of truth; fall back to latest when absent or unknown.
   const leftVersion =
@@ -95,12 +101,13 @@ function DatasetItemVersionsComparePage() {
   const leftNumber = leftVersion?.datasetVersion ?? null;
   const rightNumber = compareVersion != null && compareVersion !== leftNumber ? compareVersion : null;
 
-  const { data: rightVersion, isLoading: isRightLoading } = useDatasetItemVersion(
-    datasetId ?? '',
-    itemId ?? '',
-    rightNumber ?? 0,
-    dataset?.version,
-  );
+  const { data: rightVersion, isLoading: isRightLoading } = useDatasetItemVersion({
+    datasetId: datasetId ?? '',
+    itemId: itemId ?? '',
+    datasetVersion: rightNumber ?? 0,
+    latestVersion: dataset?.version,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) && (rightNumber ?? 0) > 0 },
+  });
 
   const setParam = (key: 'version' | 'compare' | 'view', value: string | number | null) =>
     setSearchParams(

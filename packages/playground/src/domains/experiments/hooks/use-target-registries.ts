@@ -1,7 +1,5 @@
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import type { TargetRegistries } from '@/domains/experiments/utils/target-name';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 /** Registries needed to resolve an experiment target id into a display name. */

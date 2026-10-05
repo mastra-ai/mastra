@@ -10,26 +10,28 @@ import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
 import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import {
+  isWorkspaceNotSupportedError,
+  useInstallSkill,
+  useRemoveSkill,
+  useUpdateSkills,
+  useWorkspaceInfo,
+  useWorkspaces,
+  useDeleteWorkspaceFile,
+  useCreateWorkspaceDirectory,
+  useWorkspaceSkills,
+} from '@mastra/react/hooks';
+import type { WorkspaceItem } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { WorkspaceNotices } from '@/domains/workspace/components/workspace-notices';
-import { useInstallSkill, useRemoveSkill, useUpdateSkills } from '@/domains/workspace/hooks';
-import {
-  useWorkspaceInfo,
-  useWorkspaces,
-  useDeleteWorkspaceFile,
-  useCreateWorkspaceDirectory,
-} from '@/domains/workspace/hooks/use-workspace';
-import { useWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
-import type { WorkspaceItem } from '@/domains/workspace/types';
 
 const crumbs = [navCrumb('/workspaces')];
 
@@ -61,7 +63,7 @@ export default function Workspace() {
     data: workspaceInfo,
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
-  } = useWorkspaceInfo(effectiveWorkspaceId);
+  } = useWorkspaceInfo({ workspaceId: effectiveWorkspaceId, queryOptions: { enabled: !!effectiveWorkspaceId } });
 
   // Check if 401 unauthorized (session expired)
   const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
@@ -106,7 +108,10 @@ export default function Workspace() {
   const createDirectory = useCreateWorkspaceDirectory();
 
   // Skills - pass workspaceId to get skills from the selected workspace
-  const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({
+    workspaceId: effectiveWorkspaceId,
+    queryOptions: { enabled: !!effectiveWorkspaceId },
+  });
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();

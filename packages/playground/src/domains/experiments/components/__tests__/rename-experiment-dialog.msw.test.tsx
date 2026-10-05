@@ -1,3 +1,4 @@
+import { useDatasetExperiment } from '@mastra/react/hooks';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -5,7 +6,6 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import { experiments } from './fixtures/experiments';
-import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -16,7 +16,11 @@ const patchCalls: Array<{ datasetId: string; experimentId: string; body: Record<
 
 /** Mirrors the detail page: the title comes from the experiment query so a rename must refresh it. */
 function Harness() {
-  const { data } = useDatasetExperiment('dataset-1', base.id);
+  const { data } = useDatasetExperiment({
+    datasetId: 'dataset-1',
+    experimentId: base.id,
+    queryOptions: { enabled: Boolean('dataset-1') && Boolean(base.id) },
+  });
   const [open, setOpen] = useState(false);
   if (!data) return null;
   return (

@@ -8,12 +8,6 @@ toc_max_heading_level: 2
 
 # Session
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 A `Session` is the isolated runtime for one resource and optional scope. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
 
 Create sessions through `controller.createSession()`. Direct construction and controller wiring methods aren't application APIs.

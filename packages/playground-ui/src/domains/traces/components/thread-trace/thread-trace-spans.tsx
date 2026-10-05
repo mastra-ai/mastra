@@ -1,9 +1,9 @@
+import { useTraceSpans } from '@mastra/react/hooks';
 import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
-import { useTraceSpans } from '../../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';
@@ -40,7 +40,7 @@ export function ThreadTraceSpans({ className, timelineClassName, ...props }: Thr
   const { budget, overflows, isExpanded, setExpanded } = useSpansClamp();
 
   // Passive: deduped with the (non-passive) fetch inside the consumer's messages slot and the side panel.
-  const { data, isLoading } = useTraceSpans(traceId, { passive: true });
+  const { data, isLoading } = useTraceSpans({ traceId: traceId, passive: true, queryOptions: { enabled: !!traceId } });
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
   const { expandedSpanIds, setExpandedSpanIds } = useExpandedSpanIds(hierarchicalSpans);
 

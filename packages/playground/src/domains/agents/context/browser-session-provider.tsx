@@ -1,8 +1,7 @@
-import { useBrowserSessionProbe } from '@mastra/playground-ui/domains/agents/hooks/use-browser-session-probe';
+import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
-import { useCloseBrowser } from '../hooks/use-close-browser';
 import { createBrowserFrameStore } from './browser-frame-store';
 import { BrowserFrameStoreContext, BrowserSessionContext } from './browser-session-context';
 import type { BrowserViewMode } from './browser-session-context';
@@ -81,7 +80,11 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   // `setQueriesData` when a browser_* tool transitions, so there's no
   // polling — the cache update flips `serverHasSession` to true the
   // instant the first browser tool call's status is known.
-  const { data: probe } = useBrowserSessionProbe({ agentId, threadId, enabled });
+  const { data: probe } = useBrowserSessionProbe({
+    agentId: agentId,
+    threadId: threadId,
+    queryOptions: { enabled: enabled && Boolean(agentId) },
+  });
   const screencastAvailable = probe?.screencastAvailable ?? false;
   const serverHasSession = probe?.hasSession ?? false;
 

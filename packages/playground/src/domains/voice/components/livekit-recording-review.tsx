@@ -8,10 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { useMastraPackages } from '@mastra/react/hooks';
 import { AudioLinesIcon } from 'lucide-react';
 import { useState } from 'react';
 import { LiveKitRecordingContent } from './livekit-recording-content';
-import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 
 type TraceSpans = Awaited<ReturnType<MastraClient['getTraceLight']>>['spans'];
 

@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useScorerVersions } from '../hooks/use-scorer-versions';
+import { useScorerVersions } from '@mastra/react/hooks';
 
 export interface ScorerVersionComboboxProps {
   scorerId: string;
@@ -26,6 +26,7 @@ export function ScorerVersionCombobox({
   const { data, isLoading } = useScorerVersions({
     scorerId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!scorerId },
   });
 
   const versions = data?.versions ?? [];

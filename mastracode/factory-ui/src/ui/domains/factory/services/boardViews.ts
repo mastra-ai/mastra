@@ -1,14 +1,17 @@
 /**
- * Board view persistence: the filters and sort last used on each board, so reopening a board from
- * the sidebar brings them back. The URL stays the source of truth; this only refills it.
+ * Board view persistence: the filters, sort and saved view last used on each board, so links that
+ * open a board fresh (sidebar, factory switcher, factory landing) bring them back. The URL stays
+ * the source of truth; a board never rewrites it on its own.
  */
 
+import { boardPath } from '../boardCatalog';
 import { BOARD_FILTER_QUERY } from '../boardFilters';
+import { BOARD_VIEW_QUERY } from '../boardSavedViews';
 import { BOARD_SORT_QUERY } from '../boardSort';
 
 const BOARD_VIEWS_KEY = 'mastracode.boardViews';
 const MAX_BOARDS = 50;
-const BOARD_VIEW_PARAMS: readonly string[] = [...Object.values(BOARD_FILTER_QUERY), BOARD_SORT_QUERY];
+const BOARD_VIEW_PARAMS: readonly string[] = [...Object.values(BOARD_FILTER_QUERY), BOARD_SORT_QUERY, BOARD_VIEW_QUERY];
 
 const boardScope = (factoryId: string, boardId: string) => `${factoryId}:${boardId}`;
 
@@ -36,21 +39,10 @@ function hasBoardViewParams(params: URLSearchParams): boolean {
   return BOARD_VIEW_PARAMS.some(key => params.has(key));
 }
 
-/**
- * `params` with the saved view filled in, when the URL carries no filters or sort of its own and
- * doesn't point at a card (a saved filter could hide it). Undefined when nothing needs restoring.
- */
-export function restoreBoardView(
-  factoryId: string,
-  boardId: string,
-  params: URLSearchParams,
-): URLSearchParams | undefined {
-  if (hasBoardViewParams(params) || params.has('item')) return undefined;
-  const saved = loadBoardView(factoryId, boardId);
-  if (!saved) return undefined;
-  const restored = new URLSearchParams(params);
-  for (const [key, value] of saved) restored.append(key, value);
-  return restored;
+export function rememberedBoardPath(factoryId: string, boardId: string): string {
+  const path = boardPath(factoryId, boardId);
+  const view = loadBoardView(factoryId, boardId);
+  return view ? `${path}?${view}` : path;
 }
 
 function loadBoardView(factoryId: string, boardId: string): URLSearchParams | undefined {

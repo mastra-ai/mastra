@@ -178,7 +178,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
             'bg-card relative z-10 w-32',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
-            muted && 'text-placeholder hover:text-placeholder border-border/60 hover:bg-card [&_svg]:opacity-25',
+            muted && 'text-placeholder hover:text-placeholder hover:bg-card [&_svg]:opacity-25',
           )}
         >
           {AUDIBLE_SOUNDS.find(option => option.value === lastAudible)?.label}

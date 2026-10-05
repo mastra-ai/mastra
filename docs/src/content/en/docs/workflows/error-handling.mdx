@@ -65,6 +65,8 @@ if (result.status === 'failed') {
 
 For scenarios where you need to handle workflow completion without awaiting the result, such as background jobs, fire-and-forget workflows, or centralized logging, you can use lifecycle callbacks.
 
+Lifecycle callbacks are awaited, but they aren't durable or retried. Use workflow steps for work that must complete reliably.
+
 ### `onFinish`
 
 Called when a workflow completes with any status (success, failed, suspended, or tripwire):

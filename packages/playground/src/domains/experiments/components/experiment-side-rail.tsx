@@ -4,11 +4,11 @@ import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndV
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useScoresByExperimentId } from '@mastra/react/hooks';
+import type { useExperimentMetrics } from '@mastra/react/hooks';
 import { ExperimentFlowChain } from './experiment-flow-chain';
 import { ExperimentRunMeta } from './experiment-run-meta';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import type { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 
 export interface ExperimentSideRailProps {
   experiment: DatasetExperiment;
@@ -29,7 +29,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ExperimentSideRail({ experiment, metrics, className }: ExperimentSideRailProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId

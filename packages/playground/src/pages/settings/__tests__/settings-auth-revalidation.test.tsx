@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthenticatedCapabilities } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,7 +9,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { StudioSettingsPage } from '../index';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
-import type { AuthenticatedCapabilities } from '@/domains/auth/types';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
