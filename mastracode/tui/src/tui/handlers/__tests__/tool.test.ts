@@ -360,12 +360,15 @@ describe('handleToolApprovalRequired', () => {
         },
         hookManager: undefined,
       },
+      addChildBeforeFollowUps: vi.fn(),
       notify: vi.fn(),
     } as any;
 
     handleToolApprovalRequired(ctx, 'call-approve', 'execute_command', { command: 'ls' });
 
-    expect(ctx.state.ui.showOverlay).toHaveBeenCalledTimes(1);
+    // The prompt is shown inline in the chat, not as an overlay
+    expect(ctx.addChildBeforeFollowUps).toHaveBeenCalledTimes(1);
+    expect(ctx.state.ui.showOverlay).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
   });
 });

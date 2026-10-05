@@ -131,7 +131,7 @@ describe('AskQuestionInlineComponent multi-select', () => {
     expect(onSubmit).toHaveBeenCalledWith('React, Vue');
   });
 
-  it('freezes the box showing every selected option after answering', () => {
+  it('collapses to the question and every selected option after answering', () => {
     const component = new AskQuestionInlineComponent({
       question: 'Which apply?',
       options: opts,
@@ -146,11 +146,8 @@ describe('AskQuestionInlineComponent multi-select', () => {
     component.handleInput(' '); // Vue
     component.handleInput('__tui.select.confirm__');
 
-    const lines = (component as any).borderedBox.render(60).join('\n');
-    // Selected options get a ✓, the unselected one is dimmed (no ✓).
-    expect(lines).toContain('✓');
-    expect(lines).toContain('React');
-    expect(lines).toContain('Vue');
-    expect(lines).toContain('Svelte');
+    const lines = (component as any).borderedBox.render(60).map((l: string) => l.replace(/\x1b\[[0-9;]*m/g, ''));
+    // Question, then one ✓ row per selected option; unselected options are dropped.
+    expect(lines).toEqual(['▎ Which apply?', '▎ ✓ React', '▎ ✓ Vue']);
   });
 });

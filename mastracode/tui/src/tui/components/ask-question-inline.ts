@@ -24,6 +24,7 @@ import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme, getThemeGeneration } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { MultilineInput } from './multiline-input.js';
+import { card } from './surface.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
 /**
@@ -163,146 +164,80 @@ export class AskQuestionBorderedBox {
     try {
       return this._render(width);
     } catch {
-      // Fallback: render a minimal box so the TUI doesn't crash
-      return [
-        BOX_INDENT_STR + theme.fg('dim', '╭──── Question ────╮'),
-        BOX_INDENT_STR + theme.fg('dim', '│ (render error)   │'),
-        BOX_INDENT_STR + theme.fg('dim', '╰──────────────────╯'),
-      ];
+      // Fallback: a minimal card so the TUI doesn't crash
+      return card(theme.getTheme().dim, [theme.fg('dim', '(render error)')]);
     }
   }
 
+  /**
+   * Borderless card with a colored left bar (▎):
+   * - waiting for an answer: accent bar, bold question, ❯ options, hint
+   * - answered: collapses to two muted rows, the question and "✓ answer"
+   */
   private _render(width: number): string[] {
-    const border = (s: string) => theme.fg('dim', s);
-
-    // Inner width: total width minus indent, minus 4 for "│ " + " │"
-    const innerWidth = Math.max(1, width - BOX_INDENT_STR.length - 4);
-    const boxWidth = innerWidth + 4; // "│ " + content + " │"
-
-    const lines: string[] = [];
-
-    // Top border: ╭──...──╮
-    lines.push(BOX_INDENT_STR + border(`╭${'─'.repeat(boxWidth - 2)}╮`));
-
-    // Helper to add a bordered line (truncates content that exceeds innerWidth)
-    const addLine = (content: string, contentVisWidth: number) => {
-      let finalContent = content;
-      let finalWidth = contentVisWidth;
-      if (finalWidth > innerWidth) {
-        finalContent = truncateToWidth(content, innerWidth);
-        finalWidth = visibleWidth(finalContent);
-      }
-      const pad = Math.max(0, innerWidth - finalWidth);
-      lines.push(BOX_INDENT_STR + border('│') + ' ' + finalContent + ' '.repeat(pad) + ' ' + border('│'));
-    };
-
-    // Question header
-    const header = theme.bold(theme.fg('accent', 'Question'));
-    addLine(header, visibleWidth(header));
-
-    // Question text (word-wrap to fit inside bordered box)
-    for (const qLine of this.questionLines) {
-      const wrapped = wrapTextWithAnsi(qLine, innerWidth);
-      for (const wLine of wrapped) {
-        const text = theme.fg('text', wLine);
-        addLine(text, visibleWidth(wLine));
-      }
-    }
-
-    // Empty separator
-    addLine('', 0);
-
-    // Wrap a labelled option line so long labels don't overflow the bordered box.
-    // Mirrors the free-text answered branch below: first wrapped line keeps the
-    // styled prefix (icon/spaces), continuation lines indent 3 spaces.
-    const continuationPrefix = '   ';
-    const addWrappedOptionLine = (prefix: string, label: string, style: (s: string) => string) => {
-      const prefixVis = visibleWidth(prefix);
-      const wrapped = wrapTextWithAnsi(label, Math.max(1, innerWidth - prefixVis));
-      wrapped.forEach((line, index) => {
-        const linePrefix = index === 0 ? prefix : continuationPrefix;
-        const content = `${linePrefix}${style(line)}`;
-        addLine(content, visibleWidth(linePrefix) + visibleWidth(line));
-      });
-    };
+    const t = theme.getTheme();
+    // "▎ " = 2 columns
+    const innerWidth = Math.max(1, width - BOX_INDENT_STR.length - 2);
+    const wrap = (text: string, style: (s: string) => string) =>
+      wrapTextWithAnsi(text, innerWidth).map(line => style(line));
+    const question = (style: (s: string) => string) =>
+      this.questionLines.flatMap(line => (line ? wrap(line, style) : ['']));
+    const out = (color: string, lines: string[]) =>
+      card(
+        color,
+        lines.map(line => truncateToWidth(line, innerWidth)),
+      ).map(line => BOX_INDENT_STR + line);
+    const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
 
     if (this.streaming) {
-      // Streaming: show option labels as they arrive (dimmed, no interactivity)
-      const dim = (s: string) => theme.fg('dim', s);
-      for (const item of this.items) {
-        addWrappedOptionLine(continuationPrefix, item.label, dim);
-      }
-      // Waiting indicator
-      const waiting = theme.fg('dim', '…');
-      addLine(waiting, visibleWidth(waiting));
-    } else if (this.answered && this.items.length > 0) {
-      // Render frozen item list
-      const dim = (s: string) => theme.fg('dim', s);
-      if (this.cancelled) {
-        // All items dimmed, cancelled notice
-        for (const item of this.items) {
-          addWrappedOptionLine(continuationPrefix, item.label, dim);
-        }
-        const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
-        addLine(cancelLine, visibleWidth(cancelLine));
-      } else {
-        // ✓/✗ on selected, dimmed unselected
-        const text = (s: string) => theme.fg('text', s);
-        for (const item of this.items) {
-          const isSelected = this.selectedValues
-            ? this.selectedValues.includes(item.label)
-            : item.label === this.selectedValue;
-          if (isSelected) {
-            const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            addWrappedOptionLine(`${icon}  `, item.label, text);
-          } else {
-            addWrappedOptionLine(continuationPrefix, item.label, dim);
-          }
-        }
-      }
-      addLine('', 0);
-    } else if (this.answered && this.selectedValue != null) {
-      // Free-text input answered
-      const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-      const iconPrefix = `${icon}  `;
-      const continuationPrefix = '   ';
-      const wrappedAnswer = wrapTextWithAnsi(this.selectedValue!, Math.max(1, innerWidth - visibleWidth(iconPrefix)));
-
-      wrappedAnswer.forEach((line, index) => {
-        const prefix = index === 0 ? iconPrefix : continuationPrefix;
-        const content = `${prefix}${theme.fg('text', line)}`;
-        addLine(content, visibleWidth(prefix) + visibleWidth(line));
-      });
-    } else if (this.answered && this.cancelled) {
-      // Free-text cancelled
-      const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
-      addLine(cancelLine, visibleWidth(cancelLine));
-    } else {
-      // Interactive content (SelectList or Input)
-      if (this.selectList) {
-        // SelectList renders its own lines — wrap each one with borders
-        const selectLines = this.selectList.render(innerWidth);
-        for (const sLine of selectLines) {
-          addLine(sLine, visibleWidth(sLine));
-        }
-      } else if (this.input) {
-        const inputLines = this.input.render(innerWidth);
-        for (const iLine of inputLines) {
-          addLine(iLine, visibleWidth(iLine));
-        }
-      }
-
-      // Hint text
-      const hint = theme.fg('dim', this.hintText);
-      addLine(hint, visibleWidth(hint));
+      // Options appear dimmed as they stream in; no interactivity yet.
+      return out(t.dim, [
+        ...question(s => theme.bold(theme.fg('text', s))),
+        '',
+        ...this.items.flatMap(item => wrap(item.label, s => theme.fg('dim', `  ${s}`))),
+        theme.fg('dim', '…'),
+      ]);
     }
 
-    // Bottom border: ╰──...──╯
-    lines.push(BOX_INDENT_STR + border(`╰${'─'.repeat(boxWidth - 2)}╯`));
+    if (this.answered) {
+      const asked = question(s => theme.fg('muted', s));
+      if (this.cancelled)
+        return out(t.border, [...asked, `${theme.fg('error', '✗')} ${theme.fg('dim', '(cancelled)')}`]);
+      const answers = this.selectedValues ?? (this.selectedValue != null ? [this.selectedValue] : []);
+      if (answers.length === 0) return out(t.border, asked);
+      const answerLines = answers.flatMap((answer, i) =>
+        wrapTextWithAnsi(answer, Math.max(1, innerWidth - 2)).map(
+          (line, j) => `${j === 0 ? icon : ' '} ${theme.fg('secondary', line)}`,
+        ),
+      );
+      return out(t.border, [...asked, ...answerLines]);
+    }
 
-    return lines;
+    // Waiting for an answer
+    const body = this.selectList ? this.selectList.render(innerWidth) : this.input ? this.input.render(innerWidth) : [];
+    return out(t.accent, [
+      ...question(s => theme.bold(theme.fg('text', s))),
+      '',
+      ...body,
+      '',
+      theme.fg('dim', this.hintText),
+    ]);
   }
 }
+
+/** Option list styling shared by inline prompts: accent ❯ cursor, bold selected label, ●/○ toggles. */
+export const INLINE_CARD_LIST_STYLE = {
+  get cursor() {
+    return theme.fg('accent', '❯ ');
+  },
+  get checked() {
+    return theme.fg('accent', '●') + '   ';
+  },
+  get unchecked() {
+    return theme.fg('dim', '○') + '   ';
+  },
+  selectedLabel: (label: string) => theme.bold(label),
+};
 
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
@@ -512,7 +447,13 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       });
     }
 
-    this.selectList = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme(), this.multiSelect);
+    this.selectList = new WrappingSelectList(
+      items,
+      Math.min(items.length, 8),
+      getSelectListTheme(),
+      this.multiSelect,
+      INLINE_CARD_LIST_STYLE,
+    );
 
     if (this.multiSelect) {
       this.selectList.onConfirmMulti = (selected: SelectItem[]) => {
