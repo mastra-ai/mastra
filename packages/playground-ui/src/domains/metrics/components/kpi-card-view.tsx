@@ -28,6 +28,12 @@ export function KpiCardView({
   detail,
 }: KpiCardViewProps) {
   const hasData = value != null;
+  const hasChange = changePct != null && changePct !== 0;
+  const ready = hasData && !isLoading && !isError;
+  // With a detail line the prior value joins it in the footer; otherwise it sits at the
+  // end of the value row, so a lone "vs …" never gets a hairline of its own.
+  const prevInRow = ready && hasChange && !detail && prevValue;
+
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label icon={icon}>{label}</MetricsKpiCard.Label>
@@ -37,22 +43,14 @@ export function KpiCardView({
           <MetricsKpiCard.Error />
         ) : isLoading ? (
           <MetricsKpiCard.Loading />
-        ) : hasData ? (
-          changePct != null && changePct !== 0 ? (
-            <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} lowerIsBetter={lowerIsBetter} />
-          ) : (
-            <MetricsKpiCard.NoChange />
-          )
-        ) : (
+        ) : !hasData ? (
           <MetricsKpiCard.NoData />
-        )}
+        ) : hasChange ? (
+          <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} lowerIsBetter={lowerIsBetter} />
+        ) : null}
+        {prevInRow ? <MetricsKpiCard.Prev value={prevValue} /> : null}
       </MetricsKpiCard.ValueRow>
-      {hasData && !isLoading && !isError && (
-        <MetricsKpiCard.Footer
-          detail={detail}
-          prevValue={changePct != null && changePct !== 0 ? prevValue : undefined}
-        />
-      )}
+      {ready && detail ? <MetricsKpiCard.Footer detail={detail} prevValue={hasChange ? prevValue : undefined} /> : null}
     </MetricsKpiCard>
   );
 }

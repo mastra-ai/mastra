@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { MetricsKpiCardFooter } from './metrics-kpi-card-footer';
 
 describe('MetricsKpiCardFooter', () => {
-  it('renders nothing without detail or prior value', () => {
-    expect(renderToStaticMarkup(<MetricsKpiCardFooter />)).toBe('');
+  it('renders nothing without a detail line, even with a prior value', () => {
+    expect(renderToStaticMarkup(<MetricsKpiCardFooter detail={null} prevValue="0.44%" />)).toBe('');
   });
 
   it('shows the detail and the prior value', () => {

@@ -35,8 +35,8 @@ export const KpiCards: Story = {
           <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value>
             <MetricsKpiCard.Change {...change} />
+            <MetricsKpiCard.Prev value={change.prevValue} />
           </MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Footer prevValue={change.prevValue} />
         </MetricsKpiCard>
       ))}
     </MetricsCardGroup>

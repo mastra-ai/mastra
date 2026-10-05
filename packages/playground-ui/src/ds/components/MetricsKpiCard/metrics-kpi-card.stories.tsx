@@ -63,14 +63,14 @@ export const LowerIsBetter: Story = {
   ),
 };
 
-export const NoChange: Story = {
+/** Nothing to compare against: the value stands alone. */
+export const NoPreviousValue: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
         <MetricsKpiCard.Label icon={<GaugeIcon />}>Avg Score</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>—</MetricsKpiCard.Value>
-          <MetricsKpiCard.NoChange />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
     </div>
@@ -94,7 +94,6 @@ export const GridOfCards: Story = {
         <MetricsKpiCard.Label icon={<CoinsIcon />}>Total Model Cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>—</MetricsKpiCard.Value>
-          <MetricsKpiCard.NoChange />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
@@ -112,6 +111,24 @@ export const GridOfCards: Story = {
           <MetricsKpiCard.Change changePct={3.1} prevValue="0.82" />
         </MetricsKpiCard.ValueRow>
         <MetricsKpiCard.Footer detail="128 scored runs" prevValue="0.82" />
+      </MetricsKpiCard>
+    </div>
+  ),
+};
+
+/** Prior value without a detail line: it sits at the end of the value row, no hairline. */
+export const PreviousValueInRow: Story = {
+  render: () => (
+    <div style={{ width: '20rem' }}>
+      <MetricsKpiCard>
+        <MetricsKpiCard.Label icon={<BotIcon />}>Total Agent Runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.ValueRow>
+          <MetricsKpiCard.Value>
+            <CompactNumber value={12310} />
+          </MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={15.3} prevValue="10,676" />
+          <MetricsKpiCard.Prev value="10,676" />
+        </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
     </div>
   ),
