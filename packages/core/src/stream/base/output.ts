@@ -2138,6 +2138,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+    // Carry the traceId next to runId so stream consumers can link chunks to their trace.
+    if (this.traceId && 'runId' in chunk && chunk.runId && !('traceId' in chunk && chunk.traceId)) {
+      (chunk as { traceId?: string }).traceId = this.traceId;
+    }
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }

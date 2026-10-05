@@ -89,6 +89,8 @@ export type StreamTransportRef = {
 
 interface BaseChunkType {
   runId: string;
+  /** Trace ID of the run that produced this chunk. Undefined when tracing is disabled. */
+  traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
 }
