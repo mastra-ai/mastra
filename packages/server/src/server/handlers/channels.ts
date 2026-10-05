@@ -234,11 +234,13 @@ export const RECONCILE_CHANNEL_ROUTE = createRoute({
     try {
       const channel = await getChannelOrThrow(mastra, platform);
 
+      // Resolve the agent (404 on unknown) and authorize the write before the
+      // capability check so unknown agents never read as a successful no-op.
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'connect');
+
       if (!channel.reconcileInstallation) {
         return null;
       }
-
-      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'connect');
 
       return await channel.reconcileInstallation(agentId);
     } catch (error) {
