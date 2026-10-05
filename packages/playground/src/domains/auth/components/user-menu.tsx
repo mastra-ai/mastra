@@ -109,7 +109,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           {logoutError && (
-            <p role="alert" className="text-ui-sm">
+            <p role="alert" className="text-caption">
               {logoutError.message}
             </p>
           )}
