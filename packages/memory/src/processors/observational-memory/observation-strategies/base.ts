@@ -6,7 +6,12 @@ import xxhash from 'xxhash-wasm';
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
 import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
-import { getObservableMessages, getUnobservedParts, stripThreadTags } from '../message-utils';
+import {
+  findLastCompletedObservationBoundary,
+  getObservableMessages,
+  getUnobservedParts,
+  stripThreadTags,
+} from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
@@ -46,6 +51,23 @@ function isOmPart(part: unknown): boolean {
 }
 
 /** True when the message has parts no completed observation boundary covers (OM markers aside). */
+/**
+ * Index in `message` right after this cycle's start marker (and any OM parts directly after it),
+ * or -1 when the message doesn't carry it.
+ */
+function afterOwnStartMarker(message: MastraDBMessage, marker: { type: string; data: unknown }): number {
+  const cycleId = (marker.data as { cycleId?: string } | undefined)?.cycleId;
+  if (!cycleId || marker.type === 'data-om-observation-start') return -1;
+  const parts = message.content?.parts ?? [];
+  const start = parts.findIndex(
+    (part: any) => part?.type === 'data-om-observation-start' && part?.data?.cycleId === cycleId,
+  );
+  if (start === -1) return -1;
+  let index = start + 1;
+  while (index < parts.length && isOmPart(parts[index])) index++;
+  return index;
+}
+
 function hasUnobservedContent(message: MastraDBMessage): boolean {
   return getUnobservedParts(message).some(part => !isOmPart(part));
 }
@@ -481,9 +503,11 @@ export abstract class ObservationStrategy {
    *    list belongs to the marker's thread and the cycle observed that message or it has no
    *    unobserved content;
    * 2. the newest observed assistant message; a stored copy (no live list, or another instance's
-   *    message) gets the marker right after the last part this cycle observed, so parts added
-   *    while the Observer ran stay unobserved;
-   * 3. the newest stored assistant message that is not newer than the observed range.
+   *    message) gets the marker right after the parts this cycle observed (end/failed markers right
+   *    after this cycle's start marker), so parts added while the Observer ran stay unobserved;
+   * 3. the newest stored assistant message that is not newer than the observed range, only when it
+   *    has nothing unobserved (or already carries this cycle's start marker); otherwise no marker,
+   *    and the thread cursor alone records the cycle.
    * Lifecycle markers never go on user messages.
    */
   protected async persistMarkerToObservedMessage(
@@ -511,7 +535,9 @@ export abstract class ObservationStrategy {
       try {
         const stored = (await this.storage.listMessagesById({ messageIds: [target.id] })).messages[0];
         if (stored?.content?.parts && Array.isArray(stored.content.parts)) {
-          await this.attachMarker(marker, stored, this.insertionAfterObserved(stored, target), threadId, resourceId);
+          const afterStart = afterOwnStartMarker(stored, marker);
+          const index = afterStart !== -1 ? afterStart : this.insertionAfterObserved(stored, target);
+          await this.attachMarker(marker, stored, index, threadId, resourceId);
         }
       } catch (e) {
         omDebug(`[OM:persistMarkerToObservedMessage] failed to load marker target: ${e}`);
@@ -523,32 +549,38 @@ export abstract class ObservationStrategy {
     if (observedTimes.length === 0) return;
     await this.persistMarkerToStorage(marker, threadId, resourceId, {
       notAfter: new Date(Math.max(...observedTimes)),
+      onlyIfObserved: true,
     });
   }
 
-  /** Non-marker part count of each observed message, captured when the cycle placed its first marker. */
-  private readonly observedPartCounts = new Map<string, number>();
+  /** What the cycle observed of each message, captured when it placed its first marker there. */
+  private readonly observedParts = new Map<string, { count: number; afterBoundary: boolean }>();
 
   /**
    * Index in `stored` right after the parts the cycle observed in `observed` (and any OM markers
    * directly after them). Parts are only ever appended, so the observed message's non-marker part
-   * count locates them; it is captured at the cycle's first marker, before the Observer runs, because
-   * `observed` may be a live reference that grows meanwhile. Falls back to the end when the stored
-   * copy has fewer parts than were observed.
+   * count locates them, counted from the start of the message or, when `observed` is the trimmed
+   * copy `getUnobservedMessages` returns for an already marked message, from just after the stored
+   * copy's last completed boundary. Captured at the cycle's first marker, before the Observer runs,
+   * because `observed` may be a live reference that grows meanwhile. Falls back to the end when the
+   * stored copy has fewer parts than were observed.
    */
   private insertionAfterObserved(stored: MastraDBMessage, observed: MastraDBMessage): number {
-    if (!this.observedPartCounts.has(observed.id)) {
-      this.observedPartCounts.set(observed.id, (observed.content?.parts ?? []).filter(part => !isOmPart(part)).length);
+    if (!this.observedParts.has(observed.id)) {
+      this.observedParts.set(observed.id, {
+        count: (observed.content?.parts ?? []).filter(part => !isOmPart(part)).length,
+        afterBoundary: findLastCompletedObservationBoundary(observed) === -1,
+      });
     }
-    const observedCount = this.observedPartCounts.get(observed.id)!;
+    const { count, afterBoundary } = this.observedParts.get(observed.id)!;
     const parts = stored.content.parts;
+    let index = afterBoundary ? findLastCompletedObservationBoundary(stored) + 1 : 0;
     let seen = 0;
-    let index = 0;
-    while (index < parts.length && seen < observedCount) {
+    while (index < parts.length && seen < count) {
       if (!isOmPart(parts[index])) seen++;
       index++;
     }
-    if (seen < observedCount) return parts.length;
+    if (seen < count) return parts.length;
     while (index < parts.length && isOmPart(parts[index])) index++;
     return index;
   }
@@ -584,7 +616,11 @@ export abstract class ObservationStrategy {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
-    opts?: { notAfter?: Date },
+    opts?: {
+      notAfter?: Date;
+      /** Only mark a message whose content is all observed, or that carries this cycle's start marker. */
+      onlyIfObserved?: boolean;
+    },
   ): Promise<void> {
     try {
       const result = await this.storage.listMessages({
@@ -600,8 +636,11 @@ export abstract class ObservationStrategy {
           const alreadyPresent =
             markerData?.cycleId &&
             msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+          const afterStart = afterOwnStartMarker(msg, marker);
+          // A marker after content the cycle never observed would hide it from the actor.
+          if (opts?.onlyIfObserved && afterStart === -1 && hasUnobservedContent(msg)) return;
           if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
+            msg.content.parts.splice(afterStart !== -1 ? afterStart : msg.content.parts.length, 0, marker as any);
           }
           await this.messageHistory.persistMessages({
             messages: [msg],

@@ -2316,8 +2316,10 @@ ${formattedMessages}
         omError('[OM] async buffering observation failed', err);
       })
       .finally(() => {
-        // Clean up the operation tracking
-        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Clean up the operation tracking, unless a later op already registered itself behind this one.
+        if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === asyncOp) {
+          BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        }
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
         this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
@@ -3350,8 +3352,10 @@ ${formattedMessages}
       }
     }
 
-    // Set persistent flag and register op
-    registerOp(record.id, 'bufferingObservation');
+    // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
+    // fresh head below, which a rollover may have given a new id.
+    const opRecordId = record.id;
+    registerOp(opRecordId, 'bufferingObservation');
     inMemoryRecord.isBufferingObservation = true;
     inMemoryRecord.lastBufferedAtTokens = currentTokens;
     this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
@@ -3509,7 +3513,7 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
-      unregisterOp(record.id, 'bufferingObservation');
+      unregisterOp(opRecordId, 'bufferingObservation');
       // A later call may already have registered itself behind this op; keep its entry.
       if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
