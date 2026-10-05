@@ -267,19 +267,16 @@ function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'text-muted-foreground',
-        [
-          'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
-          active
-            ? accent
-              ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
-              : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
-            : 'border-border bg-card hover:text-foreground',
-        ].join(''),
+        'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
+        active
+          ? accent
+            ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
+            : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
+          : 'border-border bg-card text-muted-foreground hover:text-foreground',
       )}
     >
+      {icon}
       <Txt as="span" variant="column" className="block">
-        {icon}
         {label}
       </Txt>
     </button>
