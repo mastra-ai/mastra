@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import { activeOMCommitKeys, isInOMCommit, runOMCommit } from '../commit-queue';
 
@@ -137,5 +139,54 @@ describe('runOMCommit', () => {
     expect(other).toBe(false);
     expect(await detached).toBe(false);
     expect(isInOMCommit('thread:held')).toBe(false);
+  });
+
+  it("runs each op in its own caller's async context, not the context of the op it waited behind", async () => {
+    const request = new AsyncLocalStorage<string>();
+    const gate = deferred();
+    const seen: string[] = [];
+    const first = request.run('request-a', () =>
+      runOMCommit('thread:context', async () => {
+        seen.push(request.getStore()!);
+        await gate.promise;
+      }),
+    );
+    const second = request.run('request-b', () =>
+      runOMCommit('thread:context', async () => {
+        seen.push(request.getStore()!);
+      }),
+    );
+    await tick();
+    gate.resolve();
+    await Promise.all([first, second]);
+    expect(seen).toEqual(['request-a', 'request-b']);
+  });
+
+  it('rejects a nested op that comes back to a key an outer op holds (A -> B -> A)', async () => {
+    const result = await runOMCommit('thread:outer', () =>
+      runOMCommit('thread:inner', () => runOMCommit('thread:outer', async () => 'deadlock').catch(e => e as Error)),
+    );
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toContain('Re-entrant observational memory commit on "thread:outer"');
+  });
+
+  it('shares one queue between two loaded copies of the module', async () => {
+    vi.resetModules();
+    const copy = await import('../commit-queue');
+    expect(copy.runOMCommit).not.toBe(runOMCommit);
+    const gate = deferred();
+    const order: string[] = [];
+    const first = runOMCommit('thread:copies', async () => {
+      await gate.promise;
+      order.push('first');
+    });
+    const second = copy.runOMCommit('thread:copies', async () => {
+      order.push('second');
+    });
+    await tick();
+    expect(order).toEqual([]);
+    gate.resolve();
+    await Promise.all([first, second]);
+    expect(order).toEqual(['first', 'second']);
   });
 });

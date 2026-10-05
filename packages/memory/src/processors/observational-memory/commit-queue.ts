@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 
 /**
  * Process-wide queue for observational memory storage commits, keyed per thread or resource
@@ -11,6 +11,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  *
  * Ops must contain only the storage commit and the head read it needs: no model calls,
  * indexing, or other slow work.
+ *
+ * Each op runs in the async context of the caller that enqueued it (tracing spans, logger
+ * correlation), not the context of the op it waited behind.
  */
 
 export type OMCommitPriority = 'reflection' | 'normal';
@@ -34,10 +37,19 @@ interface KeyQueue {
   normal: Array<() => void>;
 }
 
-const queues = new Map<string, KeyQueue>();
+interface QueueRegistry {
+  queues: Map<string, KeyQueue>;
+  /** The keys held by the ops running in the current async context, with the token of each run. */
+  heldKeys: AsyncLocalStorage<ReadonlyMap<string, symbol>>;
+}
 
-/** The key held by the op running in the current async context, with the token of that run. */
-const heldKeys = new AsyncLocalStorage<ReadonlyMap<string, symbol>>();
+// Kept on globalThis so two loaded copies of this module (CJS + ESM, or duplicate installs) share one queue.
+const REGISTRY = Symbol.for('@mastra/memory/om-commit-queue');
+const registry: QueueRegistry = ((globalThis as Record<symbol, QueueRegistry | undefined>)[REGISTRY] ??= {
+  queues: new Map(),
+  heldKeys: new AsyncLocalStorage(),
+});
+const { queues, heldKeys } = registry;
 
 function holdsKey(key: string): boolean {
   const token = heldKeys.getStore()?.get(key);
@@ -59,7 +71,8 @@ function runNext(key: string, queue: KeyQueue): void {
  * Runs `op` once every earlier op on `key` has settled (reflection-priority ops first among those
  * still waiting) and resolves or rejects with its result. A rejection reaches only this caller.
  *
- * Enqueueing on a key from inside an op that holds the same key would deadlock, so it rejects.
+ * Enqueueing on a key from inside an op that holds the same key, directly or through nested ops
+ * on other keys, would deadlock, so it rejects.
  */
 export function runOMCommit<T>(
   key: string,
@@ -80,12 +93,16 @@ export function runOMCommit<T>(
     }
     const owner = queue;
 
-    const start = () => {
+    // Bound to the enqueuing caller's async context.
+    const start = AsyncResource.bind(() => {
       const token = Symbol(key);
       owner.running = token;
+      // Keep the keys the caller's own ops hold, so a nested op cannot enqueue on them either.
+      const held = new Map(heldKeys.getStore());
+      held.set(key, token);
       // Release the key before settling the caller, so the caller observes it free.
       heldKeys
-        .run(new Map([[key, token]]), () => Promise.resolve().then(op))
+        .run(held, () => Promise.resolve().then(op))
         .then(
           value => {
             runNext(key, owner);
@@ -96,7 +113,7 @@ export function runOMCommit<T>(
             reject(error);
           },
         );
-    };
+    });
 
     (priority === 'reflection' ? owner.reflection : owner.normal).push(start);
     if (owner.running === null) runNext(key, owner);
