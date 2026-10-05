@@ -476,7 +476,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
-      'model-packs',
+      'model-defaults',
       'memory-settings',
       'custom-providers',
       'queue-health',
@@ -1535,8 +1535,8 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       // A channel integration starts a new session on the linked sender's own
-      // model pack, so it reads the same model-packs handle the web routes use.
-      expect(ctx.storage.modelPacks).toBeDefined();
+      // default model, so it reads the same model-defaults handle the web routes use.
+      expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 

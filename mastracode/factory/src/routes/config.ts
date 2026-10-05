@@ -1,7 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
+import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
+import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   getCustomProviderId,
   isThinkingLevelSetting,
@@ -14,13 +14,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import {
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
   DEFAULT_REFLECTION_THRESHOLD,
 } from '../session/memory-settings-hydration.js';
-import { applyActiveModelPack } from '../session/model-pack-hydration.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -34,7 +32,7 @@ import type {
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
-import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { seedPersonalOmDefaults } from './om-seed.js';
@@ -104,18 +102,6 @@ export interface ProviderInfo {
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
 
-/** Minimal session surface a pack activation touches. */
-interface PackSession {
-  mode: { get: () => string };
-  model: { switch: (args: { modelId: string }) => Promise<void> };
-  subagents: { model: { set: (args: { modelId: string; agentType: string }) => Promise<void> } };
-  thread: {
-    getId: () => string | null;
-    getSetting: (args: { key: string }) => Promise<unknown>;
-    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-  };
-}
-
 /** One observational-memory role's read/switch surface. */
 interface OMRole {
   modelId: () => string | undefined;
@@ -137,10 +123,13 @@ interface OMStateWrites {
 }
 
 /** Minimal session surface the OM config routes touch. */
-export interface OMSession extends PackSession {
+export interface OMSession {
   state: {
     get: () => Record<string, unknown> | undefined;
     set: (updates: OMStateWrites) => Promise<void> | void;
+  };
+  thread: {
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
   };
   om: { observer: OMRole; reflector: OMRole };
 }
@@ -312,13 +301,7 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   return { name, url, apiKey, models };
 }
 
-// ── Model packs ──────────────────────────────────────────────────────────
-
-/** A model pack as surfaced to the web client, with an `active` flag. */
-export interface ModelPackInfo extends ModePack {
-  custom: boolean;
-  active: boolean;
-}
+// ── Available models ───────────────────────────────────────────────────────
 
 /**
  * Compute which providers the user can reach, mirroring the TUI's
@@ -376,37 +359,34 @@ function canUseModelProvider(access: ProviderAccess, provider: string): boolean 
   return Boolean(access[provider]);
 }
 
-/**
- * Where a request's custom model packs live. Same posture as memory settings
- * and custom providers: the `model-packs` factory storage domain, scoped per
- * org in deployed mode and to a sentinel `local` org in no-auth mode — never
- * settings.json.
- */
-export interface PackContext {
-  storage: ModelPacksStorage;
+// ── Default model ──────────────────────────────────────────────────────────
+
+/** Per-user default model context for the current request. */
+export interface ModelDefaultsContext {
+  storage: ModelDefaultsStorage;
   orgId: string;
   userId: string;
 }
 
-/** Resolve the pack context for a request, or a ready-to-return error response. */
-async function resolvePackContext({
+/** Resolve the default-model context for a request, or a ready-to-return error response. */
+async function resolveModelDefaultsContext({
   c,
   auth,
-  modelPacks,
+  modelDefaults,
 }: {
   c: Context;
   auth: RouteAuth;
-  modelPacks?: ModelPacksStorage;
-}): Promise<PackContext | { response: Response }> {
+  modelDefaults?: ModelDefaultsStorage;
+}): Promise<ModelDefaultsContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (modelPacks) {
+  if (modelDefaults) {
     try {
-      await modelPacks.ensureReady();
+      await modelDefaults.ensureReady();
       return tenant
-        ? { storage: modelPacks, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: modelPacks, orgId: 'local', userId: 'local' };
+        ? { storage: modelDefaults, orgId: tenantOrgId(tenant), userId: tenant.userId }
+        : { storage: modelDefaults, orgId: 'local', userId: 'local' };
     } catch {
       // fall through to the unavailable response
     }
@@ -414,91 +394,12 @@ async function resolvePackContext({
   return {
     response: c.json(
       {
-        error: 'model_packs_unavailable',
-        message: 'Model pack storage is unavailable — the app database is not configured or failed to start.',
+        error: 'model_defaults_unavailable',
+        message: 'Default model storage is unavailable — the app database is not configured or failed to start.',
       },
       503,
     ),
   };
-}
-
-async function authorizePackSession({
-  c,
-  auth,
-  sessions,
-  packContext,
-  resourceId,
-  scope,
-}: {
-  c: Context;
-  auth: RouteAuth;
-  sessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  packContext: PackContext;
-  resourceId: string;
-  scope: string | undefined;
-}): Promise<Response | null> {
-  if (!auth.enabled()) return null;
-  if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
-
-  const sourceSession = await sessions.getBySessionId(resourceId);
-  // Scope matches against the live memoized workdir ONLY (the deterministic
-  // truth). The persisted column is observability, never an authorization
-  // input — a row written under a previous provider could authorize a stale
-  // scope. No live memo entry means no scoped grant (fail closed).
-  const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
-  if (
-    !sourceSession ||
-    sourceSession.orgId !== packContext.orgId ||
-    sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && scope !== liveWorkdir)
-  ) {
-    return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-  }
-  return null;
-}
-
-/** DB row → the `ModePack` shape the packs list and activation flow consume. */
-function recordToModePack(record: ModelPackRecord): ModePack {
-  return { id: `custom:${record.id}`, name: record.name, description: 'Saved custom pack', models: record.models };
-}
-
-/**
- * List available model packs (built-in, gated by provider access, plus saved
- * custom packs from the request's pack context). Drops the synthetic
- * "New Custom" placeholder because the web client has its own create flow.
- * `active` marks the user's default pack for new interactive chats.
- */
-export async function listModelPacks({
-  controller,
-  authStorage,
-  tenantCredentials,
-  packContext,
-  activePackId,
-}: {
-  controller: ModelCatalog;
-  authStorage?: AuthStorage;
-  tenantCredentials?: CredentialRecord[];
-  packContext: PackContext;
-  activePackId?: string | null;
-}): Promise<ModelPackInfo[]> {
-  const access = await buildProviderAccess({ controller, authStorage, tenantCredentials });
-  const packs = [
-    ...getAvailableModePacks(access),
-    ...(await packContext.storage.list({ orgId: packContext.orgId })).map(recordToModePack),
-  ];
-  return packs
-    .filter(p => p.id !== 'custom') // synthetic "choose each model" placeholder
-    .map(p => ({
-      ...p,
-      custom: p.id.startsWith('custom:'),
-      active: activePackId != null && p.id === activePackId,
-    }));
-}
-
-async function resolveSessionModelPackId(session: PackSession | undefined): Promise<string | null> {
-  if (!session?.thread.getId()) return null;
-  const value = await session.thread.getSetting({ key: 'activeModelPackId' });
-  return typeof value === 'string' ? value : null;
 }
 
 // ── Observational memory ────────────────────────────────────────────────────
@@ -649,9 +550,9 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
-  /** Tenant model-packs domain handle; absent in local (no-DB) mode. */
-  modelPacks?: ModelPacksStorage;
-  /** Source-control sessions used to authorize session-scoped model-pack access. */
+  /** Tenant model-defaults domain handle; absent in local (no-DB) mode. */
+  modelDefaults?: ModelDefaultsStorage;
+  /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
@@ -973,193 +874,67 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Model packs ─────────────────────────────────────────────────────────
-      // Custom pack definitions are organization-scoped. Each user can choose a
-      // default for new interactive chats, while a thread-specific activation
-      // takes precedence. Factory work sessions use the project default model.
+      // ── Default model ───────────────────────────────────────────────────────
 
-      registerApiRoute('/web/config/model-packs', {
+      registerApiRoute('/web/config/default-model', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const resourceId = c.req.query('resourceId');
-          const scope = c.req.query('scope') || undefined;
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
           try {
-            const activePack = await packContext.storage.getActive({
-              orgId: packContext.orgId,
-              userId: packContext.userId,
-            });
-            const activePackId = activePack?.packId ?? null;
-            if (resourceId) {
-              const unauthorized = await authorizePackSession({
-                c: loose(c),
-                auth,
-                sessions: options.sourceControlSessions,
-                packContext,
-                resourceId,
-                scope,
-              });
-              if (unauthorized) return unauthorized;
-            }
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const sessionPackId = await resolveSessionModelPackId(session);
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            return c.json({
-              packs: await listModelPacks({
-                controller,
-                authStorage: tenantCredentials ? undefined : authStorage,
-                tenantCredentials,
-                packContext,
-                activePackId,
-              }),
-              activePackId,
-              sessionPackId,
-            });
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            return c.json({ modelId: record?.modelId ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },
       }),
 
-      registerApiRoute('/web/config/model-packs', {
-        method: 'POST',
+      registerApiRoute('/web/config/default-model', {
+        method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          let body: { name?: unknown; models?: unknown };
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: { modelId?: unknown };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const name = typeof body.name === 'string' ? body.name.trim() : '';
-          if (!name) return c.json({ error: 'Missing required field: name' }, 400);
-          const m = (body.models ?? {}) as Record<string, unknown>;
-          const build = typeof m.build === 'string' ? m.build.trim() : '';
-          const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
-          const fast = typeof m.fast === 'string' ? m.fast.trim() : '';
-          if (!build || !plan || !fast) {
-            return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
-          }
+          const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
+          if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
           try {
-            const record = await packContext.storage.upsert({
-              orgId: packContext.orgId,
-              userId: packContext.userId,
-              input: { name, models: { build, plan, fast } },
-            });
-            return c.json({ ok: true, pack: recordToModePack(record) });
+            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
+            return c.json({ ok: true, modelId });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },
       }),
 
-      registerApiRoute('/web/config/model-packs/active', {
+      registerApiRoute('/web/config/default-model', {
         method: 'DELETE',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
           try {
-            await packContext.storage.clearActive({ orgId: packContext.orgId, userId: packContext.userId });
-            return c.json({ ok: true, activePackId: null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/model-packs/:id', {
-        method: 'DELETE',
-        requiresAuth: false,
-        handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const id = decodeURIComponent(c.req.param('id'));
-          try {
-            const recordId = id.startsWith('custom:') ? id.slice('custom:'.length) : id;
-            const deleted = await packContext.storage.delete({ orgId: packContext.orgId, id: recordId });
-            return deleted ? c.json({ ok: true }) : c.json({ error: `Unknown pack "${id}"` }, 404);
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/model-packs/:id/activate', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const id = decodeURIComponent(c.req.param('id'));
-          let body: { resourceId?: unknown; scope?: unknown; target?: unknown };
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const target = body.target ?? 'default';
-          if (target !== 'default' && target !== 'session') {
-            return c.json({ error: 'target must be "default" or "session"' }, 400);
-          }
-          const resourceId = typeof body.resourceId === 'string' && body.resourceId ? body.resourceId : undefined;
-          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (target === 'session' && !resourceId) {
-            return c.json({ error: 'Missing required field for session activation: resourceId' }, 400);
-          }
-          try {
-            if (target === 'session' && resourceId) {
-              const unauthorized = await authorizePackSession({
-                c: loose(c),
-                auth,
-                sessions: options.sourceControlSessions,
-                packContext,
-                resourceId,
-                scope,
-              });
-              if (unauthorized) return unauthorized;
-            }
-            const session =
-              target === 'session' && resourceId
-                ? await controller.getSessionByResource?.(resourceId, scope)
-                : undefined;
-            if (target === 'session' && !session) {
-              return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            }
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            const packs = await listModelPacks({
-              controller,
-              authStorage: tenantCredentials ? undefined : authStorage,
-              tenantCredentials,
-              packContext,
-            });
-            const pack = packs.find(p => p.id === id);
-            if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
-            if (target === 'default') {
-              await packContext.storage.setActive({
-                orgId: packContext.orgId,
-                userId: packContext.userId,
-                packId: pack.id,
-                models: pack.models,
-              });
-              return c.json({ ok: true, target, activePackId: pack.id });
-            }
-            if (session) {
-              await applyActiveModelPack(session, { packId: pack.id, models: pack.models });
-            }
-            return c.json({ ok: true, target, sessionPackId: pack.id });
+            await context.storage.clear({ orgId: context.orgId, userId: context.userId });
+            return c.json({ ok: true, modelId: null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

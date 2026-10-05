@@ -1489,8 +1489,8 @@ describe('session start (onSessionStart)', () => {
     memoryRecord = null as Record<string, unknown> | null,
     personalMemoryRecord = null as Record<string, unknown> | null,
     personalMemoryLookupError = null as Error | null,
-    activePack = null as { build?: string; plan?: string; fast?: string } | null,
-    packLookupError = null as Error | null,
+    userDefaultModel = null as string | null,
+    defaultLookupError = null as Error | null,
   } = {}) {
     return {
       projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId })) } as any,
@@ -1508,11 +1508,10 @@ describe('session start (onSessionStart)', () => {
           return personalMemoryRecord;
         }),
       } as any,
-      modelPacks: {
-        getActive: vi.fn(async () => {
-          if (packLookupError) throw packLookupError;
-          if (!activePack) return null;
-          return { models: { build: '', plan: '', fast: '', ...activePack } };
+      modelDefaults: {
+        get: vi.fn(async () => {
+          if (defaultLookupError) throw defaultLookupError;
+          return userDefaultModel ? { modelId: userDefaultModel } : null;
         }),
       } as any,
     };
@@ -1535,76 +1534,58 @@ describe('session start (onSessionStart)', () => {
     // works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
     expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
-    // No pack bought a say here, so the factory default is this thread's model
+    // No personal default exists, so the factory default is this thread's model
     // from now on: the choice is on the thread, not re-derived per message.
-    expect(deps.modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(session.model.switch).toHaveBeenCalledTimes(1);
     expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
   });
 
-  // The sender's own choice outranks the factory's shared default, which is the
-  // whole point of a model pack: it is the model that user picked for themselves.
-  it("starts on the linked sender's active model pack rather than the factory default", async () => {
-    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
+  // The sender's own choice outranks the factory's shared default.
+  it("starts on the linked sender's default model rather than the factory default", async () => {
+    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     // Keyed by the org/user pair the source-control row resolved, not by
     // anything the Slack payload claimed.
-    expect(deps.modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
+    expect(session.subagents.model.set.mock.calls.slice(-3).map(([arg]) => arg)).toEqual([
+      { modelId: 'openai/gpt-5.6', agentType: 'explore' },
+      { modelId: 'openai/gpt-5.6', agentType: 'plan' },
+      { modelId: 'openai/gpt-5.6', agentType: 'execute' },
+    ]);
   });
 
   // Subagent models aren't persisted on the thread, so a restarted process must
   // apply them again rather than falling back to the server-wide settings.
   it('re-applies subagent models when a restarted session restores its thread model', async () => {
     const settings = new Map<string, unknown>();
-    await createChannelSessionStartHook(makeStartDeps({ activePack: { fast: 'openai/gpt-5.6-mini' } }) as any)(
+    await createChannelSessionStartHook(makeStartDeps({ userDefaultModel: 'openai/gpt-5.6-mini' }) as any)(
       startArgs(makeSession({ settings })) as any,
     );
 
-    // The pack changed since the thread started; the thread keeps its models.
+    // The default changed since the thread started; the thread keeps its models.
     const restarted = makeSession({ settings });
-    const restartDeps = makeStartDeps({ activePack: { fast: 'openai/gpt-5.7-mini' } });
+    const restartDeps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.7-mini' });
     await createChannelSessionStartHook(restartDeps as any)(startArgs(restarted) as any);
 
     expect(restarted.model.switch).not.toHaveBeenCalled();
-    expect(restartDeps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(restartDeps.modelDefaults.get).not.toHaveBeenCalled();
     expect(restarted.subagents.model.set.mock.calls.map(([arg]) => arg)).toEqual([
       { modelId: 'openai/gpt-5.6-mini', agentType: 'explore' },
-      { modelId: 'anthropic/claude-opus-5', agentType: 'plan' },
-      { modelId: 'anthropic/claude-opus-5', agentType: 'execute' },
+      { modelId: 'openai/gpt-5.6-mini', agentType: 'plan' },
+      { modelId: 'openai/gpt-5.6-mini', agentType: 'execute' },
     ]);
-  });
-
-  // Subagents follow the sender's pack the way the TUI applies packs, so a
-  // Slack thread doesn't strand them on models the sender never chose.
-  it("gives subagents the sender's pack models, falling back to the factory default", async () => {
-    const deps = makeStartDeps({
-      activePack: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6-plan', fast: 'openai/gpt-5.6-mini' },
-    });
-    const session = makeSession();
-
-    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
-
-    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6-mini', agentType: 'explore' });
-    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6-plan', agentType: 'plan' });
-    expect(session.subagents.model.set).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'execute' });
-
-    const noPack = makeSession();
-    await createChannelSessionStartHook(makeStartDeps() as any)(startArgs(noPack) as any);
-    const noPackCalls = noPack.subagents.model.set.mock.calls.slice(-3).map(([arg]) => arg);
-    expect(noPackCalls).toEqual(
-      ['explore', 'plan', 'execute'].map(agentType => ({ modelId: 'anthropic/claude-opus-5', agentType })),
-    );
   });
 
   it("derives observational memory from the sender's provider credentials", async () => {
     const deps = makeStartDeps({
       defaultModelId: 'openai/gpt-5.6',
-      activePack: { build: 'deepseek/deepseek-chat' },
+      userDefaultModel: 'deepseek/deepseek-chat',
     });
     const session = makeSession();
 
@@ -1621,7 +1602,7 @@ describe('session start (onSessionStart)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const deps = makeStartDeps({
       defaultModelId: 'anthropic/claude-opus-5',
-      activePack: { build: 'deepseek/deepseek-chat' },
+      userDefaultModel: 'deepseek/deepseek-chat',
     });
     const session = makeSession({ currentModel: 'anthropic/claude-opus-5' });
     session.model.switch.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('missing credentials'));
@@ -1631,7 +1612,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's model pack model", {
+    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's default model", {
       modelId: 'deepseek/deepseek-chat',
       error: 'missing credentials',
     });
@@ -1639,29 +1620,29 @@ describe('session start (onSessionStart)', () => {
   });
 
   // The point of persisting the choice: the thread keeps the model it started
-  // on. A later process — where the sender's pack and the factory default have
-  // both moved on — must not retarget a conversation already under way.
-  it('keeps the first model when a later start runs with a changed pack and factory default', async () => {
+  // on. A later process — where the sender's and factory defaults have both
+  // moved on — must not retarget a conversation already under way.
+  it('keeps the first model when a later start runs with changed defaults', async () => {
     const threadSettings = new Map<string, unknown>();
-    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
+    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(makeSession({ settings: threadSettings })) as any);
 
-    deps.modelPacks.getActive.mockClear();
+    deps.modelDefaults.get.mockClear();
     deps.projects.getById.mockClear();
-    deps.modelPacks.getActive.mockResolvedValue({ models: { build: 'openai/gpt-6', plan: '', fast: '' } });
+    deps.modelDefaults.get.mockResolvedValue({ modelId: 'openai/gpt-6' });
     deps.projects.getById.mockResolvedValue({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-6' });
     const session = makeSession({ settings: threadSettings });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
-  it("starts on the sender's pack even when the factory has no default model", async () => {
-    const deps = makeStartDeps({ defaultModelId: null, activePack: { build: 'openai/gpt-5.6' } });
+  it("starts on the sender's default even when the factory has no default model", async () => {
+    const deps = makeStartDeps({ defaultModelId: null, userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
@@ -1671,24 +1652,12 @@ describe('session start (onSessionStart)', () => {
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
-  // A pack saved without a build model says nothing about the build phase, so
-  // the factory rung is the next answer rather than an empty model id.
-  it('falls through to the factory default when the active pack names no build model', async () => {
-    const deps = makeStartDeps({ activePack: { plan: 'openai/gpt-5.6' } });
-    const session = makeSession();
-
-    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
-
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
-  });
-
   // Reaching a storage domain can fail on its own (uninitialized table, a
   // transient read error). A personal preference that cannot be read is not
   // worth dropping the sender's message over.
-  it('falls back to the factory default when the model-pack lookup fails', async () => {
+  it('falls back to the factory default when the default-model lookup fails', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const deps = makeStartDeps({ packLookupError: new Error('model packs unavailable') });
+    const deps = makeStartDeps({ defaultLookupError: new Error('model defaults unavailable') });
     const session = makeSession();
 
     await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
@@ -1760,7 +1729,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
     // Still no model re-resolution: the persisted thread choice remains authoritative.
-    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
@@ -1789,7 +1758,7 @@ describe('session start (onSessionStart)', () => {
   // user's own switch. Re-applying a preference over it would undo the user's
   // selection every time the process restarts or another message arrives.
   it('leaves the model alone when its mode already has a model persisted on the thread', async () => {
-    const deps = makeStartDeps({ activePack: { build: 'openai/gpt-5.6' } });
+    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
@@ -1798,7 +1767,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.model.saveForMode).not.toHaveBeenCalled();
     // Nothing is re-resolved: the thread's model was decided when it started,
     // and a pack the user has since changed must not retarget it.
-    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
     // The factory stamp still lands: org-first credential resolution keys off
@@ -1890,7 +1859,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
     // Chat-only threads have no linked sender to read a pack for either.
-    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
   });
 
   it('configures nothing when the session row is gone', async () => {
@@ -1900,7 +1869,7 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
   });
 
   // Nothing chose a model here, so the SDK's built-in mode default is the
