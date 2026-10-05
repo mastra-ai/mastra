@@ -4242,15 +4242,18 @@ ${formattedMessages}
     config: Record<string, unknown>,
   ): Promise<void> {
     const ids = this.getStorageIds(threadId, resourceId);
-    const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
-    if (!record) {
-      throw new Error(`No observational memory record found for thread ${ids.threadId}`);
-    }
-    // Write under _overrides so getEffectiveMessageTokens / getEffectiveReflectionTokens
-    // pick up the override values, distinct from the initial config snapshot.
-    await this.storage.updateObservationalMemoryConfig({
-      id: record.id,
-      config: { _overrides: config },
+    // Read the head inside the slot, so an in-process rollover can't retire it before the write.
+    await runOMCommit(this.buffering.getLockKey(threadId, resourceId), async () => {
+      const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      if (!record) {
+        throw new Error(`No observational memory record found for thread ${ids.threadId}`);
+      }
+      // Write under _overrides so getEffectiveMessageTokens / getEffectiveReflectionTokens
+      // pick up the override values, distinct from the initial config snapshot.
+      await this.storage.updateObservationalMemoryConfig({
+        id: record.id,
+        config: { _overrides: config },
+      });
     });
   }
 
