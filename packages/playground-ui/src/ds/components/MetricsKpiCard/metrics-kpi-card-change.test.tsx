@@ -15,3 +15,17 @@ describe('MetricsKpiCardChange', () => {
     expect(renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} />)).toContain(expected);
   });
 });
+
+describe('MetricsKpiCardChange caption', () => {
+  it('keeps "vs prior period" for screen readers only by default', () => {
+    const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={5} prevValue="10" />);
+    expect(html).toContain('class="sr-only"');
+    expect(html).toContain('previous value 10');
+  });
+
+  it('shows the caption inline when asked', () => {
+    const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={5} caption />);
+    expect(html).not.toContain('class="sr-only">vs prior period');
+    expect(html).toContain('vs prior period');
+  });
+});

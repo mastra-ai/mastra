@@ -9,12 +9,14 @@ import {
   useModelCostKpiMetrics,
   useTotalTokensKpiMetrics,
 } from '@mastra/react/hooks';
+import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon, UsersIcon } from 'lucide-react';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
       label="Total Agent Runs"
+      icon={<BotIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -30,6 +32,7 @@ export function ModelCostKpiCard() {
   return (
     <KpiCardView
       label="Total Model Cost"
+      icon={<CoinsIcon />}
       value={data?.cost != null ? <CompactNumber value={data.cost} currency={currency} /> : null}
       prevValue={data?.previousCost != null ? formatFullNumber(data.previousCost, { currency }) : undefined}
       changePct={data?.costChangePercent ?? null}
@@ -45,6 +48,7 @@ export function TotalTokensKpiCard() {
   return (
     <KpiCardView
       label="Total Tokens"
+      icon={<HashIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -59,6 +63,7 @@ export function ActiveThreadsKpiCard() {
   return (
     <KpiCardView
       label="Total Threads"
+      icon={<MessagesSquareIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -73,6 +78,7 @@ export function ActiveResourcesKpiCard() {
   return (
     <KpiCardView
       label="Total Resources"
+      icon={<UsersIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}

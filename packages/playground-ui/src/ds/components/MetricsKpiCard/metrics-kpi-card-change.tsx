@@ -16,11 +16,15 @@ export function MetricsKpiCardChange({
   changePct,
   prevValue,
   lowerIsBetter,
+  caption = false,
   className,
 }: {
   changePct: number;
   prevValue?: string;
   lowerIsBetter?: boolean;
+  /** Show the inline "vs prior period" text. Off by default: pair the badge with
+   *  `MetricsKpiCard.Footer`, which shows the prior value itself. */
+  caption?: boolean;
   className?: string;
 }) {
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
@@ -38,10 +42,14 @@ export function MetricsKpiCardChange({
       >
         {formattedChange}
       </Badge>
-      <Txt as="span" variant="meta" tone="faint">
-        vs prior period
-        {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
-      </Txt>
+      {caption ? (
+        <Txt as="span" variant="meta" tone="faint">
+          vs prior period
+          {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
+        </Txt>
+      ) : (
+        <span className="sr-only">vs prior period{prevValue ? `, previous value ${prevValue}` : ''}</span>
+      )}
     </div>
   );
 }

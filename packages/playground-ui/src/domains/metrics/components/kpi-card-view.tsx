@@ -10,6 +10,10 @@ export interface KpiCardViewProps {
   isError: boolean;
   /** Treat a decrease as a good change (e.g. cost, latency). */
   lowerIsBetter?: boolean;
+  /** Glyph at the end of the label row. */
+  icon?: ReactNode;
+  /** One line of context in the footer, beside the prior value. */
+  detail?: ReactNode;
 }
 
 export function KpiCardView({
@@ -20,11 +24,13 @@ export function KpiCardView({
   isLoading,
   isError,
   lowerIsBetter,
+  icon,
+  detail,
 }: KpiCardViewProps) {
   const hasData = value != null;
   return (
     <MetricsKpiCard>
-      <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
+      <MetricsKpiCard.Label icon={icon}>{label}</MetricsKpiCard.Label>
       <MetricsKpiCard.ValueRow>
         {hasData ? <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value> : null}
         {isError ? (
@@ -41,6 +47,12 @@ export function KpiCardView({
           <MetricsKpiCard.NoData />
         )}
       </MetricsKpiCard.ValueRow>
+      {hasData && !isLoading && !isError && (
+        <MetricsKpiCard.Footer
+          detail={detail}
+          prevValue={changePct != null && changePct !== 0 ? prevValue : undefined}
+        />
+      )}
     </MetricsKpiCard>
   );
 }
