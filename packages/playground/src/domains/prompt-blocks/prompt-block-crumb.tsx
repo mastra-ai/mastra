@@ -1,5 +1,5 @@
 import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
-import { useStoredPromptBlock } from '@mastra/react/hooks';
+import { useStoredPromptBlock } from '@mastra/react/hooks/prompt-blocks';
 import { useParams } from 'react-router';
 
 export function PromptBlockCrumb() {

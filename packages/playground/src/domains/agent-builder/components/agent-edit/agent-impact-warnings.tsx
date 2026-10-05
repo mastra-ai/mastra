@@ -1,4 +1,4 @@
-import { useStoredAgentDependents } from '@mastra/react/hooks';
+import { useStoredAgentDependents } from '@mastra/react/hooks/agents';
 
 const MAX_DEPENDENTS_SHOWN = 5;
 
@@ -63,7 +63,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
             ))}
           </ul>
           {overflow > 0 && (
-            <p data-testid="agent-impact-dependents-more" className="text-icon-3 mt-1">
+            <p data-testid="agent-impact-dependents-more" className="mt-1 text-muted-foreground">
               and {overflow} more
             </p>
           )}

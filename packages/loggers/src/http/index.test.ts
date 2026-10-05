@@ -285,7 +285,9 @@ describe('HttpTransport', () => {
       await expect(timeoutTransport._flush()).rejects.toThrow();
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
-      timeoutTransport.clearBuffer();
+      // The failed logs are back in the buffer, so destroy() flushes again. Let that flush succeed;
+      // otherwise its timeout fires after the test and surfaces as an uncaught stream error.
+      fetchMock.mockResolvedValue({ ok: true });
       timeoutTransport.destroy();
       vi.useFakeTimers();
     });

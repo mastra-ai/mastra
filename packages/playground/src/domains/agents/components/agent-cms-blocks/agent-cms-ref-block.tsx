@@ -12,17 +12,20 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { useStoredAgents } from '@mastra/react/hooks';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
-import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { InstructionBlock, RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { DisplayConditionsDialog } from '@/domains/cms';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 
 export interface AgentCMSRefBlockProps {
   index: number;
   block: RefInstructionBlock;
+  onBlockChange?: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
   onDereference?: (index: number, content: string) => void;
   className?: string;
@@ -31,7 +34,9 @@ export interface AgentCMSRefBlockProps {
 }
 
 interface RefBlockContentProps {
+  index: number;
   block: RefInstructionBlock;
+  onRulesChange?: (rules: RuleGroup | undefined) => void;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
   onDereference?: (content: string) => void;
@@ -40,7 +45,9 @@ interface RefBlockContentProps {
 }
 
 const RefBlockContent = ({
+  index,
   block,
+  onRulesChange,
   dragHandleProps,
   onDelete,
   onDereference,
@@ -147,6 +154,16 @@ const RefBlockContent = ({
                   Unpublished edits
                 </Badge>
               )}
+              {onRulesChange && (
+                <div className="ml-auto">
+                  <DisplayConditionsDialog
+                    entityName={`Block ${index + 1}`}
+                    schema={schema}
+                    rules={block.rules}
+                    onRulesChange={onRulesChange}
+                  />
+                </div>
+              )}
               {!readOnly && (
                 <Popover>
                   <PopoverTrigger asChild>
@@ -154,7 +171,8 @@ const RefBlockContent = ({
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
                       className={cn(
-                        'ml-auto rounded p-0.5 hover:bg-fill-subtle',
+                        'rounded p-0.5 hover:bg-fill-subtle',
+                        !onRulesChange && 'ml-auto',
                         quietTextHover,
                         controlStateColorTransition,
                       )}
@@ -272,6 +290,7 @@ const RefBlockContent = ({
 export const AgentCMSRefBlock = ({
   index,
   block,
+  onBlockChange,
   onDelete,
   onDereference,
   className,
@@ -282,7 +301,9 @@ export const AgentCMSRefBlock = ({
     <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <RefBlockContent
+          index={index}
           block={block}
+          onRulesChange={readOnly || !onBlockChange ? undefined : rules => onBlockChange({ ...block, rules })}
           dragHandleProps={dragHandleProps}
           onDelete={readOnly || !onDelete ? undefined : () => onDelete(index)}
           onDereference={readOnly || !onDereference ? undefined : (content: string) => onDereference(index, content)}

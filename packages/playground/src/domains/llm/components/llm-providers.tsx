@@ -4,7 +4,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useLLMProviders } from '@mastra/react/hooks';
+import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';

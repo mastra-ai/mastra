@@ -1,5 +1,82 @@
 # @mastra/core
 
+## 1.75.0-alpha.5
+
+### Minor Changes
+
+- Added an explicit reconcile step for channel installations whose connect flow finishes outside the app (for example Discord's bot invite, which never redirects back). Channel providers can implement the new optional `reconcileInstallation(agentId)` method, exposed over `POST /api/channels/:platform/:agentId/reconcile` and `client.channels.reconcileInstallation(platform, agentId)`. The route requires the same write access as connecting, and returns the agent's fresh installation — or `null` when the platform doesn't support reconciliation. Listing installations is now a pure read and never changes state. ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  ```ts
+  const installation = await client.channels.reconcileInstallation('discord', 'my-agent');
+  // { id, platform, agentId, status: 'active', ... } once the invite completed
+  ```
+
+- Added optional `title`, `websiteUrl`, and `icons` options to `MCPServerConfig`, exposed on `MCPServerBase`, so MCP server implementations can announce a display title, website, and icons to clients. ([#25985](https://github.com/mastra-ai/mastra/pull/25985))
+
+- Added an `outputValidation` option to `createTool` ([#23799](https://github.com/mastra-ai/mastra/issues/23799)). When a tool's result fails `outputSchema` validation, Mastra replaces the result with a validation error, so the model is told the call failed. That happens even when the tool's side effect (an order placed, a message sent) has already happened, which invites a retry. Set `outputValidation: 'warn'` to return the tool's actual result unchanged instead. `'strict'` is the default and keeps the existing behavior. ([#26001](https://github.com/mastra-ai/mastra/pull/26001))
+
+  ```ts
+  export const placeOrderTool = createTool({
+    id: 'place-order',
+    description: 'Places an order',
+    inputSchema: z.object({ sku: z.string(), quantity: z.number() }),
+    outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+    outputValidation: 'warn',
+    execute: async ({ sku, quantity }) => orders.create({ sku, quantity }),
+  });
+  ```
+
+  Also improved how output validation failures are reported:
+
+  - Every output validation failure now writes a warning to the Mastra logger. Previously, a failure from a `createTool` tool left no trace in the logs.
+  - The tool call trace span is now marked as failed when a `createTool` tool returns a validation error. Previously it was recorded as successful.
+  - Sensitive fields such as `apiKey`, `token`, and `password` are now redacted from the tool output shown in the validation error message.
+
+### Patch Changes
+
+- Added an optional `scope` field to `AuthorizeOpts` so tool providers know whether a new connection is shared, per-author, or caller-supplied. ([#26002](https://github.com/mastra-ai/mastra/pull/26002))
+
+- Fixed DurableAgent traces after a resume or crash recovery. The resumed or recovered agent run is now nested under the original agent run, so the trace stays a single tree instead of splitting into two root spans. ([#25862](https://github.com/mastra-ai/mastra/pull/25862))
+
+  Crash recovery traces are also complete now: the agent run left open by the stopped process is ended with an `interrupted` status, and the recovered agent run is ended when the run finishes. Previously a recovered trace could be missing from the trace list or show only the part before the crash.
+
+- Fixed a thread failing on every turn when one of its attachments can't be used: a file that now returns 404, a relative path such as `/api/images/foo.png`, or inline content that isn't valid file data. If error processors and fallback models don't recover a failed download, the agent now answers with an `[Attachment unavailable: <name>]` placeholder and logs a warning. The attachment is recorded on its stored message, so later turns reuse the placeholder without downloading it again. See #23705. ([#25051](https://github.com/mastra-ai/mastra/pull/25051))
+
+- Added optional `rules` to `prompt_block_ref` instruction blocks so stored agents can save and preview per-usage display conditions on prompt block references. ([#25991](https://github.com/mastra-ai/mastra/pull/25991))
+
+  ```ts
+  await client.getStoredAgent('support-agent').update({
+    instructions: [
+      {
+        type: 'prompt_block_ref',
+        id: 'default-user-prompt',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+      },
+    ],
+  });
+  ```
+
+## 1.75.0-alpha.4
+
+### Minor Changes
+
+- Added `traceId` to agent stream chunks, next to `runId`. Clients that call `/stream` can now link a run to its trace without switching to `/generate`. The field is undefined when tracing is disabled. Custom `data-*` chunks (for example, from `writer.custom()`) are left exactly as written and don't include `traceId`. Fixes [#25811](https://github.com/mastra-ai/mastra/issues/25811). ([#25927](https://github.com/mastra-ai/mastra/pull/25927))
+
+  ```ts
+  const stream = await agent.stream('hi');
+  for await (const chunk of stream.fullStream) {
+    console.log(chunk.runId, chunk.traceId);
+  }
+  ```
+
+### Patch Changes
+
+- Fixed model call spans that listed tools the model did not receive. Each `MODEL_INFERENCE` span now has a `tools` attribute with the tool definitions (name, description, parameters) sent to the provider on that call, after input processors, `prepareStep`, `activeTools`, and `toolChoice` are applied. `availableTools` on the same span now matches it: it is empty when `toolChoice` is `'none'`, and it no longer lists names that are not registered tools. ([#25917](https://github.com/mastra-ai/mastra/pull/25917))
+
+- Removed the @experimental annotation from Agent goal APIs (goal config, setObjective, GoalSignalProvider) now that goals are stable. ([#25941](https://github.com/mastra-ai/mastra/pull/25941))
+
+- Removed the @experimental annotation from Agent signal APIs (sendSignal, subscribeToThread, sendMessage, queueMessage, cancelQueuedMessages, abortThread, state and notification signals, and signal providers) now that signals are stable. ([#25946](https://github.com/mastra-ai/mastra/pull/25946))
+
 ## 1.75.0-alpha.3
 
 ### Minor Changes

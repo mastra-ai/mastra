@@ -5,7 +5,7 @@ import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { useParams, useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';

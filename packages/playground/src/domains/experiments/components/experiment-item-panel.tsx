@@ -1,6 +1,6 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks';
+import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useCallback, useMemo } from 'react';
 
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';

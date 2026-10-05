@@ -20,7 +20,11 @@ export { PromptsList, type PromptsListProps } from './components/prompts-list/pr
 export { NoPromptBlocksInfo } from './components/prompts-list/no-prompt-blocks-info';
 
 // Hooks
-export { useStoredPromptBlocks, useStoredPromptBlock, useStoredPromptBlockMutations } from '@mastra/react/hooks';
+export {
+  useStoredPromptBlocks,
+  useStoredPromptBlock,
+  useStoredPromptBlockMutations,
+} from '@mastra/react/hooks/prompt-blocks';
 export {
   usePromptBlockVersions,
   usePromptBlockVersion,
@@ -28,4 +32,4 @@ export {
   useActivatePromptBlockVersion,
   useRestorePromptBlockVersion,
   useDeletePromptBlockVersion,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/prompt-blocks';

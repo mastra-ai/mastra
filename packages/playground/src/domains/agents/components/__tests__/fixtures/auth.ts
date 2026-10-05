@@ -1,4 +1,4 @@
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 export const readOnlyAuthCapabilities = {
   enabled: true,

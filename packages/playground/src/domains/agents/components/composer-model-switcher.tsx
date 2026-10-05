@@ -3,7 +3,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useLLMProviders } from '@mastra/react/hooks';
+import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';

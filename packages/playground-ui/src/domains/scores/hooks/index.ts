@@ -6,4 +6,4 @@ export {
   useTraceSpanScores,
   getTraceSpanScoresRefetchInterval,
   useTriggerScorer,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/scores';

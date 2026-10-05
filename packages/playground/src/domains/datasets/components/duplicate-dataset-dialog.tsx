@@ -15,7 +15,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState, useEffect } from 'react';
 
 export interface DuplicateDatasetDialogProps {
@@ -181,7 +181,7 @@ export function DuplicateDatasetDialog({
               <div className="space-y-2">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="h-full bg-success-indicator transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>

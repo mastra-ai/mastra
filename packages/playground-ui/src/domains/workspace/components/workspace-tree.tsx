@@ -1,5 +1,5 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
-import { useWorkspaceDirectory } from '@mastra/react/hooks';
+import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -165,7 +165,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             title={mount.error}
             className="flex shrink-0"
           >
-            <CircleAlertIcon className="text-destructive size-3" />
+            <CircleAlertIcon className="size-3 text-destructive-foreground" />
           </span>
         ) : null}
         {mount && isReadOnly(path) ? (
