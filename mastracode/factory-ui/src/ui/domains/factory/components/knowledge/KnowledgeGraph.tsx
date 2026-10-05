@@ -90,7 +90,6 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         style={{ background }}
       >
         {labeled ? (
-          // Node interiors are always dark (hard-coded radial gradient), so the
           <span
             className={`pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words ${node.isBoundary ? 'text-muted-foreground' : 'text-foreground'}`}
             style={{ fontSize: nameSize }}
@@ -112,7 +111,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           <Badge
             variant="neutral"
             size="xs"
-            className="bg-surface1 text-badge-neutral-fg"
+            className="bg-card"
             aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
           >
             {node.memberCount}
