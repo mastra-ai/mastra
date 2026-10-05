@@ -498,6 +498,64 @@ describe('ClickHouse Domain with URL/credentials config', () => {
   });
 });
 
+describe('ClickHouse memory updateMessages', () => {
+  const domainConfig = {
+    url: TEST_CONFIG.url,
+    username: TEST_CONFIG.username || 'default',
+    password: TEST_CONFIG.password || '',
+  };
+  const memory = new MemoryStorageClickhouse(domainConfig);
+
+  beforeAll(async () => {
+    await memory.init();
+  });
+
+  it('applies a partial content update in place without deleting and re-inserting the message', async () => {
+    const threadId = `thread-update-${Date.now()}`;
+    const resourceId = 'resource-update';
+    const messageId = `msg-update-${Date.now()}`;
+    await memory.saveThread({
+      thread: { id: threadId, resourceId, title: 'update', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: messageId,
+          threadId,
+          resourceId,
+          role: 'user',
+          type: 'v2',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'hello' }], metadata: { kept: true } },
+        },
+      ],
+    });
+
+    const command = vi.spyOn((memory as unknown as { client: ReturnType<typeof createClient> }).client, 'command');
+    try {
+      const [updated] = await memory.updateMessages({
+        messages: [{ id: messageId, content: { metadata: { added: 1 } } }],
+      });
+
+      const deletes = command.mock.calls.filter(([params]) => /DELETE FROM/i.test(params.query));
+      expect(deletes).toEqual([]);
+      expect(updated?.content).toMatchObject({
+        parts: [{ type: 'text', text: 'hello' }],
+        metadata: { kept: true, added: 1 },
+      });
+
+      const { messages } = await memory.listMessagesById({ messageIds: [messageId] });
+      expect(messages[0]?.content).toMatchObject({
+        parts: [{ type: 'text', text: 'hello' }],
+        metadata: { kept: true, added: 1 },
+      });
+    } finally {
+      command.mockRestore();
+      await memory.deleteThread({ threadId });
+    }
+  });
+});
+
 describe('ClickHouse legacy observability listTraces', () => {
   const observability = new ObservabilityStorageClickhouse({
     url: TEST_CONFIG.url,
