@@ -192,16 +192,16 @@ CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 
 const CommandGroup = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Group>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group> & { headingVariant?: 'eyebrow' | 'caption' }
->(({ className, headingVariant = 'eyebrow', ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group> & { headingVariant?: 'meta' | 'eyebrow' | 'caption' }
+>(({ className, headingVariant = 'meta', ...props }, ref) => (
   <CommandPrimitive.Group
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-muted-foreground',
       '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-muted-foreground',
-      headingVariant === 'caption'
-        ? '[&_[cmdk-group-heading]]:text-caption'
-        : '[&_[cmdk-group-heading]]:text-eyebrow [&_[cmdk-group-heading]]:uppercase',
+      headingVariant === 'meta' && '[&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:uppercase',
+      headingVariant === 'eyebrow' && '[&_[cmdk-group-heading]]:text-eyebrow [&_[cmdk-group-heading]]:uppercase',
+      headingVariant === 'caption' && '[&_[cmdk-group-heading]]:text-caption',
       className,
     )}
     {...props}

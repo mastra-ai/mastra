@@ -21,3 +21,5 @@ Added shared headline, introduction, and section-label text roles. Txt and text-
 Replace `<Txt variant="caption" className="font-mono">run_123</Txt>` with `<Txt variant="caption" font="mono">run_123</Txt>`. Command fields can use `<Input font="mono" textVariant="caption" />`, and prose editors can use `<CodeEditor font="body" />`.
 
 Text-only notices use a single text element with its own tone. Decorative dots and separators keep native elements, and technical previews use Code.
+
+Command groups keep compact uppercase headings with the meta role by default. Use `headingVariant="eyebrow"` for a larger section label or `headingVariant="caption"` for sentence-case text.
