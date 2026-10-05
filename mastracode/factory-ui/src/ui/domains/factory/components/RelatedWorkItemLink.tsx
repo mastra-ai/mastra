@@ -12,7 +12,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
-const RELATED_ITEM_LINK_CLASS = `  hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
+const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
 export function RelatedWorkItemLink({
   item,
@@ -42,7 +42,9 @@ export function RelatedWorkItemLink({
       ) : (
         <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
       )}
-      <span className="truncate">{reference ?? item.title}</span>
+      <Txt as="span" variant="meta" className="min-w-0 flex-1 truncate">
+        {reference ?? item.title}
+      </Txt>
       {live && (
         <MessageSquare
           data-live-session-indicator
@@ -65,9 +67,7 @@ export function RelatedWorkItemLink({
       aria-label={ariaLabel}
       className={cn('text-muted-foreground', RELATED_ITEM_LINK_CLASS)}
     >
-      <Txt as="span" variant="meta">
-        {content}
-      </Txt>
+      {content}
     </a>
   ) : (
     <Link
@@ -76,9 +76,7 @@ export function RelatedWorkItemLink({
       aria-label={ariaLabel}
       className={cn('text-muted-foreground', RELATED_ITEM_LINK_CLASS)}
     >
-      <Txt as="span" variant="meta" className="block">
-        {content}
-      </Txt>
+      {content}
     </Link>
   );
 
