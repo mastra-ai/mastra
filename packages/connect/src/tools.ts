@@ -146,6 +146,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   const integrationOverrides = normalizeIntegrationOverrides(options.integrations);
   validateIntegrationOverrides(integrationOverrides);
   validateIntegrationXor(integrationOverrides);
+  validateRequireApproval(integrationOverrides);
   rejectRemovedAutoApproveTools(integrationOverrides);
 
   let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
@@ -307,6 +308,25 @@ function validateIntegrationXor(integrations: Record<string, ToolsIntegrationOpt
         `Invalid options for '${integrationId}': allowTools and disallowTools are mutually exclusive; set at most one.`,
       );
     }
+  }
+}
+
+/**
+ * Rejects a `requireApproval` value that is not a boolean or an array of
+ * string tool keys. The approval branches check for literal `true` or an
+ * array, so a loosely typed value like `'true'` would otherwise disable
+ * approval on MCP providers silently (and crash the HTTP path into
+ * warn-and-skip) instead of gating tools as the author intended.
+ */
+function validateRequireApproval(integrations: Record<string, ToolsIntegrationOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+    const requireApproval = (providerOptions as Record<string, unknown>).requireApproval;
+    if (requireApproval === undefined || typeof requireApproval === 'boolean') continue;
+    if (Array.isArray(requireApproval) && requireApproval.every(name => typeof name === 'string')) continue;
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid options for '${integrationId}': requireApproval must be a boolean or an array of tool keys.`,
+    );
   }
 }
 

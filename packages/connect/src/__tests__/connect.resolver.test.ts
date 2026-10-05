@@ -510,6 +510,17 @@ describe('HTTP provider tool approval', () => {
     expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
   });
 
+  it('rejects a requireApproval value that is neither a boolean nor a string array', () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    expect(() => connect({ ...options, integrations: { linear: { requireApproval: 'true' } as never } })).toThrow(
+      /requireApproval must be a boolean or an array of tool keys/,
+    );
+    expect(() =>
+      connect({ ...options, integrations: { linear: { requireApproval: ['linear_fake_tool', 7] } as never } }),
+    ).toThrow(/requireApproval must be a boolean or an array of tool keys/);
+  });
+
   it('rejects the removed autoApproveTools option by name', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
