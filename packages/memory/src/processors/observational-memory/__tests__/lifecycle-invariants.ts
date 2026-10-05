@@ -5,7 +5,8 @@
  * `obs[<id>,<id>]`, so every message can be traced through buffering, activation, sync
  * observation, and reflection into the head's text.
  */
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 export interface SavedMessage {
   id: string;
@@ -123,16 +124,21 @@ export function instrumentStorage(
   };
 }
 
+/** Picks the messages the actor still sees raw, as OM does (`getUnobservedMessages`). */
+export type ActorRawView = (messages: MastraDBMessage[], head: ObservationalMemoryRecord) => MastraDBMessage[];
+
 /**
  * Checks the lifecycle invariants on the current state. `final` adds the checks that only hold
- * once all work has drained (no discarded work, actor-visible coverage, duplicate accounting).
+ * once all work has drained (no discarded work, actor-visible coverage, duplicate accounting);
+ * it builds the actor's raw view from the stored messages with `final.actorRawView`, so markers,
+ * the cursor, and observed ids all count exactly as they do for the actor.
  */
 export async function checkInvariants(
   storage: MemoryStorage,
   ledger: LifecycleLedger,
   ids: { threadId: string; resourceId: string },
   state: { lastCursor: number | null },
-  final: boolean,
+  final: false | { actorRawView: ActorRawView },
 ): Promise<{ violations: Violation[]; explainedDuplicates: number; overlappingSyncDuplicates: number }> {
   const violations: Violation[] = [];
   const head = await storage.getObservationalMemory(ids.threadId, ids.resourceId);
@@ -204,11 +210,14 @@ export async function checkInvariants(
       }
     }
 
-    // (6) Actor-visible view: raw messages plus the head text hold every message at least once.
+    // (6) Actor-visible view: the messages the actor sees raw plus the head text hold every message
+    // at least once.
+    const stored = (await storage.listMessages({ threadId: ids.threadId, perPage: false })).messages;
+    const actorRaw = new Set(final.actorRawView(stored, head).map(m => m.id));
     const counts = new Map<string, number>();
     for (const id of textIds) counts.set(id, (counts.get(id) ?? 0) + 1);
     for (const message of ledger.messages) {
-      const seen = (counts.get(message.id) ?? 0) + (isRaw(message.id) ? 1 : 0);
+      const seen = (counts.get(message.id) ?? 0) + (actorRaw.has(message.id) ? 1 : 0);
       if (seen === 0) {
         violations.push({ invariant: 'loss', detail: `${message.id} is missing from the actor-visible view` });
       } else if (seen > 1) {
@@ -216,9 +225,14 @@ export async function checkInvariants(
           if (!append.persisted || !append.messageIds.includes(message.id)) return false;
           // The chunk was stored before a sync observation covered the same message...
           if (ledger.syncCommits.some(s => s.seq > append.seq && s.messageIds.includes(message.id))) return true;
-          // ...or it was only partly covered when appended (it carried unobserved messages too).
-          const { min, max } = rangeOf(append);
-          return append.cursorBefore !== null && min <= append.cursorBefore && max > append.cursorBefore;
+          // ...or it was only partly covered when appended (it carried unobserved messages too), and
+          // this message is in the covered part.
+          const { max } = rangeOf(append);
+          return (
+            append.cursorBefore !== null &&
+            max > append.cursorBefore &&
+            (messageTime.get(message.id) ?? 0) <= append.cursorBefore
+          );
         });
         // Two sync cycles (other instances or processes) observed the message concurrently: the later
         // commit's Observer read it before the earlier commit landed. The conditional commit turns

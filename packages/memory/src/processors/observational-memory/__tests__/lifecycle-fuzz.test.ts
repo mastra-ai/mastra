@@ -201,7 +201,9 @@ async function runSeed(seed: number): Promise<SeedResult> {
   }
   // Activate anything left buffered so the final check sees one consistent end state.
   await oms[0]!.activate(ids);
-  const final = await checkInvariants(storage, ledger, ids, state, true);
+  const final = await checkInvariants(storage, ledger, ids, state, {
+    actorRawView: (messages, head) => oms[0]!.getUnobservedMessages(messages, head),
+  });
   violations.push(...final.violations);
   const generations = (await storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, 1_000)).length;
   const stats = {
