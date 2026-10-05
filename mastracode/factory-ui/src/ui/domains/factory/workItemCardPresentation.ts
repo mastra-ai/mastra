@@ -4,6 +4,8 @@ import type { CardMove } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 
+// The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
+// Then the first lane whose seat is still free, so a card never leads with a run it has already had.
 export function primaryCardMove(moves: CardMove[], columnStage: string, sessions: WorkItem['sessions']) {
   const columnMove = moves.find(move => move.stage === columnStage);
   if (columnMove) return columnMove;
@@ -29,6 +31,7 @@ export function proposedCardRun(
   if (!proposal) return undefined;
   if (custom) {
     const phase = definition?.phases.find(phase => phase.role === proposal.role);
+    // A proposal for a role this board never declares is a leftover from another board.
     if (!phase) return undefined;
     return { decisionId: proposal.id, label: phase.title };
   }

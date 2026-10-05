@@ -9,6 +9,7 @@ import { boardRelevanceOptions } from '../boardRelevance';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardKind } from '../boardStages';
 
+/** `contains` carries the free-text search; the closed dimensions pick one or several values. */
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
   { id: 'contains', label: 'contains' },
   { id: 'is', label: 'is' },
@@ -50,6 +51,7 @@ export function boardFilterFields({
       icon: ListFilter,
       operators: ['in'],
       strict: true,
+      // Relevance narrows the picked teammates' cards: with nobody picked there is nothing to be relevant to.
       hidden: !teammateSelected,
       suggestions: boardRelevanceOptions(kind).map(option => ({ value: option.id, label: option.label })),
     },
@@ -64,6 +66,10 @@ export function boardFilterFields({
   ];
 }
 
+/**
+ * Board narrowing as one filter bar: typing goes straight to a text search, and teammate,
+ * relevance and labels are chips built from the same input.
+ */
 export function BoardFilters({
   kind,
   fields,
@@ -85,6 +91,7 @@ export function BoardFilters({
       operators={BOARD_FILTER_OPERATORS}
       value={boardFilterItems(filters, kind)}
       onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
+      // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
       createItemId={fieldId => fieldId}
       aria-label={ariaLabel}
       className="w-full max-w-full sm:w-auto"

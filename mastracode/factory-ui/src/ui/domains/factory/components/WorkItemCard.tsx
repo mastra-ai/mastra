@@ -66,24 +66,33 @@ export function WorkItemCard({
   layout,
 }: {
   item: WorkItem;
+  // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
+  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
   deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
+  /** Cards linked to this one, resolved once for the whole board. */
   relatedItems: WorkItem[];
+  /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
+  /** Status text while a session start is resolving, before its mutation starts. */
   preparing?: string;
+  /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** Run a rule wants to start on this card, waiting for someone to release it. */
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
   retryingDecisionId?: string;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
+  /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
@@ -153,6 +162,9 @@ export function WorkItemCard({
     onMove,
     onRemove,
   };
+
+  // Acting collapses the panel first, so the result lands on the card it came from.
+  // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
     onApproveProposal: decisionId => {
@@ -191,6 +203,9 @@ export function WorkItemCard({
       <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
     );
   };
+
+  // A held card's decision, like a parked suggestion, is the person's to
+  // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     state,
     session: sessionLink(sessionHref),
@@ -249,6 +264,7 @@ export function WorkItemCard({
         }}
         className={cn(
           'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
+          // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
           highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',

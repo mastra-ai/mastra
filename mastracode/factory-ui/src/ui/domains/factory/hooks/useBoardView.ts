@@ -48,6 +48,9 @@ export function useBoardView({
   currentUserId?: string;
 }): BoardView {
   const [urlParams, setSearchParams] = useSearchParams();
+  // Opening a board without filters or sort in the URL (e.g. from the sidebar) brings back the ones
+  // last used here. They apply on this render so the board never flashes unfiltered; the effect
+  // then writes them into the URL.
   const restoredParams = restoreBoardView(factoryProjectId, kind, urlParams);
   const searchParams = restoredParams ?? urlParams;
   const restoredSearch = restoredParams?.toString();

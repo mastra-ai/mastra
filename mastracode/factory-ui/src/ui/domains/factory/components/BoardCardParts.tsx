@@ -42,7 +42,11 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
   return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
 
-// Gated on `pointer-fine` because a touch screen has no hover to reveal it with; stays up while its menu is open.
+/**
+ * Card chrome a hover can reveal: the click affordance and the actions menu.
+ * Gated on `pointer-fine` because a touch screen has no hover to reveal it
+ * with, and stays up while its menu is open.
+ */
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
@@ -65,7 +69,8 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
 export function CardStatus({ status }: { status: BoardCardStatus }) {
   if (status.kind === 'idle') return null;
 
-  // A parked run needs the user, so it stays lit without a hover.
+  // A parked run is the one idle state the card cannot whisper: it needs the
+  // user, so it stays lit without a hover. Releasing it is the actions row's job.
   if (status.kind === 'waiting') {
     return (
       <Badge size="xs" variant="orange" icon={<Sparkles aria-hidden />} role="status" aria-live="polite">
@@ -210,6 +215,7 @@ function CardActionButton({
   const variant = pillVariant(action, main);
   // The lead action keeps its label whole; a narrow column eats into the ones behind it.
   const width = main ? 'shrink-0' : 'min-w-0';
+  // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
     return (
       <Button

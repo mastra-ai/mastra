@@ -23,6 +23,7 @@ import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
 
+// GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
   'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
@@ -40,6 +41,7 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
+/** Icon for each known run-action label; `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
   Investigate: Search,
   Build: Hammer,
@@ -143,6 +145,7 @@ export function BoardStageIcon({
 }: {
   stage: string;
   kind?: BoardPhaseKind;
+  /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
   decorative?: boolean;
 }) {
   const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;

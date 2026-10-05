@@ -10,6 +10,15 @@ import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
 
+/**
+ * Factory › Board: an org-wide kanban over the repository's work items. The
+ * Intake column merges persisted `intake` cards with live GitHub/Linear
+ * candidates (issues and PRs that have no record yet — records are
+ * materialized only when someone acts on them). Everything enters through
+ * Intake and moves through the system from there. Cards move between columns
+ * by drag-and-drop or the card menu; moves only file/move cards, never start
+ * agent runs.
+ */
 export function WorkBoardPage() {
   return <BoardLayout kind="work" />;
 }

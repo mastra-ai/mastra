@@ -11,6 +11,7 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
+/** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
   factoryProjectId,
   refetchItems,
@@ -27,8 +28,14 @@ export function useBoardRuns({
     threadTitle: string;
   }>();
 
+  // A card click refetches items before it can decide whether to open an
+  // existing thread or mint a new session. That wait is a round trip long and
+  // the mutation isn't pending yet, so without this the card sits completely
+  // silent after the click.
   const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
-  // Two clicks before the next render must share the same in-flight guard.
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one.
   const preparingRef = useRef<Set<string>>(new Set());
   const beginPreparingItem = (itemId: string, label: string) => {
     if (preparingRef.current.has(itemId)) return false;
@@ -49,6 +56,8 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
+  // Refetch failures here used to be silent: an expired auth cookie made every
+  // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
     const refreshedItems = await refetchItems();
     if (!refreshedItems.isSuccess) {

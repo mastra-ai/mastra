@@ -111,6 +111,7 @@ export function BoardColumnEmptyState({
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
+  /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
   layout: BoardLayout;
 }) {
