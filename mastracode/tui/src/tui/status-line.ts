@@ -8,7 +8,7 @@ import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
-import { theme, mastra, displayModeColor, getTermWidth, extendedColors } from './theme.js';
+import { theme, mastra, displayModeColor, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -74,6 +74,38 @@ function shortPath(path: string): string {
   return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }
 
+/**
+ * The path, then shorter forms that keep the last directories, like zsh's prompt truncation:
+ * ~/dev/mastra/mastracode/tui → ~/…/mastracode/tui → ~/…/tui
+ */
+function compactPaths(path: string): string[] {
+  const isHome = path.startsWith('~/');
+  const isAbsolute = path.startsWith('/');
+  const segments = (isHome ? path.slice(2) : isAbsolute ? path.slice(1) : path).split('/').filter(Boolean);
+  const prefix = isHome ? '~/…/' : isAbsolute ? '/…/' : '…/';
+  const paths = [path];
+  for (const keep of [2, 1]) {
+    if (segments.length > keep) paths.push(prefix + segments.slice(-keep).join('/'));
+  }
+  return paths;
+}
+
+function truncateEnd(value: string, maxWidth: number): string {
+  return [...value].slice(0, Math.max(0, maxWidth - 1)).join('') + '…';
+}
+
+/** ~/…/a-very-long-directory-name → ~/…/a-very-l…ry-name */
+function truncateLastSegment(path: string, maxWidth: number): string {
+  if (visibleWidth(path) <= maxWidth) return path;
+  const slash = path.lastIndexOf('/');
+  const head = path.slice(0, slash + 1);
+  const name = [...path.slice(slash + 1)];
+  const room = maxWidth - visibleWidth(head) - 1;
+  if (room < 2) return truncateEnd(path, maxWidth);
+  const start = Math.ceil(room * 0.6);
+  return head + name.slice(0, start).join('') + '…' + name.slice(name.length - (room - start)).join('');
+}
+
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 type Part = { plain: string; styled: string };
@@ -81,14 +113,17 @@ type Part = { plain: string; styled: string };
 /**
  * Update the status line under the prompt and the Working row above it.
  *
- * Status line: one row of " · "-separated parts, left-aligned with one column of padding:
+ * Status line: " · "-separated parts, left-aligned with one column of padding:
  *   mode · model · [fallback] · [goal] · [queued] · context · location
+ * A long path shortens like zsh (~/…/parent/dir) to stay on one row; only when even that doesn't fit does
+ * the location move to a second row.
  * It never changes while the agent runs; run progress (spinner, elapsed time, throughput) lives in the
- * Working row instead. Parts are dropped or shortened from the right until the row fits.
+ * Working row instead. Parts are dropped or shortened from the right until the first row fits.
  */
 export function updateStatusLine(state: TUIState): void {
   if (!state.statusLine) return;
-  const termWidth = getTermWidth();
+  // The real width, not getTermWidth()'s 40-column floor: the row has to fit or it wraps.
+  const termWidth = state.ui.terminal?.columns || process.stdout.columns || 80;
   const PAD = 1;
   const SEP = theme.fg('dim', ' · ');
   const SEP_WIDTH = 3;
@@ -239,27 +274,36 @@ export function updateStatusLine(state: TUIState): void {
   const activeGithubPrSubscriptions = state.activeGithubPrSubscriptions ?? [];
   const githubPrLabel =
     activeGithubPrSubscriptions.length > 0 ? formatGithubPrLabel(state, activeGithubPrSubscriptions) : null;
-  const locationPart = (maxWidth = Infinity): Part | null => {
+  // 'full': the whole path; 'compact': also ~/…/parent/dir forms; 'any': also cut the title / branch / last directory.
+  type Fit = 'full' | 'compact' | 'any';
+  const locationPart = (maxWidth: number, fit: Fit): Part | null => {
     const prefix = githubPrLabel ? { plain: `${githubPrLabel.plain} `, styled: `${githubPrLabel.styled} ` } : null;
     const room = maxWidth - (prefix ? visibleWidth(prefix.plain) : 0);
+    const fits = (value: string) => visibleWidth(value) <= room;
     let text: Part | null = null;
-    // Plain-text truncation with an ellipsis; keeps at least 10 columns or gives up on the part.
-    const fit = (value: string): string | null => {
-      if (visibleWidth(value) <= room) return value;
-      if (room < 10) return null;
-      return [...value].slice(0, room - 1).join('') + '…';
-    };
     if (threadTitle) {
-      const title = fit(threadTitle);
+      const title = fits(threadTitle)
+        ? threadTitle
+        : fit === 'any' && room >= 10
+          ? truncateEnd(threadTitle, room)
+          : null;
       if (title) text = { plain: title, styled: theme.fg('muted', title) };
     } else {
+      const withBranch = (path: string): Part => ({
+        plain: branch ? `${path} (${branch})` : path,
+        styled: theme.fg('muted', path) + (branch ? theme.fg('dim', ` (${branch})`) : ''),
+      });
       const path = shortPath(state.projectInfo.rootPath ?? process.cwd());
-      const full = branch ? `${path} (${branch})` : path;
-      if (visibleWidth(full) <= room) {
-        text = { plain: full, styled: theme.fg('muted', path) + (branch ? theme.fg('dim', ` (${branch})`) : '') };
-      } else {
-        const short = fit(branch ?? path);
-        if (short) text = { plain: short, styled: theme.fg(branch ? 'dim' : 'muted', short) };
+      const candidates = fit === 'full' ? [withBranch(path)] : compactPaths(path).map(withBranch);
+      text = candidates.find(candidate => fits(candidate.plain)) ?? null;
+      if (!text && fit === 'any' && room >= 10) {
+        // Out of room for the path: keep the branch alone, or the last directory cut in the middle.
+        const value = branch
+          ? fits(branch)
+            ? branch
+            : truncateEnd(branch, room)
+          : truncateLastSegment(compactPaths(path).at(-1)!, room);
+        text = { plain: value, styled: theme.fg(branch ? 'dim' : 'muted', value) };
       }
     }
     if (!text)
@@ -269,31 +313,38 @@ export function updateStatusLine(state: TUIState): void {
     return prefix ? { plain: prefix.plain + text.plain, styled: prefix.styled + text.styled } : text;
   };
 
-  // --- Fit: try progressively more compact rows ---
+  // --- Fit: one row when everything fits, else the location moves to a second row ---
   const width = (parts: Part[]) =>
     PAD + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP_WIDTH : 0), 0) + 1; // +1 buffer
-  const compose = (parts: Array<Part | null>, withLocation: boolean): Part[] | null => {
+  const fitsRow = (parts: Array<Part | null>): Part[] | null => {
     const present = parts.filter((p): p is Part => p !== null);
-    if (!withLocation) return width(present) <= termWidth ? present : null;
-    const room = termWidth - width(present) - SEP_WIDTH;
-    const location = locationPart(room);
-    const all = location ? [...present, location] : present;
-    return location && width(all) <= termWidth ? all : null;
+    return width(present) <= termWidth ? present : null;
+  };
+  const withLocation = (parts: Array<Part | null>, fit: Fit): Part[] | null => {
+    const present = parts.filter((p): p is Part => p !== null);
+    const location = locationPart(termWidth - width(present) - SEP_WIDTH, fit);
+    return location ? fitsRow([...present, location]) : null;
   };
   const transient = [fallbackPart, goalPart, queuedPart];
+  const oneRow =
+    withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'full') ??
+    withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'full') ??
+    withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'compact') ??
+    withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'compact');
   const row =
-    compose([modePart, modelPart(fullModelId), ...transient, contextPart], true) ??
-    compose([modePart, modelPart(shortModelId), ...transient, contextPart], true) ??
-    compose([modePart, modelPart(shortModelId), ...transient, contextPart], false) ??
-    compose([modePart, modelPart(tinyModelId), ...transient, contextPart], false) ??
-    compose([modePart, modelPart(tinyModelId), goalPart, queuedPart, contextPart], false) ??
-    compose([modePart, modelPart(tinyModelId), goalPart, queuedPart], false) ??
-    compose([modePart, modelPart(tinyModelId)], false) ??
-    compose([modeInitial, modelPart(tinyModelId)], false) ??
-    compose([modePart], false) ??
+    oneRow ??
+    fitsRow([modePart, modelPart(fullModelId), ...transient, contextPart]) ??
+    fitsRow([modePart, modelPart(shortModelId), ...transient, contextPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId), ...transient, contextPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId), goalPart, queuedPart, contextPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId), goalPart, queuedPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId)]) ??
+    fitsRow([modeInitial, modelPart(tinyModelId)]) ??
+    fitsRow([modePart]) ??
     [];
+  const secondRow = oneRow ? null : locationPart(termWidth - PAD - 1, 'any');
   state.statusLine.setText(' '.repeat(PAD) + row.map(p => p.styled).join(SEP));
-  if (state.memoryStatusLine) state.memoryStatusLine.setText('');
+  if (state.memoryStatusLine) state.memoryStatusLine.setText(secondRow ? ' '.repeat(PAD) + secondRow.styled : '');
 
   updateActivityLine(state, modeColor, now);
   state.ui.requestRender();

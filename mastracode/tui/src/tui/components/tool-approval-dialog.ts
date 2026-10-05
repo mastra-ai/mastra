@@ -7,7 +7,7 @@
  *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
  */
-import { getKeybindings, truncateToWidth } from '@earendil-works/pi-tui';
+import { getKeybindings, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { Component, Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
@@ -58,15 +58,33 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
   /**
    * One inline row under the pending tool call (which already shows the command / path):
    *   ▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no
+   * On narrow terminals the options wrap under "Allow?".
    * Tools without a visible call row (e.g. MCP tools) get the tool name in front.
    */
   render(width: number): string[] {
     const warning = theme.getTheme().warning;
     const key = (k: string, label: string) => `${chalk.bold.hex(warning)(k)} ${theme.fg('muted', label)}`;
     const always = this.categoryLabel ? `always allow ${this.categoryLabel}` : 'always allow category';
-    const keys = [key('y', 'yes'), key('a', always), key('Y', 'YOLO'), key('n', 'no')].join(theme.fg('dim', '  ·  '));
-    const line = `${theme.bold(theme.fg('text', 'Allow?'))}   ${keys}`;
-    return card(warning, [line]).map(l => truncateToWidth(l, width));
+    const options = [key('y', 'yes'), key('a', always), key('Y', 'YOLO'), key('n', 'no')];
+    const sep = theme.fg('dim', '  ·  ');
+    const label = theme.bold(theme.fg('text', 'Allow?'));
+    const room = width - 2; // "▎ "
+    const line = `${label}   ${options.join(sep)}`;
+    if (visibleWidth(line) <= room) return card(warning, [line]);
+    // Narrow: the question on its own row, then the options packed into as few rows as fit.
+    const rows = [label];
+    let row = '';
+    for (const option of options) {
+      const next = row ? `${row}${sep}${option}` : option;
+      if (row && visibleWidth(next) > room) {
+        rows.push(row);
+        row = option;
+      } else {
+        row = next;
+      }
+    }
+    rows.push(row);
+    return card(warning, rows).map(l => truncateToWidth(l, width));
   }
 
   /** Arguments as "key: value" lines (used by tests and for tools without a call row). */

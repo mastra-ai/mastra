@@ -27,6 +27,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
     type = 'spacer';
     constructor(public height: number) {}
   },
+  visibleWidth: (value: string) => value.length,
   Text: class {
     type = 'text';
     constructor(
@@ -75,7 +76,8 @@ import { buildLayout, subscribeToAgentController } from '../setup.js';
 import { updateStatusLine } from '../status-line.js';
 
 function textOf(child: unknown) {
-  return stripAnsi((child as { text?: string }).text ?? '');
+  const c = child as { text?: string; render?: (width: number) => string[] };
+  return stripAnsi(c.text ?? c.render?.(200)[0] ?? '');
 }
 
 function createDeferred<T>() {
@@ -116,7 +118,7 @@ function createState(modeCount = 2) {
       globalBackgroundNoticeContainer: { type: 'global-background-notice' },
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
-      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)) },
+      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)), render: vi.fn(() => []) },
       quietMode: true,
     } as any,
     uiChildren,
@@ -173,6 +175,28 @@ describe('buildLayout startup header', () => {
     buildLayout(state, vi.fn());
 
     expect(textOf(uiChildren[3])).toBe('  [/help] info & shortcuts');
+  });
+
+  it('drops startup hints that do not fit instead of wrapping them', () => {
+    const { state, uiChildren } = createState();
+
+    buildLayout(state, vi.fn());
+
+    const hints = uiChildren[3] as { render(width: number): string[] };
+    expect(hints.render(40)).toEqual(['  [shift+tab] cycle modes']);
+    expect(hints.render(10)).toEqual([]);
+  });
+
+  it('lays the status line out again when the footer renders at a new width', () => {
+    const { state } = createState();
+    buildLayout(state, vi.fn());
+    updateStatusLineMock.mockClear();
+
+    state.footer.render(80);
+    state.footer.render(80);
+    state.footer.render(50);
+
+    expect(updateStatusLineMock).toHaveBeenCalledTimes(2);
   });
 
   it('serializes controller event handling so abort cleanup cannot interleave with stream updates', async () => {

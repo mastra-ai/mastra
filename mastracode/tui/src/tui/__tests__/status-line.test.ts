@@ -430,7 +430,7 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('anthropic/claude-sonnet-4-20250514');
   });
 
-  it('shows the thread title as the location and truncates it when needed', () => {
+  it('moves the thread title to a second row when it does not fit, and truncates it there', () => {
     const state = createState();
     state.currentThreadTitle = 'A much longer generated thread title that should appear';
     state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
@@ -438,12 +438,17 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('A much longer');
-    expect(rendered).toContain('…');
-    expect(rendered).toContain('60/120k');
-    expect(rendered).not.toContain('feature/super-long-branch');
-    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(80);
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toBe(' anthropic/claude-sonnet-4-20250514 · 60/120k↓ 50%');
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(
+      ' A much longer generated thread title that should appear',
+    );
+
+    process.stdout.columns = 40;
+    updateStatusLine(state);
+
+    const second = state.memoryStatusLine.setText.mock.lastCall?.[0];
+    expect(second).toMatch(/^ A much longer generated thread title …$/);
+    expect(visibleWidthMock(second)).toBeLessThanOrEqual(40);
   });
 
   it('shows the project path and branch when there is no thread title', () => {
@@ -608,17 +613,54 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('↓');
   });
 
-  it('shortens the location before dropping core status content at 60 columns', () => {
+  it('keeps one row with a shortened path when the full path does not fit but the short one does', () => {
+    const state = createState();
+    process.stdout.columns = 110;
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toBe(
+      ' anthropic/claude-sonnet-4-20250514 · 60/120k↓ 50% · /…/mastra--feat-mc-queueing-ux (feat/mc-queueing-ux)',
+    );
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith('');
+  });
+
+  it('moves the location to a second row and shortens the path like zsh at 60 columns', () => {
     const state = createState();
     process.stdout.columns = 60;
 
     updateStatusLine(state);
 
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feat/mc-que');
-    expect(rendered).toContain('…');
-    expect(rendered).toContain('60/120k');
-    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(60);
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toBe(' anthropic/claude-sonnet-4-20250514 · 60/120k↓ 50%');
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(
+      ' /…/mastra--feat-mc-queueing-ux (feat/mc-queueing-ux)',
+    );
+  });
+
+  it('keeps the parent directory when it fits and shortens home paths to ~', () => {
+    const state = createState();
+    state.projectInfo.rootPath = `${process.env.HOME}/dev/mastra/mastracode/tui`;
+    state.projectInfo.gitBranch = 'feat/mc-animation';
+    process.stdout.columns = 45;
+
+    updateStatusLine(state);
+
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(' ~/…/mastracode/tui (feat/mc-animation)');
+  });
+
+  it('keeps the branch alone, then cuts it, when even the last directory does not fit', () => {
+    const state = createState();
+    process.stdout.columns = 24;
+
+    updateStatusLine(state);
+
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(' feat/mc-queueing-ux');
+
+    state.projectInfo.gitBranch = undefined;
+    process.stdout.columns = 30;
+    updateStatusLine(state);
+
+    expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(' /…/mastra--feat-mc…eueing-ux');
   });
 
   it('sweeps the context counter in the mode color while messages buffer', () => {

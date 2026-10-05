@@ -3,7 +3,7 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
+import { CombinedAutocompleteProvider, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -295,13 +295,24 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     hintParts.push(keyHint('shift+tab', 'cycle modes'));
   }
   hintParts.push(keyHint('/help', 'info & shortcuts'));
-  const instructions = `  ${hintParts.join(sep)}`;
+  // As many hints as fit on one row; narrow terminals drop the later ones instead of wrapping.
+  const renderHints = (width: number): string[] => {
+    for (let count = hintParts.length; count > 0; count--) {
+      const row = `  ${hintParts.slice(0, count).join(sep)}`;
+      if (visibleWidth(row) <= width) return [row];
+    }
+    return [];
+  };
 
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(new HeaderComponent({ version, appName, info }));
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(instructions, 0, 0));
-  state.ui.addChild(new Spacer(1));
+  state.ui.addChild({ render: renderHints, invalidate: () => {} });
+  // A gap under the hints once the chat has content; before that, the idle row above the prompt is the gap.
+  state.ui.addChild({
+    render: () => (state.chatContainer.children.length > 0 ? [''] : []),
+    invalidate: () => {},
+  });
 
   // Add main containers
   state.ui.addChild(state.chatContainer);
@@ -327,6 +338,16 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.footer.addChild(state.memoryStatusLine);
   state.ui.addChild(state.footer);
   updateStatusLine(state);
+  // The status rows are laid out for one width; lay them out again when the terminal is resized.
+  let statusWidth = 0;
+  const renderFooter = state.footer.render.bind(state.footer);
+  state.footer.render = (width: number) => {
+    if (width !== statusWidth) {
+      statusWidth = width;
+      updateStatusLine(state);
+    }
+    return renderFooter(width);
+  };
   refreshModelAuthStatus();
 
   // Set focus to editor

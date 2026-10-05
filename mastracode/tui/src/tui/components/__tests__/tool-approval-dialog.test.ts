@@ -194,9 +194,16 @@ describe('ToolApprovalDialogComponent.render', () => {
     expect(lines[0]).toBe('▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no');
   });
 
+  it('wraps the choices under the question on narrow terminals', () => {
+    const { dialog } = makeDialog();
+    const lines = dialog.render(40).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toEqual(['▎ Allow?', '▎ y yes  ·  a always allow Execute', '▎ Y YOLO  ·  n no']);
+  });
+
   it('never renders wider than the terminal', () => {
     const { dialog } = makeDialog();
-    const line = dialog.render(30)[0]!.replace(/\x1b\[[0-9;]*m/g, '');
-    expect(line.length).toBeLessThanOrEqual(30);
+    for (const line of dialog.render(20)) {
+      expect(line.replace(/\x1b\[[0-9;]*m/g, '').length).toBeLessThanOrEqual(20);
+    }
   });
 });
