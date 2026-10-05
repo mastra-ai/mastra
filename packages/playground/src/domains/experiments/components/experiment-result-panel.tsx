@@ -127,7 +127,10 @@ function ExperimentResultPanelBody({
   const { Link } = useLinkComponent();
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
   // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
-  const { data: traceFeedback } = useTraceFeedback({ traceId: feedbackTraceId });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: feedbackTraceId,
+    queryOptions: { enabled: !!feedbackTraceId },
+  });
   const usage = useExperimentResultUsage(result.traceId);
 
   const details = (

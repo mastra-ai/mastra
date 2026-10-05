@@ -40,7 +40,10 @@ export default function AgentBuilderAgentsPage() {
     return params;
   }, [currentUser?.id]);
 
-  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredAgents({
+    ...listParams,
+    queryOptions: { enabled: !isCurrentUserLoading },
+  });
   const agents = data?.agents ?? [];
 
   const body = (() => {

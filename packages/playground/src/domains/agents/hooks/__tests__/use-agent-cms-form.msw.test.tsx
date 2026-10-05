@@ -548,7 +548,11 @@ describe('useAgentCmsForm', () => {
             hasStoredOverride: false,
             onSuccess: () => {},
           }),
-          versions: useAgentVersions({ agentId: AGENT_ID, params: { orderBy: { direction: 'DESC' } } }),
+          versions: useAgentVersions({
+            agentId: AGENT_ID,
+            params: { orderBy: { direction: 'DESC' } },
+            queryOptions: { enabled: Boolean(AGENT_ID) },
+          }),
         }),
         { wrapper: makeWrapper() },
       );

@@ -108,7 +108,11 @@ export function MemorySidebarBody({
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
@@ -131,13 +135,22 @@ export function MemorySidebarBody({
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
-  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: omData } = useObservationalMemory(
-    observationalOn ? agentId : undefined,
-    observationalOn ? threadId : undefined,
-    thread?.resourceId ?? agentId,
-  );
+  const { data: thread } = useThread({
+    threadId: threadId,
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
+  });
+  const { data: memoryConfigData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: omData } = useObservationalMemory({
+    agentId: observationalOn ? agentId : undefined,
+    threadId: observationalOn ? threadId : undefined,
+    resourceId: thread?.resourceId ?? agentId,
+  });
   const omAgentConfig = (memoryConfigData?.config as { observationalMemory?: OmAgentConfig } | undefined)
     ?.observationalMemory;
   const { messageTokens, messageThreshold } = getObservationWindowTokens({

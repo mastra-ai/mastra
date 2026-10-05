@@ -1,15 +1,25 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 /** Total Tokens — sum of all input + output tokens */
-export function useTotalTokensKpiMetrics(params: MetricsQueryFilters) {
+export interface TotalTokensKpi {
+  value: number | null;
+  previousValue: number | null;
+  changePercent: number | null;
+}
+
+export function useTotalTokensKpiMetrics<TData = TotalTokensKpi>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<TotalTokensKpi, TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { filters, filterKey } = params;
+  const { filters, filterKey, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'total-tokens-kpi', filterKey],
-    queryFn: async () => {
+    queryFn: async (): Promise<TotalTokensKpi> => {
       const [input, output] = await Promise.all([
         client.getMetricAggregate({
           name: ['mastra_model_total_input_tokens'],
@@ -37,5 +47,6 @@ export function useTotalTokensKpiMetrics(params: MetricsQueryFilters) {
         changePercent,
       };
     },
+    ...queryOptions,
   });
 }

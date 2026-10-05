@@ -4,7 +4,11 @@ import { useParams } from 'react-router';
 
 export function PromptBlockCrumb() {
   const { promptBlockId } = useParams<{ promptBlockId: string }>();
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(promptBlockId, { status: 'draft' });
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: promptBlockId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(promptBlockId) },
+  });
 
   if (!promptBlockId) return null;
   if (isLoading) return <CrumbSkeleton />;

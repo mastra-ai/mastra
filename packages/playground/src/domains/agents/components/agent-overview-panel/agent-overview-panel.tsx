@@ -60,9 +60,13 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
 }
 
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { mutate: reorderModelList } = useReorderModelList({ agentId: agentId });
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { data: channelPlatforms } = useChannelPlatforms();
 

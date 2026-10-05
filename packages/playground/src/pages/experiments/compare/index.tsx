@@ -38,8 +38,16 @@ function CompareExperimentsPage() {
 
   // Fetch each experiment by id: the global list is paginated and may not contain them.
   // The server 404s when an experiment does not belong to `datasetId`, which enforces same-dataset comparison.
-  const experimentA = useDatasetExperiment(datasetId, experimentIdA);
-  const experimentB = useDatasetExperiment(datasetId, experimentIdB);
+  const experimentA = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const experimentB = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
   const isLoading = experimentA.isLoading || experimentB.isLoading;
   const error = experimentA.error ?? experimentB.error;
 

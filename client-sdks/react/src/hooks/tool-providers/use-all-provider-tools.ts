@@ -1,6 +1,8 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { useToolProviders } from './use-tool-providers';
 
@@ -24,7 +26,15 @@ const PER_SERVICE_LIMIT = 500;
  * the provider's `allowedToolkits`/`allowedTools` filter (enforced
  * server-side). Used to render the full available-tools list inline.
  */
-export const useAllProviderTools = () => {
+export const useAllProviderTools = ({
+  queryOptions,
+}: {
+  /** TanStack overrides applied to every fanned-out query, spread last. `select` must keep the default shape. */
+  queryOptions?: {
+    toolkits?: MastraQueryOptions<Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['listToolkits']>>>;
+    tools?: MastraQueryOptions<Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['listTools']>>>;
+  };
+} = {}) => {
   const client = useMastraClient();
   const integrationsQuery = useToolProviders();
   const integrations = useMemo(() => integrationsQuery.data?.providers ?? [], [integrationsQuery.data?.providers]);
@@ -34,6 +44,7 @@ export const useAllProviderTools = () => {
     queries: integrations.map(integration => ({
       queryKey: ['tool-integration-services', integration.id],
       queryFn: () => client.getToolProvider(integration.id).listToolkits(),
+      ...queryOptions?.toolkits,
     })),
   });
 
@@ -55,6 +66,7 @@ export const useAllProviderTools = () => {
       queryKey: ['tool-integration-tools-all', pair.providerId, pair.toolkit],
       queryFn: () =>
         client.getToolProvider(pair.providerId).listTools({ toolkit: pair.toolkit, perPage: PER_SERVICE_LIMIT }),
+      ...queryOptions?.tools,
     })),
   });
 

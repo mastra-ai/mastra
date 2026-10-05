@@ -28,7 +28,7 @@ export function DatasetVersions({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useDatasetVersions(datasetId);
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) {

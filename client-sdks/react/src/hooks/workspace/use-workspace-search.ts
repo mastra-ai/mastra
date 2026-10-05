@@ -1,6 +1,8 @@
 import type { SkillSearchResult } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface WorkspaceSearchHit {
   kind: 'file' | 'skill';
@@ -19,15 +21,26 @@ const skillFilePath = (result: SkillSearchResult & { skillPath?: string }) =>
   result.skillPath ? `${result.skillPath.replace(/\/$/, '')}/SKILL.md` : result.source;
 
 /** Searches files and skills in parallel; one failing source (e.g. 501 not configured) keeps the other's hits. */
-export function useWorkspaceSearch(
-  workspaceId: string,
-  query: string,
-  { files: searchFiles = true, skills: searchSkills = true }: { files?: boolean; skills?: boolean } = {},
-) {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export function useWorkspaceSearch<TData = WorkspaceSearchHit[]>({
+  workspaceId,
+  query,
+  files: searchFiles = true,
+  skills: searchSkills = true,
+  queryOptions,
+}: {
+  workspaceId: string;
+  query: string;
+  files?: boolean;
+  skills?: boolean;
+  queryOptions?: MastraQueryOptions<WorkspaceSearchHit[], TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
   const trimmed = query.trim();
 
-  return useQuery({
+  return useQuery<WorkspaceSearchHit[], Error, TData>({
     queryKey: ['workspace', workspaceId, 'search', trimmed, searchFiles, searchSkills],
     queryFn: async () => {
       const workspace = client.getWorkspace(workspaceId);
@@ -65,6 +78,6 @@ export function useWorkspaceSearch(
 
       return [...hits.values()].sort((a, b) => b.score - a.score);
     },
-    enabled: trimmed.length > 0 && (searchFiles || searchSkills),
+    ...queryOptions,
   });
 }

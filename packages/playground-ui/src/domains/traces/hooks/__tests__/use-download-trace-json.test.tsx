@@ -110,7 +110,10 @@ describe('useDownloadTraceJson', () => {
       );
       const { result } = renderHook(
         () => ({
-          trace: useTraceSpans(suspendedTrace.traceId),
+          trace: useTraceSpans({
+            traceId: suspendedTrace.traceId,
+            queryOptions: { enabled: !!suspendedTrace.traceId },
+          }),
           download: useDownloadTraceJson(),
         }),
         { wrapper: makeWrapper() },

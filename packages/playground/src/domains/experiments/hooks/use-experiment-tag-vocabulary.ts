@@ -7,7 +7,7 @@ import { useMemo } from 'react';
  * still exists) plus every tag already applied to a loaded result, sorted.
  */
 export function useExperimentTagVocabulary(datasetId: string, results: DatasetExperimentResult[]) {
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   return useMemo(
     () => [...new Set([...(dataset?.tags ?? []), ...results.flatMap(r => r.tags ?? [])])].sort(),

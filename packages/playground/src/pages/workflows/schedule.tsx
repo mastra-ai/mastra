@@ -38,7 +38,7 @@ export default function SchedulePage() {
     { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
   ];
   const { paths } = useLinkComponent();
-  const { data: schedule, error } = useSchedule(scheduleId);
+  const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
   const {
     data: triggers,
     isLoading: triggersLoading,
@@ -46,8 +46,8 @@ export default function SchedulePage() {
     hasNextPage: triggersHasNextPage,
     isFetchingNextPage: triggersIsFetchingNextPage,
     setEndOfListElement: triggersSetEndOfListElement,
-  } = useScheduleTriggers(scheduleId);
-  const toggle = useToggleSchedule(scheduleId);
+  } = useScheduleTriggers({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
+  const toggle = useToggleSchedule({ scheduleId: scheduleId });
 
   if (error && is401UnauthorizedError(error)) {
     return (

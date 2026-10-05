@@ -139,8 +139,13 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
-  const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  const { total: itemCount } = useDatasetItems({
+    datasetId: datasetId,
+    search: undefined,
+    version: version,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
   const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;

@@ -28,7 +28,11 @@ function EditDatasetPageShell({ children }: { children?: ReactNode }) {
 function EditDatasetPage() {
   const { datasetId } = useParams()! as { datasetId: string };
   const navigate = useNavigate();
-  const { data: dataset, error, isLoading } = useDataset(datasetId);
+  const {
+    data: dataset,
+    error,
+    isLoading,
+  } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const goToDataset = () => void navigate(`/datasets/${datasetId}`);
 

@@ -25,9 +25,13 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const { data, isLoading } = useProviderTools(providerId, {
-    toolkit,
-    search: search || undefined,
+  const { data, isLoading } = useProviderTools({
+    providerId: providerId,
+    params: {
+      toolkit,
+      search: search || undefined,
+    },
+    queryOptions: { enabled: !!providerId },
   });
   const tools = data?.data ?? [];
 

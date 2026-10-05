@@ -16,10 +16,10 @@ export default function AgentBuilderCreate() {
   // edit page can dispatch the initial message with a tools- and skills-aware schema on
   // its very first render instead of waiting for the queries to resolve.
   const features = useBuilderAgentFeatures();
-  useTools({ enabled: canWrite && features.tools });
-  useAgents({ enabled: canWrite && features.agents });
-  useWorkflows({ enabled: canWrite && features.workflows });
-  useStoredSkills({ enabled: canWrite && features.skills });
+  useTools({ queryOptions: { enabled: canWrite && features.tools } });
+  useAgents({ queryOptions: { enabled: canWrite && features.agents } });
+  useWorkflows({ queryOptions: { enabled: canWrite && features.workflows } });
+  useStoredSkills({ queryOptions: { enabled: canWrite && features.skills } });
   // Prefetch and seed the ['builder-available-models'] cache (return value
   // ignored) so the starter/model picker render instantly instead of waiting on
   // the cold gateway-backed request when this page or the edit page mounts.

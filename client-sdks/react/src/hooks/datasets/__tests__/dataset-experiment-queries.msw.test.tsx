@@ -71,7 +71,7 @@ describe('useDatasetItemVersions', () => {
       server.use(http.get('*/api/datasets/ds-1/items/item-1/history', () => HttpResponse.json(itemHistory)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useDatasetItemVersions('ds-1', 'item-1'), { wrapper });
+      const { result } = renderHook(() => useDatasetItemVersions({ datasetId: 'ds-1', itemId: 'item-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data?.map(v => v.isLatest)).toEqual([true, false]));
     });
@@ -84,7 +84,7 @@ describe('useDatasetVersions', () => {
       server.use(http.get('*/api/datasets/ds-1/versions', () => HttpResponse.json(datasetVersions)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useDatasetVersions('ds-1'), { wrapper });
+      const { result } = renderHook(() => useDatasetVersions({ datasetId: 'ds-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(JSON.stringify(result.current.data)).toContain('v-1');
@@ -104,7 +104,7 @@ describe('useExperiments', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useExperiments({ page: 2, perPage: 5 }), { wrapper });
+      const { result } = renderHook(() => useExperiments({ pagination: { page: 2, perPage: 5 } }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(url?.searchParams.get('page')).toBe('2');
@@ -124,7 +124,10 @@ describe('useCompareExperiments', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useCompareExperiments('ds-1', 'exp-a', 'exp-b'), { wrapper });
+      const { result } = renderHook(
+        () => useCompareExperiments({ datasetId: 'ds-1', experimentIdA: 'exp-a', experimentIdB: 'exp-b' }),
+        { wrapper },
+      );
 
       await waitFor(() => expect(result.current.data?.baselineId).toBe('exp-a'));
       expect(body).toMatchObject({ experimentIdA: 'exp-a', experimentIdB: 'exp-b' });
@@ -134,7 +137,16 @@ describe('useCompareExperiments', () => {
   describe('when an experiment is missing', () => {
     it('does not fetch', () => {
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useCompareExperiments('ds-1', 'exp-a', ''), { wrapper });
+      const { result } = renderHook(
+        () =>
+          useCompareExperiments({
+            datasetId: 'ds-1',
+            experimentIdA: 'exp-a',
+            experimentIdB: '',
+            queryOptions: { enabled: false },
+          }),
+        { wrapper },
+      );
 
       expect(result.current.fetchStatus).toBe('idle');
     });
@@ -151,7 +163,7 @@ describe('useWorkflowSchema', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useWorkflowSchema('wf-1'), { wrapper });
+      const { result } = renderHook(() => useWorkflowSchema({ workflowId: 'wf-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data?.inputSchema).toEqual({ type: 'object' }));
     });
@@ -164,7 +176,7 @@ describe('useExperimentTrace', () => {
       server.use(http.get('*/api/observability/traces/trace-1/light', () => HttpResponse.json(traceLight)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useExperimentTrace('trace-1'), { wrapper });
+      const { result } = renderHook(() => useExperimentTrace({ traceId: 'trace-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data).toEqual(traceLight));
     });

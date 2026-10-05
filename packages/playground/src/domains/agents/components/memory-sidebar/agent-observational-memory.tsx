@@ -313,12 +313,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: configData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
     resourceId,
     threadId,
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Crashed operations can leave stale server flags.
@@ -338,11 +343,16 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isOMActive = isObserving || isReflecting;
 
   const { data: omData, isLoading: isOMLoading } = useObservationalMemoryWithHistory({
-    agentId,
-    resourceId,
-    threadId,
-    enabled: Boolean(statusData?.observationalMemory?.enabled),
+    agentId: agentId,
+    resourceId: resourceId,
+    threadId: threadId,
     isActive: isOMActive,
+    queryOptions: {
+      enabled:
+        Boolean(statusData?.observationalMemory?.enabled) &&
+        Boolean(agentId) &&
+        (Boolean(resourceId) || Boolean(threadId)),
+    },
   });
 
   const isLoading = isStatusLoading || isOMLoading;

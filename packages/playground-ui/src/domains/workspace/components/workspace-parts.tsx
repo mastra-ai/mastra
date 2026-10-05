@@ -30,7 +30,7 @@ export function WorkspaceRoot({ children, ...props }: WorkspaceRootProps) {
 /** An empty workspace (or one whose root folder doesn't exist yet) gets a single empty state instead of two panes. */
 function WorkspaceRootBody({ children }: { children: ReactNode }) {
   const { workspaceId } = useWorkspaceContext();
-  const { data, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
+  const { data, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: ROOT_PATH });
   const isEmpty = data ? data.length === 0 : is404NotFoundError(error);
 
   if (isEmpty) {

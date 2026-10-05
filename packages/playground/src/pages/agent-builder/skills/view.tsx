@@ -54,7 +54,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   const copySkill = useCopySkill();
 
   // Suggest a non-colliding copy name based on the caller's own skills.
-  const { data: ownSkillsData } = useStoredSkills({ enabled: canCopy });
+  const { data: ownSkillsData } = useStoredSkills({ queryOptions: { enabled: canCopy } });
   const ownSkillNames = (ownSkillsData?.skills ?? []).map(s => s.name);
 
   return (

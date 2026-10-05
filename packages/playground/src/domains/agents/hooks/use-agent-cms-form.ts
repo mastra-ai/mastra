@@ -71,7 +71,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
   const needsCreate = isCodeAgentOverride && !hasStoredOverride && !overrideCreated;
 
   const { createStoredAgent } = useStoredAgentMutations();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const initialValues = useMemo(
     () => (isEdit ? computeAgentInitialValues(options.dataSource) : undefined),

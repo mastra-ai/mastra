@@ -23,7 +23,11 @@ export function ExperimentResultSpanPane({
   onPrevious,
   onClose,
 }: ExperimentResultSpanPaneProps) {
-  const { data: spanDetail } = useSpanDetail(traceId, spanId);
+  const { data: spanDetail } = useSpanDetail({
+    traceId: traceId,
+    spanId: spanId,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
   const span = spanDetail?.span;
 
   return (

@@ -48,8 +48,16 @@ function AgentThread() {
     data: agent,
     isLoading: isAgentLoading,
     error,
-  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
-  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory } = useMemory({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
@@ -73,14 +81,13 @@ function AgentThread() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads(
-    {
-      agentId: agentId!,
-      isMemoryEnabled: hasMemory,
-      resourceId: agentId!,
-    },
-    useEntityRequestContext('agent', agentId!)[0],
-  );
+  } = useThreads({
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    resourceId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(hasMemory) },
+  });
 
   const sidebarThreads = useMemo(
     () =>

@@ -32,7 +32,7 @@ describe('useMCPServerToolsById', () => {
     it('returns the tools keyed by name', async () => {
       server.use(http.get(TOOLS_URL, () => HttpResponse.json(weatherToolsResponse)));
 
-      const { result } = renderHookWithProviders(() => useMCPServerToolsById('weather-server'));
+      const { result } = renderHookWithProviders(() => useMCPServerToolsById({ serverId: 'weather-server' }));
 
       await waitFor(() => expect(Object.keys(result.current.data ?? {})).toEqual(['getForecast', 'showMap']));
     });
@@ -40,7 +40,9 @@ describe('useMCPServerToolsById', () => {
 
   describe('when no server id is given', () => {
     it('does not fetch', () => {
-      const { result } = renderHookWithProviders(() => useMCPServerToolsById(null));
+      const { result } = renderHookWithProviders(() =>
+        useMCPServerToolsById({ serverId: null, queryOptions: { enabled: false } }),
+      );
 
       expect(result.current.fetchStatus).toBe('idle');
     });
@@ -54,9 +56,11 @@ describe('useMCPServerTools', () => {
 
       const { result } = renderHookWithProviders(() =>
         useMCPServerTools({
-          id: 'weather-server',
-          name: 'Weather Server',
-          version_detail: mcpServersResponse.servers[0].version_detail,
+          selectedServer: {
+            id: 'weather-server',
+            name: 'Weather Server',
+            version_detail: mcpServersResponse.servers[0].version_detail,
+          },
         }),
       );
 
@@ -70,7 +74,9 @@ describe('useMCPServerTool', () => {
     it('returns the tool details', async () => {
       server.use(http.get(`${TOOLS_URL}/getForecast`, () => HttpResponse.json(weatherToolsResponse.tools[0])));
 
-      const { result } = renderHookWithProviders(() => useMCPServerTool('weather-server', 'getForecast'));
+      const { result } = renderHookWithProviders(() =>
+        useMCPServerTool({ serverId: 'weather-server', toolId: 'getForecast' }),
+      );
 
       await waitFor(() => expect(result.current.data?.name).toBe('getForecast'));
     });
@@ -84,7 +90,9 @@ describe('useExecuteMCPTool', () => {
         http.post(`${TOOLS_URL}/getForecast/execute`, () => HttpResponse.json({ result: { forecast: 'sunny' } })),
       );
 
-      const { result } = renderHookWithProviders(() => useExecuteMCPTool('weather-server', 'getForecast'));
+      const { result } = renderHookWithProviders(() =>
+        useExecuteMCPTool({ serverId: 'weather-server', toolId: 'getForecast' }),
+      );
 
       let response: unknown;
       await act(async () => {

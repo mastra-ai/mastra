@@ -39,7 +39,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const transportPath = hasSse ? 'sse' : 'mcp';
   const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
-  const { data: tools } = useMCPServerTools(server);
+  const { data: tools } = useMCPServerTools({ selectedServer: server });
   const toolsList = Object.values(tools || {});
   const toolsCount = toolsList.length;
   const agentToolsCount = toolsList.filter(t => t.toolType === 'agent').length;

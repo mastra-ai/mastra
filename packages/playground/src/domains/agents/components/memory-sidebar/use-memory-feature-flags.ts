@@ -14,7 +14,11 @@ export interface MemoryFeatureFlags {
  * on/off flags the sidebar renders.
  */
 export function useMemoryFeatureFlags(agentId: string): MemoryFeatureFlags {
-  const { data: memoryConfig } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfig } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const config = memoryConfig?.config;
 
   return {

@@ -35,7 +35,10 @@ export function ExperimentCombobox({
   targetType,
   targetId,
 }: ExperimentComboboxProps) {
-  const { data, isLoading, isError } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
+  const { data, isLoading, isError } = useExperimentsForDatasetFilter({
+    datasetId: undefined,
+    target: { targetType, targetId },
+  });
 
   const experimentOptions = (data?.experiments ?? []).map(experiment => ({
     label: getExperimentDisplayName(experiment),

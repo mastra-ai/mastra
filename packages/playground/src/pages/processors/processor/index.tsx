@@ -13,7 +13,11 @@ const crumbs = [navCrumb('/processors'), processorCrumb];
 
 export function Processor() {
   const { processorId } = useParams();
-  const { data: processor, isLoading, error } = useProcessor(processorId!);
+  const {
+    data: processor,
+    isLoading,
+    error,
+  } = useProcessor({ processorId: processorId!, queryOptions: { enabled: !!processorId } });
 
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {

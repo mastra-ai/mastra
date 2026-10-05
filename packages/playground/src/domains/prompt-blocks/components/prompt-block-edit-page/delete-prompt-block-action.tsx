@@ -15,7 +15,7 @@ interface DeletePromptBlockActionProps {
 export function DeletePromptBlockAction({ blockId, blockName, disabled = false }: DeletePromptBlockActionProps) {
   const [open, setOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
 
   const isPending = deleteStoredPromptBlock.isPending;
 

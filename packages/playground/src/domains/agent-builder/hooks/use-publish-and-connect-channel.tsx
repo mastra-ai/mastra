@@ -51,7 +51,7 @@ export interface UsePublishAndConnectChannelResult {
 export function usePublishAndConnectChannel(agentId: string): UsePublishAndConnectChannelResult {
   const { canPublishToChannel } = useEditPage();
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);

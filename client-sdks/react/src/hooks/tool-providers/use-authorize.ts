@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 export interface AuthorizeArgs {
   providerId: string;
@@ -43,6 +44,7 @@ export interface UseAuthorizeOptions {
   pollIntervalMs?: number;
   timeoutMs?: number;
   openPopup?: (url: string) => Window | null;
+  queryOptions?: MastraMutationOptions<AuthorizeResult, AuthorizeArgs>;
 }
 
 /**
@@ -92,5 +94,6 @@ export const useAuthorize = (options: UseAuthorizeOptions = {}) => {
       }
       throw new Error('Authorization timed out');
     },
+    ...options.queryOptions,
   });
 };

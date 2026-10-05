@@ -19,7 +19,12 @@ type SpanFeedbackTabProps = {
  */
 export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useSpanFeedback({ traceId, spanId, page });
+  const { data, isLoading } = useSpanFeedback({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId, spanId });
   const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId, spanId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();

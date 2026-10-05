@@ -17,8 +17,12 @@ export function TopicTraceDetailsPanel({
   onSpanSelect,
   onClose,
 }: TopicTraceDetailsPanelProps) {
-  const traceSpans = useTraceSpans(traceId);
-  const spanDetail = useSpanDetail(traceId, selectedSpanId);
+  const traceSpans = useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
+  const spanDetail = useSpanDetail({
+    traceId: traceId,
+    spanId: selectedSpanId,
+    queryOptions: { enabled: !!traceId && !!selectedSpanId },
+  });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(
     traceSpans.data?.spans,
     selectedSpanId,
