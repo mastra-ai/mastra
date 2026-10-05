@@ -956,6 +956,36 @@ describe('Thread', () => {
       expect(textarea.value).toBe('Read my spreadsheet');
       expect(screen.getByRole('button', { name: 'Remove leads.xlsx' })).toBeTruthy();
     }, 10_000);
+
+    it('keeps the text typed while the request was pending, after the restored message', async () => {
+      let rejectRequest = () => {};
+      const pending = new Promise<void>(resolve => {
+        rejectRequest = resolve;
+      });
+      let requests = 0;
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async () => {
+          requests++;
+          await pending;
+          return HttpResponse.json({ error: 'Request body too large' }, { status: 413 });
+        }),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requests).toBe(1));
+      await waitFor(() => expect(textarea.value).toBe(''));
+
+      fireEvent.change(textarea, { target: { value: 'And the second tab?' } });
+      rejectRequest();
+
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+      expect(textarea.value).toBe('Read my spreadsheet\n\nAnd the second tab?');
+    }, 10_000);
   });
 
   describe('when a text attachment is added by URL', () => {

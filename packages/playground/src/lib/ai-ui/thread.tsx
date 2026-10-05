@@ -386,16 +386,17 @@ const AgentComposer = ({
     const currentLifetime = lifetime.current;
     const submittedAttachments = attachments;
     const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
-    // A message the server never received goes back in the composer, next to anything typed since.
+    // A message the server never received goes back in the composer, before anything typed since.
+    const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
     const restoreSubmission = () => {
       if (lifetime.current !== currentLifetime) return;
       if (updateDraft)
         updateDraft(previous => ({
-          text: previous.text || text,
+          text: withSubmittedText(previous.text),
           attachments: [...submittedAttachments, ...previous.attachments],
         }));
       else {
-        setThreadInput(previous => previous || text);
+        setThreadInput(withSubmittedText);
         restore(submittedAttachments);
       }
       setSubmitError('Your message could not be sent. Your draft has been restored.');
