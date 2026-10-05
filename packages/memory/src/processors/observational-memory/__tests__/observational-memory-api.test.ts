@@ -1413,7 +1413,7 @@ describe('activate()', () => {
     expect(actResult.record.activeObservations).toBeTruthy();
   });
 
-  it('should not activate while an in-process chunk write is still pending after the wait', async () => {
+  it('should activate after the chunk-write wait times out and keep a chunk that lands afterwards', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
     expect((await om.buffer({ threadId })).buffered).toBe(true);
@@ -1424,16 +1424,31 @@ describe('activate()', () => {
     try {
       const activation = om.activate({ threadId });
       await vi.advanceTimersByTimeAsync(60_000);
-      const result = await activation;
-      expect(result.activated).toBe(false);
+      expect((await activation).activated).toBe(true);
     } finally {
       vi.useRealTimers();
-      releaseChunkWrite();
     }
 
-    const status = await om.getStatus({ threadId });
-    expect(status.bufferedChunkCount).toBe(1);
-    expect((await om.activate({ threadId })).activated).toBe(true);
+    // The hung write now lands. Storage appends it after the activation instead of
+    // being overwritten by it, so it is still there to activate.
+    const record = (await storage.getObservationalMemory(threadId, null))!;
+    const lateAt = new Date(record.lastObservedAt!.getTime() + 60_000);
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- late chunk',
+        tokenCount: 5,
+        messageIds: ['late-msg'],
+        cycleId: 'late-cycle',
+        messageTokens: 100,
+        lastObservedAt: lateAt,
+      },
+    });
+    releaseChunkWrite();
+
+    const after = await storage.getObservationalMemory(threadId, null);
+    expect(after?.bufferedObservationChunks?.map(chunk => chunk.cycleId)).toEqual(['late-cycle']);
+    expect(after?.activeObservations).not.toContain('- late chunk');
   });
 
   it('should return activatedMessageIds', async () => {

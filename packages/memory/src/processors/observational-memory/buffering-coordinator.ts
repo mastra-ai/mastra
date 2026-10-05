@@ -29,9 +29,10 @@ export class BufferingCoordinator {
    * Key format: "obs:{lockKey}"
    * Value: Promise that resolves once the op has persisted its chunk (or ended without one)
    *
-   * Activation's read-then-write chunk swap only conflicts with this phase. An op stays in
-   * asyncBufferingOps through its post-persist work (indexing, thread title), which
-   * activation doesn't need to wait for.
+   * Above the threshold→blockAfter band, activation waits (bounded) on this phase so the chunk
+   * activates instead of being re-observed by the sync pass. It is not needed for safety: storage
+   * keeps a chunk appended during activation. An op stays in asyncBufferingOps through its
+   * post-persist work (indexing, thread title), which activation never waits for.
    */
   static pendingChunkWrites = new Map<string, Promise<void>>();
 
@@ -85,10 +86,6 @@ export class BufferingCoordinator {
 
   isAsyncBufferingInProgress(bufferKey: string): boolean {
     return BufferingCoordinator.asyncBufferingOps.has(bufferKey);
-  }
-
-  isChunkWriteInProgress(bufferKey: string): boolean {
-    return BufferingCoordinator.pendingChunkWrites.has(bufferKey);
   }
 
   /**
