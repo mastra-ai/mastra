@@ -25,11 +25,25 @@ describe('renderHeader', () => {
     expect(lines[4]).toContain('Branch: main');
   });
 
-  it('stacks the logo above the info when there is no room beside it', () => {
-    const lines = plain(renderHeader(44, { version: '0.2.0', info: INFO }));
+  it('stacks the logo above the info when the title does not fit beside it', () => {
+    const lines = plain(renderHeader(34, { version: '0.2.0', info: INFO }));
     expect(lines.slice(0, LOGO_HEADER.length).join('\n')).toContain('⣠⣶⣶⣄');
     expect(lines).toContain('Mastra Code v0.2.0');
     expect(lines.at(-1)).toBe('Worktree of: /dev/mastra');
+  });
+
+  it('keeps the info beside the logo and cuts long lines with … instead of overflowing', () => {
+    const info = [...INFO.slice(0, 2), 'Branch: feature/a-very-long-branch-name-that-does-not-fit'];
+    for (const width of [34, 44, 60, 72]) {
+      const lines = plain(renderHeader(width, { version: '0.2.0', info }));
+      expect(
+        lines.every(line => visibleWidth(line) <= width),
+        `width ${width}`,
+      ).toBe(true);
+    }
+    const lines = plain(renderHeader(44, { version: '0.2.0', info }));
+    expect(lines[0]).toContain('⣠⣶⣶⣄');
+    expect(lines.find(line => line.includes('Branch:'))).toMatch(/Branch: feature\/a-ve\S*…$/);
   });
 
   it('falls back to a single text line on very narrow terminals', () => {

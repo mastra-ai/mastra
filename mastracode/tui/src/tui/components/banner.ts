@@ -58,20 +58,25 @@ export function renderHeader(width: number, { version, appName, info }: HeaderOp
   if (name !== 'Mastra Code' || width < 30) return [compact];
 
   const title = theme.bold(theme.fg('text', name)) + theme.fg('dim', ` v${version}`);
-  const infoLines = info.map(l => theme.fg('muted', l));
+  // Long info (a branch name, a worktree path) is cut with … so the header never wraps.
+  const fit = (room: number) =>
+    info.map(l =>
+      theme.fg('muted', visibleWidth(l) <= room ? l : [...l].slice(0, Math.max(0, room - 1)).join('') + '…'),
+    );
   const logo = renderLogo();
   const logoWidth = visibleWidth(logo[0]!);
-  const right = [title, ...infoLines];
-  const rightWidth = Math.max(...right.map(l => visibleWidth(l)));
+  const room = width - logoWidth - LOGO_GAP;
 
-  if (logoWidth + LOGO_GAP + rightWidth <= width) {
+  // Side by side while the title fits next to the logo; the info lines shorten to the space left.
+  if (visibleWidth(title) <= room) {
+    const infoLines = fit(room);
     // Keep the block as tall as the logo: without a worktree line there are only 3 info lines, so a
     // blank row goes under the title instead.
-    const block = right.length < logo.length ? [title, '', ...infoLines] : right;
+    const block = infoLines.length + 1 < logo.length ? [title, '', ...infoLines] : [title, ...infoLines];
     const top = Math.floor((logo.length - block.length) / 2);
     return logo.map((row, i) => row + ' '.repeat(LOGO_GAP) + (block[i - top] ?? ''));
   }
-  return [...logo, '', title, ...infoLines];
+  return [...logo, '', title, ...fit(width)];
 }
 
 /** Startup header component; re-lays out on resize. */
