@@ -144,12 +144,13 @@ function ScopeLabel({
 }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate">{name}</span>
-      <Badge variant="neutral" emphasis="muted" size="xs">
+      <span className="truncate">{name}</span>{' '}
+      <Badge variant="neutral" emphasis="subtle" size="xs">
         {kind}
       </Badge>
+      {memberCount !== undefined && memberCount > 0 ? ' ' : null}
       {memberCount !== undefined && memberCount > 0 ? (
-        <span className="text-icon3 shrink-0">
+        <span className="text-muted-foreground shrink-0">
           {memberCount}
           {memberCountTruncated ? '+' : ''}
         </span>
@@ -245,7 +246,7 @@ function ScopeTree({
               type="button"
               aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.name}`}
               aria-expanded={expanded}
-              className="hover:text-icon6 flex size-5 shrink-0 items-center justify-center"
+              className="hover:text-foreground flex size-5 shrink-0 items-center justify-center"
               onClick={() => {
                 if (expanded) {
                   if (depth === 0) setCollapsedRootIds(current => new Set(current).add(node.id));
@@ -276,8 +277,8 @@ function ScopeTree({
             type="button"
             aria-pressed={pressed}
             className={cn(
-              'hover:text-icon6 min-w-0 flex-1 rounded-md px-1 py-1 text-left',
-              pressed && 'bg-surface4 text-icon6 font-medium',
+              'hover:text-foreground min-w-0 flex-1 rounded-md px-1 py-1 text-left',
+              pressed && 'bg-fill text-foreground font-medium',
             )}
             title={node.description ?? node.name}
             onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
@@ -294,7 +295,7 @@ function ScopeTree({
         {expanded && canLoadMore ? (
           <button
             type="button"
-            className="text-icon3 hover:text-icon5 py-1 text-left"
+            className="text-muted-foreground hover:text-foreground py-1 text-left"
             style={{ paddingLeft: `${20 + (depth + 1) * 12}px` }}
             disabled={scopePage.isPending}
             onClick={() => void loadPage(node.id, childCursor ?? undefined)}
@@ -310,17 +311,17 @@ function ScopeTree({
   return (
     <aside
       aria-label="Knowledge scopes"
-      className="border-surface5 bg-surface2 w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
+      className="border-border bg-card w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
     >
-      <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+      <Txt as="h2" variant="caption" className="text-foreground mb-2 font-semibold">
         Scopes
       </Txt>
-      <div className="text-icon4 flex flex-col gap-1 text-xs">
+      <div className="text-muted-foreground flex flex-col gap-1 text-xs">
         {treeRoots.map(node => renderScopeNode(node, 0, new Set()))}
         {rootCursor ? (
           <button
             type="button"
-            className="text-icon3 hover:text-icon5 px-2 py-1 text-left"
+            className="text-muted-foreground hover:text-foreground px-2 py-1 text-left"
             disabled={scopePage.isPending}
             onClick={() => void loadPage(undefined, rootCursor)}
           >
@@ -333,8 +334,8 @@ function ScopeTree({
             type="button"
             aria-pressed={selection?.scopeLevel === root.level && !selection?.scopeNodeId}
             className={cn(
-              'hover:text-icon6 w-full rounded-md px-2 py-1 text-left',
-              selection?.scopeLevel === root.level && !selection?.scopeNodeId && 'bg-surface4 text-icon6 font-medium',
+              'hover:text-foreground w-full rounded-md px-2 py-1 text-left',
+              selection?.scopeLevel === root.level && !selection?.scopeNodeId && 'bg-fill text-foreground font-medium',
             )}
             onClick={() => onSelect({ scopeLevel: root.level })}
           >
@@ -361,7 +362,7 @@ function ActivityPanel({
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   if (!selection) {
     return (
-      <Txt as="p" variant="ui-md" className="text-icon3">
+      <Txt as="p" variant="body" className="text-muted-foreground">
         Select a scope to view its recent activity.
       </Txt>
     );
@@ -376,29 +377,29 @@ function ActivityPanel({
     .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index);
   if (events.length === 0) {
     return (
-      <Txt as="p" variant="ui-md" className="text-icon3">
+      <Txt as="p" variant="body" className="text-muted-foreground">
         No knowledge activity yet.
       </Txt>
     );
   }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pr-2">
-      <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
+      <ol aria-label="Knowledge activity" className="divide-border divide-y">
         {events.map(event => (
           <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
             <div>
-              <span className="text-icon5">{knowledgeActivityLabel(event)}</span>
-              <span className="text-icon3"> · </span>
+              <span className="text-foreground">{knowledgeActivityLabel(event)}</span>
+              <span className="text-muted-foreground"> · </span>
               <button
                 type="button"
-                className="text-icon6 font-medium hover:text-purple-300 hover:underline"
+                className="text-foreground hover:text-badge-purple-indicator font-medium hover:underline"
                 onClick={() => onSelect(event)}
               >
                 {event.node.name}
               </button>
-              <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
+              <div className="text-muted-foreground mt-1 text-xs">{event.scope.join(' → ')}</div>
             </div>
-            <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
+            <time className="text-muted-foreground shrink-0 text-xs" dateTime={event.createdAt}>
               {new Date(event.createdAt).toLocaleString()}
             </time>
           </li>
@@ -407,7 +408,7 @@ function ActivityPanel({
       {activity.hasNextPage ? (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 mt-2 px-2 py-1 text-sm"
+          className="text-muted-foreground hover:text-foreground mt-2 px-2 py-1 text-sm"
           disabled={activity.isFetchingNextPage}
           onClick={() => void activity.fetchNextPage()}
         >
@@ -801,7 +802,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                 role="tab"
                 aria-selected={activeView === view}
                 className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+                  activeView === view ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => setView(view)}
               >
