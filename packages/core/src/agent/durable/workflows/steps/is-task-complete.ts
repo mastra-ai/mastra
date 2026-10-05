@@ -58,8 +58,8 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       // No scorers → nothing to grade.
       if (!registryEntry?.isTaskComplete?.scorers?.length) return state;
 
-      // Rehydrate the message list lazily — only when the core actually
-      // grades this iteration does it read the transcript / append feedback.
+      // Build the message list lazily — only when the core actually grades
+      // this iteration does it read the transcript / append feedback.
       const messageListState = await readMessageListState(params, state);
       let messageList: MessageList | undefined;
       const list = () => {
