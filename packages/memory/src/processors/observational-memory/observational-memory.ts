@@ -3514,19 +3514,25 @@ ${formattedMessages}
       }
 
       // Record the chunk as soon as it's persisted, before the op's post-persist work
-      // (indexing, thread title). Activation may run from then on, so this
-      // bookkeeping must not land after activation resets it.
+      // (indexing, thread title). Activation doesn't wait for this op in the async band, so
+      // it may already have reset the token boundary (or a later op replaced it). Only an op
+      // that still owns the boundary it set at its start moves it; otherwise its pre-activation
+      // token count would stall the next buffer trigger. The check and the in-memory write run
+      // before any await, so an activation reset can't slip between them, and its queued
+      // storage reset lands after this op's queued write.
       let chunkRecorded = false;
       const recordBufferedChunk = async () => {
         if (chunkRecorded) return;
         chunkRecorded = true;
-        // Update the boundary tokens in storage + in-memory cache for interval tracking
-        await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, newTokens)).catch(
-          () => {},
-        );
+        const ownsBoundary = BufferingCoordinator.lastBufferedBoundary.get(bufferKey) === currentTokens;
+        if (ownsBoundary) BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
+        await runOMCommit(lockKey, () =>
+          this.storage.setBufferingObservationFlag(record.id, false, ownsBoundary ? newTokens : undefined),
+        ).catch(() => {});
         flagCleared = true;
-        setBufferingState(false, newTokens);
-        BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
+        const stillOwnsBoundary =
+          ownsBoundary && BufferingCoordinator.lastBufferedBoundary.get(bufferKey) === newTokens;
+        setBufferingState(false, stillOwnsBoundary ? newTokens : undefined);
 
         // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
         const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);

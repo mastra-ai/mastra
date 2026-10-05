@@ -12750,6 +12750,11 @@ describe('Full Async Buffering Flow', () => {
     expect(getBufferedChunks(afterOp).flatMap(chunk => chunk.messageIds)).toEqual(
       expect.arrayContaining(bandMessages.map(m => m.id)),
     );
+    // The op started before the activation, so its pre-activation token boundary must not
+    // overwrite activation's reset; otherwise the next buffer trigger stalls until pending
+    // tokens climb back past the old boundary.
+    expect(BufferingCoordinator.lastBufferedBoundary.get(`obs:thread:${threadId}`)).toBe(0);
+    expect(afterOp?.lastBufferedAtTokens ?? 0).toBe(0);
   });
 
   it('should activate a persisted chunk without waiting for the buffer op to finish indexing', async () => {
