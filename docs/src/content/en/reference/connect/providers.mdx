@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` includes generated toolsets for 23 providers (913 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` includes generated toolsets for 22 providers (888 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -31,7 +31,6 @@ MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, a
 | <ProviderLogo slug="incident" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
-| <ProviderLogo slug="microsoft-teams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | <ProviderLogo slug="openai" mono /> [OpenAI](#openai) | `openai` | 26 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
@@ -676,38 +675,6 @@ Provider ID: `linear` · 46 tools
 | `linear_update_issue_label` | Update an existing Linear issue label. |
 | `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
 | `linear_update_project` | Update an existing Linear project. |
-
-## Microsoft Teams
-
-Provider ID: `microsoft-teams` · 25 tools
-
-| Tool | Description |
-| - | - |
-| `microsoft_teams_add_team_member` | Add a member to a team |
-| `microsoft_teams_create_channel` | Create a channel in a team. |
-| `microsoft_teams_create_channel_message` | Post a root message in a channel |
-| `microsoft_teams_create_channel_tab` | Add a tab to a channel. |
-| `microsoft_teams_create_chat` | Create a one-on-one or group chat. |
-| `microsoft_teams_create_chat_message` | Send a message in a chat |
-| `microsoft_teams_create_team` | Create a team from a template or existing group. |
-| `microsoft_teams_delete_channel` | Delete a channel from a team |
-| `microsoft_teams_get_channel` | Retrieve a channel by ID. |
-| `microsoft_teams_get_channel_message` | Retrieve a channel message by ID. |
-| `microsoft_teams_get_chat` | Retrieve a chat by ID. |
-| `microsoft_teams_get_chat_message` | Retrieve a chat message by ID. |
-| `microsoft_teams_get_team` | Retrieve a team by ID. |
-| `microsoft_teams_list_channel_messages` | List root messages in a channel. |
-| `microsoft_teams_list_channel_replies` | List replies under a channel message thread |
-| `microsoft_teams_list_channel_tabs` | List tabs configured on a channel. |
-| `microsoft_teams_list_channels` | List channels in a team. |
-| `microsoft_teams_list_chat_members` | List members in a chat |
-| `microsoft_teams_list_chat_messages` | List messages in a chat. |
-| `microsoft_teams_list_chats` | List chats for a user. |
-| `microsoft_teams_list_joined_teams` | List teams the user has joined |
-| `microsoft_teams_list_team_members` | List members in a team. |
-| `microsoft_teams_remove_team_member` | Remove a member from a team. |
-| `microsoft_teams_reply_to_channel_message` | Reply to a channel message thread. |
-| `microsoft_teams_update_channel` | Update mutable channel properties. |
 
 ## Notion
 

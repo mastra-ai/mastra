@@ -1,13 +1,13 @@
 ---
 title: 'Reference: channels() | Connect'
-description: "API reference for channels() in @mastra/connect: a live channel-provider resolver over a project's platform connections for Slack, Microsoft Teams, Telegram, and Discord."
+description: "API reference for channels() in @mastra/connect: a live channel-provider resolver over a project's platform connections for Slack, Telegram, and Discord."
 packages:
   - '@mastra/connect'
 ---
 
 # channels()
 
-Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Microsoft Teams, Telegram, Discord) are constructed once, up front and without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
+Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -21,7 +21,7 @@ export const mastra = new Mastra({
 
 Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
 
-The channel implementations come from `@mastra/slack`, `@mastra/teams`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly when you want to configure a channel outside the platform connection flow.
+The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly when you want to configure a channel outside the platform connection flow.
 
 ## Parameters
 
@@ -46,7 +46,7 @@ The channel implementations come from `@mastra/slack`, `@mastra/teams`, `@mastra
             name: 'integrations',
             type: 'ChannelsIntegrationOverrides',
             description:
-              'Per-provider overrides keyed by provider ID (slack-channels, microsoft-teams, telegram, discord). See Per-provider options below.',
+              'Per-provider overrides keyed by provider ID (slack-channels, telegram, discord). See Per-provider options below.',
             isOptional: true,
           },
           {

@@ -19,7 +19,7 @@ const root = process.argv[2]
 const providersDir = join(root, 'packages/connect/src/providers')
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['anthropic', 'stripe', 'twitter-v2'])
+const EXCLUDE = new Set(['anthropic', 'microsoft-teams', 'stripe', 'twitter-v2'])
 
 const DISPLAY = {
   clerk: 'Clerk',
@@ -36,7 +36,6 @@ const DISPLAY = {
   'incident-io': 'incident.io',
   jira: 'Jira',
   linear: 'Linear',
-  'microsoft-teams': 'Microsoft Teams',
   notion: 'Notion',
   openai: 'OpenAI',
   posthog: 'PostHog',
@@ -62,7 +61,6 @@ const LOGOS = {
   'incident-io': { slug: 'incident' },
   jira: { slug: 'jira' },
   linear: { slug: 'linear' },
-  'microsoft-teams': { slug: 'microsoft-teams' },
   notion: { slug: 'notion', mono: true },
   openai: { slug: 'openai', mono: true },
   posthog: { slug: 'posthog' },
