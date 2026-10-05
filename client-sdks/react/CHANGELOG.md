@@ -1,5 +1,101 @@
 # @mastra/react
 
+## 1.8.0-alpha.4
+
+### Minor Changes
+
+- Added React Query hooks for the Mastra client, grouped by domain under `@mastra/react/hooks/<domain>` (for example `agents`, `workflows`, `traces`, `metrics`, `datasets`, `memory`, `mcps`, `tools`). React apps can read and update Mastra data without writing their own fetching layer, and only load the hooks for the domains they import. ([#25916](https://github.com/mastra-ai/mastra/pull/25916))
+
+  Shared query helpers such as `MastraQueryClientProvider` and the error helpers live in `@mastra/react/hooks/query`.
+
+  `@tanstack/react-query` is now an optional peer dependency. It is only needed when you import from `@mastra/react/hooks/*`; wrap your app in `QueryClientProvider` and `MastraReactProvider`.
+
+  ```tsx
+  import { useAgents } from '@mastra/react/hooks/agents';
+  import { useWorkflows } from '@mastra/react/hooks/workflows';
+
+  const { data: agents, isLoading } = useAgents();
+  ```
+
+### Patch Changes
+
+- Fixed chat attachments being saved as separate messages, keeping their grouping with the accompanying text consistent after reloading history. ([#25922](https://github.com/mastra-ai/mastra/pull/25922))
+
+- `useChat` is now also available from `@mastra/react/chat`, an entry that does not pull in TanStack Query, and `useStreamWorkflow`, `useCreateWorkflowRun` and `useCancelWorkflowRun` from `@mastra/react/hooks/workflows`. Root imports from `@mastra/react` still work. ([#25950](https://github.com/mastra-ai/mastra/pull/25950))
+
+  ```tsx
+  // Before
+  import { useChat, useStreamWorkflow } from '@mastra/react';
+
+  // After
+  import { useChat } from '@mastra/react/chat';
+  import { useStreamWorkflow } from '@mastra/react/hooks/workflows';
+  ```
+
+- **Every data hook now accepts `queryOptions`** ([#25926](https://github.com/mastra-ai/mastra/pull/25926))
+
+  All query and mutation hooks take a single object argument and accept an optional `queryOptions` key, typed with TanStack Query's own option types. The options are applied last, so you can override any default (`enabled`, `staleTime`, `retry`, `refetchInterval`, `select`, `onSuccess`, and even `queryKey` or `queryFn`). A `select` override is reflected in the type of `data`.
+
+  ```tsx
+  const { data: nameLength } = useDataset({
+    datasetId,
+    queryOptions: { staleTime: 60_000, select: dataset => dataset.name.length },
+  });
+
+  const { createDataset } = useDatasetMutations({
+    queryOptions: { createDataset: { onSuccess: () => toast('Created') } },
+  });
+  ```
+
+  Hooks that return several mutations take options keyed by the returned property name. Passing a callback such as `onSuccess` replaces the hook's built-in callback, including its cache invalidation. Hooks no longer skip the fetch when an id is empty. Pass `enabled` yourself when an id may be missing.
+
+  The new `MastraQueryOptions`, `MastraInfiniteQueryOptions` and `MastraMutationOptions` types are exported.
+
+  **Breaking: positional arguments and option bags were replaced**
+
+  Hooks that took positional arguments now take one object. `enabled`, `refetchInterval` and similar TanStack settings moved into `queryOptions`.
+
+  ```tsx
+  // Before
+  useDataset(datasetId);
+  useStoredAgent(agentId, { status: 'draft', enabled: open }, requestContext);
+  useWorkflowRun(workflowId, runId, 2000);
+  useTraceSpans(traceId, { passive: true });
+
+  // After
+  useDataset({ datasetId });
+  useStoredAgent({ agentId, status: 'draft', requestContext, queryOptions: { enabled: Boolean(agentId) && open } });
+  useWorkflowRun({ workflowId, runId, queryOptions: { refetchInterval: 2000 } });
+  useTraceSpans({ traceId, passive: true });
+  ```
+
+  Hooks are now generic over the returned data, so `ReturnType<typeof useX>['data']` resolves to `unknown`. Use the `@mastra/client-js` response type instead.
+
+  ```ts
+  // Before
+  type Agent = NonNullable<ReturnType<typeof useAgent>['data']>;
+
+  // After
+  import type { GetAgentResponse } from '@mastra/client-js';
+  type Agent = GetAgentResponse;
+  ```
+
+  Hooks don't guard on empty ids anymore:
+
+  ```tsx
+  // Before: the hook waited until agentId was set
+  useAgent(agentId);
+
+  // After: pass the guard yourself
+  useAgent({ agentId, queryOptions: { enabled: Boolean(agentId) } });
+  ```
+
+- Data hooks now come from the `@mastra/react/hooks/<domain>` entries. Existing public imports from `@mastra/playground-ui` keep working. ([#25916](https://github.com/mastra-ai/mastra/pull/25916))
+
+- Updated dependencies [[`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`ca54402`](https://github.com/mastra-ai/mastra/commit/ca544027382316c41da7a3ba707c913262650064), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751)]:
+  - @mastra/core@1.75.0-alpha.4
+  - @mastra/client-js@1.52.0-alpha.4
+
 ## 1.7.3-alpha.3
 
 ### Patch Changes
