@@ -1,9 +1,10 @@
 /**
- * Agent ↔ DurableAgent Parity Tests
+ * Agent ↔ DurableAgent ↔ EventedAgent Parity Tests
  *
- * For each scenario, we run the same input through a plain `Agent` and a
- * `DurableAgent` (wrapping the same Agent config), then assert that the
- * observable stream output matches.
+ * For each scenario, we run the same input through a plain `Agent`, a
+ * `createDurableAgent` wrapper and a `createEventedAgent` wrapper (each
+ * around the same Agent config), then assert that the observable stream
+ * output and the model requests match.
  *
  * See `parity-harness.ts` for the comparison shape and what we deliberately
  * exclude from the check (runId, timestamps, span ids, response.id, etc.).
@@ -13,29 +14,25 @@
  *   (a) make a previously-failing scenario here pass, or
  *   (b) add a new scenario that fails until the fix lands.
  */
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createMockModelFactory, expectAgentParity, textOnlyTape } from './parity-harness';
+import { expectEngineParity, textOnlyTape } from './parity-harness';
 
-describe('Agent ↔ DurableAgent parity', () => {
+describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
   describe('basic text streaming', () => {
     it('produces identical text, usage, and finishReason', async () => {
-      const modelFactory = createMockModelFactory({
-        tapes: [textOnlyTape('Hello from the parity harness.')],
-      });
-
-      await expectAgentParity({
-        buildAgent: () =>
+      await expectEngineParity({
+        model: { tapes: [textOnlyTape('Hello from the parity harness.')] },
+        buildAgent: ({ model }) =>
           new Agent({
             id: 'parity-basic-text',
             name: 'Parity Basic Text',
             instructions: 'Respond with a single sentence.',
-            model: modelFactory(),
+            model,
           }),
-        streamAgent: a => a.stream('Say hello'),
-        streamDurable: a => a.stream('Say hello'),
+        input: 'Say hello',
       });
     });
 
@@ -50,11 +47,7 @@ describe('Agent ↔ DurableAgent parity', () => {
   });
 
   describe('activeTools filtering', () => {
-    it('forwards activeTools identically to the LLM request on both sides', async () => {
-      const modelFactory = createMockModelFactory({
-        tapes: [textOnlyTape('Done')],
-      });
-
+    it('forwards activeTools identically to the LLM request on every engine', async () => {
       const allowedTool = createTool({
         id: 'allowedTool',
         description: 'Allowed',
@@ -68,18 +61,22 @@ describe('Agent ↔ DurableAgent parity', () => {
         execute: async () => 'hidden',
       });
 
-      await expectAgentParity({
-        buildAgent: () =>
+      const results = await expectEngineParity({
+        model: { tapes: [textOnlyTape('Done')] },
+        buildAgent: ({ model }) =>
           new Agent({
             id: 'parity-active-tools',
             name: 'Parity Active Tools',
             instructions: 'Use only enabled tools',
-            model: modelFactory(),
+            model,
             tools: { allowedTool, hiddenTool },
           }),
-        streamAgent: a => a.stream('use the allowed tool', { activeTools: ['allowedTool'] }),
-        streamDurable: a => a.stream('use the allowed tool', { activeTools: ['allowedTool'] }),
+        input: 'use the allowed tool',
+        options: { activeTools: ['allowedTool'] },
       });
+
+      // Requests already match plain; pin plain to the filtered tool list.
+      expect(results.plain!.requests[0]!.tools?.map(t => t.name)).toEqual(['allowedTool']);
     });
   });
 
