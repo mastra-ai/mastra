@@ -27,7 +27,7 @@ export function MountIcon({ mount }: { mount: WorkspaceMount }) {
       return <Database className="text-badge-green-indicator" />;
     case 'local':
     case 'folder':
-      return <Folder className="text-badge-yellow-indicator" />;
+      return <Folder className="text-badge-amber-indicator" />;
     case 'hard-drive':
       return <HardDrive className="text-muted-foreground" />;
     default:

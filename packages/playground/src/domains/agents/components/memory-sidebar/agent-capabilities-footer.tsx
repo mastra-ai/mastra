@@ -338,7 +338,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="shrink-0 border-t border-border/50">
+      <div className="shrink-0 border-t border-border">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"

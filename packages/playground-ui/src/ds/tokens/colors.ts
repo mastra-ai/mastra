@@ -328,6 +328,7 @@ export const Colors = {
 };
 
 export const BorderColors = {
+  'surface-rim': 'var(--surface-rim)',
   border: 'var(--border)',
   'border-strong': 'var(--border-strong)',
   'border-hover': 'var(--border-hover)',

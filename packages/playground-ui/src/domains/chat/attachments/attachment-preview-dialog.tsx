@@ -1,5 +1,6 @@
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
+import type { RefObject } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
 
@@ -34,19 +35,42 @@ export const PdfEntry = ({ data, url }: PdfEntryProps) => {
 };
 
 interface PdfPreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
   data: string;
+  title?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
+export const PdfPreviewDialog = ({ data, title, open, onOpenChange, returnFocusRef }: PdfPreviewDialogProps) => {
+  const isInlinePdf = data.startsWith('data:application/pdf');
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
         <DialogHeader>
-          <DialogTitle>PDF preview</DialogTitle>
+          <DialogTitle>{title ?? 'PDF preview'}</DialogTitle>
         </DialogHeader>
-        <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
+        <DialogBody>
+          {open && (
+            <>
+              <iframe src={data} title={title ?? 'PDF preview'} className="h-[60dvh] w-full" />
+              <Button
+                render={
+                  <a
+                    href={data}
+                    download={isInlinePdf ? (title ?? 'attachment.pdf') : undefined}
+                    target={isInlinePdf ? undefined : '_blank'}
+                    rel="noreferrer noopener"
+                  />
+                }
+                size="sm"
+                className="mt-3"
+              >
+                {isInlinePdf ? 'Download PDF' : 'Open PDF in a new tab'}
+              </Button>
+            </>
+          )}
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -107,15 +131,16 @@ export const ImageEntry = ({ src, name }: ImageEntryProps) => {
 };
 
 interface ImagePreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
   src: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
+export const ImagePreviewDialog = ({ src, open, onOpenChange, returnFocusRef }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
         <DialogHeader>
           <DialogTitle>Image preview</DialogTitle>
         </DialogHeader>
@@ -163,16 +188,17 @@ export const TxtEntry = ({ data, name }: TxtEntryProps) => {
 };
 
 interface TxtPreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
   data: string;
   title?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const TxtPreviewDialog = ({ data, title, open, onOpenChange }: TxtPreviewDialogProps) => {
+export const TxtPreviewDialog = ({ data, title, open, onOpenChange, returnFocusRef }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
         <DialogHeader>
           <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
         </DialogHeader>
