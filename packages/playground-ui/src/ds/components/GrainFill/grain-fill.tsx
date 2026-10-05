@@ -11,7 +11,7 @@ const grainByTheme = {
   light: { intensity: 0.1, noise: 0.15 },
 };
 
-const cache = new Map<string, Promise<string | null>>();
+const cache = new Map<string, Promise<string | undefined>>();
 
 function toVec4(color: string, ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, 1, 1);
@@ -89,7 +89,7 @@ async function render(stops: number[][], theme: Theme, { width, height }: GrainF
       mount.setMinPixelRatio((PIXEL_RATIO * target) / canvas.width);
       await nextFrame();
     }
-    return canvas?.toDataURL('image/png') ?? null;
+    return canvas?.toDataURL('image/png');
   } finally {
     mount.dispose();
     host.remove();
@@ -102,7 +102,7 @@ function grainFill(element: HTMLElement, key: string, theme: Theme, size: GrainF
   if (!image) {
     image = Promise.resolve()
       .then(() => render(readStops(element), theme, size, offsetY))
-      .catch(() => null);
+      .catch(() => undefined);
     cache.set(cacheKey, image);
   }
   return image;
@@ -116,6 +116,11 @@ function isStatusTone(tone: GrainFillTone): tone is (typeof statusTones)[number]
   return statusTones.some(status => status === tone);
 }
 
+function toneLayer(tone: GrainFillTone) {
+  if (isStatusTone(tone)) return { dataTone: tone, offsetY: 0, style: {} };
+  return { dataTone: 'color', offsetY: 0.12, style: { '--grain-ink': Colors[tone] } };
+}
+
 export interface GrainFillProps extends GrainFillSize {
   tone: GrainFillTone;
   className?: string;
@@ -124,6 +129,7 @@ export interface GrainFillProps extends GrainFillSize {
 export function GrainFill({ tone, width, height, className }: GrainFillProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const { resolvedTheme } = useTheme();
+  const layer = toneLayer(tone);
 
   useEffect(() => {
     const element = ref.current;
@@ -131,7 +137,7 @@ export function GrainFill({ tone, width, height, className }: GrainFillProps) {
     let current = true;
     element.style.backgroundImage = '';
     element.removeAttribute('data-ready');
-    void grainFill(element, tone, resolvedTheme, { width, height }, isStatusTone(tone) ? 0 : 0.12).then(image => {
+    void grainFill(element, tone, resolvedTheme, { width, height }, layer.offsetY).then(image => {
       if (!current || !image) return;
       element.style.backgroundImage = `url(${image})`;
       element.setAttribute('data-ready', '');
@@ -139,16 +145,16 @@ export function GrainFill({ tone, width, height, className }: GrainFillProps) {
     return () => {
       current = false;
     };
-  }, [tone, resolvedTheme, width, height]);
+  }, [tone, resolvedTheme, width, height, layer.offsetY]);
 
   return (
     <span
       ref={ref}
       aria-hidden
-      data-grain-tone={isStatusTone(tone) ? tone : 'color'}
+      data-grain-tone={layer.dataTone}
       className={className}
       style={{
-        ...(!isStatusTone(tone) && { '--grain-ink': Colors[tone] }),
+        ...layer.style,
         backgroundRepeat: 'no-repeat',
         backgroundSize: `${width}px max(${height}px, 100%)`,
       }}

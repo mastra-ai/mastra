@@ -14,6 +14,15 @@ const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; iconClass: s
   note: { icon: <FileTextIcon />, iconClass: 'text-muted-foreground' },
 };
 
+const titledMessage = { variant: 'caption', tone: 'muted' } as const;
+const plainMessage = { variant: 'body-sm', tone: 'ink' } as const;
+
+function lastRowOf({ action, children }: Pick<NoticeRootProps, 'action' | 'children'>) {
+  if (action) return 'action';
+  if (children) return 'message';
+  return 'title';
+}
+
 export interface NoticeRootProps {
   variant: NoticeVariant;
   title?: React.ReactNode;
@@ -26,12 +35,11 @@ export interface NoticeRootProps {
 export function NoticeRoot({ variant, title, icon, action, children, className }: NoticeRootProps) {
   const { icon: defaultIcon, iconClass } = variantConfig[variant];
   const glyph = (
-    <span className={cn('flex h-[1lh] shrink-0 items-center [&>svg]:size-icon-sm', iconClass)}>
-      {icon ?? defaultIcon}
-    </span>
+    <span className={cn('flex h-lh shrink-0 items-center [&>svg]:size-icon-sm', iconClass)}>{icon ?? defaultIcon}</span>
   );
 
-  const lastRow = action ? 'action' : children ? 'message' : 'title';
+  const lastRow = lastRowOf({ action, children });
+  const messageText = title ? titledMessage : plainMessage;
 
   return (
     <div
@@ -56,12 +64,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
         </Txt>
       )}
       {children && (
-        <Txt
-          as="div"
-          variant={title ? 'caption' : 'body-sm'}
-          tone={title ? 'muted' : 'ink'}
-          className="flex min-w-0 items-end gap-2"
-        >
+        <Txt as="div" {...messageText} className="flex min-w-0 items-end gap-2">
           {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
           <div className="flex min-w-0 flex-1 flex-col gap-2 wrap-anywhere">{children}</div>
           {lastRow === 'message' && glyph}

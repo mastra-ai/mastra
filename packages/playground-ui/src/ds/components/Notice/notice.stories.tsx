@@ -245,8 +245,8 @@ export const Narrow: Story = {
           </Notice.Button>
         }
       >
-        Failed to load scorers from the remote registry. The request timed out after 30 seconds. Check your network
-        connection and confirm the registry endpoint is reachable, then retry to continue.
+        Couldn't load scorers from the remote registry. The request timed out after 30 seconds. Check your network
+        connection and confirm the registry endpoint is reachable, then retry.
       </Notice>
       <Notice variant="info">No deploys yet. Deploy to production to create your first deploy.</Notice>
       <Notice
@@ -258,7 +258,7 @@ export const Narrow: Story = {
           </Notice.Button>
         }
       >
-        <Notice.Message>Dataset successfully imported. 24 items added.</Notice.Message>
+        <Notice.Message>Dataset imported. 24 items added.</Notice.Message>
       </Notice>
     </div>
   ),
