@@ -4,8 +4,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { DragPayload } from '../boardDrag';
+import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
-import { BoardDropLine, useBoardDropZone } from './BoardDropZone';
 import { BoardStageIcon } from './BoardIcons';
 
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
@@ -45,8 +45,6 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
     </Txt>
   );
 }
-
-const BOARD_CARD_GAP_PX = 10;
 
 const COLUMN_ACTION_REVEAL_CLASS =
   'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
@@ -150,7 +148,7 @@ export function BoardColumn({
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   children: React.ReactNode;
 }) {
-  const dropZone = useBoardDropZone<HTMLDivElement>({ stage, gapPx: BOARD_CARD_GAP_PX, onDrop });
+  const dropZone = useBoardDropZone({ stage, onDrop });
 
   return (
     <section
@@ -158,16 +156,12 @@ export function BoardColumn({
       data-testid={`board-column-${stage}`}
       className={cn(
         columnWidthClass(collapsed),
-        'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
-        collapsed && 'rounded-lg',
-        collapsed && dropZone.dragOver && 'bg-background ring-1 ring-border',
+        'flex flex-col rounded-lg transition-[width,background-color] motion-reduce:transition-none',
+        dropZone.isDragOver && 'bg-background ring-1 ring-border',
       )}
       {...dropZone.dropZoneProps}
     >
-      <div ref={dropZone.cardListRef} className="relative flex min-h-16 flex-1 flex-col gap-2.5 pb-2">
-        {collapsed ? null : children}
-        <BoardDropLine top={dropZone.dropLineTop} visible={dropZone.dragOver} />
-      </div>
+      <div className="flex min-h-16 flex-1 flex-col gap-2.5 pb-2">{collapsed ? null : children}</div>
     </section>
   );
 }

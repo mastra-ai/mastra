@@ -137,7 +137,7 @@ describe('Factory board saved views', () => {
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?q=Created`],
     });
-    const page = renderWithProviders(<RouterProvider router={router} />);
+    renderWithProviders(<RouterProvider router={router} />);
     const user = userEvent.setup();
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Created later');
@@ -163,11 +163,10 @@ describe('Factory board saved views', () => {
     expect(within(triage).getByText('Created later')).toBeInTheDocument();
 
     await user.type(search, 'Moved');
-    page.unmount();
-    const reopened = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/work`],
-    });
-    renderWithProviders(<RouterProvider router={reopened} />);
+    const boards = screen.getByRole('region', { name: 'Boards' });
+    await user.click(within(boards).getByRole('link', { name: 'Review' }));
+    await screen.findByTestId('board-column-review');
+    await user.click(within(boards).getByRole('link', { name: 'Work' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBeInTheDocument();

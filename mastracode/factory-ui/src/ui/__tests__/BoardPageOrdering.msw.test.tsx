@@ -91,33 +91,47 @@ describe('Factory board view memory', () => {
     input.blur();
   };
 
-  it('brings back filters and sort when the board is reopened without them', async () => {
-    stubWorkBoard();
-    const first = openWorkBoard();
-    const triage = await screen.findByTestId('board-column-triage');
-    await within(triage).findByText('Moved recently');
+  const sidebarBoardLink = (name: 'Work' | 'Review') =>
+    within(screen.getByRole('region', { name: 'Boards' })).getByRole('link', { name });
 
+  const leaveForReviewBoard = async () => {
+    fireEvent.click(sidebarBoardLink('Review'));
+    await screen.findByTestId('board-column-review');
+  };
+
+  it('brings back filters and sort when the board is reopened from the sidebar', async () => {
+    stubWorkBoard();
+    const { router } = openWorkBoard();
+    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await searchBoard('Created');
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /^Sort filed cards/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Newest on board' }));
-    await waitFor(() => expect(first.router.state.location.search).toBe('?q=Created&sort=created-newest'));
-    first.view.unmount();
+    await waitFor(() => expect(router.state.location.search).toBe('?q=Created&sort=created-newest'));
+    await leaveForReviewBoard();
 
-    const second = openWorkBoard();
+    const workLink = sidebarBoardLink('Work');
+    expect(workLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?q=Created&sort=created-newest`);
+    fireEvent.click(workLink);
+
     const reopened = await screen.findByTestId('board-column-triage');
     await within(reopened).findByText('Created later');
     expect(within(reopened).queryByText('Moved recently')).not.toBeInTheDocument();
-    await waitFor(() => expect(second.router.state.location.search).toBe('?q=Created&sort=created-newest'));
+    expect(router.state.location.search).toBe('?q=Created&sort=created-newest');
   });
 
-  it('keeps an explicit URL and card deep links as they are', async () => {
+  it('opens a board link exactly as linked', async () => {
     stubWorkBoard();
     const first = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await searchBoard('Created');
     await waitFor(() => expect(first.router.state.location.search).toBe('?q=Created'));
     first.view.unmount();
+
+    const bare = openWorkBoard();
+    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
+    expect(bare.router.state.location.search).toBe('');
+    bare.view.unmount();
 
     const explicit = openWorkBoard('?sort=created-oldest');
     await screen.findByTestId('board-column-triage');
@@ -129,39 +143,58 @@ describe('Factory board view memory', () => {
     expect(deepLink.router.state.location.search).toBe('?item=recent-card');
   });
 
-  it('forgets the filters once they are cleared', async () => {
+  it('lands on the remembered view when the factory is opened', async () => {
     stubWorkBoard();
     const first = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await searchBoard('Created');
     await waitFor(() => expect(first.router.state.location.search).toBe('?q=Created'));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-    await waitFor(() => expect(first.router.state.location.search).toBe(''));
     first.view.unmount();
 
-    const second = openWorkBoard();
-    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
-    expect(second.router.state.location.search).toBe('');
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}`] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
+    expect(router.state.location.search).toBe('?q=Created');
   });
 
-  it('keeps a separate view for each factory while the board stays mounted', async () => {
+  it('forgets the filters once they are cleared', async () => {
     stubWorkBoard();
     const { router } = openWorkBoard();
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     await searchBoard('Created');
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    await userEvent.keyboard('{Escape}');
+    await leaveForReviewBoard();
 
-    await act(() => router.navigate(`/factories/${OTHER_FACTORY_ID}/work`));
+    expect(sidebarBoardLink('Work')).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+  });
+
+  it('keeps a separate view for each factory when switching factories', async () => {
+    stubWorkBoard();
+    const { router } = openWorkBoard();
+    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
+    await searchBoard('Created');
+    await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
+    const user = userEvent.setup();
+    const switchFactory = async (name: string) => {
+      await user.click(screen.getByRole('button', { name: 'Select factory' }));
+      await user.click(await screen.findByRole('menuitem', { name }));
+    };
+
+    await switchFactory('Other Factory');
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${OTHER_FACTORY_ID}/work`));
     const otherTriage = await screen.findByTestId('board-column-triage');
     await within(otherTriage).findByText('Other factory card');
     expect(within(otherTriage).getByText('Other factory moved')).toBeInTheDocument();
-    expect(within(otherTriage).queryByText('Created later')).not.toBeInTheDocument();
     expect(router.state.location.search).toBe('');
     await searchBoard('Moved');
     await waitFor(() => expect(router.state.location.search).toBe('?q=Moved'));
-    await waitFor(() => expect(within(otherTriage).queryByText('Other factory card')).not.toBeInTheDocument());
 
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work`));
+    await switchFactory('Acme Factory');
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Created later');
@@ -175,11 +208,10 @@ describe('Factory board view memory', () => {
     await searchBoard('Created');
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
 
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/review`));
-    await screen.findByRole('button', { name: 'Filter cards' });
+    await leaveForReviewBoard();
     expect(router.state.location.search).toBe('');
 
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work`));
+    fireEvent.click(sidebarBoardLink('Work'));
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
   });
 });

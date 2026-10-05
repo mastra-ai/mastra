@@ -1,6 +1,5 @@
 import { useSavedViews } from '@mastra/playground-ui/components/SavedViews';
 import type { SavedViewsController } from '@mastra/playground-ui/components/SavedViews';
-import { useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import type { SetURLSearchParams } from 'react-router';
 
@@ -19,7 +18,7 @@ import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } 
 import type { BoardViewSettings } from '../boardSavedViews';
 import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardKind } from '../boardStages';
-import { restoreBoardView, saveBoardView } from '../services/boardViews';
+import { saveBoardView } from '../services/boardViews';
 
 const BOARD_SEARCH_QUERY = 'search';
 
@@ -47,16 +46,7 @@ export function useBoardView({
   kind: BoardKind;
   currentUserId?: string;
 }): BoardView {
-  const [urlParams, setSearchParams] = useSearchParams();
-  // Opening a board without filters or sort in the URL (e.g. from the sidebar) brings back the ones
-  // last used here. They apply on this render so the board never flashes unfiltered; the effect
-  // then writes them into the URL.
-  const restoredParams = restoreBoardView(factoryProjectId, kind, urlParams);
-  const searchParams = restoredParams ?? urlParams;
-  const restoredSearch = restoredParams?.toString();
-  useLayoutEffect(() => {
-    if (restoredSearch !== undefined) setSearchParams(new URLSearchParams(restoredSearch), { replace: true });
-  }, [restoredSearch, setSearchParams]);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const replaceParams = (params: URLSearchParams) => {
     saveBoardView(factoryProjectId, kind, params);
