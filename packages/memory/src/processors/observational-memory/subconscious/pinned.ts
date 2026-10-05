@@ -183,7 +183,7 @@ async function requirePin(
   recordId: string,
   scopeIds: KnowledgeScopeIds,
 ): Promise<KnowledgeRecord> {
-  const record = await store.getVisibleRecord({ id: recordId, scopeIds: options.scopeIds.slice(1) });
+  const record = await store.getVisibleRecord({ id: recordId, scopeIds: scopeIds.slice(1) });
   if (!record) throw new Error(`Pin not found: ${recordId}`);
   const nodeId = await resolvePinnedNodeId(store, scopeIds);
   if (!nodeId || record.nodeId !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);

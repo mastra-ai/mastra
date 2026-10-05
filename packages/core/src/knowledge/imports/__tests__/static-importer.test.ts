@@ -145,9 +145,9 @@ describe('static Knowledge importer operations', () => {
     const updated = await operations.upsertNode('event:42', { name: 'Planning updated' });
 
     expect(await updated.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
-    expect(await knowledge.getRecord({ id: owned.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: owned.id, includeDeleted: true })).toBeNull();
     expect(await updated.removeKnowledge(edited.id)).toBeNull();
-    expect(await knowledge.getRecord({ id: edited.id })).toMatchObject({ id: edited.id });
+    expect(await knowledge.getRecordInternal({ id: edited.id })).toMatchObject({ id: edited.id });
   });
 
   it('recovers record ownership when a run is interrupted after a committed node update', async () => {
@@ -175,7 +175,7 @@ describe('static Knowledge importer operations', () => {
     for (let index = 0; index < 101; index++) {
       await operations.upsertNode(`event:filler-${index}`, { name: `Filler ${index} revised` });
     }
-    const committed = await knowledge.getNode(node.id);
+    const committed = await knowledge.getNodeInternal(node.id);
     expect(committed).toMatchObject({ name: 'Planning updated', version: 2 });
     expect(
       await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id, limit: 100 }),
@@ -184,7 +184,7 @@ describe('static Knowledge importer operations', () => {
     const replayed = await operations.upsertNode('event:42', { name: 'Planning updated' });
 
     expect(await replayed.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
-    expect(await knowledge.getRecord({ id: owned.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecordInternal({ id: owned.id, includeDeleted: true })).toBeNull();
   });
 
   it('keeps reads scoped to the runtime destination binding', async () => {
