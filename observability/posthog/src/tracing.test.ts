@@ -2,6 +2,7 @@ import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent } from '@mastra/c
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { __setObservabilityFeaturesForTest } from './features';
 import type { PosthogExporterConfig } from './tracing';
 import { PosthogExporter } from './tracing';
 
@@ -46,6 +47,9 @@ describe('PosthogExporter', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    // Default to the older pairing, where MODEL_GENERATION is the model call.
+    // The MODEL_INFERENCE mapping is covered in its own describe block.
+    __setObservabilityFeaturesForTest(undefined);
   });
 
   afterEach(async () => {
@@ -292,6 +296,10 @@ describe('PosthogExporter', () => {
     });
 
     describe('with MODEL_INFERENCE spans', () => {
+      beforeEach(() => {
+        __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+      });
+
       const traceId = 'trace-inference';
       const usage = { inputTokens: 10, outputTokens: 5 };
       const generation = createSpan({
@@ -383,8 +391,8 @@ describe('PosthogExporter', () => {
         expect(generationSpan.properties).not.toHaveProperty('$ai_generation_id');
       });
 
-      it('should keep MODEL_GENERATION as $ai_generation in a trace where another generation had inference spans', async () => {
-        await exportGeneration([['a']]);
+      it('should keep MODEL_GENERATION as $ai_generation with an older @mastra/observability', async () => {
+        __setObservabilityFeaturesForTest(undefined);
         const legacy = createSpan({
           id: 'legacy-generation',
           traceId,
@@ -395,9 +403,9 @@ describe('PosthogExporter', () => {
         await exportSpanLifecycle(exporter, legacy);
 
         expect(captured('$ai_generation').map(message => message.properties.$ai_generation_id)).toEqual([
-          'inference-0',
           'legacy-generation',
         ]);
+        expect(captured('$ai_generation')[0].properties).toMatchObject({ $ai_input_tokens: 10, $ai_output_tokens: 5 });
       });
     });
 

@@ -11,6 +11,7 @@ import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { TrackingExporter } from '@mastra/observability';
 import { PostHog } from 'posthog-node';
 import type { EventMessage } from 'posthog-node';
+import { isModelInferenceEnabled } from './features';
 
 /**
  * Token usage format compatible with PostHog.
@@ -90,8 +91,6 @@ interface MastraContent {
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
 const DISTINCT_ID = 'distinctId';
-/** Per-trace key prefix marking a MODEL_GENERATION whose provider calls were exported as MODEL_INFERENCE spans. */
-const HAS_INFERENCE = 'hasInference:';
 
 export interface PosthogExporterConfig extends TrackingExporterConfig {
   /** PostHog API key. Defaults to POSTHOG_API_KEY environment variable. */
@@ -187,7 +186,7 @@ export class PosthogExporter extends TrackingExporter<
   }): Promise<PosthogEvent> {
     const { span, traceData } = args;
 
-    const isModelCall = this.isModelCall(span, traceData);
+    const isModelCall = this.isModelCall(span);
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0, false, isModelCall);
 
@@ -401,7 +400,7 @@ export class PosthogExporter extends TrackingExporter<
   }): EventMessage {
     const { span, distinctId, endTime, traceData } = args;
 
-    const isModelCall = this.isModelCall(span, traceData);
+    const isModelCall = this.isModelCall(span);
     const startTime = span.startTime.getTime();
     const latency = (endTime - startTime) / 1000;
 
@@ -425,25 +424,13 @@ export class PosthogExporter extends TrackingExporter<
   /**
    * Whether this span is exported as `$ai_generation`. PostHog expects one per
    * provider call and sums tokens and cost across them, so exactly one span
-   * per call may carry usage.
-   *
-   * MODEL_INFERENCE is the provider call. Its parent MODEL_GENERATION is then
-   * the loop around those calls and is exported as `$ai_span`. A generation
-   * with no inference spans (older @mastra/core, legacy model path) is the
-   * only record of its call and keeps the `$ai_generation` role.
+   * per call may carry usage. With paired packages that emit MODEL_INFERENCE,
+   * that is the call and MODEL_GENERATION is the loop around it, exported as
+   * `$ai_span`. Older pairings only emit MODEL_GENERATION, which keeps the
+   * `$ai_generation` role.
    */
-  private isModelCall(span: AnyExportedSpan, traceData: PosthogTraceData): boolean {
-    if (span.type === SpanType.MODEL_INFERENCE) {
-      // Inference spans end before their generation, so the mark is set by the
-      // time the generation is exported.
-      let ancestor = span.parentSpanId ? traceData.getSpan({ spanId: span.parentSpanId }) : undefined;
-      while (ancestor && ancestor.type !== SpanType.MODEL_GENERATION) {
-        ancestor = ancestor.parentSpanId ? traceData.getSpan({ spanId: ancestor.parentSpanId }) : undefined;
-      }
-      if (ancestor) traceData.setExtraValue(HAS_INFERENCE + ancestor.id, true);
-      return true;
-    }
-    return span.type === SpanType.MODEL_GENERATION && !traceData.hasExtraValue(HAS_INFERENCE + span.id);
+  private isModelCall(span: AnyExportedSpan): boolean {
+    return span.type === (isModelInferenceEnabled() ? SpanType.MODEL_INFERENCE : SpanType.MODEL_GENERATION);
   }
 
   private getDistinctId(span: AnyExportedSpan, traceData?: PosthogTraceData): string {
@@ -486,7 +473,7 @@ export class PosthogExporter extends TrackingExporter<
     span: AnyExportedSpan,
     latency: number,
     parentIsRootSpan: boolean = false,
-    isModelCall: boolean = span.type === SpanType.MODEL_GENERATION,
+    isModelCall: boolean = this.isModelCall(span),
   ): Record<string, any> {
     const baseProperties: Record<string, any> = {
       $ai_trace_id: span.traceId,
