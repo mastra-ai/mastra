@@ -44,7 +44,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   return (
     <Container className="mb-5 content-center space-y-4 text-muted-foreground">
       {/* Main Error Display */}
-      <div className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
+      <div className="grid content-center items-center justify-items-center gap-4 [&>svg]:h-8 [&>svg]:w-8">
         {icon}
         <div className="space-y-2 text-center">
           <Txt variant="subheading" tone="ink">
@@ -69,9 +69,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </Txt>
                 <Code
-                  variant="caption"
-                  tone="muted"
-                  className="mt-1 wrap-break-word whitespace-pre-wrap"
+                  className="mt-1 wrap-break-word whitespace-pre-wrap text-caption text-muted-foreground"
                   code={error.message}
                 />
               </div>
@@ -89,7 +87,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
             </Txt>
           </summary>
           <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
-            <Code variant="caption" className="wrap-break-word whitespace-pre-wrap" code={errorString} />
+            <Code className="wrap-break-word whitespace-pre-wrap text-caption" code={errorString} />
           </div>
         </details>
       )}

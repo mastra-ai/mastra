@@ -341,7 +341,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger textVariant="caption" className="flex items-center gap-2">
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (

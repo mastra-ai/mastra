@@ -48,9 +48,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <InlineCode variant="caption" tone="ink">
-          {name}
-        </InlineCode>
+        <InlineCode className="text-caption text-foreground">{name}</InlineCode>
         <Txt as="span" variant="caption" tone="muted">
           {typeLabel}
         </Txt>
@@ -758,11 +756,8 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use{' '}
-                        <InlineCode variant="column" tone="ink">
-                          {'{{variableName}}'}
-                        </InlineCode>{' '}
-                        syntax to insert dynamic values into your instruction blocks.
+                        Use <InlineCode className="text-column text-foreground">{'{{variableName}}'}</InlineCode> syntax
+                        to insert dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>
                   </Tooltip>{' '}

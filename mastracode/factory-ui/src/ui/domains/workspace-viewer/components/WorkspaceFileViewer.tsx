@@ -110,10 +110,7 @@ export function WorkspaceFileViewer({
               <Code
                 code={content}
                 lang={file.language}
-                variant="caption"
-                font="mono"
-                tone="ink"
-                className="border-border bg-background m-0 rounded-md border p-3"
+                className="border-border bg-background m-0 rounded-md border p-3 text-caption font-mono text-foreground"
               />
             ) : null}
           </div>

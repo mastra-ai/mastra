@@ -117,12 +117,12 @@ export const FilterableList = ({
                   <li key={item.id}>
                     <Field disabled={disabled}>
                       <FieldLabel
-                        textVariant="caption"
                         data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                         data-checked={checked ? 'true' : 'false'}
                         className={cn(
                           'flex shrink items-center gap-2 rounded-md px-2 py-1.5 select-none hover:bg-fill-subtle',
                           disabled && 'opacity-60',
+                          'text-caption',
                         )}
                       >
                         <Checkbox

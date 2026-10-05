@@ -202,9 +202,7 @@ export function ReviewItemCard({
               Input
             </Txt>
             <Code
-              variant="caption"
-              tone="ink"
-              className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
+              className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-caption text-foreground"
               code={formatUnknown(item.input)}
             />
           </div>
@@ -214,9 +212,7 @@ export function ReviewItemCard({
                 Output
               </Txt>
               <Code
-                variant="caption"
-                tone="ink"
-                className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
+                className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-caption text-foreground"
                 code={formatUnknown(item.output)}
               />
             </div>
@@ -227,8 +223,7 @@ export function ReviewItemCard({
                 Error
               </Txt>
               <Code
-                variant="caption"
-                className="max-h-20 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-destructive-foreground"
+                className="max-h-20 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-destructive-foreground text-caption"
                 code={formatUnknown(item.error)}
               />
             </div>
@@ -240,7 +235,7 @@ export function ReviewItemCard({
                 Comment
               </Txt>
               <Textarea
-                textVariant="caption"
+                className="text-caption"
                 value={localComment}
                 onChange={e => {
                   setLocalComment(e.target.value);

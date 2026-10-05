@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Code } from '@mastra/playground-ui/components/Code';
 import type { PlanResume } from '@mastra/client-js';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
@@ -48,10 +49,7 @@ export function ApprovalCard({
       onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
     >
       <Code
-        variant="caption"
-        tone="ink"
-        font="mono"
-        className={resultBlock}
+        className={cn(resultBlock, 'text-caption text-foreground font-mono')}
         code={truncate(stringify(prompt.args), 400)}
       />
     </ToolApproval>

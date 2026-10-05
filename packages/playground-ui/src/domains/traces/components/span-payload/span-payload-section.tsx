@@ -78,7 +78,7 @@ export function SpanPayloadSection({
       className={cn('flex flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <DataPanelSectionHeading variant="meta" icon={icon} className={layout === 'details' ? '' : undefined}>
+        <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-meta' : undefined}>
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">

@@ -104,10 +104,7 @@ function WorkflowInformationTopSection({
         className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          <CollapsibleTrigger
-            textVariant="column"
-            className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-muted-foreground"
-          >
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
             <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
             <span>Workflow run</span>
             {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}

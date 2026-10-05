@@ -167,11 +167,11 @@ export const TechnicalValues: Story = {
         <Txt as="label" htmlFor="review-command" variant="label">
           Setup command
         </Txt>
-        <Input id="review-command" font="mono" defaultValue="pnpm install && pnpm test" />
+        <Input className="font-mono" id="review-command" defaultValue="pnpm install && pnpm test" />
       </div>
       <Tree>
         <Tree.File id="src/index.ts">
-          <Tree.Label font="mono">src/index.ts</Tree.Label>
+          <Tree.Label className="font-mono">src/index.ts</Tree.Label>
         </Tree.File>
       </Tree>
       <Txt variant="caption" tone="muted">

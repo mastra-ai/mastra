@@ -178,7 +178,7 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
       <Tree.Icon>
         <FileDiff className={colorClass} />
       </Tree.Icon>
-      <Tree.Label variant="body-sm" font="mono" className={cn('', colorClass)}>
+      <Tree.Label className={cn(colorClass, 'text-body-sm font-mono')}>
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">

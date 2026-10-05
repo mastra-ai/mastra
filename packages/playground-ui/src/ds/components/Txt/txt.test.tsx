@@ -17,7 +17,7 @@ describe('Txt', () => {
           <Txt as="label" htmlFor="command" variant="label">
             Command
           </Txt>
-          <Input id="command" font="mono" defaultValue="pnpm test" />
+          <Input className="font-mono" id="command" defaultValue="pnpm test" />
         </>,
       );
       expect(screen.getByRole('textbox', { name: 'Command' })).toHaveProperty('value', 'pnpm test');

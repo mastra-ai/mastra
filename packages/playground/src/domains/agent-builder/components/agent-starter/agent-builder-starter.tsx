@@ -91,7 +91,6 @@ export const AgentBuilderStarter = () => {
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
-            textVariant="body"
             ref={textareaRef}
             testId="agent-builder-starter-input"
             size="md"
@@ -101,7 +100,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
+            className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none text-body"
             rows={3}
           />
 

@@ -13,11 +13,11 @@ export function PageHeaderMeta({ beside = false, className, ...props }: PageHead
       data-placement={beside ? 'beside' : 'below'}
       {...props}
       className={cn(
-        'text-muted-foreground',
+        'text-meta text-muted-foreground',
         'flex min-w-0 flex-wrap items-center gap-2',
         beside && 'min-h-6 shrink-0',
         className,
       )}
-    ></div>
+    />
   );
 }

@@ -50,8 +50,7 @@ export function WorkflowTimeline() {
       >
         <div className="flex items-center">
           <CollapsibleTrigger
-            textVariant="caption"
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5 text-foreground hover:bg-fill-subtle"
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5 text-caption text-foreground hover:bg-fill-subtle"
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>

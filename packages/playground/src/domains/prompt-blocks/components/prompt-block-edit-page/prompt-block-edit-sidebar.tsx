@@ -143,10 +143,8 @@ export function PromptBlockEditSidebar({
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <InlineCode variant="label" tone="ink">
-                  {'{{variableName}}'}
-                </InlineCode>{' '}
-                syntax in your content.
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
               </>
             }
           />

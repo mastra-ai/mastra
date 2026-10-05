@@ -111,10 +111,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger
-          textVariant="caption"
-          className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-muted-foreground"
-        >
+        <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (

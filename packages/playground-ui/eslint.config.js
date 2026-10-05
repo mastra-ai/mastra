@@ -16,19 +16,6 @@ const restrictedTypographySelectors = [
   { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
 ];
 
-// Application call sites use role/face props; typography classes stay inside the DS.
-const CALLSITE_TEXT_PATTERN = String.raw`(^|\s|:|!)(text-(hero|lead|display|title|heading|subheading|body|body-sm|label|card-title|card-title-tight|card-title-strong|column|caption|eyebrow|meta|ui-sm)(?=\s|$|!)|font-(mono|body|display|sans|serif|normal|medium|semibold|bold|light|thin|black|extrabold|\[[^\]]+\])(?=\s|$|!)|leading-[^\s]+|tracking-[^\s]+)`;
-const restrictedCallsiteTextSelectors = [
-  {
-    selector: `Literal[value=/${CALLSITE_TEXT_PATTERN}/]`,
-    message: 'Use Txt or the text role/font prop on the shared component.',
-  },
-  {
-    selector: `TemplateElement[value.raw=/${CALLSITE_TEXT_PATTERN}/]`,
-    message: 'Use Txt or the text role/font prop on the shared component.',
-  },
-];
-
 // Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
 // colour Tailwind can spell, and omitting tone inherits rather than restating ink.
 const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
@@ -46,9 +33,17 @@ const restrictedTxtToneSelectors = [
 const MONO_MESSAGE =
   'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
 const MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
+// Native inputs and compound controls keep their existing className escape hatch.
+// Only Txt needs the font prop; do not grow every component API to satisfy lint.
 const restrictedMonoSelectors = [
-  { selector: `Literal[value=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
-  { selector: `TemplateElement[value.raw=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
+  {
+    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] Literal[value=/${MONO_PATTERN}/]`,
+    message: MONO_MESSAGE,
+  },
+  {
+    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] TemplateElement[value.raw=/${MONO_PATTERN}/]`,
+    message: MONO_MESSAGE,
+  },
 ];
 
 /** @type {import("eslint").Linter.Config[]} */
@@ -93,7 +88,6 @@ export default [
       'no-restricted-syntax': [
         'error',
         ...restrictedTypographySelectors,
-        ...restrictedCallsiteTextSelectors,
         ...restrictedTxtToneSelectors,
         ...restrictedMonoSelectors,
       ],

@@ -127,8 +127,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
               </Txt>
               {typeof entry.result === 'string' ? (
                 <Code
-                  variant="caption"
-                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 whitespace-pre"
+                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 whitespace-pre text-caption"
                   code={entry.result}
                 />
               ) : (

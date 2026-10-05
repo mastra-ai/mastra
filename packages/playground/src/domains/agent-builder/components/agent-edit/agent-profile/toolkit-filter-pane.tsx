@@ -47,12 +47,12 @@ const ToolkitFilterRow = memo(
       <li className="flex items-center gap-1">
         <Field disabled={disabled} className="min-w-0 flex-1">
           <FieldLabel
-            textVariant="caption"
             data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
             data-checked={checked ? 'true' : 'false'}
             className={cn(
               'flex shrink items-center gap-2 rounded-md px-2 py-1.5 select-none hover:bg-fill-subtle',
               disabled && 'opacity-60',
+              'text-caption',
             )}
           >
             <Checkbox

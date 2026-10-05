@@ -332,8 +332,12 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               </Button>
             )}
             <CollapsibleTrigger
-              textVariant="body"
-              className={cn('underline-offset-2 hover:underline', quietTextHover, controlStateColorTransition)}
+              className={cn(
+                'underline-offset-2 hover:underline',
+                quietTextHover,
+                controlStateColorTransition,
+                'text-body',
+              )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
@@ -341,9 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <Code
-              variant="caption"
-              tone="muted"
-              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 break-all whitespace-pre-wrap"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 break-all whitespace-pre-wrap text-caption text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
               code={error.details}
             />

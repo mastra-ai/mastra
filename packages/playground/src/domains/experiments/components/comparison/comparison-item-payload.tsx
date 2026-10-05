@@ -17,9 +17,7 @@ export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadPro
   return (
     <ComparisonSection title={label} defaultOpen={false}>
       <Code
-        variant="caption"
-        tone="muted"
-        className="max-h-40 overflow-auto rounded-md bg-card p-3 whitespace-pre-wrap"
+        className="max-h-40 overflow-auto rounded-md bg-card p-3 whitespace-pre-wrap text-caption text-muted-foreground"
         code={typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
       />
     </ComparisonSection>

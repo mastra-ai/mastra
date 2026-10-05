@@ -205,7 +205,6 @@ function ScorerConfigPanel({
       </div>
 
       <Textarea
-        textVariant="caption"
         id={`description-${scorerId}`}
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}

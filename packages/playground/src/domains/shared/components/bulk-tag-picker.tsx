@@ -36,7 +36,6 @@ export function BulkTagPicker({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2" align="end">
         <Input
-          textVariant="caption"
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => {
@@ -51,7 +50,7 @@ export function BulkTagPicker({
             }
           }}
           placeholder="Search or create tag..."
-          className="mb-1 h-7"
+          className="mb-1 h-7 text-caption"
           autoFocus
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">

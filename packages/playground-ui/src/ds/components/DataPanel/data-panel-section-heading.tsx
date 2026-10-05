@@ -1,10 +1,7 @@
 import type { ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 export interface DataPanelSectionHeadingProps {
-  variant?: TextStyleProps['variant'];
   /** Optional leading icon. Rendered before `children` and sized via `[&>svg]:size-3.5`. */
   icon?: ReactNode;
   className?: string;
@@ -15,18 +12,16 @@ export interface DataPanelSectionHeadingProps {
  * Section heading inside a DataPanel.Content (e.g. above a code block or a key-values list).
  * Used by `DataCodeSection` and any consumer that needs a matching small-caps label.
  */
-export function DataPanelSectionHeading({
-  icon,
-  className,
-  children,
-  variant = 'eyebrow',
-}: DataPanelSectionHeadingProps) {
+export function DataPanelSectionHeading({ icon, className, children }: DataPanelSectionHeadingProps) {
   return (
-    <div className={cn('flex items-center gap-1.5 text-placeholder [&>svg]:size-3.5', className)}>
+    <div
+      className={cn(
+        'flex items-center gap-1.5 text-caption tracking-widest text-placeholder uppercase [&>svg]:size-3.5',
+        className,
+      )}
+    >
       {icon}
-      <Txt as="span" variant={variant} tone="faint">
-        {children}
-      </Txt>
+      {children}
     </div>
   );
 }

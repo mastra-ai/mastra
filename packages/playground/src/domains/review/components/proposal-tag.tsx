@@ -38,8 +38,6 @@ export function ProposalTag({
       <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1">
         <Input
           variant="unstyled"
-          textVariant="caption"
-          tone="muted"
           ref={inputRef}
           value={editValue}
           onChange={e => setEditValue(e.target.value)}
@@ -54,7 +52,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="h-auto w-20 bg-transparent px-0 py-0.5 outline-hidden"
+          className="h-auto w-20 bg-transparent px-0 py-0.5 outline-hidden text-caption text-muted-foreground"
         />
         <button
           type="button"

@@ -39,8 +39,7 @@ function CommandInput({
 
   return (
     <Input
-      textVariant="body-sm"
-      font="mono"
+      className="font-mono"
       size="sm"
       aria-label={label}
       placeholder={placeholder}

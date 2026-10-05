@@ -10,11 +10,11 @@ export function PageHeaderEyebrow({ className, ...props }: PageHeaderEyebrowProp
       data-slot="page-header-eyebrow"
       {...props}
       className={cn(
-        'text-muted-foreground',
+        'text-caption text-muted-foreground',
         'flex min-w-0 items-center',
         '*:inline-flex *:items-center *:gap-1 *:rounded-sm *:transition-colors *:hover:text-foreground',
         className,
       )}
-    ></div>
+    />
   );
 }

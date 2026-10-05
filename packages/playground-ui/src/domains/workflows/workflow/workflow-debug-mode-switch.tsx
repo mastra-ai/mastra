@@ -11,9 +11,7 @@ export function WorkflowDebugModeSwitch() {
       <Switch checked={debugMode} onCheckedChange={setDebugMode} />
       <FieldContent className="gap-0.5">
         <FieldLabel size="smaller">Step by step</FieldLabel>
-        <FieldDescription textVariant="meta" className="text-muted-foreground">
-          Pause to inspect outputs
-        </FieldDescription>
+        <FieldDescription className="text-meta text-muted-foreground">Pause to inspect outputs</FieldDescription>
       </FieldContent>
     </Field>
   );

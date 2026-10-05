@@ -1,11 +1,9 @@
 import * as React from 'react';
+
 import { tokenStyle, useHighlight } from './use-highlight';
 import type { Highlighted } from './use-highlight';
-import { textStyle } from '@/ds/primitives/text';
-import type { TextStyleProps } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
 
-export interface CodeProps extends React.HTMLAttributes<HTMLPreElement>, TextStyleProps {
+export interface CodeProps extends React.HTMLAttributes<HTMLPreElement> {
   code: string;
   lang?: string;
   /** Per-line class, e.g. for diff or search highlighting. When set, every line is wrapped in a `[data-line]` span. */
@@ -31,17 +29,7 @@ function usableHighlight(highlighted: Highlighted | null, code: string, lang?: s
  * between colored and plain, so the settled prefix keeps its colors and only
  * the newly arrived tail waits, uncolored, for the next pass.
  */
-export const Code = React.memo(function Code({
-  code,
-  lang,
-  lineClassName,
-  variant,
-  tone,
-  font,
-  className,
-  ...rest
-}: CodeProps) {
-  const props = { ...rest, className: cn(textStyle({ variant, tone, font }), className) };
+export const Code = React.memo(function Code({ code, lang, lineClassName, ...props }: CodeProps) {
   const highlighted = useHighlight(code, lang);
 
   const usable = usableHighlight(highlighted, code, lang);

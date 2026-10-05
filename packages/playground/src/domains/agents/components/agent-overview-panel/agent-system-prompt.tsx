@@ -71,7 +71,6 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
             </TabContent>
             <TabContent value="source" className="overflow-visible py-0">
               <Code
-                variant="caption"
                 code={instructions}
                 lang="markdown"
                 role="region"
@@ -81,6 +80,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   'min-w-0 overflow-x-auto text-foreground',
                   focusRing,
                   wrapSource ? '[overflow-wrap:anywhere] whitespace-pre-wrap' : 'whitespace-pre',
+                  'text-caption',
                 )}
               />
             </TabContent>

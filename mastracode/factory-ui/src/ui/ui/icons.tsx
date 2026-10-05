@@ -1,4 +1,3 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 // Crisp inline SVG icon set for MastraCode Web. Stroke-based, currentColor —
 // so icons inherit text color and theme automatically. Kept tiny and
 // dependency-free.
@@ -83,16 +82,12 @@ export function Wordmark({ className, brand = 'code' }: { className?: string; br
   const factory = brand === 'factory';
 
   return (
-    <Txt
-      as="pre"
-      variant="caption"
-      font="mono"
-      tone="ink"
-      className={`m-0 overflow-x-auto whitespace-pre select-none ${className ? ` ${className}` : ''}`}
+    <pre
+      className={`m-0 overflow-x-auto font-mono text-caption leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
       aria-label={factory ? 'Mastra Factory' : 'Mastra Code'}
     >
       {factory ? FACTORY_WORDMARK_ART : CODE_WORDMARK_ART}
-    </Txt>
+    </pre>
   );
 }
 

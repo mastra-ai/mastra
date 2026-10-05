@@ -38,7 +38,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
     <aside id="trace-signal-settings" aria-label="Trace signal settings" className="min-h-0">
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
-          <DataDetailsPanel.Heading variant="subheading" tone="ink" className="items-center">
+          <DataDetailsPanel.Heading className="items-center text-subheading text-foreground">
             <Settings aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />

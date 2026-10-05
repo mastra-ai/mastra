@@ -14,8 +14,6 @@ import {
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
-import { textStyle } from '@/ds/primitives/text';
-import type { TextStyleProps } from '@/ds/primitives/text';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -59,22 +57,14 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
-    textVariant?: TextStyleProps['variant'];
-    font?: TextStyleProps['font'];
-    tone?: TextStyleProps['tone'];
     /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
   };
 
-function Input({ className, size, testId, variant, textVariant, font, tone, error, ...props }: InputProps) {
+function Input({ className, size, testId, variant, error, ...props }: InputProps) {
   return (
     <InputPrimitive
-      className={cn(
-        inputVariants({ variant: resolveFieldVariant(variant), size }),
-        fieldErrorRim,
-        textStyle({ variant: textVariant, font, tone }),
-        className,
-      )}
+      className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
       {...deprecatedErrorAria(error)}
       {...props}

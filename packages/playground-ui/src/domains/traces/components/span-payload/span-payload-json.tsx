@@ -11,11 +11,15 @@ export interface SpanPayloadJsonProps {
 export function SpanPayloadJson({ value, className }: SpanPayloadJsonProps) {
   return (
     <Code
-      variant="caption"
       code={JSON.stringify(value ?? null, null, 2)}
       lang="json"
       data-slot="span-payload-json"
-      className={cn(raisedSurfaceStyle, 'rounded-lg p-3 text-wrap break-all text-muted-foreground', className)}
+      className={cn(
+        raisedSurfaceStyle,
+        'rounded-lg p-3 text-wrap break-all text-muted-foreground',
+        className,
+        'text-caption',
+      )}
     />
   );
 }

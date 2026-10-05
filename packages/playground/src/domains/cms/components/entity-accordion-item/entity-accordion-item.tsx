@@ -59,7 +59,6 @@ export function EntityAccordionItem({
         </div>
 
         <Textarea
-          textVariant="caption"
           id={`description-${id}`}
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}

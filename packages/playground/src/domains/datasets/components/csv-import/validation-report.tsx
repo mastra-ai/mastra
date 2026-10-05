@@ -100,7 +100,7 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
     <tr className="border-t">
       <td className="px-2 py-1 text-muted-foreground">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <InlineCode variant="caption" className="rounded bg-muted px-1">
+        <InlineCode className="rounded bg-muted px-1 text-caption">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
         </InlineCode>

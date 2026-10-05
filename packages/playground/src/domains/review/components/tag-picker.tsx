@@ -74,13 +74,12 @@ export function TagPicker({
         </PopoverTrigger>
         <PopoverContent className="w-52 p-2" align="start">
           <Input
-            textVariant="caption"
             ref={inputRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="mb-1 h-7"
+            className="mb-1 h-7 text-caption"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -89,7 +88,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className={cn('text-muted-foreground', 'w-full rounded px-2 py-1 text-left hover:bg-fill-subtle')}
+                className="text-muted-foreground w-full rounded px-2 py-1 text-left hover:bg-fill-subtle"
               >
                 <Txt as="span" variant="caption" className="block">
                   {tag}

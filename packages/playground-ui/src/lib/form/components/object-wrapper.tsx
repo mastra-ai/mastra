@@ -22,10 +22,7 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
       onOpenChange={setExpanded}
       className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
-      <CollapsibleTrigger
-        textVariant="caption"
-        className="flex min-h-11 w-full items-center gap-2 text-left text-muted-foreground"
-      >
+      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 text-left text-caption text-muted-foreground">
         <ChevronRight aria-hidden className="size-3.5 shrink-0" />
         <span className="flex min-w-0 items-center gap-1.5">
           <Braces aria-hidden className="size-3.5" />

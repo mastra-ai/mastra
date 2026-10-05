@@ -49,8 +49,7 @@ export function WorkflowGraphBoundary({
                 </summary>
                 <CopyButton content={definition} tooltip="Copy workflow definition" />
                 <Code
-                  variant="meta"
-                  className="mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap"
+                  className="mt-2 max-h-64 overflow-auto text-meta break-words whitespace-pre-wrap"
                   code={definition}
                 />
               </details>

@@ -160,11 +160,11 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
 
-Product call sites use `Txt` or the text props of a shared component. Role utilities belong inside the design system. Keep `className` for layout, truncation, and interaction states instead of overriding size, weight, line height, or tracking.
+Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
 
-`Txt` renders text elements: headings, paragraphs, inline text, labels, timestamps, and preformatted text. It cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
+`Txt` renders text elements: headings, paragraphs, inline text, labels, and timestamps. Use `Code` for preformatted code. `Txt` cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
 
 ```tsx
 <div className="flex items-center gap-2">
@@ -175,11 +175,11 @@ Product call sites use `Txt` or the text props of a shared component. Role utili
   <Txt as="span" variant="caption">View runs</Txt>
 </Link>
 <Button onClick={run}>Run</Button>
-<Input font="mono" aria-label="Setup command" />
-<Tree.Label font="mono">src/index.ts</Tree.Label>
+<Input className="font-mono" aria-label="Setup command" />
+<Tree.Label>src/index.ts</Tree.Label>
 ```
 
-Controls with their own visual `variant` use `textVariant` for the text role (`Input`, `Textarea`, `FieldLabel`, `FieldDescription`, `FieldsetLegend`, `CollapsibleTrigger`, `ComposerInput`, and `DataList.Cell`). `MarkdownRenderer`, `Code`, `InlineCode`, `Tree.Label`, `TextAndIcon`, and `EntityName` expose the role as `variant`. Prefer the standard button and tab label role rather than changing its typography at each use.
+`Input` and `Textarea` derive typography from their size. `DataPanel.SectionHeading` owns its small-caps style and renders its icon and children directly; callers compose any custom label or action themselves. `PageHeader.Meta` and `PageHeader.Eyebrow` preserve their inherited text styles even for raw children. `CodeEditor` alone exposes a narrow `font="body" | "mono"` choice because its text lives inside CodeMirror: prose fields can use the body face while code defaults to mono.
 
 ```tsx
 import { Txt } from '@mastra/playground-ui/components/Txt';

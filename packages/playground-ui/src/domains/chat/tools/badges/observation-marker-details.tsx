@@ -66,16 +66,12 @@ export const ObservationSections = ({
         ))}
       {currentTask && (
         <ActivityItem icon={<ListTodo />} label="Current task" aria-label="Current task">
-          <MarkdownRenderer variant="caption" className={`text-foreground`}>
-            {currentTask}
-          </MarkdownRenderer>
+          <MarkdownRenderer className="text-caption text-foreground">{currentTask}</MarkdownRenderer>
         </ActivityItem>
       )}
       {suggestedResponse && (
         <ActivityItem icon={<MessageSquareReply />} label="Suggested response" aria-label="Suggested response">
-          <MarkdownRenderer variant="caption" className={`text-foreground/80 italic`}>
-            {suggestedResponse}
-          </MarkdownRenderer>
+          <MarkdownRenderer className="text-caption text-foreground/80 italic">{suggestedResponse}</MarkdownRenderer>
         </ActivityItem>
       )}
     </>
@@ -107,12 +103,11 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
           </Txt>
           {typeof value === 'object' && value !== null ? (
             <Code
-              variant="caption"
-              className="mt-1 max-h-40 overflow-auto break-words whitespace-pre-wrap text-foreground/80"
+              className="mt-1 max-h-40 overflow-auto text-caption break-words whitespace-pre-wrap text-foreground/80"
               code={formatExtractedValue(value)}
             />
           ) : (
-            <MarkdownRenderer variant="caption" className={`mt-1 text-foreground/80`}>
+            <MarkdownRenderer className="mt-1 text-caption text-foreground/80">
               {formatExtractedValue(value)}
             </MarkdownRenderer>
           )}

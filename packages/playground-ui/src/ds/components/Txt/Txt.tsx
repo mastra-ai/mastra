@@ -5,7 +5,7 @@ import { textStyle } from '@/ds/primitives/text';
 import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
-type TextElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'pre' | 'strong' | 'b' | 'time';
+type TextElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'strong' | 'b' | 'time';
 
 export interface TxtProps extends HTMLAttributes<HTMLElement>, TextStyleProps {
   as?: TextElement;

@@ -39,8 +39,6 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
     >
       <Input
         variant="unstyled"
-        textVariant="subheading"
-        tone="ink"
         type="text"
         value={draftName}
         onChange={e => handleDraftNameChange(e.target.value)}
@@ -48,13 +46,11 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         aria-label="Agent name"
         disabled={disabled}
         data-testid="agent-configure-name"
-        className="w-full max-w-sm rounded-lg px-3 py-1.5 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
+        className="w-full max-w-sm rounded-lg px-3 py-1.5 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed text-subheading text-foreground"
         style={{ viewTransitionName: 'agent-name' }}
       />
       <Textarea
         variant="unstyled"
-        textVariant="body"
-        tone="ink"
         value={draftDescription}
         onChange={e => handleDraftDescriptionChange(e.target.value)}
         placeholder="What is this agent for?"
@@ -62,7 +58,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="field-sizing-content min-h-0 w-full resize-none rounded-lg px-3 py-2 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
+        className="field-sizing-content min-h-0 w-full resize-none rounded-lg px-3 py-2 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed text-body text-foreground"
         style={{ viewTransitionName: 'agent-description' }}
       />
     </div>

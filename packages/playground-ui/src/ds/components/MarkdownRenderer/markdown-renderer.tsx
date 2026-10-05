@@ -11,8 +11,6 @@ import { MarkdownTable } from './markdown-table';
 import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
 import { CodeBlock } from '@/ds/components/CodeBlock';
-import { textStyle } from '@/ds/primitives/text';
-import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 import './markdown-renderer.css';
@@ -20,7 +18,6 @@ import './markdown-renderer.css';
 export type MarkdownExternalLinkTarget = 'tab' | 'window';
 
 export interface MarkdownRendererProps {
-  variant?: TextStyleProps['variant'];
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
@@ -52,7 +49,6 @@ export interface MarkdownRendererProps {
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   children,
   className,
-  variant,
   externalLinkTarget = 'tab',
   streaming = false,
   tableActions = false,
@@ -74,7 +70,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const mended = useMemo(() => (streaming ? remend(tail, REMEND_OPTIONS) : tail), [streaming, tail]);
 
   return (
-    <div className={cn('mastra-markdown', textStyle({ variant }), className)}>
+    <div className={cn('mastra-markdown', className)}>
       {blocks.map((block, index) => (
         <MarkdownBlock
           key={index}
