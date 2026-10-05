@@ -278,6 +278,204 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     subscription.unsubscribe();
   });
 
+  describe.each<[string, (claim: number) => number | undefined]>([
+    ['claim generations (storage-fenced run)', claim => claim],
+    ['no claim generations (lease-fenced run)', () => undefined],
+  ])('a follow-up queued before the execution lost the run, with %s', (_backend, generation) => {
+    const threadKey = 'generation-user\u0000generation-thread';
+
+    async function takeOver(successor: 'this process' | 'another process', registers: 'before' | 'after') {
+      const { pubsub, original, recovering, subscription } = await setup({ read: false });
+      const successorRuntime = successor === 'this process' ? original : recovering;
+
+      let originalLost = false;
+      const a = controlledOutput('run-1');
+      await original.registerRun(agent, a.output, options, pubsub, {
+        generation: generation(1),
+        ownershipLost: () => originalLost,
+      });
+      a.push(start);
+      await nextTicks(10);
+      await original.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'follow-up' },
+        { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+        pubsub,
+      ).accepted;
+      originalLost = true;
+
+      const b = controlledOutput('run-1');
+      const registerSuccessor = () =>
+        successorRuntime.registerRun(agent, b.output, options, pubsub, { strict: true, generation: generation(2) });
+      if (registers === 'before') await registerSuccessor();
+      a.end('failed');
+      await nextTicks(40);
+      if (registers === 'after') await registerSuccessor();
+      b.push(start);
+      await nextTicks(20);
+      return { pubsub, successorRuntime, b, subscription };
+    }
+
+    it.each([
+      ['this process', 'before'],
+      ['this process', 'after'],
+      ['another process', 'before'],
+      ['another process', 'after'],
+    ] as const)(
+      'hands it to the execution in %s that registers the run %s the lost one ends',
+      async (successor, registers) => {
+        const { pubsub, successorRuntime, b, subscription } = await takeOver(successor, registers);
+
+        expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+        expect(successorRuntime.drainPendingSignals('run-1', pubsub).map(signal => signal.contents)).toEqual([
+          'follow-up',
+        ]);
+
+        b.push(finish);
+        b.end();
+        await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+        subscription.unsubscribe();
+      },
+    );
+
+    it.each(['before', 'after'] as const)(
+      'keeps renewing the thread lease for an execution in this process that registers the run %s the lost one ends',
+      async registers => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        try {
+          const { pubsub, b, subscription } = await takeOver('this process', registers);
+          const renewLease = vi.spyOn(pubsub, 'renewLease');
+
+          vi.advanceTimersByTime(15_000);
+          expect(renewLease).toHaveBeenCalledWith(threadKey, 'run-1', expect.any(Number));
+
+          b.push(finish);
+          b.end();
+          await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+          subscription.unsubscribe();
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it('does not mistake the registration of a process that drove the run earlier, replayed from the topic, for the one that takes it over', async () => {
+      const crashed = new LeasePubSub();
+      crashed.retain = true;
+      const c = controlledOutput('run-1');
+      await new AgentThreadStreamRuntime().registerRun(agent, c.output, options, crashed, {
+        generation: generation(1),
+      });
+      c.push(start);
+      await nextTicks(10);
+
+      // That process dies; this one recovers the run from the same stream backend and replays its registration.
+      const pubsub = crashed.restart();
+      const runtime = new AgentThreadStreamRuntime();
+      let lost = false;
+      const a = controlledOutput('run-1');
+      await runtime.registerRun(agent, a.output, options, pubsub, {
+        strict: true,
+        generation: generation(2),
+        ownershipLost: () => lost,
+      });
+      a.push(start);
+      await nextTicks(10);
+      await runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'follow-up' },
+        { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+        pubsub,
+      ).accepted;
+      lost = true;
+      a.end('failed');
+      await nextTicks(40);
+
+      const b = controlledOutput('run-1');
+      await runtime.registerRun(agent, b.output, options, pubsub, { strict: true, generation: generation(3) });
+      b.push(start);
+      await nextTicks(20);
+      expect(runtime.drainPendingSignals('run-1', pubsub).map(signal => signal.contents)).toEqual(['follow-up']);
+
+      b.push(finish);
+      b.end();
+      await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+    });
+
+    it('leaves them to the next run on the thread when the run never registers again', async () => {
+      const { pubsub, original, subscription } = await setup({ read: false });
+      let lost = false;
+      const a = controlledOutput('run-1');
+      await original.registerRun(agent, a.output, options, pubsub, {
+        generation: generation(1),
+        ownershipLost: () => lost,
+      });
+      a.push(start);
+      await nextTicks(10);
+      await original.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'follow-up' },
+        { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+        pubsub,
+      ).accepted;
+      lost = true;
+      a.end('failed');
+      await nextTicks(40);
+
+      // The execution that took the run over died before registering it; its thread lease lapses.
+      expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+      pubsub.owners.delete(threadKey);
+
+      const next = controlledOutput('run-2');
+      await original.registerRun(agent, next.output, options, pubsub, { strict: true });
+      next.push(start);
+      await nextTicks(20);
+      expect(original.drainPendingSignals('run-2', pubsub).map(signal => signal.contents)).toEqual(['follow-up']);
+
+      next.push(finish);
+      next.end();
+      await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+      subscription.unsubscribe();
+    });
+  });
+
+  it('keeps renewing the thread lease for a later registration of the run when an earlier renewal reports it gone', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const { pubsub, original, subscription } = await setup({ read: false });
+      const threadKey = 'generation-user\u0000generation-thread';
+      let reportGone!: (renewed: boolean) => void;
+      const renewLease = vi
+        .spyOn(pubsub, 'renewLease')
+        .mockImplementationOnce(() => new Promise<boolean>(resolve => (reportGone = resolve)));
+
+      const a = controlledOutput('run-1');
+      await original.registerRun(agent, a.output, options, pubsub);
+      a.push(start);
+      vi.advanceTimersByTime(15_000);
+      expect(renewLease).toHaveBeenCalled();
+      a.push(finish);
+      a.end();
+      await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+
+      const b = controlledOutput('run-1');
+      await original.registerRun(agent, b.output, options, pubsub);
+      b.push(start);
+      reportGone(false);
+      await nextTicks(10);
+      renewLease.mockClear();
+      vi.advanceTimersByTime(15_000);
+      expect(renewLease).toHaveBeenCalledWith(threadKey, 'run-1', expect.any(Number));
+
+      b.push(finish);
+      b.end();
+      await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+      subscription.unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps a suspended half readable when another process resumes the run under a later generation', async () => {
     // The reader starts only after the resume registers, so the suspended half is still unread.
     const { pubsub, original, recovering, subscription, read, startReader } = await setup({ read: false });

@@ -2341,7 +2341,8 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    const globalRegistryEntry = { ...registryEntry, messageList };
+    globalRunRegistry.set(runId, globalRegistryEntry);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -2354,8 +2355,9 @@ export class DurableAgent<
 
     // Single cleanup path for both the auto-cleanup timer and the explicit
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
-    // then tears down the registry entries and pubsub topic. Idempotent via
-    // `cleanedUp`.
+    // then tears down the registry entries and pubsub topic this execution
+    // still owns — an execution that recovered the run in this process holds
+    // its own. Idempotent via `cleanedUp`.
     const performCleanup = () => {
       if (autoCleanupTimer) {
         clearTimeout(autoCleanupTimer);
@@ -2365,9 +2367,13 @@ export class DurableAgent<
 
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
-      this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
-      this.#clearPubsubTopic(runId);
+      if (this.#runRegistry.get(runId) === registryEntry) {
+        this.#runRegistry.cleanup(runId);
+      }
+      if (globalRunRegistry.get(runId) === globalRegistryEntry) {
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
       cleanedUp = true;
     };
 
@@ -2768,8 +2774,9 @@ export class DurableAgent<
 
     // Single cleanup path for both the auto-cleanup timer and the explicit
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
-    // then tears down the registry entries and pubsub topic. Idempotent via
-    // `cleanedUp`.
+    // then tears down the registry entries and pubsub topic this execution
+    // still owns — an execution that recovered the run in this process holds
+    // its own. Idempotent via `cleanedUp`.
     const performCleanup = () => {
       if (autoCleanupTimer) {
         clearTimeout(autoCleanupTimer);
@@ -2779,9 +2786,13 @@ export class DurableAgent<
 
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
-      this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
-      this.#clearPubsubTopic(runId);
+      if (this.#runRegistry.get(runId) === entry) {
+        this.#runRegistry.cleanup(runId);
+      }
+      if (globalRunRegistry.get(runId) === globalEntryForAbort) {
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
       cleanedUp = true;
     };
 

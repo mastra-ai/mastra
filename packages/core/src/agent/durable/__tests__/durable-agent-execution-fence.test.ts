@@ -86,6 +86,65 @@ function gatedModel(text: string) {
   return { model, release, entered, calls: () => calls };
 }
 
+/**
+ * A model that records each call's prompt; call `n` waits for `gates[n - 1]`, when given, before it answers.
+ * With `firstCalls`, the first call calls that tool instead of answering.
+ */
+function recordingModel(gates: Array<Promise<void> | undefined>, firstCalls?: string) {
+  const prompts: string[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const call = prompts.push(JSON.stringify(prompt));
+      await gates[call - 1];
+      const body =
+        call === 1 && firstCalls
+          ? [
+              {
+                type: 'tool-call' as const,
+                toolCallType: 'function' as const,
+                toolCallId: 'call-1',
+                toolName: firstCalls,
+                input: '{}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]
+          : [
+              { type: 'text-start' as const, id: 'text-1' },
+              { type: 'text-delta' as const, id: 'text-1', delta: `answer ${call}` },
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ];
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: `resp-${call}`, modelId: 'mock', timestamp: new Date(0) },
+          ...body,
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>(resolve => {
+    open = resolve;
+  });
+  return { opened, open };
+}
+
 /** Read `stream` in the background, collecting chunks until cancelled. */
 function collect(stream: ReadableStream<any>) {
   const chunks: any[] = [];
@@ -850,6 +909,94 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await stream.stop();
       result.cleanup();
     });
+
+    it.each([
+      ['stream', 'before'],
+      ['stream', 'after'],
+      ['resume', 'before'],
+      ['resume', 'after'],
+    ] as const)(
+      'a follow-up queued for a run its %s() execution lost reaches the execution that recovers the run in this process, started %s the lost one ends',
+      async (caller, recoveryStarts) => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const originalCall = gate();
+        const recoveryCall = gate();
+        // A resumed run first suspends on a tool call awaiting approval.
+        const earlier = caller === 'resume' ? 1 : 0;
+        const { model, prompts } = recordingModel(
+          [...Array(earlier), originalCall.opened, recoveryCall.opened],
+          caller === 'resume' ? 'lookup' : undefined,
+        );
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        });
+        const durableAgent = buildAgent({ model, storage, memory, tools: { lookup } });
+        let suspended = false;
+        const started = await durableAgent.stream('What is the answer?', {
+          memory: { thread: THREAD, resource: RESOURCE },
+          requireToolApproval: caller === 'resume',
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        let result = started;
+        if (caller === 'resume') {
+          const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+          await vi.waitFor(() => expect(suspended).toBe(true));
+          await suspendedFence.whenSettled;
+          result = await durableAgent.resume(runId, { approved: true });
+        }
+        const stream = collect(result.fullStream);
+        await vi.waitFor(() => expect(prompts).toHaveLength(earlier + 1));
+        await waitForCheckpoint(storage, runId);
+
+        const sent = durableAgent.sendSignal(
+          { type: 'user-message', contents: 'follow-up' },
+          { runId, threadId: THREAD, resourceId: RESOURCE },
+        );
+        expect(await sent.accepted).toMatchObject({ action: 'deliver', runId });
+
+        // ---- The execution's claim lapses with nobody taking the run (say,
+        // storage was unreachable while it renewed), and it notices.
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        await foreignOwnership(backend, storage, durableAgent.pubsub).vanish(fence);
+        await expect(fence.verify()).rejects.toBeInstanceOf(DurableExecutionFenceError);
+
+        const endLostExecution = async () => {
+          originalCall.open();
+          await fence.whenSettled;
+          // Let the lost execution's run finish on the thread, then its caller cleans up.
+          await new Promise(resolve => setTimeout(resolve, 50));
+          await stream.stop();
+          result.cleanup();
+        };
+        if (recoveryStarts === 'after') await endLostExecution();
+
+        // ---- This process recovers the run. `force`: the lost execution still
+        // holds the thread's lease, which counts as live for a lease-backed run.
+        const recovered = await durableAgent.recover(runId, { force: true });
+        if (recoveryStarts === 'before') {
+          await vi.waitFor(() => expect(prompts).toHaveLength(earlier + 2));
+          await endLostExecution();
+        }
+        recoveryCall.open();
+
+        const chunks = await drain(recovered.fullStream);
+        expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+        expect(prompts).toHaveLength(earlier + 3);
+        expect(prompts[earlier + 1]).not.toContain('follow-up');
+        expect(prompts[earlier + 2]).toContain('follow-up');
+
+        recovered.cleanup();
+        started.cleanup();
+      },
+    );
 
     it('a delegated sub-agent sharing the requestContext does not disturb the parent execution', async () => {
       const storage = createStorage(backend);
