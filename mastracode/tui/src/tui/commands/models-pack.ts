@@ -25,7 +25,7 @@ import chalk from 'chalk';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
-import { applyPackToSession } from '../model-packs/apply.js';
+import { applyPackToSession, listResolvableModePacks } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
@@ -1231,6 +1231,18 @@ async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePac
       delete settings.models.packAccountPreferences[pack.id];
     }
     saveSettings(settings);
+
+    const threadId = ctx.state.session.thread.getId();
+    const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
+    const activePackId = resolveThreadActiveModelPackId(
+      settings,
+      listResolvableModePacks(settings),
+      thread?.metadata as Record<string, unknown> | undefined,
+    );
+    if (activePackId === pack.id) {
+      await applyPackToSession(ctx, pack.id, { settings, expectedThreadId: threadId });
+    }
+
     const providerId = providerFromModelId(modelId);
     const accountLabel = accountId
       ? (ctx.authStorage?.listAccounts(providerId ?? '').find(account => account.id === accountId)?.label ?? accountId)

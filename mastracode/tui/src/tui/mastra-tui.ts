@@ -20,6 +20,7 @@ import {
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/index';
 import {
   resolveThreadActiveModelPackId,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
   MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
@@ -1155,8 +1156,10 @@ export class MastraTUI {
     const currentThreadId = this.state.session.thread.getId();
     if (!isCurrent()) return;
     if (!currentThreadId) {
-      await applyCurrentThreadPack({ state: this.state }, { packId: settings.models.activeModelPackId });
-      if (!isCurrent()) return;
+      if (!this.state.options.initialModelOverride) {
+        await applyCurrentThreadPack({ state: this.state }, { packId: settings.models.activeModelPackId });
+        if (!isCurrent()) return;
+      }
       updateStatusLine(this.state);
       return;
     }
@@ -1169,7 +1172,11 @@ export class MastraTUI {
     const packs = listResolvableModePacks(settings);
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
     if (!ownsUpdate()) return;
-    const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
+    const hasThreadPack = typeof metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] === 'string';
+    const resolvedPackId =
+      this.state.options.initialModelOverride && !hasThreadPack
+        ? null
+        : resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
     if (!ownsUpdate()) return;
     await applyCurrentThreadPack({ state: this.state }, { packId: resolvedPackId });
