@@ -156,12 +156,11 @@ const SHAPE_ENTRIES = Object.entries(SHAPES) as [ShapeName, ShapeSpec][];
 
 describe('T65 wf-evented-restart shapes in a fresh module graph', () => {
   for (const [shapeName, shape] of SHAPE_ENTRIES) {
-    it(`${shapeName}: restarts the parked run and does not re-run completed steps`, async () => {
+    it(`${shapeName}: restarts from the interrupted snapshot and does not re-run completed steps`, async () => {
       const id = `t65-${shapeName}`;
       const runId = `t65-run-${shapeName}`;
       const log: Entry[] = [];
       const gate = createGate();
-      gates.push(gate);
       const scenario = createRestartScenario({
         kind: 'workflow',
         runId,
@@ -182,6 +181,8 @@ describe('T65 wf-evented-restart shapes in a fresh module graph', () => {
         expect(hit, 'not exercised: no write captured the interrupted state').toBeDefined();
         checkpoint = hit!;
       } else {
+        // Only the gated shapes park a step, so the gate is registered there.
+        gates.push(gate);
         const reached = await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)]);
         expect(reached, 'not exercised: run ended before the gate').toBe(true);
         // The step is parked; wait until its entry is persisted as in-flight. Evented foreach marks
