@@ -21,12 +21,12 @@ export const modalAndShellScenario: McE2eScenario = {
     runtime.printScreen('after sandbox escape', terminal);
 
     terminal.write("!printf 'mc shell e2e stdout\\n'");
-    await runtime.waitForScreenText(/│\s+!\s+printf 'mc shell e2e stdout/i, terminal);
+    await runtime.waitForScreenText(/(?:^|\s)!\s+printf 'mc shell e2e stdout/im, terminal);
     runtime.printScreen('after shell prompt marker', terminal);
 
     terminal.write('\r');
-    await runtime.waitForScreenText(/│\s+mc shell e2e stdout/i, terminal);
-    await runtime.waitForScreenText(/\$ printf 'mc shell e2e stdout\\n'.*✓/i, terminal);
+    await runtime.waitForScreenText(/^\s+mc shell e2e stdout/im, terminal);
+    await runtime.waitForScreenText(/● \$ printf 'mc shell e2e stdout\\n'/i, terminal);
     runtime.printScreen('after shell passthrough', terminal);
 
     terminal.keyCtrlC();

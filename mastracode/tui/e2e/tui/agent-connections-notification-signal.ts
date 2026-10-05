@@ -76,9 +76,9 @@ export const agentConnectionsNotificationSignalScenario = {
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('Connect to the signal target and send a high priority peer signal.');
-    await runtime.waitForScreenText(/agent_connections_list ✓/i, terminal, 20_000);
-    await runtime.waitForScreenText(/agent_connect .*✓/i, terminal, 20_000);
-    await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 20_000);
+    await runtime.waitForScreenText(/● agent_connections_list\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/● agent_connect\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/● agent_signal_send\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Agent notification signal flow completed/i, terminal, 20_000);
     await expect(
       terminal.getByText(

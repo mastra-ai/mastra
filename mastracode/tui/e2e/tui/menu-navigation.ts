@@ -2,9 +2,10 @@ import type { McE2eTerminal } from './types.js';
 
 const ARROW_DOWN = '\x1b[B';
 /** Settings and select lists mark the highlighted row with this cursor. */
-// Overlays can be drawn over other borders, so only require whitespace
-// before the cursor and a label after it (which skips trailing "Manage →").
-const CURSOR_LINE = /(?:^|\s)→\s+\S/;
+// Overlays can be drawn over other rows, so only require indentation before
+// the cursor and a label after it (which skips trailing "Manage →"). The
+// indentation skips the prompt and sent messages, whose "→" sits in column 1.
+const CURSOR_LINE = /\s{2,}→\s+\S/;
 
 function highlightedRow(terminal: McE2eTerminal): string | undefined {
   return terminal

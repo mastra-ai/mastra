@@ -10,7 +10,8 @@ export const workIdleStatusScenario: McE2eScenario = {
   name: 'work-idle-status',
   description:
     'Verifies the TUI active timer, reasoning-aware decode throughput, completed timing, and delayed idle line.',
-  testName: 'shows accurate throughput and completed timing beside the model with delayed idle above the editor',
+  testName:
+    'shows accurate throughput in the Working row and completed timing beside the model with delayed idle above the editor',
   useOpenAIModel: true,
   aimockFixture: 'work-idle-status.json',
   async inProcessApp({ startMastraCodeApp }) {
@@ -152,7 +153,11 @@ export const workIdleStatusScenario: McE2eScenario = {
     if (ratesAfterSteps.join() !== expectedRates.join()) {
       throw new Error(`Expected rates ${expectedRates.join(', ')} after each step, got ${ratesAfterSteps.join(', ')}`);
     }
-    await runtime.waitForScreenText(/\b65 t\/s\b/, terminal);
+    // Live throughput shows in the Working row above the prompt while a run is active.
+    state.agentRunStartedAt = Date.now();
+    updateStatusLine(state);
+    await runtime.waitForScreenText(/\b65 tok\/s\b/, terminal);
+    state.agentRunStartedAt = undefined;
 
     state.lastAgentRunDurationMs = 61_000;
     state.lastAgentRunEndReason = 'done';

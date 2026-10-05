@@ -28,12 +28,12 @@ export const quietShellDescriptionScenario: McE2eScenario = {
     await runtime.waitForScreenText(/quiet-description-output/i, terminal, 5_000);
     const view = terminal.serialize().view;
     expect(view).not.toMatch(/\$ printf/);
-    // The output preview sits above the box's `$ <path>` header, which sits above the row
-    const previewAt = view.search(/│ quiet-description-output/);
-    const headerAt = view.search(/│ \$ /);
+    // The output preview sits above the group's `$ <path>` header, which sits above the row
+    const previewAt = view.search(/^ {2}quiet-description-output/m);
+    const headerAt = view.search(/^ {2}\$ /m);
     const rowAt = view.search(/✓ Printing the quiet description marker/);
     if (!(previewAt >= 0 && previewAt < headerAt && headerAt < rowAt)) {
-      throw new Error(`Expected preview, then $ header, then row; got ${previewAt}, ${headerAt}, ${rowAt}`);
+      throw new Error(`Expected preview, then $ header, then row; got ${previewAt}, ${headerAt}, ${rowAt}\n\n${view}`);
     }
     runtime.printScreen('quiet shell description', terminal);
 
