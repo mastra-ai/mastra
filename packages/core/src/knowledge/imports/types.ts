@@ -4,6 +4,9 @@ import type { KnowledgeConcreteRole, KnowledgeImportRun, KnowledgeScopeIds } fro
 import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations, StaticKnowledgeRecordInput } from './static-importer';
 
+/** Import-state keys under this prefix belong to the runtime; handler state writes cannot use them. */
+export const KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX = '__mastra_internal/';
+
 export interface KnowledgeImporterBindingInput {
   readonly source: string;
   readonly scope: string;
