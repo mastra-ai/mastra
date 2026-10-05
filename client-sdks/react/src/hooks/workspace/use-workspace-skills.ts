@@ -33,9 +33,9 @@ export const useWorkspaceSkills = <TData = ListSkillsResponse>({
       const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.listSkills();
     },
-    enabled: isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
     ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };
 
@@ -76,8 +76,8 @@ export const useAgentSkill = <TData = Skill>({
       const skill = workspace.getSkill(skillName, path);
       return skill.details();
     },
-    enabled: isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
     ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };

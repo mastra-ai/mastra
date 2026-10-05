@@ -70,6 +70,7 @@ Options are spread, not merged. Keep these effects in mind:
   ```tsx
   const { data } = useAgent({ agentId, queryOptions: { enabled: Boolean(agentId) } });
   ```
+- **Workspace hooks keep their compatibility check.** Workspace query hooks stay disabled when the server or client doesn't support workspaces, even if you pass `enabled: true`.
 - **`queryKey` and `queryFn` change cache identity.** Overriding them stops the hook from sharing cache entries with other hooks that use the default key.
 
 ## Types

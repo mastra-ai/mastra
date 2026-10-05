@@ -55,9 +55,9 @@ export const useWorkspaceInfo = <TData = WorkspaceInfo>({
       const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.info();
     },
-    enabled: isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
     ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };
 
@@ -113,9 +113,9 @@ export const useWorkspaceFileStat = <TData = FileStatResponse>({
       const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.stat(path);
     },
-    enabled: isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
     ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };
 
