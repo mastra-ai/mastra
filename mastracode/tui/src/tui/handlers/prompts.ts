@@ -8,6 +8,7 @@ import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { switchModeWithPack } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import type { TUIState } from '../state.js';
 import { theme } from '../theme.js';
@@ -437,6 +438,7 @@ export async function handlePlanApproval(
         releaseApprovalFocus();
         firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
+        await switchModeWithPack(ctx, 'build');
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
         // The controller emits the resumed tool's terminal events while this
         // handler owns its serialized event queue. Let those events reach their
@@ -448,6 +450,7 @@ export async function handlePlanApproval(
         releaseApprovalFocus();
         firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
+        await switchModeWithPack(ctx, 'build');
 
         // The approved run keeps going into implementation, so the plan has to
         // replace any active goal before it resumes: the core goal step reads

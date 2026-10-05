@@ -2,7 +2,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ switchModeWithPack: vi.fn(async () => undefined) }));
+vi.mock('../../model-packs/apply.js', () => ({ switchModeWithPack: mocks.switchModeWithPack }));
+
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
@@ -21,6 +25,10 @@ function createTmpProjectWithPlan(title: string, plan: string, filename = getPla
   fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
   return projectPath;
 }
+
+beforeEach(() => {
+  mocks.switchModeWithPack.mockClear();
+});
 
 afterEach(() => {
   while (tmpProjects.length) {
@@ -217,6 +225,10 @@ describe('handlePlanApproval goal mode', () => {
 
     expect(ctx.setGoal).toHaveBeenCalledTimes(1);
     expect(ctx.setGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(mocks.switchModeWithPack).toHaveBeenCalledWith(ctx, 'build');
+    expect(mocks.switchModeWithPack.mock.invocationCallOrder[0]).toBeLessThan(
+      (state.session.respondToToolSuspension as any).mock.invocationCallOrder[0],
+    );
     // An already-active goal would otherwise judge the resumed run, which
     // carries on into implementing the plan.
     expect((ctx.setGoal as any).mock.invocationCallOrder[0]).toBeLessThan(

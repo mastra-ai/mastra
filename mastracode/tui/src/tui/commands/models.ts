@@ -1,4 +1,4 @@
-import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
@@ -11,13 +11,13 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { applyPackToSession } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId: string): Promise<void> {
   const modeId = ctx.state.session.mode.get();
-  const modeSettingKey = `modeModelId_${modeId}`;
   const settings = loadSettings();
   const nextSettings = structuredClone(settings);
   nextSettings.models.modePackOverrides ??= {};
@@ -28,14 +28,10 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const threadId = ctx.state.session.thread.getId();
   const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
   const threadSettings = parseThreadSettings(thread?.metadata);
-  const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
   const previousFallbackStatus = thread?.metadata?.[THREAD_FALLBACK_STATUS_KEY];
-  const previousPendingFallback = thread?.metadata?.[PACK_FALLBACK_STATE_KEY];
-  const previousSessionState = ctx.state.session.state?.get?.() as
-    | { activeModelPackId?: string; [PACK_FALLBACK_STATE_KEY]?: unknown }
-    | undefined;
-  const previousSessionPackId = previousSessionState?.activeModelPackId;
+  const previousPendingFallback = thread?.metadata?.[MODEL_FALLBACK_STATE_KEY];
+  const previousSessionState = ctx.state.session.state.get() as Record<string, unknown>;
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
   const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
   const customPack = activePackId?.startsWith('custom:')
@@ -45,11 +41,9 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const effectivePackModels = activePack ? resolveModePackModels(nextSettings, activePack) : {};
   const modeModels: Record<string, string> = {};
   for (const item of modes) {
-    const persistedModelId = threadSettings.modeModelIds[item.id];
     const fallbackModelId =
       effectivePackModels[item.id] ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
-    if (persistedModelId) modeModels[item.id] = persistedModelId;
-    else if (fallbackModelId) modeModels[item.id] = fallbackModelId;
+    if (fallbackModelId) modeModels[item.id] = fallbackModelId;
   }
   modeModels[modeId] = modelId;
 
@@ -86,86 +80,30 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     nextSettings.models.modeDefaults = modeModels;
   }
 
-  let modeSettingSaved = false;
-  let packSettingSaved = false;
-  let sessionPackSaved = false;
-  let fallbackStatusCleared = false;
-  let pendingThreadFallbackCleared = false;
-  let pendingSessionFallbackCleared = false;
-  let globalSettingsWriteStarted = false;
   try {
-    await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
-    modeSettingSaved = true;
-    const savedModeSetting = await ctx.state.session.thread.getSetting({ key: modeSettingKey });
-    if (savedModeSetting !== modelId) throw new Error(`Could not save the ${modeId} mode model`);
-
-    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: nextPackId });
-    packSettingSaved = true;
+    saveSettings(nextSettings);
+    await applyPackToSession(ctx, nextPackId, { modeId });
     const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
     if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
-    globalSettingsWriteStarted = true;
-    saveSettings(nextSettings);
-    await ctx.state.session.model.switch({ modelId, scope: 'global' });
-    await ctx.state.session.state.set({ activeModelPackId: nextPackId });
-    sessionPackSaved = true;
     await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-    fallbackStatusCleared = true;
-    // A manual switch supersedes any queued hop: getDynamicModel prefers the
-    // pending toModelId over the session model, so leaving the marker in place
-    // would override the user's choice until the hop landed.
-    await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
-    pendingThreadFallbackCleared = true;
-    await ctx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
-    pendingSessionFallbackCleared = true;
+    await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+    await ctx.state.session.state.set({ [MODEL_FALLBACK_STATE_KEY]: null });
   } catch (error) {
-    if (globalSettingsWriteStarted) {
-      try {
-        saveSettings(settings);
-      } catch {
-        // Keep the original failure. The thread and active model still roll back below.
-      }
+    try {
+      saveSettings(settings);
+    } catch {
+      // Keep the original failure while restoring the live thread below.
     }
-
-    const rollbacks: Array<Promise<unknown>> = [];
-    if (sessionPackSaved) {
-      rollbacks.push(ctx.state.session.state.set({ activeModelPackId: previousSessionPackId }));
-    }
-    if (pendingThreadFallbackCleared) {
-      rollbacks.push(
-        ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: previousPendingFallback }),
-      );
-    }
-    if (pendingSessionFallbackCleared) {
-      const previousSessionPending = previousSessionState?.[PACK_FALLBACK_STATE_KEY];
-      rollbacks.push(
-        ctx.state.session.state.set({
-          [PACK_FALLBACK_STATE_KEY]: previousSessionPending === undefined ? null : previousSessionPending,
-        }),
-      );
-    }
-    if (fallbackStatusCleared) {
-      rollbacks.push(
-        ctx.state.session.thread.setSetting({
-          key: THREAD_FALLBACK_STATUS_KEY,
-          value: previousFallbackStatus,
-        }),
-      );
-    }
-    if (packSettingSaved) {
-      rollbacks.push(
-        ctx.state.session.thread.setSetting({
-          key: THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-          value: previousPackSetting,
-        }),
-      );
-    }
-    if (modeSettingSaved) {
-      rollbacks.push(ctx.state.session.thread.setSetting({ key: modeSettingKey, value: previousModeSetting }));
-    }
-    if (ctx.state.session.model.get() !== previousModelId) {
-      rollbacks.push(ctx.state.session.model.switch({ modelId: previousModelId, scope: 'global' }));
-    }
-    await Promise.allSettled(rollbacks);
+    await Promise.allSettled([
+      ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: previousPackSetting }),
+      ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: previousFallbackStatus }),
+      ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: previousPendingFallback }),
+      ctx.state.session.model.switch({ modelId: previousModelId }),
+      ctx.state.session.state.set({
+        modelRoute: previousSessionState.modelRoute,
+        [MODEL_FALLBACK_STATE_KEY]: previousSessionState[MODEL_FALLBACK_STATE_KEY] ?? null,
+      }),
+    ]);
     throw error;
   }
 

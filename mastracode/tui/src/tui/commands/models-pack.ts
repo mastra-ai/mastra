@@ -1,7 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { PACK_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -25,6 +25,7 @@ import chalk from 'chalk';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { applyPackToSession } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
@@ -748,39 +749,12 @@ export function upsertCustomPackInSettings(
 }
 
 async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
-  const controller = ctx.state.controller;
-  const modes = controller.listModes();
-
-  for (const mode of modes) {
-    const modelId = (pack.models as Record<string, string>)[mode.id];
-    if (modelId) {
-      (mode as any).defaultModelId = modelId;
-      await ctx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
-    }
-  }
-
-  const currentModeId = ctx.state.session.mode.get();
-  const currentModeModel = (pack.models as Record<string, string>)[currentModeId];
-  if (currentModeModel) {
-    await ctx.state.session.model.switch({ modelId: currentModeModel });
-  }
-
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = (pack.models as Record<string, string>)[modeId];
-    if (saModelId) {
-      await ctx.state.session.subagents.model.set({ modelId: saModelId, agentType });
-    }
-  }
-
-  await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  const modes = ctx.state.controller.listModes();
   await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-  // A manual switch supersedes any queued hop: getDynamicModel prefers the
-  // pending toModelId over the session model, so leaving the marker in place
-  // would override the user's choice until the hop landed.
-  await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+  // A manual switch supersedes any queued route hop.
+  await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+  await ctx.state.session.state.set({ [MODEL_FALLBACK_STATE_KEY]: null });
   ctx.state.fallbackStatus = undefined;
-  await ctx.state.session.state.set({ activeModelPackId: pack.id, [PACK_FALLBACK_STATE_KEY]: null });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -799,6 +773,8 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   s.models.subagentModels = {};
 
+  const currentModeId = ctx.state.session.mode.get();
+  const currentModeModel = ctx.state.session.model.get();
   const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
   const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
   const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
@@ -817,6 +793,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
   }
 
+  await applyPackToSession(ctx, pack.id, { settings: s });
   saveSettings(s);
   updateStatusLine(ctx.state);
 }
