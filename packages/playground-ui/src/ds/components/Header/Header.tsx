@@ -6,17 +6,20 @@ import { cn } from '@/lib/utils';
 export interface HeaderProps {
   children?: React.ReactNode;
   border?: boolean;
+  /** Surface edges match the app frame; content dividers use the normal border. */
+  borderTone?: 'default' | 'surface';
   className?: string;
 }
 
-export const Header = ({ children, border = true, className }: HeaderProps) => {
+export const Header = ({ children, border = true, borderTone = 'default', className }: HeaderProps) => {
   return (
     <header
       className={cn(
         'z-50 flex h-header-default w-full items-center gap-2 bg-transparent px-2',
         {
-          // Match the frame's inset rim where the header divider meets it.
-          'border-b border-(--surface-rim)': border,
+          'border-b': border,
+          'border-border': border && borderTone === 'default',
+          'border-surface-rim': border && borderTone === 'surface',
         },
         className,
       )}

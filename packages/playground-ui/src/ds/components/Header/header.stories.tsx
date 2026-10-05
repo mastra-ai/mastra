@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings, Bell, Plus, Search } from 'lucide-react';
 import { Button } from '../Button';
+import { Txt } from '../Txt';
 import { Header, HeaderTitle, HeaderAction, HeaderGroup } from './Header';
+import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 
 const meta: Meta<typeof Header> = {
   title: 'Layout/Header',
@@ -13,6 +15,10 @@ const meta: Meta<typeof Header> = {
     border: {
       control: { type: 'boolean' },
     },
+    borderTone: {
+      control: { type: 'select' },
+      options: ['default', 'surface'],
+    },
   },
 };
 
@@ -20,10 +26,29 @@ export default meta;
 type Story = StoryObj<typeof Header>;
 
 export const Default: Story = {
-  render: () => (
-    <Header>
+  args: { border: true, borderTone: 'default' },
+  render: args => (
+    <Header {...args}>
       <HeaderTitle>Dashboard</HeaderTitle>
     </Header>
+  ),
+};
+
+export const SurfaceBorder: Story = {
+  args: { border: true, borderTone: 'surface' },
+  render: args => (
+    <div className="bg-sidebar p-4">
+      <MainCard className="min-h-48">
+        <Header {...args}>
+          <HeaderTitle>App frame header</HeaderTitle>
+        </Header>
+        <div className="p-4">
+          <Txt variant="body-sm" tone="muted">
+            The header uses the same surface rim as the frame. MainCard reserves its inset pixel.
+          </Txt>
+        </div>
+      </MainCard>
+    </div>
   ),
 };
 

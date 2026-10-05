@@ -78,7 +78,7 @@ export function CandidateCard({
           })
         }
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-border/50 bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className="group border-surface-rim bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
         <button
           type="button"

@@ -94,17 +94,36 @@ Every badge hue (`green`, `red`, `amber`, `blue`, `purple`, `orange`, `cyan`, `p
 
 #### Opacity and literal colors
 
-A resting color never depends on what sits behind it. Surfaces, text, borders, notices, status, product, and chart colors are solid ramp steps in both themes, and span colors are solid values in `data-viz.css` at one lightness per theme, whatever layer they sit on.
+Opaque surfaces, text, notices, product avatars, and chart colors use solid ramp steps in both themes. Span colors use solid values in `data-viz.css`. The theme also defines translucent fills and borders whose appearance intentionally depends on the surface beneath them.
 
 Opacity is allowed only through design-system tokens, for layers whose job is to show what is underneath:
 
 - State layers over an existing surface: `fill`, `fill-subtle`, `fill-hover`, `fill-active`, and `fill-strong`.
 - Scrims and overlays: `scrim`.
 - Badge fills: `badge-{hue}-strong` and `badge-{hue}-subtle`, so a badge tints with the card or row it sits on.
-- Neutral hairlines: `border`, `border-strong`, `surface-rim`, and `gray-alpha-*`.
+- Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
 - Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
 
 Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions. `src/color-rules.test.ts` enforces this across playground-ui, Studio, and Factory.
+
+#### Border roles
+
+Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`; the color guard rejects these across the DS, Studio, Factory, and stories. Existing roles cover the following uses without adding a new token value:
+
+| Role                | Token / utility                                              | Use                                                                     |
+| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Surface edge        | `--surface-rim` / `border-surface-rim`                       | App frame, panel and card edges; frame headers that meet them           |
+| Content divider     | `--border` / `border-border`                                 | Internal separators and filled control edges                            |
+| Outlined control    | `--border-strong` / `border-border-strong`                   | Transparent controls at rest                                            |
+| Hover / focus       | `--border-hover`, `--border-focus`                           | Interactive control states                                              |
+| Field edge          | `--field-rim`, `--field-rim-on-surface`, `--field-rim-focus` | Field recipes resolve the edge for their parent surface and focus state |
+| Badge / avatar trim | `--inset-highlight`, `--inset-rim`                           | `shadow-inset` combines a top highlight and rim                         |
+
+`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box; `shadow-raised` and `shadow-overlay` combine it with a lip and drop shadows. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
+
+`Header` defaults to a content divider. Use `borderTone="surface"` for frame headers; `PageLayout` applies it to the app breadcrumb bar. `border={false}` hides either tone.
+
+Storybook's Foundations/Surface renders border tokens as isolated 1px edges on named backgrounds, with composed surfaces labeled separately. Foundations/Elevation shows the full recipes and each inset edge separately. Switch themes to inspect the actual token values in context; no extra opacity is applied to these previews.
 
 To migrate removed tokens:
 
