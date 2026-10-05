@@ -132,7 +132,6 @@ th:has(header) {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
 
-
   /*
    * Agent builder "Your agent is ready" panel — a polished, finite light pass.
    * A soft ambient aurora gently drifts behind the content, while a bright
