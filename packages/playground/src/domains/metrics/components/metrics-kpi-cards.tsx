@@ -14,7 +14,7 @@ export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Agent Runs"
+      label="Agent runs"
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -29,7 +29,7 @@ export function ModelCostKpiCard() {
   const currency = data?.costUnit ?? undefined;
   return (
     <KpiCardView
-      label="Total Model Cost"
+      label="Model cost"
       value={data?.cost != null ? <CompactNumber value={data.cost} currency={currency} /> : null}
       prevValue={data?.previousCost != null ? formatFullNumber(data.previousCost, { currency }) : undefined}
       changePct={data?.costChangePercent ?? null}
@@ -44,7 +44,7 @@ export function TotalTokensKpiCard() {
   const { data, isLoading, isError } = useTotalTokensKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Tokens"
+      label="Tokens"
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -58,7 +58,7 @@ export function ActiveThreadsKpiCard() {
   const { data, isLoading, isError } = useActiveThreadsKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Threads"
+      label="Threads"
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
@@ -72,7 +72,7 @@ export function ActiveResourcesKpiCard() {
   const { data, isLoading, isError } = useActiveResourcesKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Resources"
+      label="Resources"
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
