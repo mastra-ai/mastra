@@ -1,11 +1,14 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
-import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
+import {
+  useAgentMessages,
+  useMemoryThreadMessages,
+  useObservationalMemory,
+  useMemoryConfig,
+} from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -31,7 +34,6 @@ import {
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

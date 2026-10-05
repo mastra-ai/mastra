@@ -2,8 +2,8 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useDatasetVersions } from '@mastra/react/hooks';
 import { useEffect } from 'react';
-import { useDatasetVersions } from '../hooks/use-dataset-versions';
 
 export interface DatasetVersionsProps {
   datasetId: string;

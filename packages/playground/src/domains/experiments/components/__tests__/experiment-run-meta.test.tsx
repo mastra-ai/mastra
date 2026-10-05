@@ -1,8 +1,8 @@
 import type { DatasetExperiment, DatasetRecord, GetScorerResponse } from '@mastra/client-js';
+import type { ExperimentMetrics } from '@mastra/react/hooks';
 import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ExperimentMetrics } from '../../hooks/use-experiment-metrics';
 import { ExperimentRunMeta, type ExperimentRunMetaProps } from '../experiment-run-meta';
 import { experiments } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';

@@ -1,7 +1,7 @@
+import { useTraceQuery } from '@mastra/react/hooks';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks';
 import { useEffect, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
-import { useTraceQuery } from './use-trace-query';
-import type { TraceQueryArgs, UseTraceQueryArgs } from './use-trace-query';
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;

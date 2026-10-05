@@ -5,12 +5,11 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
 import { ArrowLeft, Eye } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useRoleImpersonation } from '@/domains/auth/hooks/use-role-impersonation';
-import { isAuthenticated } from '@/domains/auth/types';
 import { Link } from '@/lib/link';
 
 export interface AgentBuilderRootLayoutProps {

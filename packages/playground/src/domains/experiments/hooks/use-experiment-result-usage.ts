@@ -1,5 +1,4 @@
-import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
-import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
+import { useTraceSpans, useTraceUsage } from '@mastra/react/hooks';
 
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
