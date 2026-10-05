@@ -825,7 +825,14 @@ describe('createMastraCode', () => {
 
     expect(code.knowledge).toBe(instance);
     expect(code.knowledgeKey).toBe('mastra');
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), instance);
+    // No `settingsPath` configured; Knowledge follows the memory options.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      { disableSettingsOmSeed: undefined },
+      instance,
+    );
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
   });
 
