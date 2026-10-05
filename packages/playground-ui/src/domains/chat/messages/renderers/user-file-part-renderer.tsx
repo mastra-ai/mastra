@@ -1,7 +1,7 @@
 import type { FilePart } from '@mastra/react/ui';
 
 import { isTextMimeType } from '../../attachments/attachment-kind';
-import { InMessageAttachment } from './in-message-attachment';
+import { MessageAttachment } from '../../attachments/message-attachment';
 import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@/lib/file';
 
 const textPreview = (data: string) => {
@@ -36,17 +36,17 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
 
   if (isNonFetchableUrl || (!isImage && !isDocument)) {
     return (
-      <InMessageAttachment type="file" contentType={mimeType} name={fileLabel} src={isFetchableUrl ? src : undefined} />
+      <MessageAttachment type="file" contentType={mimeType} name={fileLabel} src={isFetchableUrl ? src : undefined} />
     );
   }
 
   if (isImage) {
     const imageSrc = isFetchableUrl || data.startsWith('data:') ? data : `data:${mimeType};base64,${data}`;
-    return <InMessageAttachment type="image" src={imageSrc} name={fileLabel} />;
+    return <MessageAttachment type="image" src={imageSrc} name={fileLabel} />;
   }
 
   return (
-    <InMessageAttachment
+    <MessageAttachment
       type="document"
       contentType={mimeType}
       name={fileLabel}
