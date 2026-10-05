@@ -29,7 +29,7 @@ function SpanTextRenderer({ value }: { value: string }) {
 }
 
 function SpanInterruptedRenderer({ value }: { value: InterruptedSpanOutput }) {
-  const title = value.status === 'suspended' ? 'Suspended' : 'Aborted';
+  const title = { suspended: 'Suspended', aborted: 'Aborted', interrupted: 'Interrupted' }[value.status];
   const hasTarget = value.toolName !== undefined || value.toolCallId !== undefined;
   return (
     <div data-slot="span-interrupted" data-status={value.status} className="flex flex-col gap-3">

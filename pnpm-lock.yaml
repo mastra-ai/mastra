@@ -4643,6 +4643,9 @@ importers:
       '@mastra/slack':
         specifier: workspace:^
         version: link:../../channels/slack
+      '@mastra/teams':
+        specifier: workspace:^
+        version: link:../../channels/teams
       '@mastra/telegram':
         specifier: workspace:^
         version: link:../../channels/telegram
