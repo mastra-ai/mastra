@@ -113,6 +113,19 @@ describe('Dialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
   });
 
+  it('omits the built-in close button when showCloseButton is false', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent showCloseButton={false}>
+          <DialogTitle>Title</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByText('Title')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+  });
+
   it('fires onOpenChange when a rendered DialogClose is clicked', () => {
     const onOpenChange = vi.fn();
     render(
