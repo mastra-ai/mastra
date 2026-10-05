@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
+import { payloadColumnSql } from './helpers';
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -141,7 +142,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     .join(' OR ');
   const payloads = await query<SpanQueryPayload>(
     `SELECT DISTINCT ${identities},
-    substring(CAST(input AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS inputPreview, substring(CAST(output AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS outputPreview
+    substring(CAST(${payloadColumnSql('input')} AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS inputPreview, substring(CAST(${payloadColumnSql('output')} AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS outputPreview
     FROM span_events WHERE ${payloadWhere}`,
     payloadValues,
   );

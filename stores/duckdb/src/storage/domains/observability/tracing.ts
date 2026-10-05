@@ -29,7 +29,18 @@ import {
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull, normalizeTags } from './helpers';
+import {
+  v,
+  jsonV,
+  payloadJsonV,
+  parseJson,
+  parseJsonArray,
+  toDate,
+  toDateOrNull,
+  normalizeTags,
+  JSON_NULL_PLACEHOLDER,
+  SPAN_PAYLOAD_COLUMNS,
+} from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 
 // ============================================================================
@@ -77,13 +88,17 @@ const COLUMNS = [
 
 const COLUMNS_SQL = COLUMNS.join(', ');
 
+const PAYLOAD_COLUMN_SET: ReadonlySet<string> = new Set(SPAN_PAYLOAD_COLUMNS);
+
 /**
  * Reconstruction query uses `arg_max(field, timestamp) FILTER (WHERE field IS NOT NULL)`
  * so that the final end event supplies the terminal span fields without wiping
- * stable values emitted on the start event.
+ * stable values emitted on the start event. Payload columns also skip the JSON
+ * `null` placeholder, which stands in for a missing value.
  */
 function argMaxNonNull(col: string): string {
-  return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL) as ${col}`;
+  const placeholder = PAYLOAD_COLUMN_SET.has(col) ? ` AND ${col} <> '${JSON_NULL_PLACEHOLDER}'` : '';
+  return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL${placeholder}) as ${col}`;
 }
 
 const SPAN_RECONSTRUCT_SELECT = `
@@ -600,15 +615,15 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.environment),
     v(row.source),
     v(row.serviceName),
-    jsonV(row.attributes),
+    payloadJsonV(row.attributes),
     jsonV(row.metadata),
     jsonV(row.tags),
     jsonV(row.scope),
     jsonV(row.links),
-    jsonV(row.input),
-    jsonV(row.output),
+    payloadJsonV(row.input),
+    payloadJsonV(row.output),
     jsonV(row.error),
-    jsonV(row.requestContext),
+    payloadJsonV(row.requestContext),
   ].join(', ');
 }
 
