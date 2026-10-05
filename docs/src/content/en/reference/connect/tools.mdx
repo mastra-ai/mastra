@@ -170,7 +170,7 @@ The resolver also exposes three methods for manual control:
 - `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
 - `disconnect()` closes MCP transports owned by this resolver and clears its cached snapshot.
 
-Failure handling is tuned for long-running servers:
+Failure handling favors keeping a long-running server up:
 
 - Configuration errors (missing project ID or token, unknown `integrations` keys or tool names, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw eagerly at `tools()` call time.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
@@ -178,7 +178,7 @@ Failure handling is tuned for long-running servers:
 
 ## The `integrations` allowlist
 
-When `integrations` is provided, only listed providers are returned. Without it, every connected provider with a shipped toolset is included. A listed provider with no connection in the project yet is skipped and included automatically once a connection is attached.
+When `integrations` is provided, only listed providers are returned. Without it, every connected provider with a generated toolset is included. A listed provider with no connection in the project yet is skipped and included automatically once a connection is attached.
 
 Tool keys for `allowTools` and `disallowTools` are listed per provider in the [provider toolsets reference](/reference/connect/providers).
 
@@ -190,11 +190,11 @@ For each provider present in the project's connections:
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
 
-Connections in `needs_reauth` status are never silently mapped: they're skipped with a warning until reconnected on the platform.
+Connections in `needs_reauth` status are skipped with a warning until reconnected on the platform, never mapped with dead credentials.
 
 ## MCP providers
 
-Beyond the shipped toolsets, the resolver discovers any connected provider that advertises MCP capability in the platform catalog. Discovered tools use the same flat contract, namespaced as `<provider-id>_<tool-name>`. If a provider has both a shipped toolset and an MCP capability, the MCP catalog is preferred.
+Beyond the generated toolsets, the resolver discovers any connected provider that advertises MCP capability in the platform catalog. Discovered tools use the same flat contract, namespaced as `<provider-id>_<tool-name>`. If a provider has both a generated toolset and an MCP capability, the MCP catalog is preferred.
 
 The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the provider's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the provider is detached, or `disconnect()` is called.
 
@@ -210,6 +210,6 @@ Throws `MastraConnectError` with a `code` property:
 | `missing_access_token` | No platform token configured |
 | `invalid_options` | Unknown provider ID or tool name, conflicting filters, or invalid `ttlMs` |
 | `unauthorized` | The platform rejected the token (401/403) |
-| `proxy_error` | A proxied provider request failed; `status` and `detail` carry the provider response |
+| `proxy_error` | A proxied provider request failed, with `status` and `detail` carrying the provider response |
 | `unknown_connection` | A tool call supplied a `connection_name` that matches no active connection |
 | `platform_error` | Any other platform request failure |

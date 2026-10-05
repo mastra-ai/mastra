@@ -7,18 +7,20 @@ packages:
 
 # Connect
 
-`@mastra/connect` turns the [provider connections](/docs/mastra-platform/providers) attached to a Mastra platform project into things your application can use directly:
+`@mastra/connect` lets your application use the [provider connections](/docs/mastra-platform/providers) attached to a Mastra platform project:
 
 - [`tools()`](/reference/connect/tools): a live toolset resolver for agents.
 - [`channels()`](/reference/connect/channels): chat channel providers (Slack, Telegram, Discord) for `Mastra({ channels })`.
 - [`credential()`](/reference/connect/credential): the raw credential for a connection, for custom SDK or MCP use.
 
-This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Providers](/docs/mastra-platform/providers).
+Follow this page to connect a provider from the terminal and give an agent its tools. Platform-side setup, multiple connections, and re-authentication are covered in [Providers](/docs/mastra-platform/providers).
 
 ## Prerequisites
 
-- A Mastra project with a Mastra platform project to attach connections to.
+- A [Mastra platform](/docs/mastra-platform/overview) project to hold the connections.
 - The [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+
+The CLI resolves the target project from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`.
 
 ## Install
 
@@ -28,20 +30,41 @@ npm install @mastra/connect
 
 ## Connect a provider
 
-Use [`mastra connect`](/reference/cli/mastra) to see the provider catalog and run an authorization flow:
+Start with the catalog. `mastra connect list` prints every provider, with the ones already connected to your project in green:
 
 ```bash
 mastra connect list
+```
+
+Pick one and connect it:
+
+```bash
 mastra connect add linear
 ```
 
-OAuth providers like Linear open a consent screen in your browser, and the CLI waits until the connection is active; API-key providers prompt for credentials in the terminal. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`.
+What happens next depends on the provider's auth type. OAuth providers like Linear open a consent screen in your browser, and the CLI waits until the connection becomes active. API key and Basic auth providers prompt for credentials in the terminal.
 
-Providers can also be connected from the project's Integrations tab in the dashboard. [Providers](/docs/mastra-platform/providers#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
+If your organization already has Linear connections that aren't attached to this project, the CLI offers to reuse one instead of running the auth flow again. Once a new connection is active, it offers to set a display name, which helps you tell connections apart when a project holds several for the same provider. Pass `--yes` to skip every prompt and always create a new, unnamed connection.
+
+To unlink a provider from the project later:
+
+```bash
+mastra connect remove linear
+```
+
+The organization keeps the underlying connection, so a later `mastra connect add` can re-attach it without re-authorizing.
+
+Providers can also be connected from the project's **Integrations** tab in the dashboard. [Providers](/docs/mastra-platform/providers#connect-a-provider) covers the full flow.
 
 ## Configure the environment
 
-At runtime, `@mastra/connect` authenticates to the platform with an access token. Create one with `mastra auth tokens create` and put it alongside the project ID in your app's environment:
+At runtime, `@mastra/connect` authenticates to the platform with an access token:
+
+```bash
+mastra auth tokens create
+```
+
+Put the token alongside the project ID in your app's environment:
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=your-token
@@ -66,7 +89,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, every connected provider with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so running `mastra connect add` (or connecting from the dashboard) makes the new provider's tools available to the running server without a restart.
+With no options, every connected provider with a generated toolset is included. The resolver caches its snapshot and revalidates from the platform every 30 seconds. Run `mastra connect add` while the server is running, or connect from the dashboard, and the new provider's tools show up without a restart.
 
 Ask the agent to do something with a connected provider:
 
@@ -74,7 +97,7 @@ Ask the agent to do something with a connected provider:
 const response = await opsAgent.generate('Summarize my open Linear issues.')
 ```
 
-The agent sees tools like `linear_list_issues` and `linear_create_issue`; each call is proxied through the platform with the connection's credentials injected server-side.
+The agent sees tools like `linear_list_issues` and `linear_create_issue`. Each call is proxied through the platform, which injects the connection's credentials server-side.
 
 ## Limit what an agent can touch
 
@@ -86,7 +109,7 @@ const opsTools = tools({
 })
 ```
 
-Use the object form for per-provider control. `allowTools` and `disallowTools` are mutually exclusive per provider, and unknown provider IDs or tool names throw at startup so configuration errors surface early:
+Use the object form for per-provider control. `allowTools` and `disallowTools` are mutually exclusive per provider, and unknown provider IDs or tool names throw at startup, so typos surface before an agent runs:
 
 ```typescript
 const opsTools = tools({
@@ -112,7 +135,7 @@ const toolsets = await connected()
 const response = await agent.generate('Summarize my open issues.', { toolsets })
 ```
 
-The resolver also exposes `invalidate()`, `refresh()`, and `disconnect()`. Call `refresh()` to pick up a connection you just attached without waiting for the TTL.
+The resolver also exposes `invalidate()`, `refresh()`, and `disconnect()`. Call `refresh()` to pick up a newly attached connection without waiting for the TTL.
 
 ## Add chat channels
 
