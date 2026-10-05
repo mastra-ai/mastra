@@ -82,7 +82,6 @@ import {
   MODEL_ATTEMPT_KEY,
   RESOURCE_ID_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
-  TRANSCRIPT_STEPS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
@@ -96,7 +95,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
-import { bindModelAttempt, getModelAttempt, getTranscriptStepContent, ModelAttempt } from '../../shared/model-attempt';
+import { bindModelAttempt, getModelAttempt, ModelAttempt } from '../../shared/model-attempt';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
@@ -1291,7 +1290,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
       const modelAttempt = readScoped(scopeCtx, MODEL_ATTEMPT_KEY, 'modelAttempt');
       const modelOptions = modelAttempt ? { ...options, abortSignal: modelAttempt.controller.signal } : options;
-      const transcriptSteps = readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps');
 
       const outputWriter: typeof runOutputWriter = async (chunk, writerOptions) => {
         if (modelAttempt) {
@@ -1518,14 +1516,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
       }
 
-      if (modelAttempt) {
-        modelAttempt.transcriptStep = {
-          messageId: currentMessageId,
-          start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
-          end: 0,
-        };
-      }
-
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -1567,7 +1557,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         modelAttempt,
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
-        modelAttempt?.startModel(modelConfig.model.modelId, activeFallbackModelIndex);
+        modelAttempt?.throwIfDiscarded();
+        if (modelAttempt) modelAttempt.fallbackModelIndex = activeFallbackModelIndex;
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1652,11 +1643,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // input-step processors.
         const previousSteps = inputData.output?.steps || [];
         const lastPreviousStep = previousSteps[previousSteps.length - 1];
-        const lastTranscriptStep = transcriptSteps?.[previousSteps.length - 1];
         if (lastPreviousStep) {
-          const refreshedContent = lastTranscriptStep
-            ? getTranscriptStepContent(messageList, lastTranscriptStep)
-            : messageList.get.response.aiV5.modelContent(previousSteps.length);
+          // modelContent is 1-indexed, so the last completed step is `length`.
+          const refreshedContent = messageList.get.response.aiV5.modelContent(previousSteps.length);
           // Durable agents deserialize a fresh MessageList per workflow step, so
           // the re-extraction can legitimately come back empty there. Never let
           // that wipe content we already have.
@@ -2143,10 +2132,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         if (modelAttempt) {
           modelAttempt.messageId = currentStep.messageId;
-          modelAttempt.modelId = currentStep.model.modelId;
-          if (modelAttempt.transcriptStep?.messageId !== currentStep.messageId) {
-            modelAttempt.transcriptStep = { messageId: currentStep.messageId, start: 0, end: 0 };
-          }
           bindModelAttempt(modelResult, modelAttempt);
         }
         const outputStream = new MastraModelOutput<OUTPUT>({
@@ -3158,14 +3143,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       const steps = inputData.output?.steps || [];
 
-      if (modelAttempt?.transcriptStep) {
-        modelAttempt.transcriptStep.end =
-          messageList.get.response.aiV5.ui().find(message => message.id === modelAttempt.transcriptStep?.messageId)
-            ?.parts.length ?? 0;
-      }
-      const currentIterationContent = modelAttempt?.transcriptStep
-        ? getTranscriptStepContent(messageList, modelAttempt.transcriptStep)
-        : messageList.get.response.aiV5.modelContent(steps.length + 1);
+      // Only include content from this iteration, not all accumulated content.
+      // modelContent is 1-indexed and already scopes the result to the requested
+      // step, so the step being pushed is `steps.length + 1` and no further
+      // slicing is needed.
+      const currentIterationContent = messageList.get.response.aiV5.modelContent(steps.length + 1);
 
       // Build tripwire data if this step is being rejected
       // This includes both retry scenarios and max retries exceeded
@@ -3310,25 +3292,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     const scopeCtx: RunScopeContext = { mastra, runId, _internal };
     const subscribe = readScoped(scopeCtx, SUBSCRIBE_PENDING_SIGNALS_KEY, 'subscribePendingSignals');
     const attempt = new ModelAttempt(options?.abortSignal, subscribe && (listener => subscribe(runId, listener)));
-    const previousSteps = context.inputData.output?.steps ?? [];
-    const attemptIndex = previousSteps.length;
-    const transcriptSteps =
-      readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps') ?? previousSteps.map(() => undefined);
     writeScoped(scopeCtx, MODEL_ATTEMPT_KEY, 'modelAttempt', attempt);
-    writeScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps', transcriptSteps);
     try {
-      const result = await executeAttempt(context);
-      if (result && 'output' in result && result.output?.steps && result.output.steps.length > attemptIndex) {
-        transcriptSteps.push(attempt.transcriptStep);
-        const completedStep = result.output.steps.at(-1);
-        if (completedStep) bindModelAttempt(completedStep, attempt);
-      }
-      return result;
+      return await executeAttempt(context);
     } catch (error) {
       if (!attempt.discarded) throw error;
       await attempt.discardOutput();
       attempt.closeReasoning(chunk => safeEnqueue(runController, chunk));
-      const steps = previousSteps;
+      const steps = context.inputData.output?.steps ?? [];
       const aborted = options?.abortSignal?.aborted === true;
       const result = {
         messageId: attempt.messageId ?? context.inputData.messageId,
@@ -3336,9 +3307,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           reason: aborted ? ('abort' as const) : ('other' as const),
           isContinued: !aborted,
           signalPreempted: true,
-          warnings: attempt.warnings,
+          warnings: [],
         },
-        metadata: { request: attempt.request },
+        metadata: {},
         output: { text: '', toolCalls: [], usage: {}, steps },
         messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
         processorRetryCount: context.inputData.processorRetryCount,

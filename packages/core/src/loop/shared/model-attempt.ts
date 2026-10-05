@@ -1,24 +1,5 @@
-import type { LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata } from '@internal/ai-sdk-v5';
-import type { MessageList } from '../../agent/message-list';
-import { aiV5UIMessagesToAIV5ModelMessages } from '../../agent/message-list/conversion/output-converter';
-import type { ChunkType, LanguageModelUsage } from '../../stream/types';
+import type { ChunkType } from '../../stream/types';
 import { STEP_CONTENT_CHUNK_TYPES } from './step-content-chunk-types';
-
-export interface TranscriptStep {
-  messageId: string;
-  start: number;
-  end: number;
-}
-
-export function getTranscriptStepContent(messageList: MessageList, step: TranscriptStep) {
-  const message = messageList.get.response.aiV5.ui().find(message => message.id === step.messageId);
-  if (!message) return [];
-  return aiV5UIMessagesToAIV5ModelMessages(
-    [{ ...message, parts: message.parts.slice(step.start, step.end) }],
-    messageList.get.all.db(),
-  ).flatMap(messageList.get.response.aiV5.stepContent);
-}
 
 // A stream retains its own attempt, even after the run scope points at a replacement.
 const attemptsByStream = new WeakMap<object, ModelAttempt>();
@@ -34,13 +15,8 @@ export function getModelAttempt(stream: object): ModelAttempt | undefined {
 /** Private model-call cancellation; never cancels the owning run. */
 export class ModelAttempt {
   readonly controller = new AbortController();
-  usage: LanguageModelUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-  warnings: LanguageModelV2CallWarning[] = [];
-  request?: LanguageModelRequestMetadata;
   messageId?: string;
-  transcriptStep?: TranscriptStep;
   fallbackModelIndex?: number;
-  modelId?: string;
   #state: 'waiting' | 'armed' | 'accepted' | 'discarded' = 'waiting';
   #unsubscribe?: () => void;
   #runSignal?: AbortSignal;
@@ -72,15 +48,6 @@ export class ModelAttempt {
     return this.#state === 'discarded';
   }
 
-  startModel(modelId: string, fallbackModelIndex: number): void {
-    this.throwIfDiscarded();
-    this.modelId = modelId;
-    this.fallbackModelIndex = fallbackModelIndex;
-    this.usage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-    this.warnings = [];
-    this.request = undefined;
-  }
-
   // Subscribe before draining, then arm synchronously before any processor await.
   arm(): void {
     if (this.#state === 'waiting') this.#state = 'armed';
@@ -104,16 +71,6 @@ export class ModelAttempt {
     ) {
       this.accept();
     }
-    return true;
-  }
-
-  observeRaw<OUTPUT>(chunk: ChunkType<OUTPUT>): boolean {
-    if (!this.observe(chunk)) return false;
-    if (chunk.type === 'step-start') {
-      this.warnings = chunk.payload.warnings ?? [];
-      this.request = chunk.payload.request;
-    }
-    if (chunk.type === 'finish') this.usage = chunk.payload.output.usage;
     return true;
   }
 

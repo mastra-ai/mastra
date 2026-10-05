@@ -905,7 +905,6 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(snapshots.map(snapshot => snapshot.stepNumber)).toEqual([0, 1, 1, 2]);
     expect(snapshots[3]?.content).toHaveLength(2);
     expect(snapshots[3]?.content[0]).toContain('tool result');
-    expect(snapshots[3]?.content[1]).toContain('tool result');
     expect(stateIdentities.size).toBe(1);
     expect(JSON.stringify(prompts[2])).toContain('KEPT_SIGNATURE');
     expect(JSON.stringify(prompts[2])).not.toContain('STALE_REASONING_FINGERPRINT');

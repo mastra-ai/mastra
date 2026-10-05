@@ -101,66 +101,6 @@ describe('private model attempt cancellation', () => {
     },
   );
 
-  it.each([
-    { inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0 },
-    { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
-    { inputTokens: 5, outputTokens: undefined, totalTokens: undefined, reasoningTokens: 2 },
-  ])('preserves reported usage without normalizing omitted measurements: %j', usage => {
-    const { attempt, notify } = createAttempt();
-    attempt.arm();
-    attempt.observeRaw({
-      type: 'finish',
-      runId: 'run',
-      from: ChunkFrom.AGENT,
-      payload: {
-        stepResult: { reason: 'stop' },
-        output: { usage },
-        metadata: {},
-        messages: { all: [], user: [], nonUser: [] },
-      },
-    });
-    notify();
-    expect(attempt.discarded).toBe(true);
-    expect(attempt.usage).toEqual(usage);
-    attempt.dispose();
-  });
-
-  it('clears a failed model measurement before a fallback can be preempted', () => {
-    const { attempt, notify } = createAttempt();
-    attempt.arm();
-    attempt.startModel('primary', 0);
-    attempt.observeRaw({
-      type: 'step-start',
-      runId: 'run',
-      from: ChunkFrom.AGENT,
-      payload: {
-        request: { body: 'primary-request' },
-        warnings: [{ type: 'other', message: 'primary-warning' }],
-        messageId: 'response',
-      },
-    });
-    attempt.observeRaw({
-      type: 'finish',
-      runId: 'run',
-      from: ChunkFrom.AGENT,
-      payload: {
-        stepResult: { reason: 'error' },
-        output: { usage: { inputTokens: 11, outputTokens: 12, totalTokens: 23 } },
-        metadata: {},
-        messages: { all: [], user: [], nonUser: [] },
-      },
-    });
-    attempt.startModel('fallback', 1);
-    notify();
-    expect(attempt.discarded).toBe(true);
-    expect(attempt.modelId).toBe('fallback');
-    expect(attempt.fallbackModelIndex).toBe(1);
-    expect(attempt.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
-    expect(attempt.request).toBeUndefined();
-    expect(attempt.warnings).toEqual([]);
-    attempt.dispose();
-  });
-
   it('accepts natural reasoning-only completion before response hooks', () => {
     const { attempt, notify, unsubscribe } = createAttempt();
     attempt.arm();

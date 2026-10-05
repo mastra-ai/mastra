@@ -8,7 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { bindModelAttempt, getModelAttempt, getTranscriptStepContent } from '../../loop/shared/model-attempt';
+import { bindModelAttempt, getModelAttempt } from '../../loop/shared/model-attempt';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -463,7 +463,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       ? stream.pipeThrough(
           new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
             transform(chunk, controller) {
-              if (!modelAttempt.observeRaw(chunk)) return;
+              if (!modelAttempt.observe(chunk)) return;
               bindModelAttempt(chunk, modelAttempt);
               controller.enqueue(chunk);
             },
@@ -940,8 +940,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const payloadSteps = chunk.payload.output?.steps || [];
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
-              const attempt = currentPayloadStep && getModelAttempt(currentPayloadStep);
-              const discarded = attempt?.discarded === true;
 
               // If step has tripwire, text should be empty (rejected response)
               const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
@@ -958,20 +956,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // may be a stale reference (each workflow step deserializes
                 // a fresh instance).  Fall back to the live messageList for
                 // non-durable agents.
-                content: discarded
-                  ? []
-                  : attempt?.transcriptStep
-                    ? getTranscriptStepContent(messageList, attempt.transcriptStep)
-                    : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
                 // Scoped to this step (like `text` above); the run-level
                 // reasoning still spans every step.
-                reasoningText: discarded
-                  ? ''
-                  : self.#bufferedByStep.reasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
-                reasoning: discarded ? [] : Object.values(self.#bufferedByStepReasoningDetails),
+                reasoningText: self.#bufferedByStep.reasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
+                reasoning: Object.values(self.#bufferedByStepReasoningDetails),
                 get staticToolCalls() {
                   return self.#bufferedByStep.toolCalls.filter(
                     part => part.type === 'tool-call' && part.payload?.dynamic === false,

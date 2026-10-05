@@ -1,7 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
-import { getModelAttempt, type ModelAttempt } from '../loop/shared/model-attempt';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -60,146 +59,123 @@ describe('step-finish token usage extraction', () => {
     session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
-  it.each([
-    {
-      name: 'unknown',
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
-    },
-    {
-      name: 'measured zero',
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0 },
-    },
-    {
-      name: 'reported',
-      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5, reasoningTokens: 1, cachedInputTokens: 2 },
-    },
-    {
-      name: 'partially reported',
-      usage: { inputTokens: 2, outputTokens: undefined, totalTokens: undefined, cacheCreationInputTokens: 1 },
-    },
-  ])(
-    'excludes signal-cancelled usage ($name) from events, totals and persistence, preserving accepted steps',
-    async ({ usage }) => {
-      const storage = new InMemoryStore();
-      const observedUsages: unknown[] = [];
-      const steps: unknown[] = [];
-      let interruptedAttempt: ModelAttempt | undefined;
-      let calls = 0;
-      let processing!: () => void;
-      const entered = new Promise<void>(resolve => {
-        processing = resolve;
-      });
-      let release!: () => void;
-      const gate = new Promise<void>(resolve => {
-        release = resolve;
-      });
-      const agent = new Agent({
-        id: 'interrupted-usage',
-        name: 'Interrupted usage',
-        instructions: 'Test',
-        defaultOptions: {
-          onStepFinish: step => {
-            steps.push(step);
+  it('excludes reported signal-cancelled usage from events, totals and persistence, preserving accepted steps', async () => {
+    const usage = { inputTokens: 2, outputTokens: 3, totalTokens: 5, reasoningTokens: 1, cachedInputTokens: 2 };
+    const storage = new InMemoryStore();
+    const observedUsages: unknown[] = [];
+    const steps: unknown[] = [];
+    let calls = 0;
+    let processing!: () => void;
+    const entered = new Promise<void>(resolve => {
+      processing = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const agent = new Agent({
+      id: 'interrupted-usage',
+      name: 'Interrupted usage',
+      instructions: 'Test',
+      defaultOptions: {
+        onStepFinish: step => {
+          steps.push(step);
+        },
+      },
+      outputProcessors: [
+        {
+          id: 'pause-finish',
+          async processOutputStream({ part }) {
+            if (calls === 2 && part.type === 'finish') {
+              observedUsages.push({ ...part.payload.output.usage });
+              processing();
+              await gate;
+            }
+            return part;
           },
         },
-        outputProcessors: [
-          {
-            id: 'pause-finish',
-            async processOutputStream({ part }) {
-              if (calls === 2 && part.type === 'finish') {
-                interruptedAttempt = getModelAttempt(part);
-                observedUsages.push({ ...part.payload.output.usage });
-                processing();
-                await gate;
-              }
-              return part;
-            },
-          },
-        ],
-        model: new MockLanguageModelV2({
-          doStream: async () => {
-            calls++;
-            if (calls === 2)
-              return {
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  { type: 'reasoning-start', id: 'discarded' },
-                  { type: 'reasoning-delta', id: 'discarded', delta: 'discarded reasoning' },
-                  { type: 'finish', finishReason: 'stop', usage },
-                ]),
-              };
+      ],
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          calls++;
+          if (calls === 2)
             return {
               warnings: [],
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: 'answer' },
-                { type: 'text-delta', id: 'answer', delta: 'accepted answer' },
-                { type: 'text-end', id: 'answer' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage:
-                    calls === 1
-                      ? { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
-                      : { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
-                },
+                { type: 'reasoning-start', id: 'discarded' },
+                { type: 'reasoning-delta', id: 'discarded', delta: 'discarded reasoning' },
+                { type: 'finish', finishReason: 'stop', usage },
               ]),
             };
-          },
-        }),
+          return {
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'accepted answer' },
+              { type: 'text-end', id: 'answer' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage:
+                  calls === 1
+                    ? { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+                    : { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+              },
+            ]),
+          };
+        },
+      }),
+    });
+    controller = new AgentController({
+      id: 'interrupted-usage-controller',
+      storage,
+      workspace: createMockWorkspace(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    await controller.init();
+    session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const thread = await session.thread.create();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+    await session.sendMessage({ content: 'prior measured run' });
+    const running = session.sendMessage({ content: 'reasoning run' });
+    try {
+      await entered;
+      expect(observedUsages[0]).toMatchObject(usage);
+      await session.sendSignal({ content: 'SYNTHETIC_USAGE_SIGNAL' }, { requireDelivery: true }).accepted;
+      release();
+      await running;
+      expect(calls).toBe(3);
+      expect(steps).toHaveLength(2);
+      expect(steps[1]).toMatchObject({
+        text: 'accepted answer',
+        reasoning: [],
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
       });
-      controller = new AgentController({
-        id: 'interrupted-usage-controller',
-        storage,
-        workspace: createMockWorkspace(),
-        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      expect(events.filter(event => event.type === 'usage_update')).toHaveLength(2);
+      expect(session.getTokenUsage()).toEqual({
+        promptTokens: 4,
+        completionTokens: 5,
+        totalTokens: 9,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        raw: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
       });
-      await controller.init();
-      session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-      const thread = await session.thread.create();
-      const events: AgentControllerEvent[] = [];
-      session.subscribe(event => events.push(event));
-      await session.sendMessage({ content: 'prior measured run' });
-      const running = session.sendMessage({ content: 'reasoning run' });
-      try {
-        await entered;
-        expect(observedUsages[0]).toMatchObject(usage);
-        await session.sendSignal({ content: 'SYNTHETIC_USAGE_SIGNAL' }, { requireDelivery: true }).accepted;
-        expect(interruptedAttempt?.discarded).toBe(true);
-        expect(interruptedAttempt?.usage).toMatchObject(usage);
-        release();
-        await running;
-        expect(calls).toBe(3);
-        expect(steps).toHaveLength(2);
-        expect(steps[1]).toMatchObject({
-          text: 'accepted answer',
-          reasoning: [],
-          usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
-        });
-        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(2);
-        expect(session.getTokenUsage()).toEqual({
-          promptTokens: 4,
-          completionTokens: 5,
-          totalTokens: 9,
-          cachedInputTokens: 0,
-          cacheCreationInputTokens: 0,
-          raw: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
-        });
-        expect(session.displayState.get().tokenUsage).toEqual(session.getTokenUsage());
-        expect(events.filter(event => event.type === 'agent_end')).toEqual([
-          { type: 'agent_end', reason: 'complete' },
-          { type: 'agent_end', reason: 'complete' },
-        ]);
-        await expect
-          .poll(
-            async () =>
-              (await (await storage.getStore('memory'))?.getThreadById({ threadId: thread.id }))?.metadata?.tokenUsage,
-          )
-          .toEqual(session.getTokenUsage());
-      } finally {
-        release();
-      }
-    },
-  );
+      expect(session.displayState.get().tokenUsage).toEqual(session.getTokenUsage());
+      expect(events.filter(event => event.type === 'agent_end')).toEqual([
+        { type: 'agent_end', reason: 'complete' },
+        { type: 'agent_end', reason: 'complete' },
+      ]);
+      await expect
+        .poll(
+          async () =>
+            (await (await storage.getStore('memory'))?.getThreadById({ threadId: thread.id }))?.metadata?.tokenUsage,
+        )
+        .toEqual(session.getTokenUsage());
+    } finally {
+      release();
+    }
+  });
 
   it('extracts token usage from AI SDK v5/v6 format (inputTokens/outputTokens)', async () => {
     const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
