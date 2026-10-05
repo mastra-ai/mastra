@@ -1,3 +1,4 @@
+import { channels } from '@mastra/connect';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import {
@@ -21,6 +22,11 @@ export const mastra = new Mastra({
   }),
   agents: { connectAgent },
   workflows: { activityDigestWorkflow },
+  // Live channel resolver over the project's platform connections: connect
+  // Slack, Discord, or Telegram on the platform and the webhook/OAuth routes
+  // mounted here start serving that channel — no redeploy. Channels without
+  // an active connection are simply absent from the resolved map.
+  channels: await channels(),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {

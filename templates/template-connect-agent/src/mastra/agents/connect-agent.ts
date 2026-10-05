@@ -1,4 +1,4 @@
-import { connect } from '@mastra/connect';
+import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
@@ -10,7 +10,7 @@ import { Memory } from '@mastra/memory';
  *
  * Shared with the activity-digest workflow, which calls it directly.
  */
-export const connectTools = connect();
+export const connectTools = tools();
 
 export const connectAgent = new Agent({
   id: 'connect-agent',
