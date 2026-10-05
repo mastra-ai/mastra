@@ -8,7 +8,7 @@ import {
   useDatasetExperiment,
   useDatasetExperimentResults,
   useScoresByExperimentId,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';

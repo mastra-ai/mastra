@@ -5,7 +5,7 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useUpdateThread } from '@mastra/react/hooks';
+import { useUpdateThread } from '@mastra/react/hooks/memory';
 import { useState } from 'react';
 
 export interface RenameThreadDialogProps {

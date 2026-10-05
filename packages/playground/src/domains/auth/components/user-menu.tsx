@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
-import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { Loader2, Settings, X, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';

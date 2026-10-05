@@ -11,8 +11,8 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useDatasetVersions } from '@mastra/react/hooks';
-import type { DatasetVersion } from '@mastra/react/hooks';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
+import type { DatasetVersion } from '@mastra/react/hooks/datasets';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 

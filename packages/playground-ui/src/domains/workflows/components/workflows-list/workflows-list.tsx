@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { useWorkflowsRunCounts } from '@mastra/react/hooks';
+import { useWorkflowsRunCounts } from '@mastra/react/hooks/workflows';
 import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';

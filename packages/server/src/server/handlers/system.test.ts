@@ -23,6 +23,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  spanQuery: false,
   feedback: false,
 };
 
@@ -626,6 +627,7 @@ describe('System Handlers', () => {
               'metric-discovery',
               'delta-polling',
               'thread-query',
+              'span-query',
               'trace-query-root-duration',
               'trace-query-tenant-scope',
             ] as const;
@@ -639,6 +641,7 @@ describe('System Handlers', () => {
           traceQueryRootDuration: true,
           traceQueryTenantScope: true,
           threadQuery: true,
+          spanQuery: true,
         });
       });
 

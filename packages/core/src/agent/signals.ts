@@ -3,14 +3,8 @@ import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-sdk-v5';
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentLegacySignalType = 'user-message' | 'system-reminder';
 export type AgentSignalType = AgentSignalCategory | AgentLegacySignalType;
 
@@ -25,9 +19,6 @@ type SignalFilePart = {
   providerOptions?: MastraProviderMetadata;
 };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 export type AgentStateSignalMode = 'snapshot' | 'delta';
@@ -97,9 +88,6 @@ export type AgentSignalInput =
       transient?: boolean;
     });
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalDataPart = {
   type: 'data-user-message' | 'data-signal';
   data: {
@@ -129,8 +117,6 @@ type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'a
 
 /**
  * A signal created and validated by `createSignal`.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type CreatedAgentSignal =
   | (CreatedAgentSignalBase & { type: 'state'; transient?: never })
@@ -147,8 +133,6 @@ export function isMastraSignalMessage(message: MastraDBMessage): message is Mast
  * True for a message the human wrote. A live agent-controller session persists
  * chat messages (and steers) as `user` signals rather than `user` rows, so a
  * plain `role === 'user'` check misses every message such a session received.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
   if (message.role === 'user') return true;
@@ -163,8 +147,6 @@ export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
  *
  * @mastra/memory keeps a matching local predicate because its peer range includes core versions
  * without this export. Keep both copies in sync until that peer range can be tightened.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isTransientSignalMessage(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
@@ -612,8 +594,6 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
  * Resolve delivery option attributes into concrete `attributes` on a signal.
  * Returns a new signal with the selected branch's `attributes` merged into
  * top-level `attributes`.
- *
- * @experimental
  */
 export function resolveDeliveryAttributes(
   signal: CreatedAgentSignal,

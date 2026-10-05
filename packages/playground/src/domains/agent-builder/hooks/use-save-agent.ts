@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useStoredAgentMutations } from '@mastra/react/hooks';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useCallback } from 'react';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { formValuesToSaveParams } from '../services/form-values-to-save-params';

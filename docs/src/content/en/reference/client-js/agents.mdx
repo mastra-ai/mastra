@@ -1118,7 +1118,7 @@ console.log(diff.changes) // Fields that changed between versions
 In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
 
 ```typescript title="Version targeting with React SDK"
-import { useChat } from '@mastra/react'
+import { useChat } from '@mastra/react/chat'
 
 function Chat() {
   const { messages, input, handleInputChange, handleSubmit } = useChat({

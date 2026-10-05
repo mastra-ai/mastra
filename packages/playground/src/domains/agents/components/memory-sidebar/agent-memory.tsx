@@ -13,7 +13,7 @@ import {
   useCloneThread,
   useMemoryWithOMStatus,
   useThread,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/memory';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';

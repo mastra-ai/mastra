@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useAgent, useExecuteAgentTool } from '@mastra/react/hooks';
+import { useAgent, useExecuteAgentTool } from '@mastra/react/hooks/agents';
 import { useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';

@@ -31,6 +31,8 @@ import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
   ListScoresBySpanParams,
+  QuerySpansInput,
+  QuerySpansResult,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
   QueryTracesGroupedInput,
@@ -1154,6 +1156,11 @@ export class MastraClient extends BaseResource {
   /** Queries thread identities using eligible-trace and cross-trace predicates. */
   queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
     return this.observability.queryTraceThreads(params);
+  }
+
+  /** Queries completed spans using a span predicate, returning one row per matching span. */
+  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
+    return this.observability.querySpans(params);
   }
 
   /**

@@ -2081,6 +2081,25 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "page"
     }
   },
+  "POST /observability/spans/query": {
+    "method": "POST",
+    "path": "/observability/spans/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "orderBy",
+      "page",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "spans",
+      "paginationProperty": "page"
+    }
+  },
   "POST /observability/traces/query/fields": {
     "method": "POST",
     "path": "/observability/traces/query/fields",

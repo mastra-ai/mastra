@@ -1,6 +1,6 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Lock } from 'lucide-react';
 import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';

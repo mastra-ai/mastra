@@ -4,8 +4,8 @@ import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndV
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useScoresByExperimentId } from '@mastra/react/hooks';
-import type { useExperimentMetrics } from '@mastra/react/hooks';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import type { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ExperimentFlowChain } from './experiment-flow-chain';
 import { ExperimentRunMeta } from './experiment-run-meta';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
