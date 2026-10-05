@@ -24,7 +24,7 @@ function readStops(element: HTMLElement) {
   const probe = document.createElement('canvas');
   probe.width = probe.height = 1;
   const ctx = probe.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('2D canvas unavailable');
+  if (!ctx) return undefined;
   const previous = element.style.color;
   const stops = STOPS.map(name => {
     element.style.color = `var(${name})`;
@@ -51,58 +51,61 @@ async function render(stops: number[][], theme: Theme, { width, height }: GrainF
   document.body.appendChild(host);
 
   const [back = [0, 0, 0, 0], ...colors] = stops;
-  const mount = new shaders.ShaderMount(
-    host,
-    shaders.grainGradientFragmentShader,
-    {
-      u_colorBack: back,
-      u_colors: colors,
-      u_colorsCount: colors.length,
-      u_softness: 1,
-      u_intensity: grainByTheme[theme].intensity,
-      u_noise: grainByTheme[theme].noise,
-      u_shape: shaders.GrainGradientShapes.wave,
-      u_noiseTexture: noiseTexture,
-      u_fit: shaders.ShaderFitOptions[shaders.defaultPatternSizing.fit],
-      u_scale: 1,
-      u_rotation: 270,
-      u_offsetX: -0.1,
-      u_offsetY: offsetY,
-      u_originX: 0.5,
-      u_originY: 0.5,
-      u_worldWidth: 0,
-      u_worldHeight: 0,
-    },
-    { preserveDrawingBuffer: true, antialias: false, depth: false, stencil: false },
-    0,
-    0,
-    PIXEL_RATIO,
-  );
-
   try {
-    const canvas = host.querySelector('canvas');
-    const nextFrame = () => new Promise(requestAnimationFrame);
-    await nextFrame();
-    await nextFrame();
-    const target = width * Math.max(PIXEL_RATIO, window.devicePixelRatio);
-    if (canvas && canvas.width < target) {
-      mount.setMinPixelRatio((PIXEL_RATIO * target) / canvas.width);
+    const mount = new shaders.ShaderMount(
+      host,
+      shaders.grainGradientFragmentShader,
+      {
+        u_colorBack: back,
+        u_colors: colors,
+        u_colorsCount: colors.length,
+        u_softness: 1,
+        u_intensity: grainByTheme[theme].intensity,
+        u_noise: grainByTheme[theme].noise,
+        u_shape: shaders.GrainGradientShapes.wave,
+        u_noiseTexture: noiseTexture,
+        u_fit: shaders.ShaderFitOptions[shaders.defaultPatternSizing.fit],
+        u_scale: 1,
+        u_rotation: 270,
+        u_offsetX: -0.1,
+        u_offsetY: offsetY,
+        u_originX: 0.5,
+        u_originY: 0.5,
+        u_worldWidth: 0,
+        u_worldHeight: 0,
+      },
+      { preserveDrawingBuffer: true, antialias: false, depth: false, stencil: false },
+      0,
+      0,
+      PIXEL_RATIO,
+    );
+
+    try {
+      const canvas = host.querySelector('canvas');
+      const nextFrame = () => new Promise(requestAnimationFrame);
       await nextFrame();
+      await nextFrame();
+      const target = width * Math.max(PIXEL_RATIO, window.devicePixelRatio);
+      if (canvas && canvas.width < target) {
+        mount.setMinPixelRatio((PIXEL_RATIO * target) / canvas.width);
+        await nextFrame();
+      }
+      return canvas?.toDataURL('image/png');
+    } finally {
+      mount.dispose();
     }
-    return canvas?.toDataURL('image/png');
   } finally {
-    mount.dispose();
     host.remove();
   }
 }
 
-function grainFill(element: HTMLElement, key: string, theme: Theme, size: GrainFillSize, offsetY: number) {
-  const cacheKey = `${key}:${theme}:${size.width}x${size.height}`;
+function grainFill(element: HTMLElement, theme: Theme, size: GrainFillSize, offsetY: number) {
+  const stops = readStops(element);
+  if (!stops) return Promise.resolve(undefined);
+  const cacheKey = JSON.stringify([stops, theme, size.width, size.height, offsetY]);
   let image = cache.get(cacheKey);
   if (!image) {
-    image = Promise.resolve()
-      .then(() => render(readStops(element), theme, size, offsetY))
-      .catch(() => undefined);
+    image = render(stops, theme, size, offsetY).catch(() => undefined);
     cache.set(cacheKey, image);
   }
   return image;
@@ -137,7 +140,7 @@ export function GrainFill({ tone, width, height, className }: GrainFillProps) {
     let current = true;
     element.style.backgroundImage = '';
     element.removeAttribute('data-ready');
-    void grainFill(element, tone, resolvedTheme, { width, height }, layer.offsetY).then(image => {
+    void grainFill(element, resolvedTheme, { width, height }, layer.offsetY).then(image => {
       if (!current || !image) return;
       element.style.backgroundImage = `url(${image})`;
       element.setAttribute('data-ready', '');
