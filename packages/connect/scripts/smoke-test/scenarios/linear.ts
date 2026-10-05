@@ -206,17 +206,31 @@ export const linearScenario: Scenario = {
         steps.push(makeStep('create cycle', 'linear_create_cycle', 'pass', cycleId));
       } catch (error) {
         const msg = errorMessage(error);
-        cyclesDisabled = /cycle creation is not supported|expected object, received null/i.test(msg);
-        steps.push(
-          cyclesDisabled
-            ? makeStep(
-                'create cycle',
-                'linear_create_cycle',
-                'pass',
-                `expected error (cycles disabled on team): ${msg.slice(0, 120)}`,
-              )
-            : makeStep('create cycle', 'linear_create_cycle', 'fail', msg),
-        );
+        cyclesDisabled = /cycle creation is not supported/i.test(msg);
+        if (cyclesDisabled) {
+          steps.push(
+            makeStep(
+              'create cycle',
+              'linear_create_cycle',
+              'pass',
+              `expected error (cycles disabled on team): ${msg.slice(0, 120)}`,
+            ),
+          );
+        } else if (/expected object, received null/i.test(msg)) {
+          // The generated template parses `response.data` before reading the
+          // GraphQL errors array, so any `data: null` response surfaces as
+          // this generic parse failure — cycles-disabled is the common cause
+          // but cannot be confirmed (the toolset exposes no team
+          // cyclesEnabled setting). Skip loudly rather than claim a pass.
+          // TODO: tighten once the upstream fix (NangoHQ PR #704) lands and
+          // the tool surfaces the actual GraphQL error message.
+          log.error('Could not confirm why linear_create_cycle failed', msg);
+          steps.push(
+            makeStep('create cycle', 'linear_create_cycle', 'skip', `cause unconfirmed: ${msg.slice(0, 160)}`),
+          );
+        } else {
+          steps.push(makeStep('create cycle', 'linear_create_cycle', 'fail', msg));
+        }
       }
     }
     if (cycleId) {

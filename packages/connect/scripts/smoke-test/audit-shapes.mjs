@@ -3,11 +3,13 @@
 // required keys (runtime validation failures). Heuristic — only checks
 // object-literal inputs; spreads skip the required-key check.
 //
-// Usage: node packages/connect/scripts/smoke-test/audit-shapes.mjs [repo-root]
+// Usage: node audit-shapes.mjs [repo-root] — repo root defaults to the one
+// containing this script, so it runs correctly from any working directory.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = process.argv[2] || '.';
+const root = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const providersRoot = join(root, 'packages/connect/src/providers');
 const scenariosRoot = join(root, 'packages/connect/scripts/smoke-test/scenarios');
 
