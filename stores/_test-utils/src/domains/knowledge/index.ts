@@ -394,7 +394,7 @@ export function createKnowledgeStorageTests(
         ),
       ).toBe(false);
 
-      await store.deleteRecordBySource({ id: record.id, source: 'private-import' });
+      await store.deleteRecordBySource({ id: record.id, source: 'private-import', version: record.version });
       expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).toEqual(before);
       expect(
         (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).some(
@@ -409,7 +409,7 @@ export function createKnowledgeStorageTests(
         source: 'private-import',
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
-      await store.deleteRecordBySource({ id: mixed.id, source: 'private-import' });
+      await store.deleteRecordBySource({ id: mixed.id, source: 'private-import', version: mixed.version });
       expect(
         (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).some(
           event => event.action === 'delete' && event.targetId === mixed.id,

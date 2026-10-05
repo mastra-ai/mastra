@@ -101,8 +101,8 @@ describe('Knowledge import citation resolution', () => {
     expect(mastra?.nodeId).toBeDefined();
     expect(platform?.nodeId).toBeDefined();
     expect(mastra!.nodeId).not.toBe(platform!.nodeId);
-    expect((await knowledge.getNode(mastra!.nodeId))?.name).toBe('issue:123');
-    expect((await knowledge.getNode(platform!.nodeId))?.name).toBe('issue:123');
+    expect((await knowledge.getNodeInternal(mastra!.nodeId))?.name).toBe('issue:123');
+    expect((await knowledge.getNodeInternal(platform!.nodeId))?.name).toBe('issue:123');
 
     await importer.run(platformRepo, { repo: 'platform' });
     await importer.run(mastraRepo, { repo: 'mastra' });
@@ -231,7 +231,7 @@ describe('Knowledge import citation resolution', () => {
     await github.run(mastraRepo, { refs: [moved] });
     const storage = await knowledge.getStorageInternal();
     const movedBinding = await storage.getNodeAddress({ source: GITHUB, address: moved.address });
-    const movedNode = await knowledge.getNode(movedBinding!.nodeId);
+    const movedNode = await knowledge.getNodeInternal(movedBinding!.nodeId);
     const platformScope = await storage.getScopeAddress('repo:platform');
     // A curator moves the imported node out of the importer's binding scope.
     await storage.updateNode({
