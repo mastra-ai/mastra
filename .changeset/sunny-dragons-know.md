@@ -26,13 +26,17 @@ connect({
   },
 });
 
-// After: no approval by default; opt into approval for the destructive subset
+// After (conservative): gate every tool on the provider. This preserves the
+// former approval policy, except the tools previously listed in
+// autoApproveTools now prompt too.
+connect({ integrations: { neon: { requireApproval: true } } });
+
+// After (targeted): gate only the listed tools. Not equivalent to the old
+// default; every tool missing from the list runs without a prompt, so list
+// every tool that must stay gated.
 connect({
   integrations: {
     neon: { requireApproval: ['neon_delete_project'] },
   },
 });
-
-// Or require approval for every tool on this provider
-connect({ integrations: { neon: { requireApproval: true } } });
 ```
