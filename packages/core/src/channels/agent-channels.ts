@@ -2229,7 +2229,9 @@ export class AgentChannels {
     // Two writes, not atomic: a crash between them leaves a thread without a
     // mapping, which the fallback scan repairs on the next message. The upsert
     // never repoints an existing row, so a concurrent first-contact dispatch
-    // that won the race keeps its thread and this one is abandoned (no messages yet).
+    // that won the race keeps its thread and this one is deleted (no messages
+    // yet). Leaving it would let a later metadata scan adopt it instead of the
+    // thread that holds the conversation.
     const row = await channelsStore.upsertThreadMapping({
       platform,
       ownerId,
@@ -2245,7 +2247,18 @@ export class AgentChannels {
       mastraThreadId: row.threadId,
     });
     const mapped = await memoryStore.getThreadById({ threadId: row.threadId });
-    return mapped ?? thread;
+    if (!mapped) return thread;
+    try {
+      await memoryStore.deleteThread({ threadId: thread.id });
+    } catch (error) {
+      this.log('debug', 'Failed to delete channel thread that lost the mapping race', {
+        platform,
+        threadId: externalThreadId,
+        mastraThreadId: thread.id,
+        error,
+      });
+    }
+    return mapped;
   }
 
   /**

@@ -1977,6 +1977,9 @@ describe('AgentChannels', () => {
       expect(row?.threadId).toBe(a.id);
       expect(await channelsStore.getThreadMappingByThreadId(a.id)).not.toBeNull();
       expect(await memoryStore.getThreadById({ threadId: a.id })).not.toBeNull();
+      // The losing dispatch's thread is deleted so no metadata scan can adopt it later.
+      const { threads } = await memoryStore.listThreads({ filter: { metadata: legacyFilter } });
+      expect(threads.map(t => t.id)).toEqual([a.id]);
     });
 
     it('adopts a metadata-only legacy thread, mirroring channel_subscribed, then point-reads', async () => {
