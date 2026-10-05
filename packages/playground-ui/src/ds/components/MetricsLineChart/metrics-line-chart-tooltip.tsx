@@ -20,16 +20,20 @@ export function MetricsLineChartTooltip({
       <Txt variant="column" tone="ink" className="mb-1">
         {label}
       </Txt>
-      {payload.map(entry => (
-        <p key={entry.name} className="text-foreground">
-          <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          {entry.name}:{' '}
-          <span className="font-mono">
-            {typeof entry.value === 'number' ? formatValue(entry.value) : entry.value}
-            {suffix}
-          </span>
-        </p>
-      ))}
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1">
+        {payload.map(entry => (
+          <div key={entry.name} className="contents">
+            <span className="size-2 rounded-[2px]" style={{ backgroundColor: entry.color }} />
+            <Txt as="span" variant="caption" tone="muted" className="max-w-40 truncate">
+              {entry.name}
+            </Txt>
+            <span className="text-right font-mono text-foreground tabular-nums">
+              {typeof entry.value === 'number' ? formatValue(entry.value) : entry.value}
+              {suffix}
+            </span>
+          </div>
+        ))}
+      </div>
     </ChartTooltip>
   );
 }

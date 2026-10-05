@@ -1,21 +1,24 @@
-/* Chart series and span-type hues. Chart roles point at the colour ramps; span
-   roles keep their own hue wheel, one hue per span type. */
+/* Chart series and span-type hues. In dark mode the main chart hues share one
+   perceived lightness (OKLCH ~72%) and moderate chroma so no series shouts over
+   another; red keeps a little more chroma to read as urgent. Span roles keep their
+   own hue wheel, one hue per span type. */
 
 :root {
-  --chart-blue: var(--blue-300);
+  --chart-blue: oklch(0.72 0.11 240);
   --chart-blue-deep: var(--blue-600);
-  --chart-amber: var(--amber-300);
-  --chart-green: var(--green-400);
+  --chart-amber: oklch(0.78 0.13 80);
+  --chart-green: oklch(0.72 0.13 160);
+  --chart-cyan: oklch(0.72 0.11 205);
   --chart-purple: var(--purple-400);
   --chart-orange: var(--orange-400);
   --chart-pink: var(--pink-300);
-  --chart-red: var(--red-500);
+  --chart-red: oklch(0.68 0.17 20);
 
-  --chart-sequential-1: var(--purple-200);
-  --chart-sequential-2: var(--purple-300);
-  --chart-sequential-3: var(--purple-400);
-  --chart-sequential-4: var(--purple-500);
-  --chart-sequential-5: var(--purple-600);
+  --chart-sequential-1: oklch(0.84 0.07 290);
+  --chart-sequential-2: oklch(0.78 0.1 290);
+  --chart-sequential-3: oklch(0.72 0.13 290);
+  --chart-sequential-4: oklch(0.67 0.155 290);
+  --chart-sequential-5: oklch(0.62 0.18 290);
   --chart-sequential-pale: var(--purple-200);
 
   --span-agent: oklch(0.75 0.133 250);
@@ -36,6 +39,7 @@ html.light {
   --chart-blue-deep: var(--blue-800);
   --chart-amber: var(--amber-500);
   --chart-green: var(--green-500);
+  --chart-cyan: var(--cyan-500);
   --chart-purple: var(--purple-600);
   --chart-orange: var(--orange-600);
   --chart-pink: var(--pink-500);
@@ -63,6 +67,7 @@ html.light {
   --color-chart-blue-deep: var(--chart-blue-deep);
   --color-chart-amber: var(--chart-amber);
   --color-chart-green: var(--chart-green);
+  --color-chart-cyan: var(--chart-cyan);
   --color-chart-purple: var(--chart-purple);
   --color-chart-orange: var(--chart-orange);
   --color-chart-pink: var(--chart-pink);

@@ -47,6 +47,19 @@ export const SingleSeries: Story = {
   },
 };
 
+/** One value per column with a solid cap marking the value (e.g. cold starts). */
+export const SingleSeriesCapped: Story = {
+  args: {
+    ...SingleSeries.args,
+    variant: 'capped',
+  },
+};
+
+/** Capped works on stacks too; each segment gets its own cap. */
+export const MultipleSeriesCapped: Story = {
+  args: { variant: 'capped' },
+};
+
 export const AllZero: Story = {
   args: {
     data: data.map(({ time }) => ({ time, tokens: 0, storage: 0, compute: 0 })),

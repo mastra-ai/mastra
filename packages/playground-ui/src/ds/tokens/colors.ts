@@ -3,6 +3,7 @@ export const Colors = {
   'chart-blue-deep': 'var(--chart-blue-deep)',
   'chart-amber': 'var(--chart-amber)',
   'chart-green': 'var(--chart-green)',
+  'chart-cyan': 'var(--chart-cyan)',
   'chart-purple': 'var(--chart-purple)',
   'chart-orange': 'var(--chart-orange)',
   'chart-pink': 'var(--chart-pink)',

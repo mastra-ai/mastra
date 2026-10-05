@@ -17,7 +17,7 @@ export function MetricsLineChartLegend({
         const aggregated = s.aggregate?.(data);
         return (
           <div key={s.dataKey} className="inline-flex items-center gap-2">
-            <div className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+            <div className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: s.color }} />
             <Txt as="span" variant="caption" tone="muted" className="max-w-24 truncate">
               {s.label}
             </Txt>

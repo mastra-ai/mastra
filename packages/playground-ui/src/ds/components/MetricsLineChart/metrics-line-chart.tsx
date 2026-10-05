@@ -1,6 +1,8 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
+import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
+import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
 
 export type MetricsLineChartSeries = {
@@ -25,6 +27,7 @@ function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
       stroke="currentColor"
       strokeOpacity={0.2}
       strokeWidth={1}
+      strokeDasharray="3 3"
       className="pointer-events-none text-black transition-transform duration-150 ease-out dark:text-white"
       style={{ transform: `translateX(${top.x}px)` }}
     />
@@ -60,6 +63,7 @@ export function MetricsLineChart({
   showLegend?: boolean;
 }) {
   const isClickable = typeof onPointClick === 'function';
+  const id = useChartDefsId();
 
   return (
     <div>
@@ -67,6 +71,9 @@ export function MetricsLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+            <defs>
+              <ChartGlowFilter id={`${id}-glow`} blur={4.5} alpha={0.7} />
+            </defs>
             <CartesianGrid
               stroke="currentColor"
               strokeOpacity={0.08}
@@ -95,10 +102,11 @@ export function MetricsLineChart({
             {series.map(s => (
               <Line
                 key={s.dataKey}
-                type="linear"
+                type="monotone"
                 dataKey={s.dataKey}
                 stroke={s.color}
                 strokeWidth={2}
+                filter={`url(#${id}-glow)`}
                 dot={showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
                 activeDot={
                   isClickable
