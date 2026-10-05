@@ -1,3 +1,4 @@
+import type { VolumeRow } from '@mastra/react/hooks';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars/horizontal-bars';
@@ -7,7 +8,6 @@ import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
-import type { VolumeRow } from '../hooks/use-trace-volume-metrics';
 import { CHART_COLORS } from './metrics-utils';
 import { formatCompactNumber } from '@/lib/cost';
 

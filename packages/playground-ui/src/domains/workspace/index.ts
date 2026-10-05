@@ -3,9 +3,9 @@ export type { WorkspaceTreeViewProps } from './components/workspace-tree-view';
 export { Workspace } from './components/workspace';
 export type { WorkspaceRootProps } from './components/workspace';
 export { useWorkspaceContext } from './components/use-workspace-context';
-export { useWorkspaceDirectory } from './hooks/use-workspace-directory';
-export { useWorkspaceFileContent } from './hooks/use-workspace-file-content';
-export { useWorkspaceSearch } from './hooks/use-workspace-search';
+export { useWorkspaceDirectory } from '@mastra/react/hooks';
+export { useWorkspaceFileContent } from '@mastra/react/hooks';
+export { useWorkspaceSearch } from '@mastra/react/hooks';
 export type {
   WorkspaceCreateDirectoryHandler,
   WorkspaceDeleteHandler,

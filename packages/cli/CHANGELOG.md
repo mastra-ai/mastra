@@ -1,5 +1,17 @@
 # mastra
 
+## 1.32.2-alpha.3
+
+### Patch Changes
+
+- Fixed Factory board cards offering a second run while one was still starting. After you click a run such as Review, its button now shows a disabled "Moving…" or "Starting…" until the run's session exists, then "Open session". While automation works on a card, the button names what it is doing ("Syncing…", "Retrying…"), matching the card's status line. ([#25836](https://github.com/mastra-ai/mastra/pull/25836))
+
+  While a run or automation holds a card, its menu disables the actions that would start another run. Dragging the card into a lane that would start one, or picking it in global search, shows "Another run can't start while this card is busy." instead. Moves that start nothing stay available, so you can still close a held card or mark it done. While your own move, run or retry is in flight, the menu in the card's details panel also disables Remove and Dismiss suggested run.
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+  - @mastra/deployer@1.75.0-alpha.3
+
 ## 1.32.2-alpha.2
 
 ### Patch Changes

@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import type { MetricsDimensionalFilter } from '@mastra/react/hooks';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 type EntityTypeValue = `${EntityType}`;
@@ -269,23 +270,7 @@ export function applyMetricsPropertyFilterTokens(params: URLSearchParams, tokens
  *  calls. Kept compatible with `metricsFilterSchema` in @internal/core — every
  *  scalar field maps to a single-string column filter, and `tags` is the only
  *  array field (matched via `has()` / equivalent on backends). */
-export type MetricsDimensionalFilter = {
-  rootEntityType?: EntityType;
-  entityName?: string;
-  tags?: string[];
-  serviceName?: string;
-  environment?: string;
-  provider?: string;
-  model?: string;
-  threadId?: string;
-  resourceId?: string;
-  userId?: string;
-  organizationId?: string;
-  runId?: string;
-  sessionId?: string;
-  requestId?: string;
-  experimentId?: string;
-};
+export type { MetricsDimensionalFilter } from '@mastra/react/hooks';
 
 /** Convert the active token list into a `MetricsFilter`-compatible object.
  *

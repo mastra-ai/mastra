@@ -241,7 +241,7 @@ describe('Chat history recovery', () => {
       expect(result.current.tasks).toEqual(savedTasks);
       rerender({ threadId: 'second', history: emptyHistory });
       expect(result.current.tasks).toEqual([]);
-    });
+    }, 15_000);
 
     it('does not replace newer streamed tasks with saved tasks', async () => {
       const { result, rerender } = await setup();

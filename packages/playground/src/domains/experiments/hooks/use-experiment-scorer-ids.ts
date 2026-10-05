@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { useScoresByExperimentId } from '@mastra/react/hooks';
 import { useMemo } from 'react';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 /**
  * Scorer ids that apply to an experiment. They are pinned on the experiment at
