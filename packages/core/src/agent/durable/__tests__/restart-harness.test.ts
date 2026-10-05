@@ -43,7 +43,9 @@ function createModel(calls: { count: number }) {
 }
 
 const gates: Gate[] = [];
-afterEach(() => {
+const scenarios: { stop(): Promise<void> }[] = [];
+afterEach(async () => {
+  await Promise.all(scenarios.splice(0).map(s => s.stop()));
   for (const gate of gates.splice(0)) gate.release();
 });
 
@@ -79,6 +81,7 @@ function toolScenario(kind: 'durable' | 'evented' | 'evented-fallback', runId: s
       });
     },
   });
+  scenarios.push(scenario);
   return { scenario, gate, toolCalls, modelCalls };
 }
 
@@ -114,37 +117,42 @@ describe('restart harness', () => {
     expect(recovered.finishEvents).toBe(1);
   }, 30_000);
 
-  it('cuts graph 1 off: releasing the original run after restart changes nothing in graph 2', async () => {
-    const runId = 'restart-isolation';
-    const { scenario, gate, toolCalls, modelCalls } = toolScenario('durable', runId);
-    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
-    await gate.reached;
-    const recovered = await scenario.restart(await original.checkpoint());
-    expect(recovered.text).toBe('done');
+  // The recovery is only real if graph 1 cannot reach graph 2 — otherwise a
+  // restart test could pass because the original run finished instead.
+  for (const kind of ['durable', 'evented'] as const) {
+    it(`${kind}: cuts graph 1 off — releasing the original run after restart changes nothing in graph 2`, async () => {
+      const runId = `restart-isolation-${kind}`;
+      const { scenario, gate, toolCalls, modelCalls } = toolScenario(kind, runId);
+      const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+      await gate.reached;
+      const recovered = await scenario.restart(await original.checkpoint());
+      expect(recovered.text).toBe('done');
 
-    const graph2 = recovered.graph;
-    const before = await graph2.workflows.listWorkflowRuns();
-    const graph2ModelCalls = modelCalls.get(2)!.count;
+      const graph2 = recovered.graph;
+      const before = await graph2.workflows.listWorkflowRuns();
+      const graph2ModelCalls = modelCalls.get(2)!.count;
 
-    // Let graph 1 finish its own run to the end.
-    gate.release();
-    const originalText = await consumeText((await original.driven) as any);
-    expect(originalText).toBe('done');
-    expect(toolCalls.filter(c => c.generation === 1).map(c => c.index)).toEqual([0, 1]);
-    // Graph 1 finished and cleaned up in its own store...
-    await vi.waitFor(async () =>
-      expect(
-        await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
-      ).toBeFalsy(),
-    );
+      // Let graph 1 finish its own run to the end, publishing its own FINISH.
+      gate.release();
+      const originalText = await consumeText((await original.driven) as any);
+      expect(originalText).toBe('done');
+      expect(toolCalls.filter(c => c.generation === 1).map(c => c.index)).toEqual([0, 1]);
+      // Graph 1 finished and cleaned up in its own store...
+      await vi.waitFor(async () =>
+        expect(
+          await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
+        ).toBeFalsy(),
+      );
 
-    // ...and nothing it did reached graph 2.
-    expect(await graph2.workflows.listWorkflowRuns()).toEqual(before);
-    expect(modelCalls.get(2)!.count).toBe(graph2ModelCalls);
-    expect(toolCalls.filter(c => c.generation === 2).map(c => c.index)).toEqual([1]);
-    expect(recovered.finishEvents).toBe(1);
-    expect(recovered.onFinishCalls).toBe(1);
-  }, 30_000);
+      // ...and nothing it did reached graph 2. `finishEvents`/`onFinishCalls`
+      // read live, so a FINISH leaking in from graph 1 after this point shows up.
+      expect(await graph2.workflows.listWorkflowRuns()).toEqual(before);
+      expect(modelCalls.get(2)!.count).toBe(graph2ModelCalls);
+      expect(toolCalls.filter(c => c.generation === 2).map(c => c.index)).toEqual([1]);
+      expect(recovered.finishEvents).toBe(1);
+      expect(recovered.onFinishCalls).toBe(1);
+    }, 30_000);
+  }
 
   it('workflow: restarts a default-engine run blocked in step 2, and from every running write', async () => {
     const runId = 'restart-workflow';
@@ -178,6 +186,7 @@ describe('restart harness', () => {
           .commit();
       },
     });
+    scenarios.push(scenario);
     const original = await scenario.start(async ({ workflow }) => {
       const run = await workflow.createRun({ runId });
       return run.start({ inputData: { trail: [] } });
@@ -229,6 +238,15 @@ describe('restart harness', () => {
     );
     const finished = await original.checkpoint();
     expect(findRow(finished, DurableStepIds.AGENTIC_LOOP, runId)).toBeUndefined();
+    // A checkpoint whose root row exists but is no longer running is rejected too.
+    // (An agent's loop row is deleted on finish rather than rewritten, so build one.)
+    const running = original.checkpoints.filter(
+      c => findRow(c, DurableStepIds.AGENTIC_LOOP, runId)?.snapshot.status === 'running',
+    );
+    expect(running.length).toBeGreaterThan(0);
+    const stale = structuredClone(running.at(-1)!);
+    findRow(stale, DurableStepIds.AGENTIC_LOOP, runId)!.snapshot.status = 'success';
+    await expect(scenario.restart(stale)).rejects.toThrow(/no running .* row for run restart-negative \(found success/);
     await expect(scenario.restart(finished)).rejects.toThrow(/no running .* row for run restart-negative/);
     await expect(scenario.restart({ rows: [], write: 0 })).rejects.toThrow(/found none; rows: none/);
   }, 30_000);

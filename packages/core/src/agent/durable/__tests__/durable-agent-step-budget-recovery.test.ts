@@ -8,6 +8,11 @@
  * grant itself a fresh 3. `ceiling` answers at once and an always-failing
  * completion scorer keeps asking for another step; `maxSteps` must still cap it.
  *
+ * Coverage matches the harness conditions exactly: `default` and `ceiling` on
+ * each of plain/durable/evented, and `durable-recover`/`evented-recover` on the
+ * `default` variant only — the harness declares no `variants` for those two
+ * conditions, so the ceiling variant is not a restart cell there either.
+ *
  * Excluded, as in the harness: `stopWhen` across a restart (a closure, never
  * persisted) and exact timing. Unlike the harness this runs without Memory
  * (`@mastra/memory` is not a core dependency); recovery reads the conversation
@@ -140,10 +145,16 @@ function evaluate({
     expect(probe.modelCalls, `maxSteps=${MAX} is a hard ceiling on model calls`).toBeLessThanOrEqual(MAX);
     // Not exercised is not a pass.
     expect(probe.modelCalls, 'completion feedback asked for another step').toBeGreaterThanOrEqual(2);
+    // The script answers at once, so the budget is spent on feedback, not steps.
+    expect(started, 'the script answered at once, so no tool step ran').toEqual([]);
     return;
   }
-  // `.every` is vacuously true on an empty list, so require a step first.
-  expect(started.length, 'at least one step ran').toBeGreaterThanOrEqual(1);
+  // The mock is a pure function of the prompt, so the whole run is deterministic:
+  // the script asks for steps 1..3 and the third model call answers. Pinning the
+  // exact values (the harness' compared contract) catches an engine that stops
+  // early, which a `<=` bound alone would let pass.
+  expect(started, 'the script got steps 1..3').toEqual([1, 2, 3]);
+  expect(probe.modelCalls, `made exactly ${MAX} model calls`).toBe(MAX);
   expect(
     started.every(n => n <= MAX),
     `no step beyond the budget (n <= ${MAX}): ${started}`,
@@ -197,7 +208,14 @@ describe('T20 step budget across recovery', () => {
       const original = await scenario.start(({ agent }) =>
         agent.stream('Go.', streamOptions(runId, 'default', { calls: 0 })),
       );
-      const drained = original.driven.then((result: any) => drain(result.fullStream)).then(() => 'ended' as const);
+      // Graph 1 runs on past the checkpoint (its gate is released in afterEach);
+      // its fate is not the subject, and this branch must not reject unhandled.
+      const drained = original.driven
+        .then((result: any) => drain(result.fullStream))
+        .then(
+          () => 'ended' as const,
+          () => 'ended' as const,
+        );
       const reached = await Promise.race([gate.reached.then(() => 'reached' as const), drained]);
       expect(reached, 'not exercised: run ended before step 2').toBe('reached');
 

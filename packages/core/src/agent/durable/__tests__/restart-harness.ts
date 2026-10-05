@@ -35,17 +35,19 @@
  * for (const checkpoint of original.checkpoints.filter(hasRunningRow)) await scenario.restart(checkpoint);
  * ```
  *
- * What this simulates: a new process that shares nothing in memory with the
+ * What this simulates: a new process that shares no *module* state with the
  * crashed one. Graph 2 has its own module singletons (`globalRunRegistry`,
  * local recovery claims, the default pubsub), its own `Mastra` and a store
- * that only holds what graph 1 had written at the checkpoint.
+ * that only holds what graph 1 had written at the checkpoint. Closures the
+ * test itself supplies to both graphs — gates, tool logs, model probes — are
+ * deliberately shared, and are the only channel between the two.
  *
  * What it does not simulate: process death. Graph 1 keeps running in the
  * same Node process — its blocked promises, timers and objects stay alive.
- * They cannot reach graph 2 because the two graphs share no store, pubsub or
- * module state, but they still consume CPU and can log. Release graph 1's
- * gates when the test ends. Only workflow rows are copied: memory threads,
- * observability and other storage domains start empty in graph 2.
+ * It cannot reach graph 2 because the graphs share no store, pubsub or module
+ * state, but it still consumes CPU and can log. Release graph 1's gates when
+ * the test ends. Only workflow rows are copied: memory threads, observability
+ * and other storage domains start empty in graph 2.
  */
 
 import { expect, vi } from 'vitest';
@@ -225,8 +227,9 @@ export type AgentRestartResult = {
   /** Text of the finish chunk; a run recovered after its last model turn streams no text deltas. */
   text?: string;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
-  /** FINISH events published on the run's agent stream topic in graph 2. */
+  /** FINISH events published on the run's agent stream topic in graph 2. Live: reads the current count. */
   finishEvents: number;
+  /** `onFinish` callbacks seen in graph 2. Live: reads the current count. */
   onFinishCalls: number;
   streamErrors: string[];
   executionError?: string;
@@ -251,18 +254,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
 
 export function createRestartScenario<K extends RestartKind>(options: ScenarioOptions<K>) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const graphs: Graph[] = [];
   let generation = 0;
 
   return {
     /** Builds graph 1, records a copy of its workflow rows after every write, and starts the run. */
     async start(drive: (ctx: Graph & { runId: string }) => Promise<unknown>) {
       const graph = await buildGraph(options, ++generation);
+      graphs.push(graph);
       const checkpoints: Checkpoint[] = [];
+      // A monotonic counter, not `checkpoints.length`: concurrent writes interleave
+      // at the await, and duplicate `write` indexes would make them indistinguishable.
+      let writes = 0;
       for (const method of WRITE_METHODS) {
         const original = graph.workflows[method].bind(graph.workflows);
         graph.workflows[method] = async (...args: unknown[]) => {
           const result = await original(...args);
-          checkpoints.push({ rows: await copyRows(graph.workflows), write: checkpoints.length + 1 });
+          checkpoints.push({ rows: await copyRows(graph.workflows), write: ++writes });
           return result;
         };
       }
@@ -291,6 +299,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
      */
     async restart(checkpoint: Checkpoint): Promise<RestartResult> {
       const graph = await buildGraph(options, ++generation);
+      graphs.push(graph);
       const rootName = rootWorkflowName(options.kind, graph);
       const root = findRow(checkpoint, rootName, options.runId);
       if (root?.snapshot.status !== 'running') {
@@ -319,6 +328,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       let onFinishCalls = 0;
       const attempt = (async () => {
         const recovered = await agent.recover(options.runId, { onFinish: () => void onFinishCalls++ });
+        // Read while the run is live: the registry entry is cleared on cleanup.
         const execution = graph.core.globalRunRegistry.get(options.runId)?.workflowExecution;
         const streamErrors: string[] = [];
         const chunkTypes: string[] = [];
@@ -332,15 +342,30 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
             usage = chunk.payload.output?.usage;
           }
         }
-        const executionError = await Promise.resolve(execution).then(
-          () => undefined,
-          (error: unknown) => String((error as Error)?.message ?? error),
-        );
+        // An absent entry would make `expect(executionError).toBeUndefined()`
+        // assert nothing, so report it as an error instead.
+        const executionError =
+          execution === undefined
+            ? 'run registry entry missing after recovery'
+            : await Promise.resolve(execution).then(
+                () => undefined,
+                (error: unknown) => String((error as Error)?.message ?? error),
+              );
         recovered.cleanup?.();
         return { text, usage, streamErrors, chunkTypes, executionError };
       })();
       const outcome = await withTimeout(attempt, timeoutMs, `recover(${options.runId})`);
-      return { ...outcome, finishEvents, onFinishCalls, graph };
+      // `finishEvents`/`onFinishCalls` are getters so a test can assert them
+      // after releasing graph 1, catching a late publish that leaked across.
+      const result = { ...outcome, graph } as RestartResult;
+      Object.defineProperty(result, 'finishEvents', { get: () => finishEvents });
+      Object.defineProperty(result, 'onFinishCalls', { get: () => onFinishCalls });
+      return result;
+    },
+
+    /** Call at the end of a test to stop the event workers every graph started. */
+    async stop() {
+      for (const graph of graphs) await graph.mastra?.stopWorkers?.();
     },
   };
 }

@@ -7,13 +7,15 @@
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 
 import { createGate, createRestartScenario, findRow } from './restart-harness';
 import type { Gate } from './restart-harness';
 
 const gates: Gate[] = [];
-afterEach(() => {
+const scenarios: { stop(): Promise<void> }[] = [];
+afterEach(async () => {
+  await Promise.all(scenarios.splice(0).map(s => s.stop()));
   for (const gate of gates.splice(0)) gate.release();
 });
 
@@ -94,6 +96,7 @@ describe('T54 evented workflow restart after a crash inside an agent step', () =
           .commit();
       },
     });
+    scenarios.push(scenario);
 
     const original = await scenario.start(async ({ workflow }) => {
       const run = await workflow.createRun({ runId });
