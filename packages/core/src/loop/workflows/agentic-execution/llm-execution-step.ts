@@ -1993,6 +1993,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 tools: currentStep.tools,
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
+                specificationVersion: currentStep.model.specificationVersion,
               })
             : undefined;
           modelSpanTracker?.setInferenceContext?.({
