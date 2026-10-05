@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt';
+import { messageSurfaceStyle } from '@/ds/primitives/message-surface';
 import { cn } from '@/lib/utils';
 
 export interface MessageProps extends ComponentProps<'div'> {
@@ -39,8 +40,8 @@ export function Message({ from, avatar, footer, attachments, pending, children, 
             data-slot="message-content"
             className={cn(
               'max-w-full min-w-0 text-body break-words',
-              isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-foreground',
-              isUser && pending && 'border-dashed border-border',
+              isUser && cn(messageSurfaceStyle, 'px-4 py-2'),
+              isUser && pending && 'border border-dashed border-border',
               !isUser && footer && '[&>:last-child]:mb-0',
             )}
           >

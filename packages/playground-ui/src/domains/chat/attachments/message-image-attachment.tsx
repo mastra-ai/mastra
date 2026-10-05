@@ -22,7 +22,7 @@ export function MessageImageAttachment({ src, name, typeLabel }: { src: string; 
               src={src}
               alt={name}
               loading="lazy"
-              className="size-full object-contain"
+              className="size-full object-cover"
               onError={() => setFailed(true)}
             />
           ) : undefined

@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. It is separate from ComposerAttachment so sent files can evolve without changing draft uploads. Images, PDFs and text support previews; spreadsheets and other binary files use file entries.',
+          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. Sent cards and user messages share the same borderless surface, radius, and subtle elevation. Image captions sit over a gradient with progressively masked blur. Images, PDFs and text support previews; spreadsheets and other binary files use file entries. ComposerAttachment remains separate.',
       },
     },
   },
@@ -27,6 +27,29 @@ const image =
 
 export const Image: Story = {
   args: { type: 'image', name: 'landscape.svg', src: `data:image/svg+xml,${encodeURIComponent(image)}` },
+};
+
+const brightImage =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="white"/><path d="M0 200 80 100 160 200 240 100 320 200" fill="none" stroke="#d4d4d4" stroke-width="24"/></svg>';
+const transparentImage =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><circle cx="160" cy="100" r="72" fill="#a3e8c0"/><path d="m125 100 25 25 50-50" fill="none" stroke="#182c25" stroke-width="12"/></svg>';
+
+export const ImageSafeZone: Story = {
+  render: () => (
+    <div className="flex flex-wrap items-start gap-4">
+      <MessageAttachment {...Image.args} type="image" />
+      <MessageAttachment
+        type="image"
+        name="bright-background-with-a-long-filename.svg"
+        src={`data:image/svg+xml,${encodeURIComponent(brightImage)}`}
+      />
+      <MessageAttachment
+        type="image"
+        name="transparent-artwork.svg"
+        src={`data:image/svg+xml,${encodeURIComponent(transparentImage)}`}
+      />
+    </div>
+  ),
 };
 
 const pdf =
