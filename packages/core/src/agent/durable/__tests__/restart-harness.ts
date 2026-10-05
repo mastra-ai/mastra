@@ -205,8 +205,13 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
     const workflows = await mastra.getStorage()!.getStore('workflows');
     return { core, mastra, storage, workflows, generation, agent };
   } catch (error) {
-    // A graph that fails to build must not leak the event workers it already started.
-    await mastra?.stopWorkers?.();
+    // A graph that fails to build must not leak the event workers it already started, and a failure
+    // to stop them must not hide why the build failed.
+    try {
+      await mastra?.stopWorkers?.();
+    } catch {
+      // keep the construction error
+    }
     throw error;
   }
 }

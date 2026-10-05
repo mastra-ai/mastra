@@ -2,15 +2,18 @@
 // an evented workflow is cut off in a parked step, restarted from a copy of its rows in a fresh
 // module graph, and must finish correctly without re-running steps that already completed.
 //
-// Only the four gate-checkpointed shapes live here. The remaining T65 shapes (the green
-// `empty-path`, and the red `finished`/`foreach-gap`/`nested-done`/`nested-pending`/`state`) are cut
-// by hanging a storage write rather than by parking a step, which the helper's checkpoint modes
-// (gate and every-write) do not model; they are reproduced in
-// `.mastracode/plans/cor-1382-restart-helper.proof/sigkill-only-repro.scratch.test.ts`.
+// Every green `wf-evented-restart` shape the helper can cut is here: `sequential`, `parallel`,
+// `conditional` and `foreach` park in a step (gate checkpoint), and `empty-path` is cut at the
+// every-write checkpoint where the interrupted state first appears in storage. The five red shapes
+// on this SHA stay as recorded evidence in
+// `.mastracode/plans/cor-1382-restart-helper.proof/sigkill-only-repro.scratch.test.ts`, to land with
+// their owning fixes: `state` (COR-1352) parks in a step like `sequential` but does not survive the
+// restart, and `finished`/`foreach-gap`/`nested-done`/`nested-pending` (COR-1333/1350/1351/1348) are
+// interrupted between two persisted states rather than inside a step.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createGate, createRestartScenario, findRow } from './restart-harness';
-import type { CoreGraph, Gate } from './restart-harness';
+import type { Checkpoint, CoreGraph, Gate } from './restart-harness';
 
 const N = z.object({ n: z.number() });
 
@@ -44,7 +47,7 @@ function steps(core: CoreGraph, log: Entry[], generation: number, gate: Gate) {
 function buildShape(
   core: CoreGraph,
   id: string,
-  shape: 'sequential' | 'parallel' | 'conditional' | 'foreach',
+  shape: 'sequential' | 'parallel' | 'conditional' | 'foreach' | 'empty-path',
   log: Entry[],
   generation: number,
   gate: Gate,
@@ -101,10 +104,13 @@ function buildShape(
         .then(sum)
         .commit();
     }
+    case 'empty-path':
+      // No parked step: the cut lands on the start save, before `first` is saved.
+      return wf().then(step('first')).then(step('last')).commit();
   }
 }
 
-type ShapeName = 'sequential' | 'parallel' | 'conditional' | 'foreach';
+type ShapeName = 'sequential' | 'parallel' | 'conditional' | 'foreach' | 'empty-path';
 type ShapeSpec = {
   input: any;
   expect: (r: any) => boolean;
@@ -112,7 +118,10 @@ type ShapeSpec = {
   never?: string[];
   rerunItems?: number[];
   reenter?: { step: string; n: number };
+  /** Park this step, then restart from the gate checkpoint. */
   blockStep?: string;
+  /** No parked step: restart from the first captured write whose root snapshot matches. */
+  cut?: (snapshot: any) => boolean;
 };
 
 const SHAPES: Record<ShapeName, ShapeSpec> = {
@@ -134,6 +143,12 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
     expect: (r: any) => r?.n === 60,
     rerunItems: [1],
     blockStep: 'item',
+  },
+  'empty-path': {
+    input: { n: 1 },
+    expect: (r: any) => r?.n === 3,
+    // COR-1353: the root is saved `running` with no active step and `first` not yet saved.
+    cut: (s: any) => s?.status === 'running' && !(s.activePaths ?? []).length && !ctxOf(s, 'first'),
   },
 };
 
@@ -158,23 +173,35 @@ describe('T65 wf-evented-restart shapes in a fresh module graph', () => {
         return run.start({ inputData: shape.input });
       });
 
-      const reached = await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)]);
-      expect(reached, 'not exercised: run ended before the gate').toBe(true);
-      // The step is parked; wait until its entry is persisted as in-flight. Evented foreach marks
-      // the entry success and keeps a null slot for the item still running, so it has its own probe.
-      await vi.waitFor(async () => {
-        const entry = ctxOf(findRow(await original.checkpoint(), id, runId)?.snapshot, shape.blockStep ?? 'block');
-        if (shape.blockStep === 'item') expect(entry?.output?.[0] != null && entry?.output?.[1] === null).toBe(true);
-        else expect(entry?.status).toBe('running');
-      });
-      const checkpoint = await original.checkpoint();
+      let checkpoint: Checkpoint;
+      if (shape.cut) {
+        // No parked step: graph 1 runs to the end, and the cut is the first captured write whose root
+        // snapshot is the interrupted state. A restart from that copy is the kill landing there.
+        await original.settled;
+        const hit = original.checkpoints.find(c => shape.cut!(findRow(c, id, runId)?.snapshot));
+        expect(hit, 'not exercised: no write captured the interrupted state').toBeDefined();
+        checkpoint = hit!;
+      } else {
+        const reached = await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)]);
+        expect(reached, 'not exercised: run ended before the gate').toBe(true);
+        // The step is parked; wait until its entry is persisted as in-flight. Evented foreach marks
+        // the entry success and keeps a null slot for the item still running, so it has its own probe.
+        await vi.waitFor(async () => {
+          const entry = ctxOf(findRow(await original.checkpoint(), id, runId)?.snapshot, shape.blockStep ?? 'block');
+          if (shape.blockStep === 'item') expect(entry?.output?.[0] != null && entry?.output?.[1] === null).toBe(true);
+          else expect(entry?.status).toBe('running');
+        });
+        checkpoint = await original.checkpoint();
+      }
       expect(findRow(checkpoint, id, runId)?.snapshot.status).toBe('running');
 
       const { result } = await scenario.restart(checkpoint);
       const starts = (step: string) => log.filter(e => e.generation === 2 && e.step === step && e.event === 'start');
 
       expect(result.status).toBe('success');
-      expect(shape.expect(result.result), `result is correct for ${shapeName}`).toBe(true);
+      expect(shape.expect(result.result), `result is correct for ${shapeName}: ${JSON.stringify(result.result)}`).toBe(
+        true,
+      );
       if (shape.reenter) {
         expect(starts(shape.reenter.step).length, `interrupted step re-entered once`).toBe(1);
         expect(starts(shape.reenter.step)[0]!.input?.n).toBe(shape.reenter.n);
