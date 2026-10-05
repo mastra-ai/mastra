@@ -1174,7 +1174,7 @@ The command loads `.env` and `.env.local` from the current directory.
 | `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
 | `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
-| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. The `--project` flag takes precedence over it. |
 
 ### Examples
 
