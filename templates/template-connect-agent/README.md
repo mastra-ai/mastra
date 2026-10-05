@@ -42,6 +42,9 @@ Ask the agent things like "list my open Linear issues", "search Notion for the l
 - **Tune the digest** — edit the prompt and schema in `src/mastra/workflows/activity-digest.ts`, or schedule the workflow to post digests wherever you like.
 - **Swap the model** — change the `model` string in `src/mastra/agents/connect-agent.ts` to any Gateway-supported model.
 
+> [!NOTE]
+> This template tracks `@mastra` **alpha** releases, and the included `.npmrc` sets `legacy-peer-deps=true` so npm accepts prerelease `@mastra/core` against the peer ranges of already-published packages. Once the dependencies move back to stable versions, both can be removed.
+
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
