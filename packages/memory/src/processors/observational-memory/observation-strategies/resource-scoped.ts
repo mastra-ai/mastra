@@ -339,6 +339,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         writer: this.opts.writer,
         abortSignal: this.opts.abortSignal,
         requestContext: this.opts.requestContext,
+        observationCommitted: this.observationCommitted,
       });
       this.observationResults.push({
         threadId,
@@ -415,7 +416,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     };
   }
 
-  async persist(processed: ProcessedObservation) {
+  async persist(processed: ProcessedObservation): Promise<boolean> {
     const { record, resourceId } = this.opts;
     const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
 
@@ -487,6 +488,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         ),
       );
     }
+    return true;
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
