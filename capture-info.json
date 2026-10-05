@@ -1,7 +1,7 @@
 {
   "issue": "PLTFRM-2478",
   "before": "41da786907aabd7537a510a97843c4f6d4dfd20c",
-  "after": "4dcd0e9709eaecaf09f47cfa30c9897107f60877",
+  "after": "2c662873a80c5f0fe563d5be6696a5f65e60c5e4",
   "source": "Unmodified Chromium screenshots of playground-ui Storybook stories",
   "detail": "Layout/PageLayout Container, browser content at 8x zoom",
   "shell": "Layout/AppShell StandardDesktop",
