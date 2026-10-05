@@ -30,6 +30,21 @@ export class MastraConnectError extends Error {
   }
 }
 
+/**
+ * A caller configuration mistake (for example an unknown tool name in
+ * `requireApproval`) that must fail resolution instead of being downgraded
+ * to the resolver's warn-and-skip path, which exists for provider-side
+ * failures. Internal to the package: callers observe it as a regular
+ * `MastraConnectError` with code `invalid_options`.
+ *
+ * @internal
+ */
+export class MastraConnectConfigError extends MastraConnectError {
+  constructor(message: string) {
+    super('invalid_options', message);
+  }
+}
+
 function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }

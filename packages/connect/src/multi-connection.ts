@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './client.js';
 import { platformMcpTransport } from './client.js';
-import { MastraConnectError } from './errors.js';
+import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import type { McpProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { applyToolFilter } from './toolset.js';
 
@@ -468,8 +468,7 @@ export async function buildMcpMultiConnectionTools(input: {
     if (requireApprovalFor) {
       const unknown = [...requireApprovalFor].filter(name => !catalogUnion.has(name));
       if (unknown.length > 0) {
-        throw new MastraConnectError(
-          'invalid_options',
+        throw new MastraConnectConfigError(
           `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(
             ', ',
           )}. Known tools: ${[...catalogUnion].join(', ')}.`,

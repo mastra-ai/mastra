@@ -3,8 +3,12 @@ import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { listIntegrations, listProjectConnections, platformMcpTransport, resolveClient } from './client.js';
-import { MastraConnectError } from './errors.js';
-import { buildMcpMultiConnectionTools, buildProxyMultiConnectionTools } from './multi-connection.js';
+import { MastraConnectConfigError, MastraConnectError } from './errors.js';
+import {
+  buildMcpMultiConnectionTools,
+  buildProxyMultiConnectionTools,
+  listConnectionsToolKey,
+} from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { TOOLS } from './registry.js';
 import {
@@ -19,11 +23,12 @@ interface ToolsIntegrationOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
   connectionId?: string;
   /**
-   * Tool-approval policy for this MCP provider. Discovered tools do not
-   * require approval by default, matching `@mastra/mcp`'s own default. Pass
-   * `true` to require approval for every discovered tool on this provider,
-   * or an array of tool keys to require approval only for those tools.
-   * Unknown names in the array throw at build time so a typo never silently
+   * Tool-approval policy for this provider, applied to discovered MCP tools
+   * and checked-in HTTP tools alike. Tools do not require approval by
+   * default, matching `@mastra/mcp`'s own default. Pass `true` to require
+   * approval for every tool on this provider, or an array of tool keys to
+   * require approval only for those tools. Unknown names in the array fail
+   * resolution with an `invalid_options` error so a typo never silently
    * widens access. (Explicit `false` is equivalent to omitting the option.)
    */
   requireApproval?: boolean | string[];
@@ -112,8 +117,10 @@ let nextResolverId = 0;
  * to (or detached from) the project are picked up (or dropped) without a
  * restart.
  *
- * Configuration errors (missing project id, bad ttlMs, malformed integration id)
- * throw here — at call time — so they surface at startup.
+ * Configuration errors (missing project id, bad ttlMs, malformed integration id,
+ * the removed `autoApproveTools` key) throw here — at call time — so they
+ * surface at startup. Configuration errors that need discovery to detect
+ * (an unknown tool name in `requireApproval`) fail the resolution instead.
  * Expected provider absence is silently skipped. Actionable per-integration
  * problems during resolution (needs re-auth or ambiguity) are downgraded to
  * warn-and-skip so one bad integration never takes down the whole toolset.
@@ -139,6 +146,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   const integrationOverrides = normalizeIntegrationOverrides(options.integrations);
   validateIntegrationOverrides(integrationOverrides);
   validateIntegrationXor(integrationOverrides);
+  rejectRemovedAutoApproveTools(integrationOverrides);
 
   let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
@@ -302,6 +310,23 @@ function validateIntegrationXor(integrations: Record<string, ToolsIntegrationOpt
   }
 }
 
+/**
+ * Rejects the removed `autoApproveTools` option by name. Discovered MCP tools
+ * no longer require approval by default, so a loosely typed config still
+ * carrying this key would otherwise be ignored silently and its tools would
+ * run without the prompts the author expected.
+ */
+function rejectRemovedAutoApproveTools(integrations: Record<string, ToolsIntegrationOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+    if ('autoApproveTools' in (providerOptions as Record<string, unknown>)) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Invalid options for '${integrationId}': autoApproveTools was removed. Tools no longer require approval by default; opt in with requireApproval: true or a list of tool keys to gate.`,
+      );
+    }
+  }
+}
+
 function buildRequests(
   integrations: Record<string, ToolsIntegrationOptions>,
   catalog: IntegrationCatalogEntry[],
@@ -379,6 +404,7 @@ async function mapTools(
             client: options.client,
             ...providerFilterOptions(request.options),
           } as Parameters<typeof request.registration.createTools>[0]);
+          applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
         }
       } else {
         // kind === 'multi'
@@ -404,9 +430,17 @@ async function mapTools(
             disallowTools: request.options.disallowTools,
             client: options.client,
           });
+          applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
+            listConnectionsToolKey(integrationId),
+          ]);
         }
       }
     } catch (error) {
+      // Warn-and-skip exists so one unreachable provider never takes down the
+      // whole resolution. Configuration mistakes (like an unknown tool name in
+      // `requireApproval`) are different: skipping would silently drop the
+      // provider AND its approval gates, so rethrow them to the caller.
+      if (error instanceof MastraConnectConfigError) throw error;
       console.warn(
         `[@mastra/connect] Skipping ${integrationId}: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -446,6 +480,42 @@ function providerFilterOptions(options: ToolsIntegrationOptions): {
     : options.disallowTools !== undefined
       ? { disallowTools: options.disallowTools }
       : {};
+}
+
+/**
+ * Applies a per-provider `requireApproval` policy to a checked-in HTTP
+ * toolset by marking the selected tools. `true` gates every provider tool
+ * (but never the synthetic `<provider>__list_connections` wrapper tool,
+ * matching the MCP paths, where only server-discovered tools are gated);
+ * an array gates the listed keys and rejects unknown names with the same
+ * `invalid_options` error MCP discovery raises, so a typo never silently
+ * widens access.
+ */
+function applyProxyRequireApproval(
+  providerTools: ToolsInput,
+  integrationId: string,
+  requireApproval: boolean | string[] | undefined,
+  excludeKeys: string[] = [],
+): void {
+  if (!requireApproval) return;
+  if (requireApproval === true) {
+    const excluded = new Set(excludeKeys);
+    for (const [toolKey, tool] of Object.entries(providerTools)) {
+      if (excluded.has(toolKey)) continue;
+      (tool as { requireApproval?: boolean }).requireApproval = true;
+    }
+    return;
+  }
+  const known = Object.keys(providerTools);
+  const unknown = requireApproval.filter(name => !known.includes(name));
+  if (unknown.length > 0) {
+    throw new MastraConnectConfigError(
+      `Unknown tool name(s) in requireApproval for '${integrationId}': ${unknown.join(', ')}. Known tools: ${known.join(', ')}.`,
+    );
+  }
+  for (const name of requireApproval) {
+    (providerTools[name] as { requireApproval?: boolean }).requireApproval = true;
+  }
 }
 
 async function discoverMcpTools(input: {
@@ -497,8 +567,7 @@ async function discoverMcpTools(input: {
   if (requireApprovalFor) {
     const unknown = [...requireApprovalFor].filter(name => !(name in discovery.tools));
     if (unknown.length > 0) {
-      throw new MastraConnectError(
-        'invalid_options',
+      throw new MastraConnectConfigError(
         `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
       );
     }

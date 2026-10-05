@@ -346,12 +346,25 @@ describe('MCP tool approval', () => {
     expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
   });
 
-  it('skips the provider and warns when requireApproval names an unknown tool', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_everything'] } });
-    expect(discovered).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('requireApproval'));
-    warnSpy.mockRestore();
+  it('fails resolution when requireApproval names an unknown tool', async () => {
+    await expect(
+      discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_everything'] } }),
+    ).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining('requireApproval'),
+    });
+  });
+
+  it('rejects the removed autoApproveTools option by name', () => {
+    expect(() =>
+      connect({
+        projectId: 'project-1',
+        integrations: {
+          [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } as never,
+        },
+        client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: vi.fn() as never },
+      }),
+    ).toThrow(/autoApproveTools was removed/);
   });
 });
 

@@ -6,13 +6,15 @@
 
 Previously, every MCP tool discovered through `connect()` was forced to require approval, with an `autoApproveTools` escape hatch to list specific keys that should skip it. The forced-approval policy made the typical case needlessly interactive and diverged from `@mastra/mcp`, whose default is "no approval unless the server definition opts in."
 
-The new `requireApproval` option replaces `autoApproveTools`:
+The new `requireApproval` option replaces `autoApproveTools` and applies to generated HTTP toolsets as well as discovered MCP tools:
 
 - Omit (or pass `false`) → no approval required for any tool on this provider
-- `true` → every discovered tool requires approval
+- `true` → every tool on this provider requires approval
 - `string[]` → approval required only for the listed tool keys
 
-Unknown names in the array still throw at build time so a typo cannot silently widen access.
+Unknown names in the array fail resolution with an `invalid_options` error instead of silently dropping the provider, so a typo can neither widen access nor remove the toolset. A config that still contains the removed `autoApproveTools` key throws at `tools()` call time with a migration hint, so loosely typed configs cannot carry the dead option forward and run previously-gated tools without a prompt.
+
+If you relied on the old always-on default (for example, agents scaffolded from the connect templates), opt back in explicitly with `requireApproval: true` on the providers whose tools should prompt before running.
 
 **Migration**
 
