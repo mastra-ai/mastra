@@ -12,5 +12,5 @@ const transport = new HttpTransport({
   maxBufferSize: 5_000,
 });
 
-transport.getDroppedLogCount(); // number of logs dropped during outages
+transport.getDroppedLogCount(); // number of logs dropped because the buffer exceeded maxBufferSize
 ```

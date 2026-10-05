@@ -55,7 +55,11 @@ export class HttpTransport extends LoggerTransport {
       exponentialBackoff: options.retryOptions?.exponentialBackoff ?? true,
     };
 
-    this.maxBufferSize = Math.max(options.maxBufferSize ?? 10_000, this.batchSize);
+    const maxBufferSize = options.maxBufferSize ?? 10_000;
+    if (!Number.isInteger(maxBufferSize) || maxBufferSize < 1) {
+      throw new Error('HttpTransport maxBufferSize must be a positive integer');
+    }
+    this.maxBufferSize = Math.max(maxBufferSize, this.batchSize);
     this.logBuffer = [];
     this.lastFlush = Date.now();
 
@@ -120,16 +124,17 @@ export class HttpTransport extends LoggerTransport {
   }
 
   _flush(): Promise<void> {
+    // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
+    if (this.flushPromise) {
+      return this.flushPromise;
+    }
     if (this.logBuffer.length === 0) {
       return Promise.resolve();
     }
 
-    // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
-    if (!this.flushPromise) {
-      this.flushPromise = this.flushBatch().finally(() => {
-        this.flushPromise = null;
-      });
-    }
+    this.flushPromise = this.flushBatch().finally(() => {
+      this.flushPromise = null;
+    });
     return this.flushPromise;
   }
 
@@ -191,9 +196,11 @@ export class HttpTransport extends LoggerTransport {
   _destroy(err: Error, cb: Function): void {
     clearInterval(this.flushIntervalId);
 
-    // Final flush
-    if (this.logBuffer.length > 0) {
-      this._flush()
+    // Final flush. Wait out any in-flight request first so logs queued behind it still get sent.
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      (this.flushPromise ?? Promise.resolve())
+        .catch(() => {})
+        .then(() => this._flush())
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);

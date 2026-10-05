@@ -440,6 +440,54 @@ describe('HttpTransport', () => {
       guarded.clearBuffer();
       guarded.destroy();
     });
+
+    it.each([Number.NaN, Number.POSITIVE_INFINITY, 2.5, 0, -1])('rejects maxBufferSize %s', maxBufferSize => {
+      expect(() => new HttpTransport({ ...outageOptions, maxBufferSize })).toThrow(
+        'HttpTransport maxBufferSize must be a positive integer',
+      );
+    });
+
+    it('returns the in-flight flush even after it has taken the last buffered batch', async () => {
+      const capped = new HttpTransport({ ...outageOptions });
+      vi.spyOn(capped, '_flush').mockImplementation(() => Promise.resolve());
+      capped._transform({ msg: 'm0' } as any, 'utf8', () => {});
+      capped._transform({ msg: 'm1' } as any, 'utf8', () => {});
+      vi.mocked(capped._flush).mockRestore();
+
+      const first = capped._flush();
+      expect(capped.getBufferedLogs()).toHaveLength(0);
+      const second = capped._flush();
+
+      expect(second).toBe(first);
+      await expect(second).rejects.toThrow('endpoint down');
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it('sends logs queued behind an in-flight request on destroy', async () => {
+      const resolvers: Array<(value: unknown) => void> = [];
+      fetchMock.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)));
+      const guarded = new HttpTransport({ ...outageOptions });
+
+      guarded._transform({ msg: 'm0' } as any, 'utf8', () => {});
+      guarded._transform({ msg: 'm1' } as any, 'utf8', () => {});
+      guarded._transform({ msg: 'm2' } as any, 'utf8', () => {});
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const callback = vi.fn();
+      guarded._destroy(null as any, callback);
+      resolvers[0]!({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(fetchMock.mock.calls[1]![1].body).logs.map((log: any) => log.msg)).toEqual(['m2']);
+      expect(callback).not.toHaveBeenCalled();
+
+      resolvers[1]!({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(callback).toHaveBeenCalledWith(null);
+      expect(guarded.getBufferedLogs()).toHaveLength(0);
+    });
   });
 
   describe('cleanup and resource management', () => {
