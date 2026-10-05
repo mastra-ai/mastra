@@ -3201,6 +3201,11 @@ export class DurableAgent<
       .catch(async error => {
         const leaseLossError = recoveryLease.getLossError();
         if (leaseLossError) {
+          // #reportRecoveryFailure skips emitError on lease loss, so nothing
+          // else ends the recovered spans; stores only persist span ends.
+          const output = { status: 'interrupted' as const, reason: 'recovery lease lost' };
+          recoverModelSpan?.end({ output });
+          recoverAgentSpan?.end({ output });
           await threadRegistration?.rollback({ releaseLease: false });
           performCleanup();
         }
