@@ -266,6 +266,7 @@ type InputShared_Type_2 = {
   requestContextKeys?: string[] | undefined;
   traceId?: string | undefined;
   parentSpanId?: string | undefined;
+  nestUnderParent?: boolean | undefined;
   tags?: string[] | undefined;
   hideInput?: boolean | undefined;
   hideOutput?: boolean | undefined;
