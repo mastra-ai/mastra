@@ -227,12 +227,6 @@ Observations are added in stable chunks, which helps providers reuse the existin
 
 ## Signals
 
-:::beta
-
-Signals may change without a major version bump until the API is stable.
-
-:::
-
 [Signals](/docs/harness/signals) add messages or system-generated context to a memory-backed thread. Delivery depends on the thread's state: a signal can wake an idle agent or enter an active loop. It can also wait for the next turn or persist without waking the agent.
 
 State signals require memory and an existing thread. Notification inbox signals require a storage adapter with notification support.
