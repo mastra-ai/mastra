@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
@@ -12,14 +12,6 @@ import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOpera
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pressActive = (init: { key: string }) => fireEvent.keyDown(document.activeElement ?? document.body, init);
 const argAt = (mock: { mock: { calls: any[][] } }, call: number, arg: number) => mock.mock.calls.at(call)?.at(arg);
-
-beforeAll(() => {
-  // jsdom ships no PointerEvent, and Base UI constructs one on press.
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -399,10 +391,7 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(true);
         expect(preexisting.hasAttribute('data-shine')).toBe(false);
 
-        // jsdom has no AnimationEvent: build one with the name the browser would report.
-        const end = new Event('animationend', { bubbles: true });
-        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
-        fireEvent(committed, end);
+        fireEvent.animationEnd(committed, { animationName: 'filter-bar-chip-shine' });
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 

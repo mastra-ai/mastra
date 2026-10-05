@@ -1,5 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
+import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks';
+import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks';
 import {
   ActivityIcon,
   BoxIcon,
@@ -32,7 +34,6 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
@@ -73,12 +74,7 @@ type EntityTypeValue = `${EntityType}`;
 
 export type EntityOptions = { label: string; entityType: EntityTypeValue };
 
-export const ROOT_ENTITY_TYPES = {
-  AGENT: 'agent',
-  WORKFLOW: 'workflow_run',
-  SCORER: 'scorer',
-  INGEST: 'rag_ingestion',
-} as const satisfies Record<string, EntityTypeValue>;
+export { ROOT_ENTITY_TYPES };
 
 export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },
@@ -124,7 +120,7 @@ export const TRACE_LIST_MODE_PARAM = 'listMode';
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
 export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
 export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
-export type TraceListMode = 'traces' | 'branches';
+export type { TraceListMode };
 
 export const TRACE_LIST_MODE_OPTIONS = [
   { label: 'Traces (default)', value: 'traces' },

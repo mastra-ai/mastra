@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 61.0.0-alpha.3
+
+### Minor Changes
+
+- Added `opensView` to sidebar links. A link with `opensView: true` shows a trailing caret so users can tell it opens its own navigation view. ([#25868](https://github.com/mastra-ai/mastra/pull/25868))
+
+  ```tsx
+  <SidebarNew.Sections
+    sections={[{ key: 'infra', links: [{ name: 'Gateway', url: '/gateway', icon: <GatewayIcon />, opensView: true }] }]}
+  />
+  ```
+
+### Patch Changes
+
+- Fixed uneven spacing in RelativeTimestamp when it sits inside a sentence such as "Deployed 1h ago". Only short labels like "1h" stay monospace; words like "ago" and full dates now match the surrounding text. ([#25867](https://github.com/mastra-ai/mastra/pull/25867))
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`d2f2243`](https://github.com/mastra-ai/mastra/commit/d2f2243ed0d3190b685d0b1a9349ca00a95ce647), [`056427c`](https://github.com/mastra-ai/mastra/commit/056427cda3e9b7c064e55daaa688601807806840), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+  - @mastra/memory@1.36.0-alpha.2
+  - @mastra/client-js@1.52.0-alpha.3
+  - @mastra/ai-sdk@1.10.7-alpha.1
+  - @mastra/react@1.7.3-alpha.3
+
 ## 61.0.0-alpha.2
 
 ### Patch Changes

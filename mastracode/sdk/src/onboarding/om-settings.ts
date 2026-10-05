@@ -4,6 +4,7 @@
  * routes — no UI dependencies.
  */
 import type { OMPack } from './packs.js';
+import { resolveProviderOMDefault } from './packs.js';
 import type { GlobalSettings } from './settings.js';
 import { loadSettings, saveSettings } from './settings.js';
 
@@ -25,6 +26,19 @@ export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMP
   settings.models.activeOmPackId = pack.id;
   settings.models.omModelOverride = null;
   return true;
+}
+
+export function seedProviderOMDefault(providerId: string): OMPack | undefined {
+  const pack = resolveProviderOMDefault(providerId);
+  // No cheap OM pack for this provider — leave OM open for a later login rather
+  // than pinning observation and reflection to a full-size coding model.
+  if (pack.id === 'custom') return undefined;
+
+  const settings = loadSettings();
+  if (!applyOMDefaultIfUnconfigured(settings, pack)) return undefined;
+
+  saveSettings(settings);
+  return pack;
 }
 
 /**

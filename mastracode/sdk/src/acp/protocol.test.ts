@@ -9,12 +9,21 @@ import type { RequestPermissionResponse, SessionNotification } from '@agentclien
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AuthStorage } from '../auth/storage.js';
+import { seedProviderOMDefault } from '../onboarding/om-settings.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
 import { MastraCodeAcpAgent } from './agent.js';
 import type { AcpSessionRuntime } from './agent.js';
+
+vi.mock('../utils/open-url.js', () => ({ openUrlInBrowser: vi.fn() }));
+vi.mock('../onboarding/om-settings.js', () => ({ seedProviderOMDefault: vi.fn() }));
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
+  vi.restoreAllMocks();
+  vi.mocked(openUrlInBrowser).mockClear();
+  vi.mocked(seedProviderOMDefault).mockClear();
 });
 
 async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
@@ -124,6 +133,100 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
+  it.each([
+    ['without terminal support', {}, []],
+    ['when terminal auth is turned off', { auth: { terminal: false } }, []],
+    ['with terminal auth', { auth: { terminal: true } }, ['anthropic', 'github-copilot', 'mastracode-login']],
+    [
+      'with the legacy terminal-auth flag',
+      { _meta: { 'terminal-auth': true } },
+      ['anthropic', 'github-copilot', 'mastracode-login'],
+    ],
+  ])(
+    'offers browser sign-in, and terminal login only to clients that can run it, %s',
+    async (_case, clientCapabilities, terminal) => {
+      const { client } = await connect();
+      const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities });
+      expect(authMethods?.map(method => method.id)).toEqual(['openai-codex', 'kimi-for-coding', 'xai', ...terminal]);
+      expect(authMethods?.filter(method => !('type' in method)).length).toBe(3);
+    },
+  );
+
+  it.each([
+    ['anthropic', ['login', '--provider', 'anthropic']],
+    ['github-copilot', ['login', '--provider', 'github-copilot']],
+    ['mastracode-login', ['login']],
+  ])('launches the login command for the %s terminal method', async (methodId, args) => {
+    const { client } = await connect();
+    const { authMethods } = await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: { auth: { terminal: true } },
+    });
+    expect(authMethods?.find(method => method.id === methodId)).toMatchObject({
+      type: 'terminal',
+      args,
+      _meta: { 'terminal-auth': { command: process.execPath, args: [...process.argv.slice(1, 2), ...args] } },
+    });
+  });
+
+  it('signs in by opening the provider login page in the browser', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.openai.com/oauth/authorize?state=abc' });
+      return {
+        type: 'oauth-account',
+        id: 'openai-codex:1',
+        label: 'ChatGPT',
+        addedAt: '2026-10-03T00:00:00.000Z',
+        active: true,
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: 0,
+      };
+    });
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'openai-codex' });
+    expect(login).toHaveBeenCalledWith('openai-codex', expect.objectContaining({ authMode: 'browser' }));
+    expect(openUrlInBrowser).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize?state=abc');
+    expect(seedProviderOMDefault).toHaveBeenCalledWith('openai-codex');
+  });
+
+  it('fails sign-in that needs typed input and points to terminal login', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      await callbacks.onPrompt({ message: 'Paste the authorization code:' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'openai-codex' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode login'),
+    });
+  });
+
+  it('fails device sign-in whose page would ask for a code it cannot show', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.x.ai/activate', userCode: 'ABCD-1234' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'xai' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode login'),
+    });
+    expect(openUrlInBrowser).not.toHaveBeenCalled();
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
+  });
+
+  it('accepts terminal logins without running a flow and rejects unknown methods', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login');
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'mastracode-login' });
+    await client.authenticate({ methodId: 'anthropic' });
+    await client.authenticate({ methodId: 'github-copilot' });
+    expect(login).not.toHaveBeenCalled();
+    await expect(client.authenticate({ methodId: 'nope' })).rejects.toMatchObject({
+      message: expect.stringContaining('Unknown authentication method'),
+    });
+  });
+
   it('keeps the original creation error on the wire when cleanup also fails', async () => {
     const { client, createThread, cleanup } = await connect();
     const error = RequestError.invalidParams({ thread: 'broken' }, 'thread creation failed');

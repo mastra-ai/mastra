@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 290 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 291 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -1247,7 +1247,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "edenai/flexai/DeepSeek-V4.1-Flash",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -1280,6 +1280,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.02,
     "outputCost": 0.1
+  },
+  {
+    "model": "edenai/flexai/Step-3.7-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 256000,
+    "inputCost": 0.2,
+    "outputCost": 1.15
   },
   {
     "model": "edenai/google/gemini-2.5-flash-image",
@@ -1504,10 +1516,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.009,
-    "outputCost": 0.045
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "edenai/groq/openai/gpt-oss-120b",

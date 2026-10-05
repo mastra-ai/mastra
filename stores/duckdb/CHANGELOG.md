@@ -1,5 +1,20 @@
 # @mastra/duckdb
 
+## 1.13.0-alpha.1
+
+### Minor Changes
+
+- Added filtered span queries to DuckDB observability storage with stable pagination, previews, and model cost. ([#25791](https://github.com/mastra-ai/mastra/pull/25791))
+
+  ```typescript
+  const result = await observabilityStorage.querySpans(plan);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+
 ## 1.13.0-alpha.0
 
 ### Minor Changes

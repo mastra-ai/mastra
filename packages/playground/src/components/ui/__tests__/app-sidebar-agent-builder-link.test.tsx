@@ -1,9 +1,9 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { authHandler, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const unauthenticatedCapabilities = {

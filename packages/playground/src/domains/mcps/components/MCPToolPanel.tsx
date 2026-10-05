@@ -5,12 +5,12 @@ import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useExecuteMCPTool, useMCPServerTool } from '@mastra/react/hooks';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 
 export interface MCPToolPanelProps {

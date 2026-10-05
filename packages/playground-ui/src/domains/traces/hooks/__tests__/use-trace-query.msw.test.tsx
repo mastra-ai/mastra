@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
+import type { TraceQueryArgs } from '@mastra/react/hooks';
+import { getTraceQueryNextPageParam, useTraceQuery, useTraceMetadataFilterFields } from '@mastra/react/hooks';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -9,9 +10,6 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { buildTraceListFilters } from '../../trace-filters';
-import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
-import { getTraceQueryNextPageParam, useTraceQuery } from '../use-trace-query';
-import type { TraceQueryArgs } from '../use-trace-query';
 import { firstTraceQueryPage, lastTraceQueryPage } from './fixtures/trace-query';
 import { firstLegacyTracePage, lastLegacyTracePage } from './fixtures/trace-query-legacy';
 

@@ -2,12 +2,12 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/pla
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useAgents } from '@mastra/react/hooks';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
 
-import { useAgents } from '../../../hooks/use-agents';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';

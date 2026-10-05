@@ -6,19 +6,20 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, GitFork } from 'lucide-react';
-import { useCallback } from 'react';
-import { AgentObservationalMemory } from './agent-observational-memory';
-import { AgentWorkingMemory } from './agent-working-memory';
-import { getRecentMessagesSettings } from './lib/recent-messages';
-import { useThreadInput } from '@/domains/conversation';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import {
   useMemoryConfig,
   useMemorySearch,
   useCloneThread,
   useMemoryWithOMStatus,
   useThread,
-} from '@/domains/memory/hooks';
+} from '@mastra/react/hooks';
+import { ExternalLink, GitFork } from 'lucide-react';
+import { useCallback } from 'react';
+import { AgentObservationalMemory } from './agent-observational-memory';
+import { AgentWorkingMemory } from './agent-working-memory';
+import { getRecentMessagesSettings } from './lib/recent-messages';
+import { useThreadInput } from '@/domains/conversation';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 
 interface AgentMemoryProps {
@@ -69,7 +70,14 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const handleCloneThread = useCallback(async () => {
     if (!threadId || !agentId) return;
 
-    const result = await cloneThread({ threadId, agentId });
+    let result;
+    try {
+      result = await cloneThread({ threadId, agentId });
+    } catch {
+      toast.error('Failed to clone thread');
+      return;
+    }
+    toast.success('Thread cloned successfully');
     // Navigate to the cloned thread
     if (result?.thread?.id) {
       navigate(paths.agentThreadLink(agentId, result.thread.id));

@@ -2,9 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useAgent } from '@mastra/react/hooks';
 import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
-import { useAgent } from '../hooks/use-agent';
 import { AgentConfigToggle } from './agent-config-toggle';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { withStudioBasePath } from '@/lib/studio-base-path';

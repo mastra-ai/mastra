@@ -2,7 +2,7 @@
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useMobileDrawer } from './main-sidebar-context';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
@@ -15,25 +15,6 @@ const DrawerToggle = () => {
   const { openMobile, setOpenMobile } = useMobileDrawer();
   return <button onClick={() => setOpenMobile(!openMobile)}>Toggle drawer</button>;
 };
-
-beforeAll(() => {
-  if (!window.matchMedia) {
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      configurable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-  }
-});
 
 afterEach(() => cleanup());
 

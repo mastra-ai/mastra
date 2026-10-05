@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';

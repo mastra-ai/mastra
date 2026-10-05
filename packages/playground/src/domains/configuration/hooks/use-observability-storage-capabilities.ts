@@ -1,4 +1,4 @@
-import { useMastraPackages } from './use-mastra-packages';
+import { useMastraPackages } from '@mastra/react/hooks';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 const LEGACY_ANALYTICS_OBSERVABILITY_TYPES = new Set([
