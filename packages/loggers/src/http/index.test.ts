@@ -63,6 +63,40 @@ describe('HttpTransport', () => {
   });
 
   describe('logging functionality', () => {
+    it('should keep the buffer within its configured limit', () => {
+      const boundedTransport = new HttpTransport({
+        ...defaultOptions,
+        batchSize: 3,
+        maxBufferSize: 3,
+        bufferOverflowStrategy: 'drop-oldest',
+      });
+      vi.spyOn(boundedTransport, '_flush').mockResolvedValue();
+
+      for (let index = 1; index <= 5; index++) {
+        boundedTransport._transform({ msg: `message${index}`, time: Date.now() }, 'utf8', () => {});
+      }
+
+      expect(boundedTransport.getBufferedLogs().map(log => log.msg)).toEqual(['message3', 'message4', 'message5']);
+      expect(boundedTransport.getDroppedLogsCount()).toBe(2);
+    });
+
+    it('should preserve the oldest logs when configured to drop newest', () => {
+      const boundedTransport = new HttpTransport({
+        ...defaultOptions,
+        batchSize: 3,
+        maxBufferSize: 3,
+        bufferOverflowStrategy: 'drop-newest',
+      });
+      vi.spyOn(boundedTransport, '_flush').mockResolvedValue();
+
+      for (let index = 1; index <= 5; index++) {
+        boundedTransport._transform({ msg: `message${index}`, time: Date.now() }, 'utf8', () => {});
+      }
+
+      expect(boundedTransport.getBufferedLogs().map(log => log.msg)).toEqual(['message1', 'message2', 'message3']);
+      expect(boundedTransport.getDroppedLogsCount()).toBe(2);
+    });
+
     it('should work with PinoLogger', async () => {
       const logger = new PinoLogger({
         name: 'test-logger',
@@ -155,6 +189,32 @@ describe('HttpTransport', () => {
   });
 
   describe('error handling and retries', () => {
+    it('should keep a restored failed batch within the buffer limit', async () => {
+      let rejectRequest: (error: Error) => void = () => {};
+      fetchMock.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectRequest = reject;
+          }),
+      );
+      const boundedTransport = new HttpTransport({
+        ...defaultOptions,
+        batchSize: 2,
+        maxBufferSize: 3,
+        bufferOverflowStrategy: 'drop-newest',
+        retryOptions: { maxRetries: 0 },
+      });
+      boundedTransport['logBuffer'] = [{ msg: 'message1' }, { msg: 'message2' }, { msg: 'message3' }] as any;
+
+      const flush = boundedTransport._flush();
+      boundedTransport['logBuffer'].push({ msg: 'message4' }, { msg: 'message5' });
+      rejectRequest(new Error('endpoint unavailable'));
+
+      await expect(flush).rejects.toThrow('endpoint unavailable');
+      expect(boundedTransport.getBufferedLogs().map(log => log.msg)).toEqual(['message1', 'message2', 'message3']);
+      expect(boundedTransport.getDroppedLogsCount()).toBe(2);
+    });
+
     it('should retry on HTTP errors', async () => {
       fetchMock
         .mockImplementationOnce(() =>
@@ -285,6 +345,7 @@ describe('HttpTransport', () => {
       await expect(timeoutTransport._flush()).rejects.toThrow();
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
+      timeoutTransport.clearBuffer();
       timeoutTransport.destroy();
       vi.useFakeTimers();
     });

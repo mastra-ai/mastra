@@ -7,6 +7,8 @@ interface RetryOptions {
   exponentialBackoff?: boolean;
 }
 
+type BufferOverflowStrategy = 'drop-oldest' | 'drop-newest';
+
 interface HttpTransportOptions {
   url: string;
   method?: 'POST' | 'PUT' | 'PATCH';
@@ -15,6 +17,8 @@ interface HttpTransportOptions {
   flushInterval?: number;
   timeout?: number;
   retryOptions?: RetryOptions;
+  maxBufferSize?: number;
+  bufferOverflowStrategy?: BufferOverflowStrategy;
 }
 
 export class HttpTransport extends LoggerTransport {
@@ -25,6 +29,9 @@ export class HttpTransport extends LoggerTransport {
   private flushInterval: number;
   private timeout: number;
   private retryOptions: Required<RetryOptions>;
+  private maxBufferSize: number;
+  private bufferOverflowStrategy: BufferOverflowStrategy;
+  private droppedLogsCount: number;
   private logBuffer: BaseLogMessage[];
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
@@ -43,6 +50,14 @@ export class HttpTransport extends LoggerTransport {
       ...options.headers,
     };
     this.batchSize = options.batchSize || 100;
+    this.maxBufferSize = options.maxBufferSize ?? Math.max(10000, this.batchSize);
+    if (!Number.isInteger(this.maxBufferSize) || this.maxBufferSize < this.batchSize) {
+      throw new Error('maxBufferSize must be an integer greater than or equal to batchSize');
+    }
+    this.bufferOverflowStrategy = options.bufferOverflowStrategy ?? 'drop-oldest';
+    if (!['drop-oldest', 'drop-newest'].includes(this.bufferOverflowStrategy)) {
+      throw new Error('bufferOverflowStrategy must be either "drop-oldest" or "drop-newest"');
+    }
     this.flushInterval = options.flushInterval || 10000;
     this.timeout = options.timeout || 30000;
     this.retryOptions = {
@@ -52,6 +67,7 @@ export class HttpTransport extends LoggerTransport {
     };
 
     this.logBuffer = [];
+    this.droppedLogsCount = 0;
     this.lastFlush = Date.now();
 
     // Start flush interval
@@ -113,7 +129,20 @@ export class HttpTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
+    }
+  }
+
+  private enforceBufferLimit(): void {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow <= 0) return;
+
+    this.droppedLogsCount += overflow;
+    if (this.bufferOverflowStrategy === 'drop-oldest') {
+      this.logBuffer.splice(0, overflow);
+    } else {
+      this.logBuffer.splice(this.maxBufferSize, overflow);
     }
   }
 
@@ -141,6 +170,7 @@ export class HttpTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.enforceBufferLimit();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
@@ -251,5 +281,9 @@ export class HttpTransport extends LoggerTransport {
 
   public getLastFlushTime(): number {
     return this.lastFlush;
+  }
+
+  public getDroppedLogsCount(): number {
+    return this.droppedLogsCount;
   }
 }
