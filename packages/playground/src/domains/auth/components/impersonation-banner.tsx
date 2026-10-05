@@ -13,19 +13,15 @@ export function ImpersonationBanner() {
   if (!isImpersonating || !impersonatedRole) return null;
 
   return (
-    <div className="bg-info1/10 border-info1/20 mx-3 mb-2 flex items-center gap-2 rounded-md border px-3 py-1.5">
-      <Eye className="text-info1 h-3.5 w-3.5 shrink-0" />
-      <Txt variant="meta" className="text-info1 truncate">
-        Previewing{' '}
-        <Txt as="span" variant="meta" className="capitalize">
-          {impersonatedRole.name}
-        </Txt>{' '}
-        experience
+    <div className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-info-edge bg-info-subtle px-3 py-1.5">
+      <Eye className="h-3.5 w-3.5 shrink-0 text-info-subtle-foreground" />
+      <Txt variant="meta" className="truncate text-info-subtle-foreground">
+        Previewing <span className="font-medium capitalize">{impersonatedRole.name}</span> experience
       </Txt>
       <button
         type="button"
         onClick={stopImpersonation}
-        className="text-info1 hover:bg-info1/20 ml-auto shrink-0 rounded p-0.5"
+        className="ml-auto shrink-0 rounded p-0.5 text-info-subtle-foreground hover:bg-info-indicator/20"
         title="Exit role preview"
       >
         <X className="h-3 w-3" />
