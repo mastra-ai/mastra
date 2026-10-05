@@ -130,6 +130,7 @@ async function history(storage: InMemoryMemory, threadId: string, resourceId: st
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 });

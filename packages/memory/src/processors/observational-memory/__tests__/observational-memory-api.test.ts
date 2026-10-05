@@ -285,6 +285,7 @@ beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
   BufferingCoordinator.pendingChunkWrites.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 });

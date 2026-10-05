@@ -2336,6 +2336,7 @@ describe('Observer Agent Helpers', () => {
     await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -2450,6 +2451,7 @@ describe('Observer Agent Helpers', () => {
     } finally {
       BufferingCoordinator.asyncBufferingOps.clear();
       BufferingCoordinator.lastBufferedBoundary.clear();
+      BufferingCoordinator.observationBoundaryOwners.clear();
       BufferingCoordinator.lastBufferedAtTime.clear();
       BufferingCoordinator.reflectionBufferCycleIds.clear();
     }
@@ -9079,6 +9081,7 @@ describe('Locking Behavior', () => {
       } finally {
         BufferingCoordinator.asyncBufferingOps.clear();
         BufferingCoordinator.lastBufferedBoundary.clear();
+        BufferingCoordinator.observationBoundaryOwners.clear();
         BufferingCoordinator.lastBufferedAtTime.clear();
         BufferingCoordinator.reflectionBufferCycleIds.clear();
         vi.useRealTimers();
@@ -11826,6 +11829,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -13383,6 +13387,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -13576,6 +13581,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -15846,6 +15852,7 @@ describe('Per-step save deduplication', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17125,6 +17132,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17235,6 +17243,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17426,6 +17435,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17527,6 +17537,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17670,6 +17681,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17777,6 +17789,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17904,6 +17917,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18169,6 +18183,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18431,6 +18446,7 @@ describe('Processor stream events: buffering status and activation markers', () 
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18589,6 +18605,7 @@ describe('Processor stream events: buffering status and activation markers', () 
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18804,6 +18821,7 @@ describe('Async reflection failure should not permanently block future reflectio
     // Clear static maps
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -19233,6 +19251,7 @@ describe('Message ordering regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -19621,6 +19640,7 @@ describe('Message ordering regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
