@@ -12,6 +12,27 @@ export type MastraCodeSessionState = {
 
 export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
 
+export interface ModelRouteEntry {
+  id: string;
+  label: string;
+  modelId: string;
+  accountId?: string;
+  memoryModelId?: string;
+}
+
+export interface ModelRoute {
+  entries: ModelRouteEntry[];
+}
+
+export interface PendingModelFallback {
+  fromEntryId: string;
+  toEntryId: string;
+  toModelId: string;
+  threadId?: string;
+  reason: 'pool-exhausted' | 'persistent-outage';
+  at: string;
+}
+
 export interface MastraCodeState {
   [key: string]: unknown;
   [key: `subagentModelId_${string}`]: string | undefined;
@@ -62,21 +83,10 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
-  /** Explicit model-pack identity for the current thread. */
-  activeModelPackId?: string | null;
-  /**
-   * Pending pack hop written by the account-rotation processor on a cascade
-   * hop; cleared back to null once the TUI applies it. Declared here so
-   * consumers resolve it as a typed record instead of casting `unknown`.
-   */
-  mastracodePendingPackFallback?: {
-    fromPackId: string;
-    toPackId: string;
-    toModelId: string;
-    threadId?: string;
-    reason: 'pool-exhausted' | 'persistent-outage';
-    at: string;
-  } | null;
+  /** Ordered host-supplied model and account fallback route for this thread. */
+  modelRoute?: ModelRoute;
+  /** One-hop fallback intent written by account rotation and consumed by the host. */
+  mastracodePendingModelFallback?: PendingModelFallback | null;
   /**
    * Session-level reasoning-effort override. When unset, the effective level is
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
@@ -132,13 +142,23 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
-  // Session-scoped selection.
-  // validates state against this schema, so they MUST be declared here — Zod
-  // strips unknown keys on parse, which would otherwise silently discard the
-  // seeded model and leave the controller with no model selected.
+  // Session-scoped selection. The controller validates state against this
+  // schema, so these keys must be declared here — Zod strips unknown keys.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
-  activeModelPackId: z.string().nullable().optional(),
+  modelRoute: z
+    .object({
+      entries: z.array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          modelId: z.string(),
+          accountId: z.string().optional(),
+          memoryModelId: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
@@ -203,13 +223,12 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
-  // Pending pack hop written by the account-rotation processor on a cascade
-  // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
-  // then clears it back to null. Must be declared — Zod strips unknown keys.
-  mastracodePendingPackFallback: z
+  // Pending route hop written by account rotation. The host consumes it on
+  // `state_changed` to apply thread stickiness, then clears it back to null.
+  mastracodePendingModelFallback: z
     .object({
-      fromPackId: z.string(),
-      toPackId: z.string(),
+      fromEntryId: z.string(),
+      toEntryId: z.string(),
       toModelId: z.string(),
       threadId: z.string().optional(),
       reason: z.enum(['pool-exhausted', 'persistent-outage']),

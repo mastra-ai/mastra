@@ -147,7 +147,6 @@ vi.mock('./onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -353,9 +352,9 @@ describe('scores storage domain', () => {
 });
 
 describe('Kimi startup access', () => {
-  it('rejects stored OAuth credentials without a valid device ID', async () => {
+  it('rejects stored OAuth credentials without a valid device ID for OM pack selection', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { getAvailableOmPacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
@@ -366,11 +365,11 @@ describe('Kimi startup access', () => {
         refresh: 'refresh-token',
         expires: Date.now() + 60_000,
       });
-      vi.mocked(getAvailableModePacks).mockClear();
+      vi.mocked(getAvailableOmPacks).mockClear();
 
       await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
 
-      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+      expect(getAvailableOmPacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
     } finally {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -477,30 +476,17 @@ describe('settings.json OM seeding', () => {
     }
   });
 
-  it('uses mode defaults without the active pack when disableModelPacks is set', async () => {
-    const { loadSettings, resolveModelDefaults } = await import('./onboarding/settings.js');
-    const baseSettings = vi.mocked(loadSettings)();
-    const modeDefaults = {
-      build: 'anthropic/claude-fable-5',
-      plan: 'openai/gpt-5.4-mini',
-      fast: 'google/gemini-3.5-flash',
-    };
-    vi.mocked(loadSettings).mockReturnValue({
-      ...baseSettings,
-      models: { ...baseSettings.models, activeModelPackId: 'openai', modeDefaults },
-    });
+  it('does not resolve model packs for startup mode defaults', async () => {
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { resolveModelDefaults } = await import('./onboarding/settings.js');
     const { createMastraCode } = await import('./index.js');
+    vi.mocked(getAvailableModePacks).mockClear();
+    vi.mocked(resolveModelDefaults).mockClear();
 
-    try {
-      await createMastraCode({ cwd: '/tmp/project-no-packs', disableModelPacks: true });
+    await createMastraCode({ cwd: '/tmp/project-no-runtime-packs' });
 
-      expect(resolveModelDefaults).toHaveBeenCalledWith(
-        expect.objectContaining({ models: expect.objectContaining({ activeModelPackId: null, modeDefaults }) }),
-        expect.any(Array),
-      );
-    } finally {
-      vi.mocked(loadSettings).mockReturnValue(baseSettings);
-    }
+    expect(getAvailableModePacks).not.toHaveBeenCalled();
+    expect(resolveModelDefaults).not.toHaveBeenCalled();
   });
 
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {
