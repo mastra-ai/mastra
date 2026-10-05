@@ -46,6 +46,7 @@ export function MetricsLineChart({
   xAxisMinTickGap = 28,
   showDots = false,
   showLegend = true,
+  valueFormatter,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
@@ -61,6 +62,8 @@ export function MetricsLineChart({
   showDots?: boolean;
   /** Set to `false` to render `MetricsLineChartLegend` elsewhere, e.g. next to tabs. */
   showLegend?: boolean;
+  /** Formats y-axis ticks and tooltip values (e.g. `ms`, `%`). Defaults to compact numbers. */
+  valueFormatter?: (value: number) => string;
 }) {
   const isClickable = typeof onPointClick === 'function';
   const id = useChartDefsId();
@@ -94,11 +97,11 @@ export function MetricsLineChart({
               tickLine={false}
               axisLine={false}
               width="auto"
-              tickFormatter={(value: number) => compactNumber.format(value)}
+              tickFormatter={(value: number) => (valueFormatter ?? compactNumber.format)(value)}
               domain={yDomain}
               tickCount={3}
             />
-            <Tooltip content={<MetricsLineChartTooltip />} cursor={<SmoothCursor />} />
+            <Tooltip content={<MetricsLineChartTooltip formatValue={valueFormatter} />} cursor={<SmoothCursor />} />
             {series.map(s => (
               <Line
                 key={s.dataKey}

@@ -6,19 +6,21 @@ import { fn } from 'storybook/test';
 
 import { Button } from '../Button/Button';
 import { MetricsCard } from '../MetricsCard';
+import { errorRateSeries, ms, percent, percentileSeries, requestsByHour } from '../MetricsCard/metrics-story-data';
 import { Tab, TabContent, TabList, Tabs } from '../Tabs';
 import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 
+// Input and output tokens share a scale, so neither line is flattened against the axis.
 const data: Record<string, unknown>[] = [
-  { time: '09:00', requests: 52_000, errors: 3 },
-  { time: '10:00', requests: 184_000, errors: 47 },
-  { time: '11:00', requests: 97_000, errors: 12 },
-  { time: '12:00', requests: 412_000, errors: 88 },
-  { time: '13:00', requests: 596_000, errors: 21 },
-  { time: '14:00', requests: 238_000, errors: 100 },
-  { time: '15:00', requests: 341_000, errors: 0 },
+  { time: '09:00', input: 52_000, output: 18_000 },
+  { time: '10:00', input: 184_000, output: 61_000 },
+  { time: '11:00', input: 97_000, output: 40_000 },
+  { time: '12:00', input: 412_000, output: 133_000 },
+  { time: '13:00', input: 596_000, output: 201_000 },
+  { time: '14:00', input: 238_000, output: 92_000 },
+  { time: '15:00', input: 341_000, output: 120_000 },
 ];
 
 const total = (key: string) => (points: Record<string, unknown>[]) => ({
@@ -28,8 +30,8 @@ const total = (key: string) => (points: Record<string, unknown>[]) => ({
 });
 
 const series = [
-  { dataKey: 'requests', label: 'Requests', color: 'var(--chart-blue)', aggregate: total('requests') },
-  { dataKey: 'errors', label: 'Errors', color: 'var(--chart-red)', aggregate: total('errors') },
+  { dataKey: 'input', label: 'Input tokens', color: 'var(--chart-blue)', aggregate: total('input') },
+  { dataKey: 'output', label: 'Output tokens', color: 'var(--chart-amber)', aggregate: total('output') },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsLineChart> = {
@@ -81,8 +83,8 @@ const average = (key: string) => (points: Record<string, unknown>[]) => {
 };
 
 const latencySeries = [
-  { dataKey: 'p50', label: 'p50', color: 'var(--chart-green)', aggregate: average('p50') },
-  { dataKey: 'p95', label: 'p95', color: 'var(--chart-orange)', aggregate: average('p95') },
+  { dataKey: 'p50', label: 'p50', color: 'var(--chart-sequential-1)', aggregate: average('p50') },
+  { dataKey: 'p95', label: 'p95', color: 'var(--chart-sequential-3)', aggregate: average('p95') },
 ] satisfies MetricsLineChartSeries[];
 
 function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
@@ -144,6 +146,36 @@ export const FixedDomain: Story = {
     yDomain: [0, 1],
     showDots: true,
   },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** Latency percentiles on the sequential ramp: lighter for the median, deeper for the tail. */
+export const Percentiles: Story = {
+  args: { data: requestsByHour, series: percentileSeries, valueFormatter: ms },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** Rates as percentages: axis ticks and tooltip values go through `valueFormatter`. */
+export const ErrorRate: Story = {
+  args: { data: requestsByHour, series: errorRateSeries, valueFormatter: percent },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** 30 daily points: axis labels thin out to fit instead of colliding. */
+export const LongRange: Story = {
+  args: { data: latencyData, series: latencySeries, valueFormatter: ms },
   render: args => (
     <div className="w-[min(48rem,calc(100vw-3rem))]">
       <MetricsLineChart {...args} />

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { count, requestsByHour, statusSeries } from '../MetricsCard/metrics-story-data';
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
 import { MetricsStackedBarChart } from './metrics-stacked-bar-chart';
 
@@ -84,5 +85,24 @@ export const OverIncluded: Story = {
     valueFormatter: value => `${value} GB`,
     referenceLine: { value: included, label: `${included} GB included`, color: 'var(--destructive-indicator)' },
     showLegend: false,
+  },
+};
+
+/**
+ * Status classes over a day with an incident. Thin 3xx/4xx/5xx slices keep a 2px minimum so
+ * a handful of errors stays visible; hover a column to dim the others.
+ */
+export const StatusClasses: Story = {
+  args: { data: requestsByHour, series: statusSeries, valueFormatter: count, height: 260 },
+};
+
+/** A dashed threshold line, e.g. a plan limit or an alert level. */
+export const WithReferenceLine: Story = {
+  args: {
+    data: requestsByHour,
+    series: statusSeries,
+    valueFormatter: count,
+    height: 260,
+    referenceLine: { value: 3500, label: 'Rate limit', color: 'var(--chart-red)' },
   },
 };
