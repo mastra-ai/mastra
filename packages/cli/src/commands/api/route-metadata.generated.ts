@@ -6696,7 +6696,6 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "modeId",
       "modelId",
       "scope"
     ],

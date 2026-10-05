@@ -53,9 +53,11 @@ describe('AgentController.createSession — cross-session isolation', () => {
 
     await a.mode.switch({ modeId: 'plan' });
 
-    // Only session a moved to plan; b is untouched.
+    // Only session a moved to plan; neither session's model changed.
     expect(a.mode.get()).toBe('plan');
     expect(b.mode.get()).toBe('build');
+    expect(a.model.get()).toBe('openai/gpt-4o');
+    expect(b.model.get()).toBe('openai/gpt-4o');
   });
 
   it('isolates model selection between sessions', async () => {

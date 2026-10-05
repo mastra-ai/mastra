@@ -18,6 +18,7 @@ import {
   LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
+  SWITCH_AGENT_CONTROLLER_MODEL_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
   CREATE_AGENT_CONTROLLER_THREAD_ROUTE,
@@ -1225,6 +1226,26 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any)) as { modeId: string };
       expect(state.modeId).toBe('plan');
+    });
+  });
+
+  describe('SWITCH_AGENT_CONTROLLER_MODEL_ROUTE', () => {
+    it('switches the session model without a modeId', async () => {
+      const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        modelId: 'anthropic/claude-opus-4-6',
+        scope: 'thread',
+      } as any);
+      expect(ack).toEqual({ ok: true });
+
+      const state = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { modelId: string };
+      expect(state.modelId).toBe('anthropic/claude-opus-4-6');
     });
   });
 

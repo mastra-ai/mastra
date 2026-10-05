@@ -2002,12 +2002,12 @@ export class AgentController<TState = {}> {
     if (!abortSignal) {
       session.run.clearAbortRequested();
     }
-    // Reconcile the in-memory model selection with the persisted per-mode model
+    // Reconcile the in-memory model selection with the persisted thread model
     // before snapshotting it into the request context. In multiplayer
     // deployments another process (or a freshly-created Session for an existing
     // thread) may have persisted a different model; the per-instance cache would
-    // otherwise run with a stale selection. No-op in the single-player TUI.
-    await session.model.syncFromPersisted({ modeId });
+    // otherwise run with a stale selection. No-op when already in sync.
+    await session.model.syncFromPersisted();
     const requestContext = await this.buildRequestContext(session, requestContextInput, {
       abortSignal,
       resourceId,

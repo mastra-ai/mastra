@@ -98,40 +98,29 @@ async function buildController(storage: InMemoryStore): Promise<{
   return { controller, session, agents: { build: buildAgent, plan: planAgent } };
 }
 
-describe('AgentController mode-model persistence across restarts', () => {
+describe('AgentController single-model persistence across restarts', () => {
   let storage: InMemoryStore;
 
   beforeEach(() => {
     storage = new InMemoryStore();
   });
 
-  it('restores the saved mode and falls back to its defaultModelId when no per-mode model was explicitly persisted', async () => {
-    // Session 1: start in build, switch to fast (no explicit model change),
-    // then "exit" — i.e. simulate reopening with a fresh controller pointed at
-    // the same thread.
-    const { session: session1 } = await buildController(storage);
-    const thread = await session1.thread.create();
-    expect(session1.mode.get()).toBe('build');
+  it('keeps the selected model when switching modes', async () => {
+    const { session } = await buildController(storage);
+    await session.thread.create();
+    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
 
-    await session1.mode.switch({ modeId: 'fast' });
-    expect(session1.mode.get()).toBe('fast');
-    expect(session1.model.get()).toBe('cerebras/zai-glm-4.7');
+    await session.mode.switch({ modeId: 'fast' });
 
-    // Session 2: reopen and resume the same thread.
-    const { session: session2 } = await buildController(storage);
-    await session2.thread.switch({ threadId: thread.id });
-
-    expect(session2.mode.get()).toBe('fast');
-    expect(session2.model.get()).toBe('cerebras/zai-glm-4.7');
+    expect(session.mode.get()).toBe('fast');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it('restores an explicitly chosen per-mode model on reopen', async () => {
+  it('restores currentModelId on reopen', async () => {
     const { session: session1 } = await buildController(storage);
     const thread = await session1.thread.create();
-
-    await session1.mode.switch({ modeId: 'fast' });
     await session1.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
-    expect(session1.model.get()).toBe('cerebras/qwen-3-coder-480b');
+    await session1.mode.switch({ modeId: 'fast' });
 
     const { session: session2 } = await buildController(storage);
     await session2.thread.switch({ threadId: thread.id });
@@ -140,16 +129,42 @@ describe('AgentController mode-model persistence across restarts', () => {
     expect(session2.model.get()).toBe('cerebras/qwen-3-coder-480b');
   });
 
-  it('keeps the default mode and its persisted model on reopen when the user never switched modes', async () => {
+  it('restores a legacy modeModelId key when currentModelId is absent', async () => {
     const { session: session1 } = await buildController(storage);
     const thread = await session1.thread.create();
-    await session1.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    const memory = await storage.getStore('memory');
+    await memory!.updateThread({
+      id: thread.id,
+      title: 'legacy thread',
+      metadata: {
+        currentModeId: 'fast',
+        currentModelId: null,
+        modeModelId_fast: 'cerebras/qwen-3-coder-480b',
+      },
+    });
 
     const { session: session2 } = await buildController(storage);
     await session2.thread.switch({ threadId: thread.id });
 
-    expect(session2.mode.get()).toBe('build');
-    expect(session2.model.get()).toBe('anthropic/claude-opus-4-6');
+    expect(session2.mode.get()).toBe('fast');
+    expect(session2.model.get()).toBe('cerebras/qwen-3-coder-480b');
+  });
+
+  it('falls back to the restored mode default when no model is persisted', async () => {
+    const { session: session1 } = await buildController(storage);
+    const thread = await session1.thread.create();
+    const memory = await storage.getStore('memory');
+    await memory!.updateThread({
+      id: thread.id,
+      title: 'defaulted thread',
+      metadata: { currentModeId: 'fast', currentModelId: null },
+    });
+
+    const { session: session2 } = await buildController(storage);
+    await session2.thread.switch({ threadId: thread.id });
+
+    expect(session2.mode.get()).toBe('fast');
+    expect(session2.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
   it('emits mode_changed with the correct previousModeId when restoring a mode from thread metadata', async () => {
@@ -158,12 +173,7 @@ describe('AgentController mode-model persistence across restarts', () => {
     await session1.mode.switch({ modeId: 'plan' });
 
     const { session: session2 } = await buildController(storage);
-    // Simulate the UI currently being in build mode before the user switches
-    // to a plan-mode thread. `set` is intentional here: this test cares about
-    // the restore event emitted by thread metadata hydration, not about
-    // persisting another mode switch onto the original thread.
     session2.mode.set({ modeId: 'build' });
-    expect(session2.mode.get()).toBe('build');
 
     const events: Array<{ type: 'mode_changed'; modeId: string; previousModeId: string }> = [];
     session2.subscribe(event => {

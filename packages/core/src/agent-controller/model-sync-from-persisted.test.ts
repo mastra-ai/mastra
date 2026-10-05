@@ -51,34 +51,56 @@ describe('SessionModel.syncFromPersisted', () => {
     storage = new InMemoryStore();
   });
 
-  it('restores the persisted per-mode model over a stale in-memory selection', async () => {
+  it('restores currentModelId over a stale in-memory selection', async () => {
     const { session } = await buildController(storage);
     const thread = await session.thread.create();
     await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
 
-    // A second Session over the same storage/thread (e.g. another server
-    // replica) that seeded from the boot-time default.
     const { session: replica } = await buildController(storage, 'replica-session');
     await replica.thread.switch({ threadId: thread.id });
-    // Simulate a stale in-memory selection (display cache drifted).
     replica.model.set({ modelId: 'openai/gpt-5.5' });
 
-    await replica.model.syncFromPersisted({ modeId: replica.mode.get() });
+    await replica.model.syncFromPersisted();
 
     expect(replica.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it('keeps the in-memory selection when no per-mode model was persisted', async () => {
+  it('falls back to the legacy current-mode model key', async () => {
     const { session } = await buildController(storage);
-    await session.thread.create();
-    expect(session.model.get()).toBe('openai/gpt-5.5');
+    const thread = await session.thread.create();
+    const memory = await storage.getStore('memory');
+    await memory!.updateThread({
+      id: thread.id,
+      title: 'legacy thread',
+      metadata: {
+        currentModeId: 'plan',
+        currentModelId: null,
+        modeModelId_plan: 'anthropic/claude-opus-4-6',
+      },
+    });
 
-    await session.model.syncFromPersisted({ modeId: session.mode.get() });
+    const { session: replica } = await buildController(storage, 'replica-session');
+    await replica.thread.switch({ threadId: thread.id });
+    replica.model.set({ modelId: 'openai/gpt-5.5' });
 
-    expect(session.model.get()).toBe('openai/gpt-5.5');
+    await replica.model.syncFromPersisted();
+
+    expect(replica.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it('emits model_changed only when the value actually changes', async () => {
+  it('keeps the in-memory selection when no model was persisted', async () => {
+    const { session } = await buildController(storage);
+    const thread = await session.thread.create();
+    const memory = await storage.getStore('memory');
+    await memory!.updateThread({ id: thread.id, title: 'empty thread', metadata: { currentModelId: null } });
+    session.model.set({ modelId: 'openai/gpt-5.2-codex' });
+
+    await session.model.syncFromPersisted();
+
+    expect(session.model.get()).toBe('openai/gpt-5.2-codex');
+  });
+
+  it('emits model_changed only when the persisted value changes the selection', async () => {
     const { session } = await buildController(storage);
     const thread = await session.thread.create();
     await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
@@ -88,31 +110,15 @@ describe('SessionModel.syncFromPersisted', () => {
       if (event.type === 'model_changed') events.push(event.modelId);
     });
 
-    // In sync with storage → no event (the single-player TUI case).
-    await session.model.syncFromPersisted({ modeId: session.mode.get() });
+    await session.model.syncFromPersisted();
     expect(events).toEqual([]);
 
-    // Another actor persists a different model for this mode.
     const { session: other } = await buildController(storage, 'other-session');
     await other.thread.switch({ threadId: thread.id });
     await other.model.switch({ modelId: 'openai/gpt-5.2-codex' });
 
-    await session.model.syncFromPersisted({ modeId: session.mode.get() });
+    await session.model.syncFromPersisted();
     expect(events).toEqual(['openai/gpt-5.2-codex']);
     expect(session.model.get()).toBe('openai/gpt-5.2-codex');
-  });
-
-  it('two sessions over the same storage converge after one switches', async () => {
-    const { session: a } = await buildController(storage, 'session-a');
-    const thread = await a.thread.create();
-
-    const { session: b } = await buildController(storage, 'session-b');
-    await b.thread.switch({ threadId: thread.id });
-
-    await a.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
-    expect(b.model.get()).not.toBe('anthropic/claude-opus-4-6');
-
-    await b.model.syncFromPersisted({ modeId: b.mode.get() });
-    expect(b.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 });
