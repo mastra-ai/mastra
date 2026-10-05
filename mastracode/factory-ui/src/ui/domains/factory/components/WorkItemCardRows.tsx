@@ -7,15 +7,13 @@ import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
 import type { CardAction } from '../cardPrimaryAction';
-import { metadataLabelColors, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardLabels, CardStatus, SourceTitle } from './BoardCardParts';
-import { SourceIcon } from './BoardIcons';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -48,8 +46,6 @@ export function WorkItemCardRows({
   /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
-  const labels = metadataLabels(item.metadata);
-  const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
   const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
@@ -77,17 +73,13 @@ export function WorkItemCardRows({
           )}
         </div>
         <div className="flex min-w-0 items-center gap-1.5">
-          {item.source === 'github-pr' ? (
-            <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
-          ) : (
-            <SourceIcon source={item.source} />
-          )}
+          <WorkItemSourceIcon item={item} />
           <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </Txt>
         </div>
       </div>
-      <CardLabels labels={labels} colors={labelColors} />
+      <MetadataLabels metadata={item.metadata} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (

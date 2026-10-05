@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it } from 'vitest';
