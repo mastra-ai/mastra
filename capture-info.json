@@ -1,0 +1,33 @@
+{
+  "issue": "PLTFRM-2478",
+  "followUpTo": 25923,
+  "before": "73aaaca04e",
+  "after": "ce679e650704964920cbb696d791f5da372c75cd",
+  "source": "Unmodified Chromium screenshots of playground-ui Storybook",
+  "stories": [
+    "Foundations/Surface",
+    "Foundations/Elevation",
+    "Layout/Header",
+    "Layout/AppShell StandardDesktop",
+    "Composite/CodeBlock WithSelect"
+  ],
+  "viewports": {
+    "desktop": [
+      1280,
+      920
+    ],
+    "tablet": [
+      768,
+      1024
+    ],
+    "mobile": [
+      390,
+      844
+    ]
+  },
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "notes": "Border comparisons scroll to Boundary ladder. Rim responsive captures scroll to Rim. surface-before-dark is a full-page baseline at 1440x1100."
+}

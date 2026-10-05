@@ -1,0 +1,72 @@
+[
+  {
+    "theme": "dark",
+    "surface": {
+      "border": "oklch(1 0 0 / 0.05)",
+      "fields": [
+        {
+          "color": "oklch(1 0 0 / 0.05)",
+          "name": "--field-rim edge"
+        },
+        {
+          "color": "oklch(1 0 0 / 0.4)",
+          "name": "--field-rim-focus edge"
+        },
+        {
+          "color": "oklch(1 0 0 / 0.05)",
+          "name": "--field-rim-on-surface edge"
+        }
+      ],
+      "overridden": "oklch(1 0 0 / 0.4)",
+      "shadow": "oklch(1 0 0 / 0.05) 0px 0px 0px 1px inset"
+    }
+  },
+  {
+    "theme": "dark",
+    "inset": [
+      {
+        "name": "--inset-highlight isolated edge",
+        "shadow": "oklch(1 0 0 / 0.07) 0px 1px 0px 0px inset"
+      },
+      {
+        "name": "--inset-rim isolated edge",
+        "shadow": "oklch(1 0 0 / 0.07) 0px 0px 0px 1px inset"
+      }
+    ]
+  },
+  {
+    "theme": "light",
+    "surface": {
+      "border": "oklch(0 0 0 / 0.08)",
+      "fields": [
+        {
+          "color": "oklch(0 0 0 / 0.08)",
+          "name": "--field-rim edge"
+        },
+        {
+          "color": "oklch(0.205 0 0 / 0.5)",
+          "name": "--field-rim-focus edge"
+        },
+        {
+          "color": "oklch(0 0 0 / 0.14)",
+          "name": "--field-rim-on-surface edge"
+        }
+      ],
+      "overridden": "oklch(0.205 0 0 / 0.5)",
+      "shadow": "oklch(0 0 0 / 0.08) 0px 0px 0px 1px inset"
+    }
+  },
+  {
+    "theme": "light",
+    "inset": [
+      {
+        "name": "--inset-highlight isolated edge",
+        "shadow": "oklch(1 0 0 / 0.55) 0px 1px 0px 0px inset"
+      },
+      {
+        "name": "--inset-rim isolated edge",
+        "shadow": "oklch(0 0 0 / 0.08) 0px 0px 0px 1px inset"
+      }
+    ]
+  }
+]
