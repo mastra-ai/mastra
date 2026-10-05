@@ -8,14 +8,16 @@ import { useId } from 'react';
 import { useCardMorph } from '../hooks/useCardMorph';
 import { boardCardState } from '../boardCardState';
 import type { BoardCandidate } from '../boardCandidates';
-import { setDragPayload } from '../boardDrag';
+import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
+import type { BoardLayout } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CandidateDetailsPanel } from './CandidateDetailsPanel';
+import { CandidateListRow } from './CandidateListRow';
 
 // Acting on it is what files the record.
 export function CandidateCard({
@@ -23,6 +25,7 @@ export function CandidateCard({
   projectRepositoryId,
   factoryProjectId,
   onRun,
+  layout,
 }: {
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
@@ -31,6 +34,7 @@ export function CandidateCard({
   factoryProjectId: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
+  layout: BoardLayout;
 }) {
   const detailsTitleId = useId();
   const morph = useCardMorph();
@@ -58,6 +62,34 @@ export function CandidateCard({
     </DropdownMenu.Item>,
   ];
 
+  const actions =
+    defaultMove === undefined ? undefined : (
+      <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+    );
+
+  const detailsPanel = (
+    <CandidateDetailsPanel
+      candidate={candidate}
+      labelledBy={detailsTitleId}
+      morph={morph}
+      status={status}
+      projectRepositoryId={projectRepositoryId}
+      factoryProjectId={factoryProjectId}
+      menu={menuItems}
+      defaultMove={defaultMove}
+      onRun={onRun}
+    />
+  );
+
+  if (layout === 'list') {
+    return (
+      <>
+        <CandidateListRow candidate={candidate} morph={morph} status={status} actions={actions} menu={menuItems} />
+        {detailsPanel}
+      </>
+    );
+  }
+
   return (
     <>
       <article
@@ -65,18 +97,7 @@ export function CandidateCard({
         draggable
         aria-label={candidate.title}
         data-testid="candidate-card"
-        onDragStart={event =>
-          setDragPayload(event, {
-            kind: 'candidate',
-            candidate: {
-              source: candidate.source,
-              sourceKey: candidate.sourceKey,
-              title: candidate.title,
-              url: candidate.url,
-              metadata: candidate.metadata,
-            },
-          })
-        }
+        onDragStart={event => setDragPayload(event, candidatePayload(candidate))}
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
         className="group border-border/50 bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
@@ -91,14 +112,10 @@ export function CandidateCard({
         <CandidateCardRows
           candidate={candidate}
           status={status}
-          actions={
-            defaultMove === undefined ? undefined : (
-              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
-            )
-          }
+          actions={actions}
           controls={
             <>
-              <CardDetailsHint />
+              <CardDetailsHint onOpen={morph.openDetails} />
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
@@ -121,18 +138,7 @@ export function CandidateCard({
           }
         />
       </article>
-
-      <CandidateDetailsPanel
-        candidate={candidate}
-        labelledBy={detailsTitleId}
-        morph={morph}
-        status={status}
-        projectRepositoryId={projectRepositoryId}
-        factoryProjectId={factoryProjectId}
-        menu={menuItems}
-        defaultMove={defaultMove}
-        onRun={onRun}
-      />
+      {detailsPanel}
     </>
   );
 }

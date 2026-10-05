@@ -1,11 +1,12 @@
 import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { NavLink, useLocation, useParams } from 'react-router';
+import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardPath, orderedBoards } from '../boardCatalog';
+import { orderedBoards } from '../boardCatalog';
+import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 
 export function FactorySection({ children }: { children?: ReactNode }) {
@@ -39,7 +40,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
             orderedBoards(catalog.data).map(board => (
               <FactoryLink
                 key={board.id}
-                to={boardPath(factoryId, board.id)}
+                to={rememberedBoardPath(factoryId, board.id)}
                 icon={board.id === 'review' ? GitPullRequest : SquareKanban}
                 label={board.title}
               />
@@ -55,7 +56,8 @@ export function FactorySection({ children }: { children?: ReactNode }) {
 function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentType<{ size?: number }>; label: string }) {
   const overlays = useOverlays();
   const { pathname } = useLocation();
-  const isActive = pathname === to || pathname.startsWith(`${to}/`);
+  const { pathname: targetPathname } = useResolvedPath(to);
+  const isActive = pathname === targetPathname || pathname.startsWith(`${targetPathname}/`);
 
   return (
     <SidebarNew.NavLink
