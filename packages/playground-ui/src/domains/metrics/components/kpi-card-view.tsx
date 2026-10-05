@@ -32,9 +32,12 @@ export function KpiCardView({
   const hasData = value != null;
   const hasChange = changePct != null && changePct !== 0;
   const ready = hasData && !isLoading && !isError;
+  // A zero change still has a prior period worth showing; only a missing comparison hides it.
+  const hasComparison = changePct != null;
+  const hasDetail = detail != null && detail !== false && detail !== '';
   // With a detail line the prior value joins it in the footer; otherwise it sits at the
   // end of the value row, so a lone "vs …" never gets a hairline of its own.
-  const prevInRow = ready && hasChange && !detail && prevValue;
+  const prevInRow = ready && hasComparison && !hasDetail && prevValue;
 
   return (
     <MetricsKpiCard>
@@ -57,7 +60,9 @@ export function KpiCardView({
         ) : null}
         {prevInRow ? <MetricsKpiCard.Prev value={prevValue} /> : null}
       </MetricsKpiCard.ValueRow>
-      {ready && detail ? <MetricsKpiCard.Footer detail={detail} prevValue={hasChange ? prevValue : undefined} /> : null}
+      {ready && hasDetail ? (
+        <MetricsKpiCard.Footer detail={detail} prevValue={hasComparison ? prevValue : undefined} />
+      ) : null}
     </MetricsKpiCard>
   );
 }

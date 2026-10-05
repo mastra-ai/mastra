@@ -16,7 +16,7 @@ export function MetricsKpiCardFooter({
   prevValue?: string;
   className?: string;
 }) {
-  if (!detail) return null;
+  if (detail == null || detail === false || detail === '') return null;
   return (
     <div className={cn('mt-2 flex items-center justify-between gap-2 border-t border-border pt-3', className)}>
       <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 truncate">
