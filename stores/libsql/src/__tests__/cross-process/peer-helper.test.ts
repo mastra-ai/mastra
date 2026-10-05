@@ -44,37 +44,45 @@ describe('cross-process peer helper', () => {
 
   const spawn = (args: SelfTestArgs) => env.spawnPeer(FIXTURE, args);
 
-  it('shares one socket: a publish in the peer is received in main', async () => {
-    const topic = `xproc.selftest.${randomUUID()}`;
-    const received = gate<Event>();
-    await env.pubsub().subscribe(topic, event => received.resolve(event));
-    expect(env.pubsub().isBroker, env.describe()).toBe(true);
+  it(
+    'shares one socket: a publish in the peer is received in main',
+    async () => {
+      const topic = `xproc.selftest.${randomUUID()}`;
+      const received = gate<Event>();
+      await env.pubsub().subscribe(topic, event => received.resolve(event));
+      expect(env.pubsub().isBroker, env.describe()).toBe(true);
 
-    const peer = await spawn({ mode: 'publish', topic, payload: 'from-peer' });
-    const result = await peer.result<{ pid: number }>();
+      const peer = await spawn({ mode: 'publish', topic, payload: 'from-peer' });
+      const result = await peer.result<{ pid: number }>();
 
-    const event = await received.promise;
-    expect(event.data, env.describe()).toEqual({ payload: 'from-peer' });
-    expect(result.pid).toBe(peer.pid);
-    expect(peer.pid).not.toBe(process.pid);
-    expect(await peer.exit()).toEqual({ code: 0, signal: null });
-  });
+      const event = await received.promise;
+      expect(event.data, env.describe()).toEqual({ payload: 'from-peer' });
+      expect(result.pid).toBe(peer.pid);
+      expect(peer.pid).not.toBe(process.pid);
+      expect(await peer.exit()).toEqual({ code: 0, signal: null });
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 
-  it('shares one LibSQL file: a row written by the peer is readable by main', async () => {
-    const threadId = `xproc-thread-${randomUUID()}`;
-    const peer = await spawn({ mode: 'db-write', threadId });
-    await peer.result();
+  it(
+    'shares one LibSQL file: a row written by the peer is readable by main',
+    async () => {
+      const threadId = `xproc-thread-${randomUUID()}`;
+      const peer = await spawn({ mode: 'db-write', threadId });
+      await peer.result();
 
-    const store = new LibSQLStore({ id: 'self-test-main', url: env.dbUrl });
-    await store.init();
-    try {
-      const memory = (await store.getStore('memory'))!;
-      const thread = await memory.getThreadById({ threadId });
-      expect(thread?.resourceId, env.describe()).toBe(`written-by-${peer.pid}`);
-    } finally {
-      await store.close();
-    }
-  });
+      const store = new LibSQLStore({ id: 'self-test-main', url: env.dbUrl });
+      await store.init();
+      try {
+        const memory = (await store.getStore('memory'))!;
+        const thread = await memory.getThreadById({ threadId });
+        expect(thread?.resourceId, env.describe()).toBe(`written-by-${peer.pid}`);
+      } finally {
+        await store.close();
+      }
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 
   it('fails waitFor within its hang guard when the peer never signals', async () => {
     const peer = await spawn({ mode: 'silent' });
@@ -89,45 +97,53 @@ describe('cross-process peer helper', () => {
     expect(await peer.exit()).toEqual({ code: 0, signal: null });
   });
 
-  it('a paused peer does not process a published event until resumed', async () => {
-    const topic = `xproc.selftest.${randomUUID()}`;
-    const mainCopy = gate<Event>();
-    await env.pubsub().subscribe(topic, event => mainCopy.resolve(event));
+  it(
+    'a paused peer does not process a published event until resumed',
+    async () => {
+      const topic = `xproc.selftest.${randomUUID()}`;
+      const mainCopy = gate<Event>();
+      await env.pubsub().subscribe(topic, event => mainCopy.resolve(event));
 
-    const peer = await spawn({ mode: 'heard', topic });
-    await peer.waitFor('subscribed');
+      const peer = await spawn({ mode: 'heard', topic });
+      await peer.waitFor('subscribed');
 
-    await peer.pause();
-    let heard = false;
-    const heardSignal = peer.waitFor<{ seq: number }>('heard').then(data => {
-      heard = true;
-      return data;
-    });
+      await peer.pause();
+      let heard = false;
+      const heardSignal = peer.waitFor<{ seq: number }>('heard').then(data => {
+        heard = true;
+        return data;
+      });
 
-    await env.pubsub().publish(topic, { type: 'ping', runId: 'self-test', data: { seq: 1 } });
-    // Main's own subscriber has the event, so the broker already fanned it out to the peer's socket.
-    await mainCopy.promise;
-    expect(heard, `peer handled the event while stopped\n${env.describe()}`).toBe(false);
+      await env.pubsub().publish(topic, { type: 'ping', runId: 'self-test', data: { seq: 1 } });
+      // Main's own subscriber has the event, so the broker already fanned it out to the peer's socket.
+      await mainCopy.promise;
+      expect(heard, `peer handled the event while stopped\n${env.describe()}`).toBe(false);
 
-    await peer.resume();
-    expect(await heardSignal).toEqual({ seq: 1 });
-    expect(await peer.exit()).toEqual({ code: 0, signal: null });
-  });
+      await peer.resume();
+      expect(await heardSignal).toEqual({ seq: 1 });
+      expect(await peer.exit()).toEqual({ code: 0, signal: null });
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 
-  it('runs each process in its own module graph: a peer run is not in main globalRunRegistry', async () => {
-    const runId = `xproc-registry-${randomUUID()}`;
-    const peer = await spawn({ mode: 'registry', runId });
+  it(
+    'runs each process in its own module graph: a peer run is not in main globalRunRegistry',
+    async () => {
+      const runId = `xproc-registry-${randomUUID()}`;
+      const peer = await spawn({ mode: 'registry', runId });
 
-    const parked = await peer.waitFor<{ pid: number; present: boolean }>('parked');
-    expect(parked.pid).toBe(peer.pid);
-    expect(parked.present, `run missing from the peer's registry\n${env.describe()}`).toBe(true);
-    // `has` rather than `get`: the run must not be visible here at all.
-    expect(globalRunRegistry.has(runId), `peer run leaked into main's registry\n${env.describe()}`).toBe(false);
+      const parked = await peer.waitFor<{ pid: number; present: boolean }>('parked');
+      expect(parked.pid).toBe(peer.pid);
+      expect(parked.present, `run missing from the peer's registry\n${env.describe()}`).toBe(true);
+      // `has` rather than `get`: the run must not be visible here at all.
+      expect(globalRunRegistry.has(runId), `peer run leaked into main's registry\n${env.describe()}`).toBe(false);
 
-    peer.send('release');
-    expect(await peer.result<{ text: string }>()).toEqual({ text: 'finished 1 steps' });
-    expect(await peer.exit()).toEqual({ code: 0, signal: null });
-  });
+      peer.send('release');
+      expect(await peer.result<{ text: string }>()).toEqual({ text: 'finished 1 steps' });
+      expect(await peer.exit()).toEqual({ code: 0, signal: null });
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 
   it(
     'runs a producer peer with workers off: only main executes the workflow event',

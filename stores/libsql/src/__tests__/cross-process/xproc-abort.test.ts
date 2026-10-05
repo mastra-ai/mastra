@@ -51,96 +51,100 @@ describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from a
     await env.cleanup();
   });
 
-  it('stops the run before step 3 with no model call after the abort', async () => {
-    const id = randomUUID();
-    const agentId = `t79-${engine}-${id}`;
-    const runId = `t79-run-${id}`;
+  it(
+    'stops the run before step 3 with no model call after the abort',
+    async () => {
+      const id = randomUUID();
+      const agentId = `t79-${engine}-${id}`;
+      const runId = `t79-run-${id}`;
 
-    const toolLog: StepToolEvent[] = [];
-    const reached = gate();
-    const release = gate();
-    const { agent, modelCalls } = createStepAgent({
-      id: agentId,
-      steps: 3,
-      blockAt: 2,
-      release: release.promise,
-      onToolEvent: event => {
-        toolLog.push(event);
-        if (event.event === 'reached') reached.resolve();
-      },
-    });
-    const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
-
-    // Main claims the broker role before any peer connects.
-    const pubsub = env.pubsub();
-    let controlReceivedByMain = 0;
-    await pubsub.subscribe(`agent.control.${runId}`, () => {
-      controlReceivedByMain++;
-    });
-    storage = new LibSQLStore({ id: `t79-main-${id}`, url: env.dbUrl });
-    const mastra = new Mastra({ agents: { t79: runner }, storage, pubsub, logger: false });
-    expect(mastra.getAgent('t79') as unknown).toBe(runner);
-
-    // Spawned first, as in the harness: it is idle until told to abort.
-    const peerArgs: T79PeerArgs = { engine, agentId, runId };
-    const peer = await env.spawnPeer(PEER_FIXTURE, peerArgs, { role: `peer-${engine}` });
-
-    const callbacks: string[] = [];
-    const result = await runner.stream('Go', {
-      runId,
-      maxSteps: 6,
-      onAbort: () => {
-        callbacks.push('onAbort');
-      },
-      onFinish: () => {
-        callbacks.push('onFinish');
-      },
-    });
-    const chunks: Array<{ type: string }> = [];
-    const settled = (async () => {
-      const reader = result.fullStream.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) return;
-        chunks.push(value);
-      }
-    })();
-
-    const record = () =>
-      JSON.stringify({
-        engine,
-        runId,
-        modelCalls: modelCalls(),
-        toolLog,
-        chunkTypes: chunks.map(c => c.type),
-        callbacks,
-        controlReceivedByMain,
+      const toolLog: StepToolEvent[] = [];
+      const reached = gate();
+      const release = gate();
+      const { agent, modelCalls } = createStepAgent({
+        id: agentId,
+        steps: 3,
+        blockAt: 2,
+        release: release.promise,
+        onToolEvent: event => {
+          toolLog.push(event);
+          if (event.event === 'reached') reached.resolve();
+        },
       });
-    const context = () => `${record()}\n${env.describe()}`;
+      const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
 
-    // Not-exercised guard: the case only means something once step 2 is parked.
-    await hangGuard(reached.promise, 'step 2 never reached its gate (case not exercised)', context);
-    const callsAtAbort = modelCalls();
+      // Main claims the broker role before any peer connects.
+      const pubsub = env.pubsub();
+      let controlReceivedByMain = 0;
+      await pubsub.subscribe(`agent.control.${runId}`, () => {
+        controlReceivedByMain++;
+      });
+      storage = new LibSQLStore({ id: `t79-main-${id}`, url: env.dbUrl });
+      const mastra = new Mastra({ agents: { t79: runner }, storage, pubsub, logger: false });
+      expect(mastra.getAgent('t79') as unknown).toBe(runner);
 
-    peer.send('abort-now');
-    const peerResult = await peer.result<{ accepted: boolean; runId: string }>();
-    const peerExit = await peer.exit();
-    release.resolve();
-    await hangGuard(settled, 'stream did not settle after the abort', context);
+      // Spawned first, as in the harness: it is idle until told to abort.
+      const peerArgs: T79PeerArgs = { engine, agentId, runId };
+      const peer = await env.spawnPeer(PEER_FIXTURE, peerArgs, { role: `peer-${engine}` });
 
-    // Recorded, not asserted (tri-state / product calls): accepted, abort chunk, onAbort vs onFinish.
-    const diagnostics = `peer=${JSON.stringify({ peerResult, peerExit })}\n${context()}`;
+      const callbacks: string[] = [];
+      const result = await runner.stream('Go', {
+        runId,
+        maxSteps: 6,
+        onAbort: () => {
+          callbacks.push('onAbort');
+        },
+        onFinish: () => {
+          callbacks.push('onFinish');
+        },
+      });
+      const chunks: Array<{ type: string }> = [];
+      const settled = (async () => {
+        const reader = result.fullStream.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return;
+          chunks.push(value);
+        }
+      })();
 
-    expect(peerExit, `peer process exited cleanly\n${diagnostics}`).toEqual({ code: 0, signal: null });
-    expect(peerResult.runId, `peer reported a result with no error\n${diagnostics}`).toBe(runId);
-    expect(modelCalls() - callsAtAbort, `no model call after the abort\n${diagnostics}`).toBe(0);
-    expect(
-      toolLog.filter(e => e.event === 'start' && e.n === 3),
-      `step 3 never started\n${diagnostics}`,
-    ).toEqual([]);
-    expect(
-      chunks.filter(c => c.type === 'error'),
-      `no error chunk\n${diagnostics}`,
-    ).toEqual([]);
-  });
+      const record = () =>
+        JSON.stringify({
+          engine,
+          runId,
+          modelCalls: modelCalls(),
+          toolLog,
+          chunkTypes: chunks.map(c => c.type),
+          callbacks,
+          controlReceivedByMain,
+        });
+      const context = () => `${record()}\n${env.describe()}`;
+
+      // Not-exercised guard: the case only means something once step 2 is parked.
+      await hangGuard(reached.promise, 'step 2 never reached its gate (case not exercised)', context);
+      const callsAtAbort = modelCalls();
+
+      peer.send('abort-now');
+      const peerResult = await peer.result<{ accepted: boolean; runId: string }>();
+      const peerExit = await peer.exit();
+      release.resolve();
+      await hangGuard(settled, 'stream did not settle after the abort', context);
+
+      // Recorded, not asserted (tri-state / product calls): accepted, abort chunk, onAbort vs onFinish.
+      const diagnostics = `peer=${JSON.stringify({ peerResult, peerExit })}\n${context()}`;
+
+      expect(peerExit, `peer process exited cleanly\n${diagnostics}`).toEqual({ code: 0, signal: null });
+      expect(peerResult.runId, `peer reported a result with no error\n${diagnostics}`).toBe(runId);
+      expect(modelCalls() - callsAtAbort, `no model call after the abort\n${diagnostics}`).toBe(0);
+      expect(
+        toolLog.filter(e => e.event === 'start' && e.n === 3),
+        `step 3 never started\n${diagnostics}`,
+      ).toEqual([]);
+      expect(
+        chunks.filter(c => c.type === 'error'),
+        `no error chunk\n${diagnostics}`,
+      ).toEqual([]);
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 });
