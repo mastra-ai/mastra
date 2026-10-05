@@ -13100,8 +13100,8 @@ describe('Full Async Buffering Flow', () => {
       await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeOp + 1));
       expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
 
-      // Turn 2, step 0: a chunk is ready, but activating now would wait on the held op.
-      // Reflection still runs: it doesn't wait on the observation op.
+      // Turn 2, step 0: a chunk is ready. Activation takes it without waiting on the held op
+      // (storage keeps the op's chunk when it lands). Reflection still runs.
       const maybeReflect = vi.spyOn(om.reflector, 'maybeReflect');
       turn2Step0 = step(0, { freshState: true });
       const outcome = await Promise.race([
@@ -13109,7 +13109,7 @@ describe('Full Async Buffering Flow', () => {
         new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
       ]);
       expect(outcome).toBe('completed');
-      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations ?? '').toBe('');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
       expect(maybeReflect).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'turn-sync' }));
     } finally {
       clearTimeout(timer);
@@ -13120,15 +13120,17 @@ describe('Full Async Buffering Flow', () => {
     await inFlightOp;
     await waitForAsyncOps();
 
-    // With no op in flight, the next step activates the buffered chunks.
-    await step(1);
-    expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+    // The held op's chunk landed after the activation and is still there to activate.
+    const afterOp = await storage.getObservationalMemory(threadId, resourceId);
+    expect(getBufferedChunks(afterOp).flatMap(chunk => chunk.messageIds)).toEqual(
+      expect.arrayContaining(bandMessages.map(m => m.id)),
+    );
   });
 
   it('should activate a persisted chunk without waiting for the buffer op to finish indexing', async () => {
     // A buffer op stays registered through its post-persist work (indexing, thread title),
-    // which can take seconds with a real embedder. Only the chunk write
-    // conflicts with activation, so a persisted chunk must activate in the band meanwhile.
+    // which can take seconds with a real embedder. Activation never waits on that tail,
+    // so a persisted chunk must activate in the band meanwhile.
     let releaseIndexing!: () => void;
     const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
     const indexSpy = vi
@@ -13150,7 +13152,7 @@ describe('Full Async Buffering Flow', () => {
       await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
       expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
       expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
-      expect(om.buffering.isChunkWriteInProgress(bufferKey)).toBe(false);
+      expect(BufferingCoordinator.pendingChunkWrites.has(bufferKey)).toBe(false);
 
       // Turn 2, step 0: the chunk is ready and nothing can append another one.
       let timer: ReturnType<typeof setTimeout> | undefined;
