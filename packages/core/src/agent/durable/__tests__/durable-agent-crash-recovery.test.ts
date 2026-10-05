@@ -19,7 +19,121 @@ import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 const RECOVERY_TIMEOUT_MS = 5_000;
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
-type Checkpoint = { outer?: WorkflowRunState; inner?: WorkflowRunState; rows: SnapshotRow[] };
+type Checkpoint = {
+  outer?: WorkflowRunState;
+  inner?: WorkflowRunState;
+  rows: SnapshotRow[];
+  /** Span-end events the original process had emitted when this checkpoint was written */
+  endedSpanCount: number;
+};
+
+type RecordedSpan = { id: string; traceId: string; parentSpanId?: string; type: string; name: string; output?: any };
+
+/**
+ * Stands in for an observability store that persists only span-end events
+ * (the insert-only strategy). Each span end overwrites the stored record, like
+ * a store update. `ended` is the event log, so a crash is a prefix of it.
+ */
+class SpanRecorder {
+  ended: RecordedSpan[] = [];
+  #nextId = 0;
+
+  constructor(private readonly prefix: string) {}
+
+  #span(data: RecordedSpan): any {
+    const recorder = this;
+    const span: any = {
+      ...data,
+      startTime: new Date(),
+      isInternal: false,
+      isEvent: false,
+      isValid: true,
+      isRootSpan: !data.parentSpanId,
+      end: (opts?: { output?: unknown }) => recorder.ended.push({ ...data, output: opts?.output }),
+      error: (opts?: { error?: unknown }) => recorder.ended.push({ ...data, output: { error: String(opts?.error) } }),
+      update: () => {},
+      exportSpan: () => ({ ...data }),
+      getParentSpanId: () => data.parentSpanId,
+      findParent: () => undefined,
+      executeInContext: async (fn: () => Promise<unknown>) => fn(),
+      executeInContextSync: (fn: () => unknown) => fn(),
+      externalTraceId: data.traceId,
+      getCorrelationContext: () => undefined,
+      observabilityInstance: {},
+      createChildSpan: (opts: any) => recorder.#start({ ...opts, traceId: data.traceId, parentSpanId: data.id }),
+      createEventSpan: (opts: any) => recorder.#start({ ...opts, traceId: data.traceId, parentSpanId: data.id }),
+      createTracker: () => {
+        let step: any;
+        return {
+          getTracingContext: () => ({ currentSpan: step ?? span }),
+          reportGenerationError: () => {},
+          endGeneration: (opts?: { output?: unknown }) => span.end(opts),
+          updateGeneration: () => {},
+          wrapStream: <T>(stream: T) => stream,
+          startStep: () => {
+            step ??= span.createChildSpan({ type: 'model_step', name: 'step' });
+          },
+          startInference: () => {},
+          updateStep: () => {},
+          setStepIndex: () => {},
+          setDeferStepClose: () => {},
+          setInferenceContext: () => {},
+          exportCurrentStep: () => step?.exportSpan(),
+          getPendingStepFinishPayload: () => undefined,
+        };
+      },
+    };
+    return span;
+  }
+
+  #start(opts: { type: string; name?: string; traceId?: string; parentSpanId?: string }) {
+    const id = `${this.prefix}-${++this.#nextId}`;
+    return this.#span({
+      id,
+      traceId: opts.traceId ?? `trace-${id}`,
+      parentSpanId: opts.parentSpanId,
+      type: opts.type,
+      name: opts.name ?? opts.type,
+    });
+  }
+
+  entrypoint() {
+    const instance = {
+      getConfig: () => ({ serviceName: 'test' }),
+      getExporters: () => [],
+      getSpanOutputProcessors: () => [],
+      getLogger: () => undefined,
+      getBridge: () => undefined,
+      startSpan: (opts: any) => this.#start(opts),
+      rebuildSpan: (data: RecordedSpan) => this.#span(data),
+      flush: async () => {},
+      shutdown: async () => {},
+      __setLogger: () => {},
+      __setMastraEnvironment: () => {},
+    };
+    return {
+      shutdown: async () => {},
+      setMastraContext: () => {},
+      setLogger: () => {},
+      getSelectedInstance: () => instance,
+      registerInstance: () => {},
+      getInstance: () => instance,
+      getDefaultInstance: () => instance,
+      listInstances: () => new Map([['default', instance]]),
+      unregisterInstance: () => false,
+      hasInstance: () => true,
+      setConfigSelector: () => {},
+      clear: () => {},
+    };
+  }
+}
+
+/** The stored trace: the last end event of each span, in first-end order. */
+function storedSpans(events: RecordedSpan[]) {
+  const byId = new Map<string, RecordedSpan>();
+  for (const event of events) byId.set(event.id, event);
+  return [...byId.values()];
+}
 
 const streamStart = (id: string) => [
   { type: 'stream-start', warnings: [] },
@@ -65,7 +179,7 @@ type AgentKind = 'durable' | 'evented-fallback';
 
 // A fresh module graph per process keeps module-level state (run registry,
 // local recovery claims) from leaking between the original run and recovery.
-async function startProcess(kind: AgentKind, usages?: TestUsage[]) {
+async function startProcess(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
   vi.resetModules();
   const [
     { Mastra },
@@ -108,6 +222,7 @@ async function startProcess(kind: AgentKind, usages?: TestUsage[]) {
     storage,
     logger: false,
     recovery: { durableAgents: 'auto' },
+    ...(observability ? { observability: observability.entrypoint() as any } : {}),
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
   return { durableAgent, workflows, globalRunRegistry, pubsub: mastra.pubsub };
@@ -152,8 +267,8 @@ function outerTargetId({ outer }: Checkpoint) {
 
 // Runs a two-round tool-calling turn to completion, copying the workflow store
 // after every write.
-async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[]) {
-  const original = await startProcess(kind, usages);
+async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
+  const original = await startProcess(kind, usages, observability);
   const rows = new Map<string, SnapshotRow>();
   const checkpoints: Checkpoint[] = [];
   const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
@@ -164,6 +279,7 @@ async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[]) {
       outer: copy.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
       inner: copy.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
       rows: copy,
+      endedSpanCount: observability?.ended.length ?? 0,
     });
     return persist(args);
   };
@@ -194,8 +310,9 @@ async function recoverFrom(
   kind: AgentKind,
   expectedUsage: TestUsage = { inputTokens: 30, outputTokens: 60, totalTokens: 90 },
   usages?: TestUsage[],
+  observability?: SpanRecorder,
 ): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(kind, usages);
+  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(kind, usages, observability);
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
   let finishEvents = 0;
@@ -292,6 +409,37 @@ describe('DurableAgent crash recovery', () => {
       if (knownUnrecoverable(checkpoint)) continue;
       const outcome = await recoverFrom(checkpoint, runId, 'durable', unknownUsage, usages);
       if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
+    }
+    expect(failures).toEqual([]);
+  }, 120_000);
+
+  // #25718: the recovered AGENT_RUN nests under the original, and the stored
+  // trace keeps exactly one root, which has ended.
+  it('stores a single-rooted trace after recovering from every checkpoint', async () => {
+    const original = new SpanRecorder('orig');
+    const { checkpoints, runId } = await captureCheckpoints('durable', undefined, original);
+
+    const failures: string[] = [];
+    for (const [index, checkpoint] of checkpoints.entries()) {
+      if (knownUnrecoverable(checkpoint)) continue;
+      const recovery = new SpanRecorder(`rec${index}`);
+      const outcome = await recoverFrom(checkpoint, runId, 'durable', undefined, undefined, recovery);
+      const stored = storedSpans([...original.ended.slice(0, checkpoint.endedSpanCount), ...recovery.ended]);
+      const roots = stored.filter(span => !span.parentSpanId);
+      const recovered = stored.find(span => span.name.includes('(recovered)'));
+      const problem =
+        outcome !== 'ok'
+          ? outcome
+          : roots.length !== 1
+            ? `${roots.length} root spans: ${roots.map(span => span.name).join(', ')}`
+            : roots[0]!.type !== 'agent_run'
+              ? `root is ${roots[0]!.type}`
+              : !recovered
+                ? 'recovered AGENT_RUN span never ended'
+                : recovered.parentSpanId !== roots[0]!.id
+                  ? 'recovered AGENT_RUN span is not a child of the root'
+                  : undefined;
+      if (problem) failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${problem}`);
     }
     expect(failures).toEqual([]);
   }, 120_000);
