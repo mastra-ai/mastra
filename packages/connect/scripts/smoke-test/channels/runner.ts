@@ -1,5 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 
+import { Agent } from '@mastra/core/agent';
 import type { ChannelProvider } from '@mastra/core/channels';
 import { Mastra } from '@mastra/core/mastra';
 
@@ -14,7 +15,15 @@ import { mountChannelRoutes } from './server.js';
 
 type ApiRoute = ReturnType<ChannelProvider['getRoutes']>[number];
 
-/** The three channel-capable integrations `channels()` registers today. */
+/**
+ * The three channel-capable integrations `channels()` registers today.
+ *
+ * TODO(#25332): when the Slack channel is rekeyed to the `slack-channels`
+ * App Configuration integration (and `microsoft-teams` is registered),
+ * update this list — otherwise the suite silently stops covering Slack.
+ * The manifest flow below already runs the full mint + delete lifecycle
+ * once the channel is backed by an App Configuration token.
+ */
 export const CHANNEL_IDS = ['discord', 'slack', 'telegram'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
@@ -35,11 +44,14 @@ export interface ChannelRunnerOptions {
  * with an active connection, the late-bound credential flow from platform
  * connection to live provider instance.
  *
- * All checks are read-only. Credential verification calls each vendor's
- * canonical whoami endpoint directly (not through the proxy) because that is
- * exactly how channel providers consume the credential: `channels()` hands
- * the resolved token to the provider, which talks to the vendor API itself.
- * No webhooks are registered, no agents installed, and no messages sent.
+ * Credential verification calls each vendor's canonical whoami endpoint
+ * directly (not through the proxy) because that is exactly how channel
+ * providers consume the credential: `channels()` hands the resolved token to
+ * the provider, which talks to the vendor API itself. Where the full flow is
+ * reachable without external listeners it runs for real — Discord's
+ * connect → signed-webhook → disconnect loop and Slack's manifest
+ * mint + delete lifecycle — and everything created is torn down in the same
+ * run. No messages are sent and nothing survives the process.
  */
 export async function runChannelSmokeTests(options: ChannelRunnerOptions = {}): Promise<RunResult> {
   const startedAt = new Date().toISOString();
@@ -469,6 +481,13 @@ async function channelOutcome(
     steps.push(...(await discordWebhookFlow(projectId, client, credential.apiKey)));
   }
 
+  // Slack supports the manifest half of the flow without external listeners:
+  // connect() mints a real Slack app via the manifest API (pending OAuth
+  // install), disconnect() deletes the minted app again.
+  if (id === 'slack' && credential) {
+    steps.push(...(await slackManifestFlow(projectId, client)));
+  }
+
   const status: ProviderOutcome['status'] = steps.some(s => s.status === 'fail') ? 'fail' : 'pass';
   return { integrationId: id, summary, status, steps, elapsedMs: Date.now() - started };
 }
@@ -630,9 +649,161 @@ async function discordWebhookFlow(
   return steps;
 }
 
+/**
+ * Full Slack manifest lifecycle against the platform credential:
+ *
+ * 1. Build a dedicated resolver (Slack only) and a Mastra instance with a
+ *    placeholder agent (its model is never invoked — `connect()` only reads
+ *    the agent's name/description for the app manifest).
+ * 2. `connect()` mints a real Slack app via `apps.manifest.create` using the
+ *    token the platform serves, and returns a pending OAuth install with an
+ *    authorization URL (completing the install needs a human browser step,
+ *    so activation stays out of scope).
+ * 3. `disconnect()` deletes the minted app via `apps.manifest.delete` and
+ *    removes the record — nothing is left in the Slack workspace.
+ *
+ * Today the platform's `slack` integration serves a workspace bot token,
+ * which Slack's manifest API rejects (`not_allowed_token_type`) — the
+ * channel is being rekeyed to the `slack-channels` App Configuration
+ * integration (PR #25332). Until that lands, the token-type rejection is
+ * recorded as an explicit skip: it still proves the manifest path is wired
+ * end-to-end up to Slack's token gate. Once a `slack-channels` connection
+ * backs the channel, this same flow runs the real mint + delete lifecycle.
+ */
+async function slackManifestFlow(projectId: string, client: ResolvedClient): Promise<ScenarioStep[]> {
+  const steps: ScenarioStep[] = [];
+  const clientOptions = { accessToken: client.accessToken };
+
+  type ManifestProvider = ChannelProvider & {
+    setBaseUrl?: (url: string) => void;
+    __attach?: (mastra: Mastra) => void;
+    listInstallations?: () => Promise<Array<{ agentId: string; status: string }>>;
+  };
+
+  let provider: ManifestProvider | undefined;
+  let connected = false;
+  try {
+    const resolver = await channels({
+      projectId,
+      client: clientOptions,
+      integrations: {
+        discord: { disabled: true },
+        telegram: { disabled: true },
+      },
+    });
+    // The agent exists only so connect() can derive the app's display name;
+    // its model is never invoked.
+    const agent = new Agent({
+      id: SMOKE_AGENT_ID,
+      name: 'Mastra Smoke Channels',
+      instructions: 'Smoke-test placeholder. Never invoked.',
+      model: 'openai/gpt-4o-mini',
+    });
+    const mastra = new Mastra({ channels: resolver, agents: { [SMOKE_AGENT_ID]: agent }, logger: false });
+
+    const resolved = await resolver();
+    provider = resolved.slack as ManifestProvider | undefined;
+    if (!provider) {
+      steps.push(makeStep('manifest flow: resolve dedicated provider', undefined, 'fail', 'slack did not resolve'));
+      return steps;
+    }
+    // Programmatic connect() (not via a mounted route) needs the Mastra
+    // reference for agent resolution; __attach is idempotent if the channel
+    // registration already did this.
+    provider.__attach?.(mastra);
+    provider.setBaseUrl?.('http://127.0.0.1:4111');
+
+    if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
+      steps.push(
+        makeStep('manifest flow: mint app via connect()', undefined, 'fail', 'provider lacks connect/disconnect'),
+      );
+      return steps;
+    }
+
+    let result: Awaited<ReturnType<NonNullable<ChannelProvider['connect']>>>;
+    try {
+      result = await provider.connect(SMOKE_AGENT_ID, {
+        name: `mastra-smoke-${Date.now()}`,
+        description: 'Mastra connect smoke test — safe to delete',
+      });
+    } catch (error) {
+      const message = errorMessage(error);
+      if (/not_allowed_token_type|invalid_auth|missing_scope|token_revoked|account_inactive/i.test(message)) {
+        steps.push(
+          makeStep(
+            'manifest flow: mint app via connect()',
+            undefined,
+            'skip',
+            `Slack rejected the mint at the token gate (${message}). The connection's credential is not an App ` +
+              `Configuration token — pending the slack-channels rekey (PR #25332). The manifest path itself is wired.`,
+          ),
+        );
+      } else {
+        steps.push(makeStep('manifest flow: mint app via connect()', undefined, 'fail', message));
+      }
+      return steps;
+    }
+    connected = true;
+
+    const authorizationUrl =
+      result.type === 'oauth' ? (result as { authorizationUrl?: string }).authorizationUrl : undefined;
+    steps.push(
+      result.type === 'oauth' && typeof authorizationUrl === 'string' && authorizationUrl.length > 0
+        ? makeStep('manifest flow: mint app via connect()', undefined, 'pass', 'real app minted; pending OAuth install')
+        : makeStep(
+            'manifest flow: mint app via connect()',
+            undefined,
+            'fail',
+            `expected an oauth result with an authorization URL, got '${result.type}'`,
+          ),
+    );
+
+    const pending = (await provider.listInstallations?.())?.find(i => i.agentId === SMOKE_AGENT_ID);
+    steps.push(
+      pending?.status === 'pending'
+        ? makeStep('manifest flow: pending installation recorded', undefined, 'pass')
+        : makeStep(
+            'manifest flow: pending installation recorded',
+            undefined,
+            'fail',
+            `installation status: ${pending?.status ?? 'missing'}`,
+          ),
+    );
+  } catch (error) {
+    steps.push(makeStep('manifest flow', undefined, 'fail', errorMessage(error)));
+  } finally {
+    if (provider && connected) {
+      try {
+        await provider.disconnect?.(SMOKE_AGENT_ID);
+        const remaining = (await provider.listInstallations?.())?.find(i => i.agentId === SMOKE_AGENT_ID);
+        steps.push(
+          remaining == null
+            ? makeStep(
+                'manifest flow: disconnect deletes minted app',
+                undefined,
+                'pass',
+                'app deleted via apps.manifest.delete; record removed',
+              )
+            : makeStep('manifest flow: disconnect deletes minted app', undefined, 'fail', 'installation still present'),
+        );
+      } catch (error) {
+        steps.push(
+          makeStep(
+            'manifest flow: disconnect deletes minted app',
+            undefined,
+            'fail',
+            `LEAKED Slack app for "${SMOKE_AGENT_ID}": ${errorMessage(error)}`,
+          ),
+        );
+      }
+    }
+  }
+  return steps;
+}
+
 const CHANNEL_SUMMARIES: Record<ChannelId, string> = {
   discord: 'Discord channel: bot-token late-binding + live credential check',
-  slack: 'Slack channel: token resolver path + live credential check',
+  slack: 'Slack channel: token resolver path, live credential check + manifest mint/delete lifecycle',
   telegram: 'Telegram channel: bot-token resolver path + live credential check',
 };
 

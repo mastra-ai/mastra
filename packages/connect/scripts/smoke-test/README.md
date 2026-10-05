@@ -88,14 +88,15 @@ pnpm --filter @mastra/connect smoke-test:channels
 pnpm --filter @mastra/connect smoke-test:channels --channel discord
 ```
 
-It checks four layers:
+It checks five layers:
 
 - **Resolver contract** — construction guards, route mounting before any connection exists, TTL cache + `invalidate()`/`refresh()`, `disabled` and bogus `connectionId` overrides.
 - **Server mount** — the resolver is handed to a real `Mastra` instance; the suite asserts the channel routes land in the merged `server.apiRoutes` with correct `requiresAuth` flags, mounts them the way the production server adapter does (`handler` / `createHandler({ mastra })` onto Hono), and drives every platform's webhook endpoint with real HTTP requests (unknown webhook ids answer 404).
 - **Credential flow** — for each connected channel: presence in the resolved map (which proves credential late-binding, e.g. Discord's `sync()` → `configure()`), provider `id`/routes/`getInfo()`, a platform credential fetch, and a vendor whoami call (Discord `GET /users/@me` + `/applications/@me`, Slack `auth.test`, Telegram `getMe`). The whoami calls deliberately bypass the proxy — channel providers call vendor APIs directly with the resolved token, so that direct path is what gets smoked.
 - **Discord full webhook flow** — the one platform where the whole loop is testable without external listeners. The suite overrides the provider's Ed25519 public key with a locally generated pair (`providerOptions.publicKey`), `connect()`s an agent to a guild the bot is already in (`commands: []`, so nothing on the guild is mutated), POSTs a **signed PING interaction** to the mounted route and expects a PONG, POSTs a forged signature and expects 401, then `disconnect()`s and verifies the installation is gone. The installation lives in in-process channel storage, so nothing persists after the run.
+- **Slack manifest lifecycle** — `connect()` attempts a real `apps.manifest.create` mint with the token the platform serves, expecting a pending OAuth install with an authorization URL, then `disconnect()` deletes the minted app via `apps.manifest.delete` (completing the OAuth install needs a human browser step, so activation stays out of scope). Today the `slack` integration serves a workspace bot token that Slack's manifest API rejects (`not_allowed_token_type`), so the mint records a documented skip — it still proves the path is wired up to Slack's token gate. Once the channel is rekeyed to the `slack-channels` App Configuration integration (PR [#25332](https://github.com/mastra-ai/mastra/pull/25332)), the same flow runs the full mint + delete lifecycle with nothing left behind in the workspace.
 
-Slack's equivalent flow needs an App Configuration token (the manifest-mint path) and a reachable public URL for Slack to call back, and Telegram's needs `setWebhook` against the live bot — both stay out of scope here; their webhook routes are still exercised via the mounted server (signature rejection and unknown-webhook paths). The suite sends no messages and registers nothing with any vendor.
+Telegram's equivalent flow needs `setWebhook` against the live bot and a reachable public URL — out of scope here; its webhook route is still exercised via the mounted server (unknown-webhook path). Slack event delivery needs a completed OAuth install (pending installations are invisible to the events route by design). The suite sends no messages and registers nothing with any vendor beyond the Slack app it deletes in the same run.
 
 ## Cross-provider cleanup
 
