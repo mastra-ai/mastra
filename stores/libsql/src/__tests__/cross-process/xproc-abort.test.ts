@@ -40,12 +40,22 @@ function hangGuard<T>(promise: Promise<T>, what: string, describeEnv: () => stri
 describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from another process', engine => {
   let env: XprocEnv;
   let storage: LibSQLStore | undefined;
+  let mastra: Mastra | undefined;
 
   beforeEach(async () => {
     env = await createXprocEnv();
   });
 
   afterEach(async () => {
+    // Shutdown before closing storage, and never close storage without it: the
+    // owning instance is what finalizes a run that is still in flight, and
+    // Mastra closes the stores it owns. The evented engine deletes a finished
+    // run's snapshots in a fire-and-forget continuation, so that cleanup can
+    // instead land during shutdown and lose the race against the store closing;
+    // the store then logs `deleteWorkflowRunById ... CLIENT_CLOSED` and the
+    // agent swallows it (no unhandled rejection, nothing asserted after here).
+    await mastra?.shutdown();
+    mastra = undefined;
     await storage?.close();
     storage = undefined;
     await env.cleanup();
@@ -80,7 +90,7 @@ describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from a
         controlReceivedByMain++;
       });
       storage = new LibSQLStore({ id: `t79-main-${id}`, url: env.dbUrl });
-      const mastra = new Mastra({ agents: { t79: runner }, storage, pubsub, logger: false });
+      mastra = new Mastra({ agents: { t79: runner }, storage, pubsub, logger: false });
       expect(mastra.getAgent('t79') as unknown).toBe(runner);
 
       // Spawned first, as in the harness: it is idle until told to abort.
@@ -124,12 +134,20 @@ describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from a
       await hangGuard(reached.promise, 'step 2 never reached its gate (case not exercised)', context);
       const callsAtAbort = modelCalls();
 
-      peer.send('abort-now');
-      const peerResult = await peer.result<{ accepted: boolean; runId: string }>();
-      const peerExit = await peer.exit();
-      release.resolve();
+      const { result: peerResult, exit: peerExit } = await (async () => {
+        try {
+          peer.send('abort-now');
+          const result = await peer.result<{ accepted: boolean; runId: string }>();
+          const exit = await peer.exit();
+          return { result, exit };
+        } finally {
+          // The success path releases the gate only after the peer has
+          // reported; on a failure this keeps the parked tool (and the run)
+          // from outliving the test.
+          release.resolve();
+        }
+      })();
       await hangGuard(settled, 'stream did not settle after the abort', context);
-
       // Recorded, not asserted (tri-state / product calls): accepted, abort chunk, onAbort vs onFinish.
       const diagnostics = `peer=${JSON.stringify({ peerResult, peerExit })}\n${context()}`;
 

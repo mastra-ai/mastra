@@ -142,13 +142,35 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
       }),
   };
 
-  const flushAndExit = async (message: PeerToMain, code: number) => {
-    // Mandatory: without it the last publish frame can still be in this
-    // process's write queue when it exits, and the receiver never sees it.
-    await pubsub?.flush().catch(() => {});
+  const exitWith = async (message: PeerToMain, code: number) => {
     await send(message).catch(() => {});
     process.disconnect?.();
     process.exit(code);
+  };
+
+  const flushAndExit = async (message: PeerToMain, code: number) => {
+    // Mandatory: without it the last publish frame can still be in this
+    // process's write queue when it exits, and the receiver never sees it.
+    // Not best-effort: a failed flush means a frame may be lost, so it turns
+    // into this peer's error outcome (and a nonzero exit) instead of a
+    // silently dropped publish that shows up later as a mystery hang.
+    try {
+      await pubsub?.flush();
+    } catch (error) {
+      await exitWith(
+        {
+          kind: 'error',
+          error: serializeError(
+            new Error(
+              `peer ${config.role} (pid ${config.pid}): flush() before exit failed, its last publish may not have reached the broker: ${serializeError(error).message}`,
+            ),
+          ),
+        },
+        1,
+      );
+      return;
+    }
+    await exitWith(message, code);
   };
 
   void (async () => {

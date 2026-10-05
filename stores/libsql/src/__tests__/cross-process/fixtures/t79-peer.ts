@@ -45,7 +45,6 @@ runPeer<T79PeerArgs>(async peer => {
   await peer.waitFor('abort-now');
   // Tri-state on purpose: a process owning no local run may report false while the run stops anyway.
   const accepted = runner.abortRunStream(runId);
-
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -60,5 +59,8 @@ runPeer<T79PeerArgs>(async peer => {
   } finally {
     clearTimeout(timer);
   }
+  // No `mastra.shutdown()` here on purpose: aborting a run this process does not
+  // own leaves a phantom entry in `globalRunRegistry`, and shutdown throws on it
+  // (COR-1391). The test process shuts down its own instance instead.
   return { accepted, runId };
 });

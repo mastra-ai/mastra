@@ -15,7 +15,8 @@ export type SelfTestArgs =
   | { mode: 'silent' }
   | { mode: 'heard'; topic: string }
   | { mode: 'registry'; runId: string }
-  | { mode: 'workflow-producer'; workflowId: string; logPath: string };
+  | { mode: 'workflow-producer'; workflowId: string; logPath: string }
+  | { mode: 'flush-fails' };
 
 runPeer<SelfTestArgs>(async peer => {
   const { args } = peer;
@@ -49,14 +50,12 @@ runPeer<SelfTestArgs>(async peer => {
     }
 
     case 'heard': {
-      const heard = new Promise<Event>(resolve => {
-        void peer.pubsub().subscribe(args.topic, event => resolve(event));
-      });
-      // subscribe() resolves once the broker acknowledged the membership, so a
-      // publish after this signal is routed to this process.
-      await peer.pubsub().subscribe(`${args.topic}.ready`, () => {});
+      const heard = gate<Event>();
+      // subscribe() resolves once the broker acknowledged the membership, so
+      // everything published after this point is routed to this process.
+      await peer.pubsub().subscribe(args.topic, event => heard.resolve(event));
       await peer.signal('subscribed');
-      const event = await heard;
+      const event = await heard.promise;
       await peer.signal('heard', event.data);
       return { pid: process.pid };
     }
@@ -107,8 +106,22 @@ runPeer<SelfTestArgs>(async peer => {
       await run.startAsync({ inputData: {} });
       await peer.signal('started', { runId: run.runId, pid: process.pid });
       await peer.waitFor('finish');
+      // Drain before returning: if this process did execute the event after
+      // all, its marker must be written before the test reads the log.
+      await mastra.shutdown();
       await storage.close();
       return { runId: run.runId, pid: process.pid };
+    }
+
+    case 'flush-fails': {
+      // Makes the mandatory flush-before-exit fail, so the test can prove a
+      // lost-frame risk becomes this peer's error outcome and not a silent
+      // success. The instance is patched; the process's own cleanups are
+      // unaffected because this peer exits through runPeer.
+      peer.pubsub().flush = async () => {
+        throw new Error('injected flush failure');
+      };
+      return { pid: process.pid };
     }
   }
 });

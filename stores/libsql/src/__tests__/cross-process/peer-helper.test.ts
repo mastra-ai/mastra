@@ -199,4 +199,17 @@ describe('cross-process peer helper', () => {
     },
     DEFAULT_HANG_GUARD_MS + 5_000,
   );
+
+  it(
+    'fails the peer when it cannot flush before exit',
+    async () => {
+      const peer = await spawn({ mode: 'flush-fails' });
+
+      await expect(peer.result(), `flush failure must not look like a clean result\n${env.describe()}`).rejects.toThrow(
+        /flush\(\) before exit failed/,
+      );
+      expect(await peer.exit()).toEqual({ code: 1, signal: null });
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 });

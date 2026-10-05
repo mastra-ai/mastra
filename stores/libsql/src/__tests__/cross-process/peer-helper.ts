@@ -148,14 +148,15 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
   const socketPath = path.join(dir, 'events.sock');
   const dbPath = path.join(dir, 'shared.db');
   const config: XprocConfig = { role: 'main', pid: process.pid, dir, socketPath, dbPath, workers };
-  const peers: Array<{ handle: PeerHandle; child: ChildProcess }> = [];
+  const peers: Array<{ handle: PeerHandle; child: ChildProcess; errors: string[] }> = [];
   let pubsub: UnixSocketPubSub | undefined;
   const tsx = import.meta.resolve('tsx');
 
   const describe = () => {
     const lines = [`xproc-config ${JSON.stringify(config)}`];
-    for (const { handle } of peers) {
+    for (const { handle, errors } of peers) {
       lines.push(`xproc-config ${JSON.stringify(handle.config)}`);
+      for (const error of errors) lines.push(`--- ${handle.config.role} (pid ${handle.pid}) child error ---\n${error}`);
       if (handle.stderr.trim())
         lines.push(`--- ${handle.config.role} (pid ${handle.pid}) stderr ---\n${handle.stderr}`);
     }
@@ -180,8 +181,13 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
 
     let stdout = '';
     let stderr = '';
+    const errors: string[] = [];
     child.stdout?.on('data', chunk => (stdout += chunk));
     child.stderr?.on('data', chunk => (stderr += chunk));
+    // A forked child can fail asynchronously (spawn failure, killed while a
+    // message is in flight). Keep it for failure messages instead of letting
+    // it surface as an unhandled 'error' event.
+    child.on('error', error => errors.push(error.stack ?? error.message));
 
     const exited = new Promise<PeerExit>(resolve => {
       // 'close' (not 'exit'): stdio and the IPC channel have drained, so every message the peer sent has arrived.
@@ -245,7 +251,11 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
       },
       send(name, data) {
         const message: MainToPeer = { kind: 'signal', name, data };
-        child.send(message);
+        // A send racing peer termination reports an error rather than throwing
+        // here; keep it so the next failure message explains itself.
+        child.send(message, error => {
+          if (error) errors.push(`send("${name}") failed: ${error.message}`);
+        });
       },
       waitFor<T>(name: string, { timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) {
         const queued = inbox.get(name);
@@ -297,7 +307,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
         return exited;
       },
     };
-    peers.push({ handle, child });
+    peers.push({ handle, child, errors });
 
     await withHangGuard(
       Promise.race([configReceived, exitedBefore('reporting its config')]),
