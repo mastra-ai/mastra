@@ -21,6 +21,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
 import { skillResultRedactor } from '../hooks';
+import { getBufferedChunks } from '../message-utils';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
@@ -1413,13 +1414,32 @@ describe('activate()', () => {
     expect(actResult.record.activeObservations).toBeTruthy();
   });
 
-  it('should activate after the chunk-write wait times out and keep a chunk that lands afterwards', async () => {
+  it('should activate after the chunk-write wait times out and keep the chunk the hung op lands meanwhile', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
     expect((await om.buffer({ threadId })).buffered).toBe(true);
+    const before = (await storage.getObservationalMemory(threadId, null))!;
+    const lateAt = new Date(getBufferedChunks(before).at(-1)!.lastObservedAt!.getTime() + 60_000);
 
-    // Simulate a buffer op whose chunk write hangs past activate()'s wait.
+    // A buffer op whose chunk write hangs past activate()'s wait, then lands while the
+    // activation that gave up waiting is swapping.
     const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(`obs:thread:${threadId}`);
+    const originalSwap = storage.swapBufferedToActive.bind(storage);
+    vi.spyOn(storage, 'swapBufferedToActive').mockImplementationOnce(async input => {
+      await storage.updateBufferedObservations({
+        id: input.id,
+        chunk: {
+          observations: '- late chunk',
+          tokenCount: 5,
+          messageIds: ['late-msg'],
+          cycleId: 'late-cycle',
+          messageTokens: 100,
+          lastObservedAt: lateAt,
+        },
+      });
+      releaseChunkWrite();
+      return originalSwap(input);
+    });
     vi.useFakeTimers();
     try {
       const activation = om.activate({ threadId });
@@ -1427,28 +1447,13 @@ describe('activate()', () => {
       expect((await activation).activated).toBe(true);
     } finally {
       vi.useRealTimers();
+      releaseChunkWrite();
     }
 
-    // The hung write now lands. Storage appends it after the activation instead of
-    // being overwritten by it, so it is still there to activate.
-    const record = (await storage.getObservationalMemory(threadId, null))!;
-    const lateAt = new Date(record.lastObservedAt!.getTime() + 60_000);
-    await storage.updateBufferedObservations({
-      id: record.id,
-      chunk: {
-        observations: '- late chunk',
-        tokenCount: 5,
-        messageIds: ['late-msg'],
-        cycleId: 'late-cycle',
-        messageTokens: 100,
-        lastObservedAt: lateAt,
-      },
-    });
-    releaseChunkWrite();
-
-    const after = await storage.getObservationalMemory(threadId, null);
-    expect(after?.bufferedObservationChunks?.map(chunk => chunk.cycleId)).toEqual(['late-cycle']);
-    expect(after?.activeObservations).not.toContain('- late chunk');
+    // The late chunk is neither dropped by the swap nor activated ahead of its turn.
+    const after = (await storage.getObservationalMemory(threadId, null))!;
+    expect(getBufferedChunks(after).map(chunk => chunk.cycleId)).toContain('late-cycle');
+    expect(after.activeObservations).not.toContain('- late chunk');
   });
 
   it('should return activatedMessageIds', async () => {
@@ -1550,6 +1555,60 @@ describe('activate()', () => {
 
         expect(result.activated).toBe(true);
       } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not wait on an in-flight buffer op when the ttl triggers activation', async () => {
+      vi.useFakeTimers();
+      let releaseChunkWrite: (() => void) | undefined;
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: 300_000,
+          observation: { model: createMockObserverModel(), messageTokens: 50_000, bufferTokens: 5_000 },
+          reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+        });
+        const staleTime = now.getTime() - 301_000;
+        const messages: MastraDBMessage[] = [
+          { ...createTestMessage('Earlier question', 'user', 'ttl-wait-user-1', new Date(staleTime - 1000)), threadId },
+          {
+            ...createTestMessage('Earlier answer', 'assistant', 'ttl-wait-assistant-1', new Date(staleTime)),
+            threadId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Earlier answer', createdAt: staleTime }],
+            } as MastraMessageContentV2,
+          },
+          { ...createTestMessage('Latest user follow-up', 'user', 'ttl-wait-user-2', now), threadId },
+        ];
+        await storage.saveMessages({ messages });
+        const record = await om.getOrCreateRecord(threadId);
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['ttl-wait-user-1', 'ttl-wait-assistant-1'],
+            cycleId: 'ttl-wait-cycle-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(staleTime + 1),
+          },
+        });
+
+        // A buffer op is still running its Observer call. A TTL activation exists to refresh a
+        // cold prompt cache before the step's model call, so it must not wait on that op.
+        releaseChunkWrite = BufferingCoordinator.trackChunkWrite(`obs:thread:${threadId}`);
+        let settled = false;
+        const activation = om.activate({ threadId, checkThreshold: true, messages }).finally(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(10);
+        expect(settled).toBe(true);
+        expect((await activation).activated).toBe(true);
+      } finally {
+        releaseChunkWrite?.();
         vi.useRealTimers();
       }
     });
