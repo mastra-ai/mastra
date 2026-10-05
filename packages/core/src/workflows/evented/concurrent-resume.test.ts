@@ -99,6 +99,121 @@ describe('evented concurrent resume', () => {
     }
   });
 
+  it('allows only one nested child to resume the suspended parent at a time', async () => {
+    let alphaResumeStarted!: () => void;
+    const alphaResumeHasStarted = new Promise<void>(resolve => {
+      alphaResumeStarted = resolve;
+    });
+    let releaseAlphaResume!: () => void;
+    const alphaResumeReleased = new Promise<void>(resolve => {
+      releaseAlphaResume = resolve;
+    });
+
+    const childStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ item: inputData.item });
+        }
+        if (resumeData && inputData.item === 'alpha') {
+          alphaResumeStarted();
+          await alphaResumeReleased;
+        }
+        return inputData.item;
+      },
+    });
+    const childWorkflow = createWorkflow({
+      id: 'evented-concurrent-child-workflow',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+    })
+      .then(childStep)
+      .commit();
+    const parentWorkflow = createWorkflow({
+      id: 'evented-concurrent-parent-workflow',
+      inputSchema: z.array(z.object({ item: z.string() })),
+      outputSchema: z.array(z.string()),
+    })
+      .foreach(childWorkflow, { concurrency: 2 })
+      .commit();
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { [parentWorkflow.id]: parentWorkflow, [childWorkflow.id]: childWorkflow },
+    });
+
+    await mastra.startWorkers();
+    try {
+      const parentRun = await parentWorkflow.createRun();
+      const parentStart = parentRun.start({ inputData: [{ item: 'alpha' }, { item: 'beta' }] });
+      expect(
+        await Promise.race([
+          parentStart,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('parent start did not suspend')), 5_000)),
+        ]),
+      ).toMatchObject({ status: 'suspended' });
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: parentWorkflow.id,
+        runId: parentRun.runId,
+      });
+      const iterations = (parentSnapshot?.context?.[childWorkflow.id] as any)?.output ?? [];
+      const nestedRunIds = iterations.map(
+        (iteration: { suspendPayload?: { __workflow_meta?: { runId?: string } } }) =>
+          iteration.suspendPayload?.__workflow_meta?.runId,
+      ) as string[];
+      expect(nestedRunIds).toEqual([expect.any(String), expect.any(String)]);
+
+      const childRuns = await Promise.all(nestedRunIds.map(runId => childWorkflow.createRun({ runId })));
+      const alphaResume = childRuns[0]!.resume({ resumeData: { approved: true } });
+      await Promise.race([
+        alphaResumeHasStarted,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('alpha resume did not start')), 5_000)),
+      ]);
+
+      await expect(childRuns[1]!.resume({ resumeData: { approved: true } })).rejects.toMatchObject({
+        id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+      });
+      expect(
+        await workflowsStore.loadWorkflowSnapshot({ workflowName: childWorkflow.id, runId: nestedRunIds[1]! }),
+      ).toMatchObject({ status: 'suspended' });
+
+      releaseAlphaResume();
+      await expect(alphaResume).resolves.toMatchObject({ status: 'success' });
+      await expect
+        .poll(async () => {
+          const snapshot = await workflowsStore.loadWorkflowSnapshot({
+            workflowName: parentWorkflow.id,
+            runId: parentRun.runId,
+          });
+          return snapshot?.status;
+        })
+        .toBe('suspended');
+
+      await expect(childRuns[1]!.resume({ resumeData: { approved: true } })).resolves.toMatchObject({
+        status: 'success',
+      });
+      await expect
+        .poll(async () => {
+          const snapshot = await workflowsStore.loadWorkflowSnapshot({
+            workflowName: parentWorkflow.id,
+            runId: parentRun.runId,
+          });
+          return snapshot?.status;
+        })
+        .toBe('success');
+    } finally {
+      releaseAlphaResume();
+      await mastra.stopWorkers();
+    }
+  });
+
   it('releases the resume claim when execution fails before dispatch', async () => {
     const { approval, downstreamExecute, mastra, storage, workflow } = createApprovalWorkflow();
 

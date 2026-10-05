@@ -698,6 +698,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
+        parentWorkflow: parentWorkflow
+          ? ({
+              ...parentWorkflow,
+              nestedStepId: parentWorkflow.stepId,
+              forEachIndex,
+            } as WorkflowRunState['parentWorkflow'])
+          : undefined,
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},

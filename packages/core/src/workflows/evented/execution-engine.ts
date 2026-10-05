@@ -12,9 +12,10 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
-import type { WorkflowEventProcessor } from './workflow-event-processor';
+import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
@@ -61,6 +62,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -154,6 +156,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           data: {
             workflowId: params.workflowId,
             runId: params.runId,
+            parentWorkflow: params.parentWorkflow as ParentWorkflow | undefined,
             executionPath: params.resume.resumePath,
             stepResults: params.resume.stepResults,
             resumeSteps: params.resume.steps,
