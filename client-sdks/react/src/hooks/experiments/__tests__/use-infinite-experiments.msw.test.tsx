@@ -45,7 +45,7 @@ describe('useInfiniteExperiments', () => {
     it('when no dataset is given, then it requests the first page of the global list and flattens it', async () => {
       const urls = servePages([experiments]);
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteExperiments(undefined), { wrapper });
+      const { result } = renderHook(() => useInfiniteExperiments({ datasetId: undefined }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(ids(result.current.data)).toEqual(ids(experiments));
@@ -56,7 +56,7 @@ describe('useInfiniteExperiments', () => {
     it('when a dataset is given, then it requests the first page of the dataset list', async () => {
       const urls = servePages([[experiments[0]]]);
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteExperiments('dataset-1'), { wrapper });
+      const { result } = renderHook(() => useInfiniteExperiments({ datasetId: 'dataset-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(ids(result.current.data)).toEqual([experiments[0].id]);
@@ -69,7 +69,7 @@ describe('useInfiniteExperiments', () => {
       const urls = servePages([experiments]);
       const { wrapper } = makeWrapper();
       const { result } = renderHook(
-        () => useInfiniteExperiments(undefined, { targetType: 'agent', targetId: 'agent-1' }),
+        () => useInfiniteExperiments({ datasetId: undefined, target: { targetType: 'agent', targetId: 'agent-1' } }),
         { wrapper },
       );
 
@@ -83,7 +83,7 @@ describe('useInfiniteExperiments', () => {
       const urls = servePages([[experiments[0]]]);
       const { wrapper } = makeWrapper();
       const { result } = renderHook(
-        () => useInfiniteExperiments('dataset-1', { targetType: 'workflow', targetId: '' }),
+        () => useInfiniteExperiments({ datasetId: 'dataset-1', target: { targetType: 'workflow', targetId: '' } }),
         { wrapper },
       );
 
@@ -100,7 +100,7 @@ describe('useInfiniteExperiments', () => {
     it('when the next page is fetched, then it is appended and the server is asked for page 1', async () => {
       const urls = servePages([[first, second], [third]]);
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteExperiments(undefined), { wrapper });
+      const { result } = renderHook(() => useInfiniteExperiments({ datasetId: undefined }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(ids(result.current.data)).toEqual([first.id, second.id]);
@@ -116,7 +116,7 @@ describe('useInfiniteExperiments', () => {
     it('when the end-of-list sentinel comes into view, then the next page is fetched automatically', async () => {
       const urls = servePages([[first], [second]]);
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteExperiments(undefined), { wrapper });
+      const { result } = renderHook(() => useInfiniteExperiments({ datasetId: undefined }), { wrapper });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       act(() => result.current.setEndOfListElement(document.createElement('div')));
@@ -131,7 +131,7 @@ describe('useInfiniteExperiments', () => {
     it('when the hook resolves, then there is no next page and no extra request', async () => {
       const urls = servePages([[]]);
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteExperiments(undefined), { wrapper });
+      const { result } = renderHook(() => useInfiniteExperiments({ datasetId: undefined }), { wrapper });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual([]);

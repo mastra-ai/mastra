@@ -115,7 +115,10 @@ export default function LogsPage() {
     url.featuredTraceId,
   );
 
-  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
+  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans({
+    traceId: url.featuredTraceId ?? null,
+    queryOptions: { enabled: !!url.featuredTraceId },
+  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),

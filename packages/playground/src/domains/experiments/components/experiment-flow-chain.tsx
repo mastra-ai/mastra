@@ -81,7 +81,10 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const { Link: LinkComponent, paths } = useLinkComponent();
   const registries = useTargetRegistries();
   const { scorers } = registries;
-  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
+  const { data: dataset, isLoading: isDatasetLoading } = useDataset({
+    datasetId: experiment.datasetId ?? '',
+    queryOptions: { enabled: Boolean(experiment.datasetId) },
+  });
   const scorerIds = useExperimentScorerIds(experiment);
 
   const targetType = experiment.targetType;

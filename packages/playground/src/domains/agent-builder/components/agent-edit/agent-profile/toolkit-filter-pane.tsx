@@ -116,7 +116,10 @@ const ProviderToolkitSection = ({
   disabled,
   multipleAllowed,
 }: ProviderToolkitSectionProps) => {
-  const { data, isLoading } = useToolkits(provider.providerId);
+  const { data, isLoading } = useToolkits({
+    providerId: provider.providerId,
+    queryOptions: { enabled: !!provider.providerId },
+  });
 
   const toolkits = useMemo<ToolkitRow[]>(() => {
     const names = new Map<string, string>();

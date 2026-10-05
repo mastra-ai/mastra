@@ -170,7 +170,15 @@ export function WorkflowInformation({
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   const {
     createWorkflowRun,

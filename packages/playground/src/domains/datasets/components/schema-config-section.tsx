@@ -52,9 +52,10 @@ export function SchemaConfigSection({
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
-  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   // Static schemas for agent and scorer
   const agentSchema = useAgentSchema();

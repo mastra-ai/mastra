@@ -13,7 +13,11 @@ export interface AgentEntityHeaderProps {
 }
 
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });
   const agentName = agent?.name || '';
 

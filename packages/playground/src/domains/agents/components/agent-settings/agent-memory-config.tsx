@@ -123,10 +123,11 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 }
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
-  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(
-    agentId,
-    useEntityRequestContext('agent', agentId)[0],
-  );
+  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 

@@ -63,7 +63,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   const { parseFile, isParsing, error: parseError } = useCSVParser();
   const { batchInsertItems } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const columnMapping = useColumnMapping(parsedCSV?.headers ?? []);
 

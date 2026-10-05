@@ -38,7 +38,11 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';

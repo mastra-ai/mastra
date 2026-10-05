@@ -16,7 +16,7 @@ interface ToolkitListProps {
 }
 
 export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, selectedCount = 0 }: ToolkitListProps) {
-  const { data, isLoading } = useToolkits(providerId);
+  const { data, isLoading } = useToolkits({ providerId: providerId, queryOptions: { enabled: !!providerId } });
   const toolkits = data?.data ?? [];
 
   if (isLoading) {

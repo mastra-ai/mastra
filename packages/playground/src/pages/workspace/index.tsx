@@ -63,7 +63,7 @@ export default function Workspace() {
     data: workspaceInfo,
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
-  } = useWorkspaceInfo(effectiveWorkspaceId);
+  } = useWorkspaceInfo({ workspaceId: effectiveWorkspaceId, queryOptions: { enabled: !!effectiveWorkspaceId } });
 
   // Check if 401 unauthorized (session expired)
   const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
@@ -108,7 +108,10 @@ export default function Workspace() {
   const createDirectory = useCreateWorkspaceDirectory();
 
   // Skills - pass workspaceId to get skills from the selected workspace
-  const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({
+    workspaceId: effectiveWorkspaceId,
+    queryOptions: { enabled: !!effectiveWorkspaceId },
+  });
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();

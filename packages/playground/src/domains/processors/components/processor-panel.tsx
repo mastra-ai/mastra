@@ -34,7 +34,11 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
-  const { data: processor, isLoading, error } = useProcessor(processorId);
+  const {
+    data: processor,
+    isLoading,
+    error,
+  } = useProcessor({ processorId: processorId, queryOptions: { enabled: !!processorId } });
 
   useEffect(() => {
     if (error) {

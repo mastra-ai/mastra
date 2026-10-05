@@ -29,8 +29,16 @@ function AgentSession() {
     data: agent,
     isLoading: isAgentLoading,
     error,
-  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
-  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory } = useMemory({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
 
@@ -39,14 +47,13 @@ function AgentSession() {
 
   const hasMemory = Boolean(memory?.result);
 
-  const { refetch: refreshThreads } = useThreads(
-    {
-      resourceId: agentId!,
-      agentId: agentId!,
-      isMemoryEnabled: hasMemory,
-    },
-    useEntityRequestContext('agent', agentId!)[0],
-  );
+  const { refetch: refreshThreads } = useThreads({
+    resourceId: agentId!,
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(hasMemory) },
+  });
 
   useEffect(() => {
     if (!hasMemory) return;

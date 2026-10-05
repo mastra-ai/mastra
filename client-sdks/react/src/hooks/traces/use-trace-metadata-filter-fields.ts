@@ -9,6 +9,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
 
 export type TraceQueryDiscoveryTimeRange = GetTraceQueryFieldsArgs['timeRange'];
@@ -69,16 +70,16 @@ export const createTraceQueryValuesResolver = (
  */
 export const useTraceMetadataFilterFields = ({
   timeRange,
-  enabled = true,
+  queryOptions,
 }: {
   timeRange: TraceQueryDiscoveryTimeRange;
-  enabled?: boolean;
+  queryOptions?: MastraQueryOptions<GetTraceQueryFieldsResponse>;
 }) => {
   const client = useMastraClient();
 
   const query = useQuery({
     queryKey: traceQueryFieldsQueryKey(timeRange),
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }): Promise<GetTraceQueryFieldsResponse> => {
       try {
         return await client.getTraceQueryFields(
           { timeRange, predicateScope: 'trace', limit: DISCOVERY_LIMIT },
@@ -89,12 +90,12 @@ export const useTraceMetadataFilterFields = ({
         throw error;
       }
     },
-    enabled,
     retry: false,
     staleTime: DISCOVERY_STALE_TIME,
     // Changing the time range must not tear down the filter bar behind a skeleton;
     // keep the previous field list until the new range resolves.
     placeholderData: keepPreviousData,
+    ...queryOptions,
   });
 
   const observedFields = query.data?.observedFields;

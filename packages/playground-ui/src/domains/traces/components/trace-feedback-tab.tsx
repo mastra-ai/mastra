@@ -21,7 +21,7 @@ type TraceFeedbackTabProps = {
  */
 export function TraceFeedbackTab({ traceId, variant }: TraceFeedbackTabProps) {
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useTraceFeedback({ traceId, page });
+  const { data, isLoading } = useTraceFeedback({ traceId, page, queryOptions: { enabled: !!traceId } });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId });
   const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();

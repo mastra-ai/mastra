@@ -66,9 +66,12 @@ describe('useInfiniteDatasets', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useInfiniteDatasets({ targetType: 'agent', targetId: 'agent-1' }), {
-        wrapper,
-      });
+      const { result } = renderHook(
+        () => useInfiniteDatasets({ filter: { targetType: 'agent', targetId: 'agent-1' } }),
+        {
+          wrapper,
+        },
+      );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       const url = onRequest.mock.calls[0][0];

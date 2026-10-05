@@ -69,7 +69,11 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
 
 export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: WorkspacePreviewFactory }) {
   const { workspaceId, activeFilePath } = useWorkspaceContext();
-  const { data, isLoading, error } = useWorkspaceFileContent(workspaceId, activeFilePath);
+  const { data, isLoading, error } = useWorkspaceFileContent({
+    workspaceId: workspaceId,
+    path: activeFilePath,
+    queryOptions: { enabled: !!activeFilePath },
+  });
 
   if (!activeFilePath) return null;
   if (isLoading) {

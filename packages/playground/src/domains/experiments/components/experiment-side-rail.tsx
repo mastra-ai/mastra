@@ -29,7 +29,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ExperimentSideRail({ experiment, metrics, className }: ExperimentSideRailProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId

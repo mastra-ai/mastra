@@ -26,10 +26,23 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset, error } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
-  const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
-  const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
+  const versionA = useDatasetItems({
+    datasetId: datasetId ?? '',
+    search: undefined,
+    version: versionNumbers[0] ?? null,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+  const versionB = useDatasetItems({
+    datasetId: datasetId ?? '',
+    search: undefined,
+    version: versionNumbers[1] ?? null,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
   const itemsA = useMemo(() => versionA.data ?? [], [versionA.data]);
   const itemsB = useMemo(() => versionB.data ?? [], [versionB.data]);

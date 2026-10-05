@@ -141,7 +141,7 @@ function ThreadTraceRowContent({
   const { Link, paths } = useLinkComponent();
   const traceHref = paths.traceLink(traceId);
   // Same query the span tree observes (passive: the tree drives refetches).
-  const { data: traceData } = useTraceSpans(traceId, { passive: true });
+  const { data: traceData } = useTraceSpans({ traceId: traceId, passive: true, queryOptions: { enabled: !!traceId } });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
 
   return (

@@ -15,7 +15,11 @@ export interface AgentDetailHeaderActionsProps {
 
 /** Edit / Share / Config actions shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
 

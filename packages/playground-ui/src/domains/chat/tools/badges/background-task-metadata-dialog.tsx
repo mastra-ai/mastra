@@ -32,10 +32,10 @@ const BackgroundTaskMetadata = ({
   open,
   onOpenChange,
 }: BackgroundTaskMetadataProps) => {
-  const { data: task } = useGetBackgroundTaskById(
-    backgroundTaskTaskId,
-    !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt,
-  );
+  const { data: task } = useGetBackgroundTaskById({
+    backgroundTaskId: backgroundTaskTaskId,
+    queryOptions: { enabled: !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt },
+  });
   const { tasks } = useBackgroundTaskStream({
     taskId: backgroundTaskTaskId,
     enabled: !backgroundTaskCompletedAt && !backgroundTaskSuspendedAt,

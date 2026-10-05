@@ -172,7 +172,12 @@ describe('useExperimentMetrics', () => {
 
       const { result } = renderHook(
         () =>
-          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: false }),
+          useExperimentMetrics({
+            experimentId: EXPERIMENT_ID,
+            experimentStatus: 'completed',
+            supportsMetrics: false,
+            queryOptions: { enabled: false },
+          }),
         { wrapper: makeWrapper() },
       );
 

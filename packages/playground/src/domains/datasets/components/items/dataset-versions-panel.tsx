@@ -32,7 +32,13 @@ export function DatasetVersionsPanel({
   onCompareVersionsClick,
   activeVersion,
 }: DatasetVersionsPanelProps) {
-  const { data: versions, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useDatasetVersions(datasetId);
+  const {
+    data: versions,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());

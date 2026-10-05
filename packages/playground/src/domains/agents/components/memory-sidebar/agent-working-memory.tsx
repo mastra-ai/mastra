@@ -26,7 +26,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);

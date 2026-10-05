@@ -22,7 +22,11 @@ export function ScorerSwitcher() {
 
 export function StoredScorerCrumb() {
   const { scorerId } = useParams<{ scorerId: string }>();
-  const { data: scorer, isLoading } = useStoredScorer(scorerId, { status: 'draft' });
+  const { data: scorer, isLoading } = useStoredScorer({
+    scorerId: scorerId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(scorerId) },
+  });
 
   if (!scorerId) return null;
   if (isLoading) return <CrumbSkeleton />;

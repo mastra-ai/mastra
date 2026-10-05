@@ -33,7 +33,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   }, [agents, toolId]);
 
   // Only fetch from API if tool not found in agents
-  const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
+  const { data: apiTool, isLoading, error } = useTool({ toolId: toolId!, queryOptions: { enabled: !agentTool } });
 
   const tool: any = agentTool || apiTool;
 
