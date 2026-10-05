@@ -285,6 +285,7 @@ describe('HttpTransport', () => {
       await expect(timeoutTransport._flush()).rejects.toThrow();
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
+      timeoutTransport.clearBuffer();
       timeoutTransport.destroy();
       vi.useFakeTimers();
     });
@@ -322,6 +323,122 @@ describe('HttpTransport', () => {
       const retryDelays = setTimeoutSpy.mock.calls.map(c => c[1]).filter(d => d === 10 || d === 20);
       expect(retryDelays).toEqual([10, 10]);
       setTimeoutSpy.mockRestore();
+    });
+  });
+
+  describe('buffer limits', () => {
+    const outageOptions = {
+      url: 'https://api.example.com/logs',
+      batchSize: 2,
+      flushInterval: 60_000,
+      retryOptions: { maxRetries: 0 },
+    };
+
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      fetchMock.mockImplementation(() => Promise.reject(new Error('endpoint down')));
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('defaults to a finite cap of 10,000 entries', () => {
+      const capped = new HttpTransport({ url: 'https://api.example.com/logs', flushInterval: 60_000 });
+      vi.spyOn(capped, '_flush').mockImplementation(() => Promise.resolve());
+
+      for (let i = 0; i < 10_005; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+
+      expect(capped.getBufferedLogs()).toHaveLength(10_000);
+      expect(capped.getDroppedLogCount()).toBe(5);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it('drops the oldest entries when new writes exceed maxBufferSize during an outage', async () => {
+      const capped = new HttpTransport({ ...outageOptions, maxBufferSize: 5 });
+
+      for (let i = 0; i < 10; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      const buffered = capped.getBufferedLogs();
+      expect(buffered.length).toBeLessThanOrEqual(5);
+      expect(buffered.at(-1)?.msg).toBe('m9');
+      expect(buffered.map(log => log.msg)).not.toContain('m0');
+      expect(capped.getDroppedLogCount()).toBe(10 - buffered.length);
+      expect(console.warn).toHaveBeenCalledTimes(1);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it('enforces the cap when a failed batch is restored to the buffer', async () => {
+      const capped = new HttpTransport({ ...outageOptions, batchSize: 3, maxBufferSize: 5 });
+      const flushSpy = vi.spyOn(capped, '_flush').mockImplementation(() => Promise.resolve());
+      for (let i = 0; i < 5; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+      flushSpy.mockRestore();
+
+      const flush = capped._flush();
+      // A write lands while the failing request is in flight.
+      capped._transform({ msg: 'm5' } as any, 'utf8', () => {});
+      await expect(flush).rejects.toThrow('endpoint down');
+
+      const buffered = capped.getBufferedLogs();
+      expect(buffered).toHaveLength(5);
+      expect(buffered.map(log => log.msg)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']);
+      expect(capped.getDroppedLogCount()).toBe(1);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it('never caps the buffer below batchSize', () => {
+      const capped = new HttpTransport({ ...outageOptions, batchSize: 4, maxBufferSize: 1 });
+      vi.spyOn(capped, '_flush').mockImplementation(() => Promise.resolve());
+
+      for (let i = 0; i < 4; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+
+      expect(capped.getBufferedLogs()).toHaveLength(4);
+      expect(capped.getDroppedLogCount()).toBe(0);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it('keeps only one flush request in flight at a time', async () => {
+      let resolveRequest!: (value: unknown) => void;
+      fetchMock.mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveRequest = resolve;
+          }),
+      );
+      const guarded = new HttpTransport({ ...outageOptions });
+
+      for (let i = 0; i < 6; i++) {
+        guarded._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      resolveRequest({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(guarded.getBufferedLogs()).toHaveLength(4);
+
+      const next = guarded._flush();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      resolveRequest({ ok: true });
+      await next;
+      expect(guarded.getBufferedLogs()).toHaveLength(2);
+      guarded.clearBuffer();
+      guarded.destroy();
     });
   });
 

@@ -15,6 +15,7 @@ interface HttpTransportOptions {
   flushInterval?: number;
   timeout?: number;
   retryOptions?: RetryOptions;
+  maxBufferSize?: number;
 }
 
 export class HttpTransport extends LoggerTransport {
@@ -26,6 +27,9 @@ export class HttpTransport extends LoggerTransport {
   private timeout: number;
   private retryOptions: Required<RetryOptions>;
   private logBuffer: BaseLogMessage[];
+  private maxBufferSize: number;
+  private droppedLogCount = 0;
+  private flushPromise: Promise<void> | null = null;
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
 
@@ -51,6 +55,7 @@ export class HttpTransport extends LoggerTransport {
       exponentialBackoff: options.retryOptions?.exponentialBackoff ?? true,
     };
 
+    this.maxBufferSize = Math.max(options.maxBufferSize ?? 10_000, this.batchSize);
     this.logBuffer = [];
     this.lastFlush = Date.now();
 
@@ -99,11 +104,36 @@ export class HttpTransport extends LoggerTransport {
     }
   }
 
-  async _flush(): Promise<void> {
-    if (this.logBuffer.length === 0) {
+  private enforceBufferLimit(): void {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow <= 0) {
       return;
     }
 
+    this.logBuffer.splice(0, overflow);
+    if (this.droppedLogCount === 0) {
+      console.warn(
+        `HttpTransport: buffer exceeded maxBufferSize (${this.maxBufferSize}); dropping oldest logs. Use getDroppedLogCount() to track drops.`,
+      );
+    }
+    this.droppedLogCount += overflow;
+  }
+
+  _flush(): Promise<void> {
+    if (this.logBuffer.length === 0) {
+      return Promise.resolve();
+    }
+
+    // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
+    if (!this.flushPromise) {
+      this.flushPromise = this.flushBatch().finally(() => {
+        this.flushPromise = null;
+      });
+    }
+    return this.flushPromise;
+  }
+
+  private async flushBatch(): Promise<void> {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
 
@@ -113,6 +143,7 @@ export class HttpTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
     }
   }
@@ -141,6 +172,7 @@ export class HttpTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.enforceBufferLimit();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
@@ -247,6 +279,10 @@ export class HttpTransport extends LoggerTransport {
 
   public clearBuffer(): void {
     this.logBuffer = [];
+  }
+
+  public getDroppedLogCount(): number {
+    return this.droppedLogCount;
   }
 
   public getLastFlushTime(): number {
