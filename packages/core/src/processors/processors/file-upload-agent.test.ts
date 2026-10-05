@@ -7,14 +7,16 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
+import { MessageList } from '../../agent/message-list';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
@@ -23,7 +25,7 @@ import { Workspace } from '../../workspace/workspace';
 import type { WorkspaceSandboxResolver } from '../../workspace/workspace';
 
 import { FILE_UPLOAD_ERROR_CODES, FileUploadProcessor } from './file-upload';
-import type { FileUploadProcessorOptions } from './file-upload';
+import type { FileUploadFileInfo, FileUploadProcessorOptions } from './file-upload';
 
 const MEMORY = { thread: 'file-upload-thread', resource: 'file-upload-resource' };
 const UUID = '[0-9a-f-]{36}';
@@ -151,9 +153,9 @@ describe('FILE_UPLOAD_ERROR_CODES', () => {
       NO_SANDBOX: 'NO_SANDBOX',
       NO_WRITE_CAPABILITY: 'NO_WRITE_CAPABILITY',
       INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
+      INVALID_FILTER: 'INVALID_FILTER',
       UNSUPPORTED_FILE_SOURCE: 'UNSUPPORTED_FILE_SOURCE',
       INVALID_FILE_DATA: 'INVALID_FILE_DATA',
-      FILE_DOWNLOAD_FAILED: 'FILE_DOWNLOAD_FAILED',
       FILE_TOO_LARGE: 'FILE_TOO_LARGE',
       UPLOAD_FAILED: 'UPLOAD_FAILED',
       FILE_NOT_UPLOADED: 'FILE_NOT_UPLOADED',
@@ -413,22 +415,40 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     expect(lastPrompt.match(new RegExp(uploadedPath('\\.txt'), 'g'))).toHaveLength(2);
   });
 
-  it('leaves a file that matches no filter in the prompt and does not upload it', async () => {
+  it('asks filter about each file, uploads the ones it accepts and leaves the others to the model', async () => {
     const { sandbox, writes } = createFakeSandbox();
-    const { agent, prompts } = createHarness(sandbox, { mimeTypes: ['application/pdf'], extensions: ['csv'] });
-    const kept = Buffer.from('plain text stays');
+    const asked: FileUploadFileInfo[] = [];
+    const { agent, prompts } = createHarness(sandbox, {
+      filter: file => {
+        asked.push(file);
+        return file.mimeType === 'application/pdf' || file.extension === 'csv';
+      },
+    });
 
     await agent.generate(
       [
         userMessage(
-          file(kept, 'notes.txt', 'text/plain'),
-          file(Buffer.from('%PDF'), 'report.pdf', 'application/pdf'),
-          file(Buffer.from('a,b'), 'data.csv', 'application/octet-stream'),
+          file(Buffer.from('plain text stays'), 'notes.txt', 'text/plain'),
+          file(Buffer.from('%PDF'), 'report.pdf', 'Application/PDF; version=1.7'),
+          file(Buffer.from('a,b'), 'Data.CSV', 'application/octet-stream'),
         ),
       ],
       { memory: MEMORY },
     );
 
+    expect(asked).toContainEqual({ fileName: 'notes.txt', mimeType: 'text/plain', extension: 'txt', source: 'inline' });
+    expect(asked).toContainEqual({
+      fileName: 'report.pdf',
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+      source: 'inline',
+    });
+    expect(asked).toContainEqual({
+      fileName: 'Data.CSV',
+      mimeType: 'application/octet-stream',
+      extension: 'csv',
+      source: 'inline',
+    });
     expect(filePartsIn(prompts.at(-1))).toMatchObject([{ mediaType: 'text/plain', filename: 'notes.txt' }]);
     expect(writes[0]!.map(written => written.path)).toEqual([
       expect.stringMatching(uploadedPath('\\.pdf')),
@@ -436,9 +456,14 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     ]);
   });
 
-  it('leaves a file of an excluded type in the prompt and uploads the rest', async () => {
+  it('waits for a filter that answers asynchronously', async () => {
     const { sandbox, writes } = createFakeSandbox();
-    const { agent, prompts } = createHarness(sandbox, { excludeMimeTypes: ['application/pdf'] });
+    const { agent, prompts } = createHarness(sandbox, {
+      filter: async ({ mimeType }) => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return mimeType !== 'application/pdf';
+      },
+    });
 
     await agent.generate(
       [
@@ -457,6 +482,38 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     expect(filePartsIn(prompts.at(-1))).toMatchObject([{ mediaType: 'application/pdf', filename: 'report.pdf' }]);
     expect(writes[0]!.map(written => written.path)).toEqual([expect.stringMatching(uploadedPath('\\.xlsx'))]);
   });
+
+  it.each([
+    ['nothing', () => undefined as unknown as boolean, 'undefined'],
+    ['a non-boolean', () => 'yes' as unknown as boolean, 'yes'],
+    [
+      'an exception',
+      () => {
+        throw new Error('rule lookup failed');
+      },
+      'rule lookup failed',
+    ],
+  ])(
+    'aborts the turn without calling the model or writing anything when filter returns %s',
+    async (_label, filter, cause) => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts } = createHarness(sandbox, { filter });
+
+      const result = await agent.generate([userMessage(file(Buffer.from('data'), 'notes.txt', 'text/plain'))], {
+        memory: MEMORY,
+      });
+
+      expect(result.tripwire?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.INVALID_FILTER,
+        fileName: 'notes.txt',
+        mimeType: 'text/plain',
+        cause,
+      });
+      expect(prompts).toEqual([]);
+      expect(writes).toEqual([]);
+    },
+  );
 
   describe('file size limit', () => {
     it('aborts the turn without calling the model or writing anything when one file is too large', async () => {
@@ -531,7 +588,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         memory: MEMORY,
       });
 
-      expect(received).toEqual([{ fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf' }]);
+      expect(received).toEqual([
+        { fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf', source: 'inline' },
+      ]);
     });
 
     it.each([
@@ -639,9 +698,12 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const remoteBytes = Buffer.from('%PDF remote report');
     let server: Server;
     let baseUrl: string;
+    let requests: string[];
 
     beforeEach(async () => {
+      requests = [];
       server = createServer((request, response) => {
+        requests.push(request.url ?? '');
         const found = request.url === '/report.pdf';
         response.writeHead(found ? 200 : 404, { 'Content-Type': 'application/pdf' });
         response.end(found ? remoteBytes : 'Not found');
@@ -669,50 +731,53 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes[0]![0]!.content).toEqual(bytes);
     });
 
-    it('downloads a file sent as an http URL, then uploads it', async () => {
+    it('aborts with UNSUPPORTED_FILE_SOURCE, without downloading it, when the filter accepts a file sent as an http URL', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox);
-
-      await agent.generate([userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))], {
-        memory: MEMORY,
-      });
-
-      expect(writes[0]![0]!.content).toEqual(remoteBytes);
-      expect(filePartsIn(prompts.at(-1))).toEqual([]);
-      expect(JSON.stringify(prompts.at(-1))).not.toContain(baseUrl);
-    });
-
-    it('checks the size of a downloaded file against the limit', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const { agent } = createHarness(sandbox, { maxFileSize: () => 4 });
 
       const result = await agent.generate(
         [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
 
-      expect(result.tripwire?.metadata).toMatchObject({
-        code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE,
-        size: remoteBytes.byteLength,
+      expect(result.tripwire?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.UNSUPPORTED_FILE_SOURCE,
+        fileName: 'report.pdf',
+        mimeType: 'application/pdf',
       });
+      expect(requests).toEqual([]);
+      expect(prompts).toEqual([]);
       expect(writes).toEqual([]);
     });
 
-    it('aborts with FILE_DOWNLOAD_FAILED when the URL cannot be downloaded', async () => {
+    it('tells the filter where each file comes from, so URLs can be left to the model', async () => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox);
+      const sources: Array<[string | undefined, string]> = [];
+      const { agent } = createHarness(sandbox, {
+        filter: ({ fileName, source }) => {
+          sources.push([fileName, source]);
+          return source === 'inline';
+        },
+      });
+      const bytes = Buffer.from('inline bytes');
 
       const result = await agent.generate(
-        [userMessage(file(new URL(`${baseUrl}/missing.pdf`), 'missing.pdf', 'application/pdf'))],
+        [
+          userMessage(
+            file(bytes, 'inline.txt', 'text/plain'),
+            file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'),
+            file('file-abc123', 'provider.pdf', 'application/pdf'),
+          ),
+        ],
         { memory: MEMORY },
       );
 
-      expect(result.tripwire?.metadata).toMatchObject({
-        code: FILE_UPLOAD_ERROR_CODES.FILE_DOWNLOAD_FAILED,
-        fileName: 'missing.pdf',
-      });
-      expect(prompts).toEqual([]);
-      expect(writes).toEqual([]);
+      expect(result.tripwire).toBeUndefined();
+      expect(sources).toContainEqual(['inline.txt', 'inline']);
+      expect(sources).toContainEqual(['report.pdf', 'url']);
+      expect(sources).toContainEqual(['provider.pdf', 'providerFileId']);
+      expect(writes.flat().map(written => written.content)).toEqual([bytes]);
     });
 
     it.each([
@@ -772,7 +837,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       const uploaded = writes[0]![0]!.path;
       expect(uploaded).toMatch(uploadedPath('\\.pdf'));
-      expect(received).toEqual([{ fileName: undefined, mimeType: 'application/pdf', extension: undefined }]);
+      expect(received).toEqual([
+        { fileName: undefined, mimeType: 'application/pdf', extension: undefined, source: 'inline' },
+      ]);
       expect(textsIn(prompts.at(-1))[0]).toContain('name: unnamed file');
       const stored = (await recall()).find(message => message.role === 'user');
       expect(stored?.content.metadata?.fileUploads).toEqual([
@@ -782,7 +849,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
     it('uploads an image part, which can never carry a name', async () => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox, { mimeTypes: ['image/*'] });
+      const { agent, prompts } = createHarness(sandbox, { filter: ({ mimeType }) => mimeType.startsWith('image/') });
       const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
       await agent.generate(
@@ -992,26 +1059,48 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       await memory.saveMessages({ messages });
     }
 
-    it('aborts with FILE_NOT_UPLOADED when the thread history still holds a raw matching file', async () => {
+    it('lets a raw file of the thread history reach the model on every turn, as before the processor', async () => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts, memory } = createHarness(sandbox, { mimeTypes: ['application/pdf'] });
+      const { agent, prompts, memory } = createHarness(sandbox, {
+        filter: ({ mimeType }) => mimeType === 'application/pdf',
+      });
+      await seedHistory(memory, [storedFileRow('user', 10)]);
+
+      const first = await agent.generate('What was in that file?', { memory: MEMORY });
+      const second = await agent.generate('And what else?', { memory: MEMORY });
+
+      expect(first.tripwire).toBeUndefined();
+      expect(second.tripwire).toBeUndefined();
+      expect(prompts).toHaveLength(2);
+      for (const prompt of prompts) {
+        expect(filePartsIn(prompt)).toMatchObject([{ mediaType: 'application/pdf', filename: 'old.pdf' }]);
+      }
+      expect(writes).toEqual([]);
+    });
+
+    it('never asks the filter about a file of the thread history', async () => {
+      const { sandbox } = createFakeSandbox();
+      const asked: Array<string | undefined> = [];
+      const { agent, prompts, memory } = createHarness(sandbox, {
+        filter: ({ fileName }) => {
+          asked.push(fileName);
+          throw new Error('rule lookup failed');
+        },
+      });
       await seedHistory(memory, [storedFileRow('user', 10)]);
 
       const result = await agent.generate('What was in that file?', { memory: MEMORY });
 
-      expect(result.tripwire?.metadata).toEqual({
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
-        fileName: 'old.pdf',
-        mimeType: 'application/pdf',
-      });
-      expect(prompts).toEqual([]);
-      expect(writes).toEqual([]);
+      expect(result.tripwire).toBeUndefined();
+      expect(asked).toEqual([]);
+      expect(prompts).toHaveLength(1);
     });
 
     it('lets a file produced by the assistant through', async () => {
       const { sandbox } = createFakeSandbox();
-      const { agent, prompts, memory } = createHarness(sandbox, { mimeTypes: ['application/pdf'] });
+      const { agent, prompts, memory } = createHarness(sandbox, {
+        filter: ({ mimeType }) => mimeType === 'application/pdf',
+      });
       await seedHistory(memory, [storedTextRow(20), storedFileRow('assistant', 10)]);
 
       const result = await agent.generate('Thanks', { memory: MEMORY });
@@ -1058,9 +1147,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(JSON.stringify(await recall())).not.toContain(first.toString('base64'));
     });
 
-    it('leaves an attachment that matches no filter where it is', async () => {
+    it('leaves an attachment the filter rejects where it is', async () => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox, { mimeTypes: ['application/pdf'] });
+      const { agent, prompts } = createHarness(sandbox, { filter: ({ mimeType }) => mimeType === 'application/pdf' });
 
       await agent.generate([uiMessage(attachment(Buffer.from('kept'), 'kept.txt', 'text/plain'))], {
         memory: MEMORY,
@@ -1069,5 +1158,78 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes).toEqual([]);
       expect(filePartsIn(prompts.at(-1))).toHaveLength(1);
     });
+  });
+});
+
+describe('FileUploadProcessor.processInputStep', () => {
+  it('aborts with MEMORY_REQUIRED, before writing anything, when memory is read-only', async () => {
+    const { sandbox, writes, commands } = createFakeSandbox();
+    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
+    const messageList = new MessageList({ threadId: MEMORY.thread, resourceId: MEMORY.resource });
+    messageList.add(userMessage(file(Buffer.from('a'), 'a.txt', 'text/plain')), 'input');
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: MEMORY.thread },
+      resourceId: MEMORY.resource,
+      memoryConfig: { readOnly: true },
+    });
+    const abort = vi.fn((reason: string) => {
+      throw new Error(reason);
+    });
+    const args = { messageList, requestContext, abort } as unknown as Parameters<
+      FileUploadProcessor['processInputStep']
+    >[0];
+
+    await expect(processor.processInputStep(args)).rejects.toThrow('read-only');
+
+    expect(abort).toHaveBeenCalledWith(expect.any(String), {
+      metadata: { processorId: 'file-upload', code: FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED },
+    });
+    expect(writes).toEqual([]);
+    expect(commands).toEqual([]);
+  });
+});
+
+describe('FileUploadProcessor.processLLMRequest', () => {
+  const createAbort = () =>
+    vi.fn((reason: string) => {
+      throw new Error(reason);
+    });
+  const callArgs = (args: Record<string, unknown>) =>
+    args as unknown as Parameters<FileUploadProcessor['processLLMRequest']>[0];
+
+  it('stops the call with FILE_NOT_UPLOADED when a new message still holds a raw file the filter accepts', async () => {
+    const { sandbox } = createFakeSandbox();
+    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
+    const messageList = new MessageList({ threadId: MEMORY.thread, resourceId: MEMORY.resource });
+    messageList.add(userMessage(file(Buffer.from('%PDF'), 'late.pdf', 'application/pdf')), 'input');
+    const abort = createAbort();
+
+    await expect(processor.processLLMRequest(callArgs({ prompt: [], messageList, abort }))).rejects.toThrow('late.pdf');
+
+    expect(abort).toHaveBeenCalledWith(expect.any(String), {
+      metadata: {
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
+        fileName: 'late.pdf',
+        mimeType: 'application/pdf',
+      },
+    });
+  });
+
+  it('checks nothing without a message list, since it cannot tell new files from the history', async () => {
+    const { sandbox } = createFakeSandbox();
+    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
+    const prompt = [
+      {
+        role: 'user' as const,
+        content: [{ type: 'file' as const, data: new Uint8Array([37, 80, 68, 70]), mediaType: 'application/pdf' }],
+      },
+    ];
+    const abort = createAbort();
+
+    await processor.processLLMRequest(callArgs({ prompt, abort }));
+
+    expect(abort).not.toHaveBeenCalled();
   });
 });

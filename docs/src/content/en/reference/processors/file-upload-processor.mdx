@@ -9,7 +9,7 @@ packages:
 
 The `FileUploadProcessor` uploads files attached to user messages to a [workspace sandbox](/reference/workspace/sandbox) and replaces each file with a text reference to its path. The model receives the path and never the file content. The agent works on the file with its sandbox tools.
 
-A file that matches the configured filters never reaches the model. When the processor can't upload it, the processor stops the turn instead of letting the file through.
+A file that the filter accepts never reaches the model. When the processor can't upload it, the processor stops the turn instead of letting the file through.
 
 The processor requires an agent with [memory](/docs/memory/overview) and a thread. The replaced message is what gets stored, which is why the same file isn't uploaded again on the next turn.
 
@@ -37,8 +37,7 @@ export const agent = new Agent({
   inputProcessors: [
     new FileUploadProcessor({
       workspace,
-      mimeTypes: ['application/pdf', 'image/*'],
-      extensions: ['csv', 'xlsx'],
+      filter: ({ extension }) => extension === 'csv' || extension === 'xlsx',
     }),
   ],
 })
@@ -88,31 +87,18 @@ if (result.tripwire?.processorId === 'file-upload') {
     isOptional: false,
   },
   {
-    name: 'mimeTypes',
-    type: 'string[]',
+    name: 'filter',
+    type: '(file: FileUploadFileInfo) => boolean | Promise<boolean>',
     description:
-      "MIME types to upload. Matching ignores case and MIME parameters, so 'text/plain; charset=utf-8' matches 'text/plain'. Use 'image/*' to match a whole type.",
+      'Decides, for each file, whether it is uploaded (`true`) or left to the model (`false`). The function must return a boolean; throwing or returning anything else stops the turn. See [File selection](#file-selection).',
     isOptional: true,
-  },
-  {
-    name: 'extensions',
-    type: 'string[]',
-    description:
-      "File extensions to upload, with or without the leading dot. Matching ignores case. The extension is read from the file name, so a file without a name can't match an extension.",
-    isOptional: true,
-  },
-  {
-    name: 'excludeMimeTypes',
-    type: 'string[]',
-    description:
-      'MIME types to never upload, written like `mimeTypes`. A file of an excluded type reaches the model, even when it matches `mimeTypes` or `extensions`.',
-    isOptional: true,
+    defaultValue: 'Every file is uploaded',
   },
   {
     name: 'maxFileSize',
-    type: '(file: { fileName?: string; mimeType: string; extension?: string }) => number',
+    type: '(file: FileUploadFileInfo) => number',
     description:
-      'Returns the largest accepted size in bytes for a file. `fileName` and `extension` are undefined for a file sent without a name. The function must return a non-negative number; anything else stops the turn.',
+      'Returns the largest accepted size in bytes for a file. The function must return a non-negative number; anything else stops the turn.',
     isOptional: true,
     defaultValue: '10 MB for every file',
   },
@@ -151,9 +137,9 @@ if (result.tripwire?.processorId === 'file-upload') {
   },
   {
     name: 'processLLMRequest',
-    type: '(args: ProcessLLMRequestArgs) => void',
+    type: '(args: ProcessLLMRequestArgs) => Promise<void>',
     description:
-      'Runs on the final prompt. Stops the turn when a matching file sent by the user is still in it, whatever path the file took to get there.',
+      'Runs before each model call. Stops the turn when a new message of the request still holds a file that the filter accepts, whatever path the file took to get there. Messages recalled from memory are not checked.',
     isOptional: false,
   },
 ]}
@@ -161,30 +147,73 @@ if (result.tripwire?.processorId === 'file-upload') {
 
 ## File selection
 
-A file is uploaded when its MIME type is in `mimeTypes` or its extension is in `extensions`. When you set neither option, every file is uploaded.
+The `filter` function receives each file of the new messages and returns `true` to upload it. A file it rejects is left untouched and reaches the model as usual. Without `filter`, every file is uploaded.
 
-A file that doesn't match is left untouched and reaches the model as usual.
+This filter uploads every file except the types the model reads itself:
 
-Use `excludeMimeTypes` to keep some types out of the sandbox. An excluded file is never uploaded, whatever the other two options say. Set it alone to upload every file except the types the model reads itself:
+```typescript
+import { FileUploadProcessor } from '@mastra/core/processors'
+
+const readByModel = ['image/', 'audio/', 'video/', 'text/']
+
+const fileUpload = new FileUploadProcessor({
+  workspace,
+  filter: ({ mimeType }) =>
+    mimeType !== 'application/pdf' && !readByModel.some(prefix => mimeType.startsWith(prefix)),
+})
+```
+
+`filter` and `maxFileSize` receive the same `FileUploadFileInfo` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'fileName',
+    type: 'string',
+    description: 'Name the file was sent with. Undefined for a file sent without a name.',
+    isOptional: true,
+  },
+  {
+    name: 'mimeType',
+    type: 'string',
+    description: 'MIME type in lower case and without parameters: `Text/Plain; charset=utf-8` becomes `text/plain`.',
+    isOptional: false,
+  },
+  {
+    name: 'extension',
+    type: 'string',
+    description:
+      'Extension of the file name, in lower case and without the dot. Undefined when the file has no name or no extension.',
+    isOptional: true,
+  },
+  {
+    name: 'source',
+    type: "'inline' | 'url' | 'providerFileId'",
+    description:
+      'Where the bytes are: `inline` for data sent with the message, `url` for a link, `providerFileId` for a file ID of a model provider. Only `inline` files can be uploaded.',
+    isOptional: false,
+  },
+]}
+/>
+
+The size isn't part of it, because it's only known once the data is decoded.
+
+`filter` can be async. It runs again before each model call for the files of the new messages, so it must give the same answer for the same file.
+
+The processor only looks at messages added during the current request, with the `user` or `signal` role. It never checks or changes messages recalled from memory, and it ignores files produced by the assistant. A file already stored in a thread reaches the model as it did before you added the processor.
+
+Only files sent inline, as binary, base64, or a data URL, are uploaded. The processor never downloads a URL: a request made by the server could reach an internal address. A file the filter accepts that is a URL or a provider file ID stops the turn with `UNSUPPORTED_FILE_SOURCE`.
+
+To send such files to the model instead, reject them in the filter:
 
 ```typescript
 import { FileUploadProcessor } from '@mastra/core/processors'
 
 const fileUpload = new FileUploadProcessor({
   workspace,
-  excludeMimeTypes: ['image/*', 'application/pdf'],
+  filter: ({ source, mimeType }) => source === 'inline' && !mimeType.startsWith('image/'),
 })
 ```
-
-The processor only looks at messages added during the current request, with the `user` or `signal` role. It never changes messages recalled from memory, and it ignores files produced by the assistant.
-
-Files can arrive in any of these forms:
-
-| Source | Behavior |
-| - | - |
-| Inline data: binary, base64, or a data URL | Decoded and uploaded |
-| `http` or `https` URL | Downloaded by the server that runs the agent, then uploaded |
-| Any other reference, such as a `gs://` URL or a provider file ID | Stops the turn with `UNSUPPORTED_FILE_SOURCE` |
 
 ## Upload location
 
@@ -296,12 +325,12 @@ The tripwire metadata has this shape:
 | `NO_SANDBOX` | The workspace resolved no sandbox for the request, or resolving it failed |
 | `NO_WRITE_CAPABILITY` | The sandbox has neither `writeFiles` nor `executeCommand` |
 | `INVALID_MAX_FILE_SIZE` | `maxFileSize` threw, or returned something other than a non-negative number |
-| `UNSUPPORTED_FILE_SOURCE` | A matching file is neither inline data nor an `http` or `https` URL |
-| `INVALID_FILE_DATA` | The inline data of a matching file can't be decoded |
-| `FILE_DOWNLOAD_FAILED` | A matching file sent as a URL can't be downloaded |
-| `FILE_TOO_LARGE` | A matching file is larger than its limit |
+| `INVALID_FILTER` | `filter` threw, or returned something other than `true` or `false` |
+| `UNSUPPORTED_FILE_SOURCE` | A file to upload is a URL or a provider file ID instead of inline data |
+| `INVALID_FILE_DATA` | The inline data of a file to upload can't be decoded |
+| `FILE_TOO_LARGE` | A file to upload is larger than its limit |
 | `UPLOAD_FAILED` | Writing to the sandbox failed |
-| `FILE_NOT_UPLOADED` | A matching file is still in the prompt right before the model call |
+| `FILE_NOT_UPLOADED` | A file of a new message that the filter accepts is still there right before the model call |
 
 `MEMORY_REQUIRED`, `NO_SANDBOX`, and `NO_WRITE_CAPABILITY` are checked at the start of every call, including calls without a file. A setup problem shows on the first call instead of the first upload.
 
@@ -309,7 +338,7 @@ All the files of a turn are checked before the first write. One file that fails 
 
 When a write fails, the processor removes the files it wrote during the turn with `rm -f` before it stops the turn. If the removal fails, or the sandbox can't run commands, `orphanPaths` lists the paths that may remain.
 
-Before it stops a turn, the processor replaces every matching file of that turn with a `[File not uploaded]` note. A stopped turn can still be stored, for example on a durable agent, and this keeps raw files out of the thread.
+Before it stops a turn, the processor replaces every file of that turn that the filter accepts with a `[File not uploaded]` note. When the filter itself fails, every file of the turn is replaced. A stopped turn can still be stored, for example on a durable agent, and this keeps raw files out of the thread.
 
 ## Files sent with signals
 
@@ -320,12 +349,10 @@ The processor handles files sent with `agent.sendMessage()` and `agent.sendSigna
 
 ## Limitations
 
-- **Stored messages with a raw file.** A message stored without going through the processor keeps its file. This happens with a signal sent with the `persist` behavior, and with threads created before you added the processor. The processor doesn't change stored messages, so each turn on that thread stops with `FILE_NOT_UPLOADED` until the message is removed.
+- **Stored messages with a raw file.** A message stored without going through the processor keeps its file, and the model receives it on later turns. This happens with threads created before you added the processor, and with a signal sent with the `persist` behavior, which is stored without running input processors.
 - **Durable agents and early signals.** On a durable agent, a signal that arrives before the first model call of a run isn't uploaded. The turn stops with `FILE_NOT_UPLOADED`.
 - **Relative paths with `writeFiles`.** Each sandbox provider resolves the relative `uploads/` path itself. Check that your provider resolves it against the directory where commands run.
-- **Downloads.** A file sent as a URL is downloaded in full before its size is checked.
-- **Images in the prompt.** Mastra detects the type of an image from its content when it builds the prompt. An image sent with another MIME type can be detected there and stop the turn with `FILE_NOT_UPLOADED`.
-- **Processor workflows.** The check on the final prompt doesn't run when the processor is nested in a processor workflow.
+- **Processor workflows.** The check before each model call doesn't run when the processor is nested in a processor workflow.
 
 ## Related
 

@@ -40,10 +40,14 @@ const workspace = new Workspace({
   skills: ['.agents/skills'],
 });
 
-// Files the model reads itself keep going to the model; everything else is uploaded to the sandbox.
+// Files the model reads itself, and links, keep going to the model; other files sent inline are uploaded.
+const readByModel = ['image/', 'audio/', 'video/', 'text/'];
 const fileUploadProcessor = new FileUploadProcessor({
   workspace,
-  excludeMimeTypes: ['image/*', 'application/pdf', 'audio/*', 'video/*', 'text/*'],
+  filter: ({ source, mimeType }) =>
+    source === 'inline' &&
+    mimeType !== 'application/pdf' &&
+    !readByModel.some(prefix => mimeType.startsWith(prefix)),
 });
 
 const memory = new Memory({

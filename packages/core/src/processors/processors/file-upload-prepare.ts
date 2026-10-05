@@ -1,20 +1,12 @@
 import { collect, describeError, describeFile, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
 import type { Result } from './file-upload-errors';
+import { fileInfoOf } from './file-upload-file-info';
+import type { FileUploadFileInfo } from './file-upload-file-info';
 import { buildUploadPath } from './file-upload-filename';
-import { extensionOf } from './file-upload-matching';
 import type { FileCandidate } from './file-upload-messages';
-import { classifySource, loadFileBytes } from './file-upload-source';
-import type { FileSource } from './file-upload-source';
+import { decodeInline, inlineDataOf } from './file-upload-source';
 
-export interface FileUploadMaxFileSizeArgs {
-  /** Name the file was sent with; `undefined` when it has none. */
-  fileName?: string;
-  mimeType: string;
-  /** Lower-cased extension without the dot; `undefined` when the file has no name or no extension. */
-  extension?: string;
-}
-
-export type FileUploadMaxFileSize = (file: FileUploadMaxFileSizeArgs) => number;
+export type FileUploadMaxFileSize = (file: FileUploadFileInfo) => number;
 
 /** A file whose bytes are loaded, checked, and ready to be written to the sandbox. */
 export interface PreparedFile {
@@ -25,36 +17,35 @@ export interface PreparedFile {
 
 interface PlannedFile {
   candidate: FileCandidate;
-  source: FileSource;
+  data: string;
   maxFileSize: number;
 }
 
 /**
- * Checks and loads every file before the first write: one bad file stops the
- * whole turn, and nothing is downloaded until every file has a usable source
- * and limit.
+ * Checks and decodes every file before the first write: one bad file stops the
+ * whole turn, and nothing is decoded until every file has inline data and a limit.
  */
-export async function prepareFiles(
+export function prepareFiles(
   candidates: FileCandidate[],
   maxFileSize: FileUploadMaxFileSize,
   threadId: string,
-): Promise<Result<PreparedFile[]>> {
+): Result<PreparedFile[]> {
   const planned = collect(candidates.map(candidate => planFile(candidate, maxFileSize)));
   if (!planned.ok) return planned;
-  return collect(await Promise.all(planned.value.map(file => loadPlannedFile(file, threadId))));
+  return collect(planned.value.map(file => loadPlannedFile(file, threadId)));
 }
 
 function planFile(candidate: FileCandidate, maxFileSize: FileUploadMaxFileSize): Result<PlannedFile> {
   const limit = resolveMaxFileSize(candidate, maxFileSize);
   if (!limit.ok) return limit;
-  const source = classifySource(candidate.data, fileDetails(candidate));
-  if (!source.ok) return source;
-  return ok({ candidate, source: source.value, maxFileSize: limit.value });
+  const data = inlineDataOf(candidate.data, fileDetails(candidate));
+  if (!data.ok) return data;
+  return ok({ candidate, data: data.value, maxFileSize: limit.value });
 }
 
 // `maxFileSize` is user code: a wrong value must stop the turn, not silently lift the limit.
 function resolveMaxFileSize(candidate: FileCandidate, maxFileSize: FileUploadMaxFileSize): Result<number> {
-  const { fileName, mimeType } = candidate;
+  const { fileName, mimeType, data } = candidate;
   const invalid = (cause: string) =>
     failed(
       FILE_UPLOAD_ERROR_CODES.INVALID_MAX_FILE_SIZE,
@@ -62,18 +53,15 @@ function resolveMaxFileSize(candidate: FileCandidate, maxFileSize: FileUploadMax
       { ...fileDetails(candidate), cause },
     );
   try {
-    const limit = maxFileSize({ fileName, mimeType, extension: extensionOf(fileName) });
+    const limit = maxFileSize(fileInfoOf({ fileName, mimeType, data }));
     return typeof limit === 'number' && limit >= 0 ? ok(limit) : invalid(String(limit));
   } catch (error) {
     return invalid(describeError(error));
   }
 }
 
-async function loadPlannedFile(
-  { candidate, source, maxFileSize }: PlannedFile,
-  threadId: string,
-): Promise<Result<PreparedFile>> {
-  const content = await loadFileBytes(source, fileDetails(candidate));
+function loadPlannedFile({ candidate, data, maxFileSize }: PlannedFile, threadId: string): Result<PreparedFile> {
+  const content = decodeInline(data, fileDetails(candidate));
   if (!content.ok) return content;
   const size = content.value.byteLength;
   if (size > maxFileSize) {

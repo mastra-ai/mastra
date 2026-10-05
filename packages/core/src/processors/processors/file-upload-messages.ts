@@ -1,8 +1,6 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import { resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { toDisplayName } from './file-upload-filename';
-import type { FileMatcher, MatchableFile } from './file-upload-matching';
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
@@ -134,17 +132,4 @@ function formatUploadedNote(file: FileUploadRecord): string {
     `type: ${file.mimeType}`,
     `size: ${file.size} bytes`,
   ].join('\n');
-}
-
-/** First file the user sent that matches the filters and is still in the prompt about to reach the model. */
-export function findUnuploadedFile(prompt: LanguageModelV2Prompt, matches: FileMatcher): MatchableFile | undefined {
-  for (const message of prompt) {
-    if (message.role !== 'user') continue;
-    for (const part of message.content) {
-      if (part.type !== 'file') continue;
-      const file = { fileName: part.filename, mimeType: part.mediaType };
-      if (matches(file)) return file;
-    }
-  }
-  return undefined;
 }

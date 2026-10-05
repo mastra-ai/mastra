@@ -7,15 +7,9 @@ import type { AnyWorkspace } from '../../workspace/workspace';
 import type { ProcessInputArgs, ProcessInputStepArgs, ProcessLLMRequestArgs, Processor } from '../index';
 import { describeError, describeFile, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
 import type { FileUploadFailure, FileUploadTripwireMetadata, Result } from './file-upload-errors';
-import { createFileMatcher } from './file-upload-matching';
-import type { FileMatcher, FileMatcherOptions } from './file-upload-matching';
-import {
-  collectCandidates,
-  findUnuploadedFile,
-  listNewMessages,
-  markRejected,
-  markUploaded,
-} from './file-upload-messages';
+import { selectFiles } from './file-upload-filter';
+import type { FileUploadFilter } from './file-upload-filter';
+import { collectCandidates, listNewMessages, markRejected, markUploaded } from './file-upload-messages';
 import type { FileCandidate } from './file-upload-messages';
 import { prepareFiles } from './file-upload-prepare';
 import type { FileUploadMaxFileSize, PreparedFile } from './file-upload-prepare';
@@ -23,14 +17,21 @@ import { hasWriteCapability, writeFilesToSandbox } from './file-upload-writer';
 
 export { FILE_UPLOAD_ERROR_CODES } from './file-upload-errors';
 export type { FileUploadErrorCode, FileUploadTripwireMetadata } from './file-upload-errors';
+export type { FileUploadFileInfo } from './file-upload-file-info';
+export type { FileUploadFilter } from './file-upload-filter';
 export type { FileUploadRecord } from './file-upload-messages';
-export type { FileUploadMaxFileSize, FileUploadMaxFileSizeArgs } from './file-upload-prepare';
+export type { FileUploadMaxFileSize } from './file-upload-prepare';
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-export interface FileUploadProcessorOptions extends FileMatcherOptions {
+export interface FileUploadProcessorOptions {
   /** Workspace whose sandbox receives the uploaded files. Pass the same workspace as the agent's. */
   workspace: AnyWorkspace;
+  /**
+   * Called for each file of a new user message: `true` uploads it, `false` leaves it to the model.
+   * Without a filter, every file is uploaded. It can run more than once for the same file, so keep it pure.
+   */
+  filter?: FileUploadFilter;
   /** Returns the largest accepted size, in bytes, for a file. Defaults to 10 MB for every file. */
   maxFileSize?: FileUploadMaxFileSize;
 }
@@ -53,7 +54,9 @@ type Abort = ProcessInputArgs<FileUploadTripwireMetadata>['abort'];
  *   // ...
  *   memory,
  *   workspace,
- *   inputProcessors: [new FileUploadProcessor({ workspace, mimeTypes: ['application/pdf', 'image/*'] })],
+ *   inputProcessors: [
+ *     new FileUploadProcessor({ workspace, filter: ({ mimeType }) => !mimeType.startsWith('image/') }),
+ *   ],
  * });
  * ```
  */
@@ -62,13 +65,13 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
   readonly name = 'File Upload';
 
   private readonly workspace: AnyWorkspace;
-  private readonly matches: FileMatcher;
+  private readonly filter?: FileUploadFilter;
   private readonly maxFileSize: FileUploadMaxFileSize;
 
   constructor(options: FileUploadProcessorOptions) {
     assertSandboxConfigured(options?.workspace);
     this.workspace = options.workspace;
-    this.matches = createFileMatcher(options);
+    this.filter = options.filter;
     this.maxFileSize = options.maxFileSize ?? (() => DEFAULT_MAX_FILE_SIZE);
   }
 
@@ -78,11 +81,13 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     abort,
     abortSignal,
   }: ProcessInputArgs<FileUploadTripwireMetadata>): Promise<MessageList> {
-    const candidates = this.findCandidates(messageList);
+    const files = newFiles(messageList);
+    const accepted = await selectFiles(files, this.filter);
+    if (!accepted.ok) return this.fail(abort, files, accepted.failure);
     const memory = checkMemory(requestContext);
-    if (!memory.ok) return this.fail(abort, candidates, memory.failure);
-    const uploaded = await this.upload(candidates, requestContext, abortSignal);
-    if (!uploaded.ok) return this.fail(abort, candidates, uploaded.failure);
+    if (!memory.ok) return this.fail(abort, accepted.value, memory.failure);
+    const uploaded = await this.upload(accepted.value, requestContext, abortSignal);
+    if (!uploaded.ok) return this.fail(abort, accepted.value, uploaded.failure);
     return messageList;
   }
 
@@ -93,27 +98,32 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     abort,
     abortSignal,
   }: ProcessInputStepArgs<FileUploadTripwireMetadata>): Promise<void> {
-    const candidates = this.findCandidates(messageList);
-    if (candidates.length === 0) return;
-    const uploaded = await this.upload(candidates, requestContext, abortSignal);
-    if (!uploaded.ok) return this.fail(abort, candidates, uploaded.failure);
+    const files = newFiles(messageList);
+    const accepted = await selectFiles(files, this.filter);
+    if (!accepted.ok) return this.fail(abort, files, accepted.failure);
+    if (accepted.value.length === 0) return;
+    const memory = checkMemory(requestContext);
+    if (!memory.ok) return this.fail(abort, accepted.value, memory.failure);
+    const uploaded = await this.upload(accepted.value, requestContext, abortSignal);
+    if (!uploaded.ok) return this.fail(abort, accepted.value, uploaded.failure);
   }
 
-  // Last line of defense: whatever path a matching file took to get into the
-  // prompt (a stored message the hooks above never saw, for instance), it stops here.
-  processLLMRequest({ prompt, messageList, abort }: ProcessLLMRequestArgs<FileUploadTripwireMetadata>): void {
-    const leaked = findUnuploadedFile(prompt, this.matches);
-    if (!leaked) return;
-    const candidates = messageList ? this.findCandidates(messageList) : [];
-    return this.fail(abort, candidates, {
+  // Last line of defense: a file of this request that the filter accepts but that is still in a
+  // message (a signal the hooks above never saw, for instance) stops the call here. Files of the
+  // thread history are left alone, so threads from before the processor keep working. Without a
+  // message list, new files can't be told from the history, so nothing is checked.
+  async processLLMRequest({ messageList, abort }: ProcessLLMRequestArgs<FileUploadTripwireMetadata>): Promise<void> {
+    if (!messageList) return;
+    const files = newFiles(messageList);
+    const leaked = await selectFiles(files, this.filter);
+    if (!leaked.ok) return this.fail(abort, files, leaked.failure);
+    const [file] = leaked.value;
+    if (!file) return;
+    return this.fail(abort, leaked.value, {
       code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
-      message: `${describeFile(leaked.fileName)} matches the upload filters but was not uploaded, so the model call was stopped.`,
-      details: leaked,
+      message: `${describeFile(file.fileName)} is accepted by the filter but was not uploaded, so the model call was stopped.`,
+      details: { fileName: file.fileName, mimeType: file.mimeType },
     });
-  }
-
-  private findCandidates(messageList: MessageList): FileCandidate[] {
-    return collectCandidates(listNewMessages(messageList)).filter(this.matches);
   }
 
   // The sandbox is checked even when there is nothing to upload, so a broken setup shows on the first call.
@@ -127,7 +137,7 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     if (candidates.length === 0) return ok(undefined);
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
     if (!threadId) return memoryRequired();
-    const prepared = await prepareFiles(candidates, this.maxFileSize, threadId);
+    const prepared = prepareFiles(candidates, this.maxFileSize, threadId);
     if (!prepared.ok) return prepared;
     const written = await writeFilesToSandbox(sandbox.value, prepared.value, abortSignal);
     if (!written.ok) return written;
@@ -145,6 +155,8 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     return abort(message, { metadata: { processorId: this.id, code, ...details } });
   }
 }
+
+const newFiles = (messageList: MessageList): FileCandidate[] => collectCandidates(listNewMessages(messageList));
 
 // A workspace without any sandbox can never work: say so when the app starts, not on the first call.
 function assertSandboxConfigured(workspace: AnyWorkspace | undefined): void {

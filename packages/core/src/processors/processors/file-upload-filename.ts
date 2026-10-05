@@ -1,4 +1,4 @@
-import { extensionOf, normalizeMimeType } from './file-upload-matching';
+import { extensionOf, normalizeMimeType } from './file-upload-file-info';
 
 const UPLOADS_DIRECTORY = 'uploads';
 

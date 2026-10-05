@@ -10,17 +10,17 @@ export const FILE_UPLOAD_ERROR_CODES = {
   NO_WRITE_CAPABILITY: 'NO_WRITE_CAPABILITY',
   /** `maxFileSize` threw, or returned something other than a non-negative number. */
   INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
-  /** A file is neither inline data nor an http(s) URL. */
+  /** `filter` threw, or returned something other than `true` or `false`. */
+  INVALID_FILTER: 'INVALID_FILTER',
+  /** A file to upload isn't inline data: a URL or a provider file ID is never fetched. */
   UNSUPPORTED_FILE_SOURCE: 'UNSUPPORTED_FILE_SOURCE',
   /** Inline file data could not be decoded. */
   INVALID_FILE_DATA: 'INVALID_FILE_DATA',
-  /** A file given as a URL could not be downloaded. */
-  FILE_DOWNLOAD_FAILED: 'FILE_DOWNLOAD_FAILED',
   /** A file is larger than the limit returned by `maxFileSize`. */
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   /** Writing to the sandbox failed. */
   UPLOAD_FAILED: 'UPLOAD_FAILED',
-  /** A matching file was still in the prompt right before the model call. */
+  /** A file the filter accepts was still in the prompt right before the model call. */
   FILE_NOT_UPLOADED: 'FILE_NOT_UPLOADED',
 } as const;
 
