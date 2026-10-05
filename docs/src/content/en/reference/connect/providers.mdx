@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` includes generated toolsets for 24 providers (925 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` includes generated toolsets for 23 providers (913 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -17,7 +17,6 @@ MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, a
 
 | Provider | Provider ID | Tools |
 | - | - | - |
-| <ProviderLogo slug="anthropic" mono /> [Anthropic](#anthropic) | `anthropic` | 12 |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 33 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
@@ -41,25 +40,6 @@ MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, a
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
 | <ProviderLogo slug="workos" mono /> [WorkOS](#workos) | `workos` | 40 |
-
-## Anthropic
-
-Provider ID: `anthropic` · 12 tools
-
-| Tool | Description |
-| - | - |
-| `anthropic_cancel_message_batch` | Cancel an Anthropic Message Batch. |
-| `anthropic_count_message_tokens` | Count tokens for an Anthropic message request. |
-| `anthropic_create_message` | Create an Anthropic model message. |
-| `anthropic_create_message_batch` | Create a message batch in Anthropic. |
-| `anthropic_delete_file` | Delete or archive a file in Anthropic. |
-| `anthropic_get_file` | Retrieve a single file from Anthropic. |
-| `anthropic_get_message_batch` | Retrieve a single message batch from Anthropic. |
-| `anthropic_get_model` | Retrieve a single model from Anthropic. |
-| `anthropic_list_files` | List files from Anthropic. |
-| `anthropic_list_message_batch_results` | Stream or retrieve results for an Anthropic Message Batch |
-| `anthropic_list_message_batches` | List message batches from Anthropic. |
-| `anthropic_list_models` | List models from Anthropic. |
 
 ## Clerk
 

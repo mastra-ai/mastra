@@ -51,6 +51,36 @@ tools({
 
 Check tool keys against the [provider toolsets reference](/reference/connect/providers). A misspelled tool key doesn't throw. When the provider's tools load, `tools()` logs a warning and skips that provider entirely. The agent gets none of its tools. A misspelled provider ID logs a warning and is ignored.
 
+## Filter tools per request
+
+`integrations` fixes the toolset when the agent is built. To decide per request, pass a function as the agent's `tools` option. Mastra calls it on every `generate()` and `stream()` with the [request context](/docs/server/request-context), so you can call the resolver inside and filter what it returns:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: 'openai/gpt-5-mini',
+  tools: async ({ requestContext }) => {
+    const all = await connected()
+
+    // Viewers get Linear tools only, and nothing destructive.
+    if (requestContext?.get('role') === 'viewer') {
+      return Object.fromEntries(
+        Object.entries(all).filter(([key]) => key.startsWith('linear_') && !key.includes('delete')),
+      )
+    }
+    return all
+  },
+})
+```
+
+Tool keys start with the provider, so a key prefix such as `linear_` filters a whole provider in or out. Calling `connected()` on every request stays cheap because the resolver serves its cached snapshot. [Request context](/docs/server/request-context) shows how to set the values from middleware or per call.
+
 ## Choose between connections
 
 If a project links two Slack workspaces, the agent chooses a workspace on each call. The same applies to any provider with more than one connection: the toolset gains a `<provider>__list_connections` tool, and every other tool takes a `connection_name` input. Give connections [names you can tell apart](/docs/mastra-platform/connect/connections#name-connections).

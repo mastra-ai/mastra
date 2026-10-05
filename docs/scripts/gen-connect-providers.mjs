@@ -19,10 +19,9 @@ const root = process.argv[2]
 const providersDir = join(root, 'packages/connect/src/providers')
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['stripe', 'twitter-v2'])
+const EXCLUDE = new Set(['anthropic', 'stripe', 'twitter-v2'])
 
 const DISPLAY = {
-  anthropic: 'Anthropic',
   clerk: 'Clerk',
   discord: 'Discord',
   fireflies: 'Fireflies.ai',
@@ -49,7 +48,6 @@ const DISPLAY = {
 }
 
 const LOGOS = {
-  anthropic: { slug: 'anthropic', mono: true },
   clerk: { slug: 'clerk', mono: true },
   discord: { slug: 'discord' },
   fireflies: { src: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
@@ -154,7 +152,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 Tool keys are stable identifiers of the form \`<provider>_<action>\` and are the values accepted by \`allowTools\` and \`disallowTools\`. Toolsets are versioned with the package: the exact list depends on the installed \`@mastra/connect\` version, and this page reflects the version it was generated from.
 
-MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, and Sanity) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/docs/mastra-platform/providers#mcp-providers) for the list and links to each provider's MCP documentation.
+MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, and Sanity) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/docs/mastra-platform/connect/providers#mcp-providers) for the list and links to each provider's MCP documentation.
 
 | Provider | Provider ID | Tools |
 | - | - | - |

@@ -50,7 +50,39 @@ channels({
 })
 ```
 
-See the [`channels()` reference](/reference/connect/channels) for every option.
+See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `disabled` to leave one out.
+
+## Vary tools by channel
+
+When a message arrives through a channel, the agent runs with a `channel` entry on the [request context](/docs/server/request-context) that says where the message came from. Combine it with [`tools()`](/docs/mastra-platform/connect/tools#filter-tools-per-request) to give the agent a different toolset per conversation, such as read-only tools in group channels and the full set in direct messages:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import type { ChannelContext } from '@mastra/core/channels'
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+export const assistant = new Agent({
+  name: 'assistant',
+  instructions: 'You help the team from Slack and Discord.',
+  model: 'openai/gpt-5-mini',
+  tools: async ({ requestContext }) => {
+    const channel = requestContext?.get('channel') as ChannelContext | undefined
+    const all = await connected()
+
+    // Anyone can talk to the agent in a group channel, so keep writes out of reach there.
+    if (channel && !channel.isDM) {
+      return Object.fromEntries(
+        Object.entries(all).filter(([key]) => !/create|update|delete|send/.test(key)),
+      )
+    }
+    return all
+  },
+})
+```
+
+The channel context carries the platform, the channel and thread IDs, and the sender's identity, so the same pattern can branch per platform or per user. The [Slack guide](/integrations/channels/slack#request-context) lists every field.
 
 ## Bring your own app instead
 
