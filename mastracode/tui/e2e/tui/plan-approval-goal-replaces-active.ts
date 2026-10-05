@@ -26,11 +26,11 @@ export const planApprovalGoalReplacesActiveScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     terminal.submit(`/goal ${PLANNING_GOAL}`);
     await runtime.waitForScreenText(/Plan: E2E Active Goal Plan/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Use as \/goal\s+— switch to Build mode and pursue this plan/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Use as \/goal\s+switch to Build mode and pursue this plan/i, terminal, 10_000);
 
     terminal.write('\x1b[B');
     terminal.write('\r');

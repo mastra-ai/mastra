@@ -18,7 +18,7 @@ export const branchContextLongNameScenario: McE2eScenario = {
         }),
       ) as any
     ).toBeVisible();
-    await runtime.waitForScreenText(/feature\/(?:supe\.\.tra-long|su…)/, terminal);
+    await runtime.waitForScreenText(/feature\/super-long-branch-na\S*…/, terminal);
     runtime.printScreen('after branch context assertion', terminal);
 
     terminal.keyCtrlC();

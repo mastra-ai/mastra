@@ -5,10 +5,10 @@ import type { McE2eScenario, McE2eTerminal } from './types.js';
 
 function expectSingleStatusFooterBelowEditor(terminal: McE2eTerminal, label: string): void {
   const rows = terminal.serialize().view.split('\n');
-  const statusRows = rows.flatMap((row, index) => (row.includes('▐build▌') ? [index] : []));
+  const statusRows = rows.flatMap((row, index) => (/\bbuild · /.test(row) ? [index] : []));
   const aboveStatus = statusRows.length === 1 ? rows[statusRows[0]! - 1] : undefined;
 
-  if (statusRows.length !== 1 || !/^\s*╰─+╯\s*$/.test(aboveStatus ?? '')) {
+  if (statusRows.length !== 1 || !/^\s*▀+\s*$/.test(aboveStatus ?? '')) {
     throw new Error(
       `${label}: expected one status footer directly below the editor border, found ${statusRows.length} ` +
         `at rows ${statusRows.map(row => row + 1).join(', ')}\n\n${rows.join('\n')}`,
@@ -41,7 +41,7 @@ export const statusFooterInlineStartScenario: McE2eScenario = {
     expectSingleStatusFooterBelowEditor(terminal, 'after startup');
 
     terminal.submit('Animate the status footer.');
-    await runtime.waitForScreenText(/» Animate the status footer\./, terminal);
+    await runtime.waitForScreenText(/→ Animate the status footer\./, terminal);
     // The response fixture holds time-to-first-token so the footer animation runs on its own.
     await runtime.sleep(1_000);
     runtime.printScreen('while the footer animates', terminal);

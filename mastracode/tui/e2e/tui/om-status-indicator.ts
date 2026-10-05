@@ -8,49 +8,22 @@ import type { McE2eScenario } from './types.js';
 let tuiRef: any;
 let latestStyled = '';
 
-function extractBarCellStyles(styled: string): string[] {
-  const cells: string[] = [];
-  let activeStyle = '';
-  for (const match of styled.matchAll(/\x1b\[[0-9;]*m|━/g)) {
-    const token = match[0];
-    if (token === '━') {
-      cells.push(activeStyle);
-    } else if (token === '\x1b[0m' || token === '\x1b[39m') {
-      activeStyle = '';
-    } else if (/^\x1b\[(?:3\d|9\d|38;)/.test(token)) {
-      activeStyle = token;
-    }
-  }
-  return cells.slice(0, 10);
-}
+const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '');
 
-function assertSegmentAnimation(
-  firstFrame: string,
-  secondFrame: string,
-  activeRange: [start: number, end: number],
-): void {
-  const first = extractBarCellStyles(firstFrame);
-  const second = extractBarCellStyles(secondFrame);
-  if (first.length !== 10 || second.length !== 10) {
-    throw new Error(`Expected 10 styled context cells, got ${first.length} and ${second.length}`);
+// The counter sweeps while OM buffers: same text, different styling between animation frames.
+function assertCounterSweeps(firstFrame: string, secondFrame: string): void {
+  if (stripAnsi(firstFrame) !== stripAnsi(secondFrame)) {
+    throw new Error('Expected the status text to stay the same while the counter sweeps');
   }
-
-  const [start, end] = activeRange;
-  if (JSON.stringify(first.slice(start, end)) === JSON.stringify(second.slice(start, end))) {
-    throw new Error(`Expected context cells ${start}-${end - 1} to animate`);
-  }
-  if (JSON.stringify(first.slice(0, start)) !== JSON.stringify(second.slice(0, start))) {
-    throw new Error(`Expected context cells before ${start} to remain static`);
-  }
-  if (JSON.stringify(first.slice(end)) !== JSON.stringify(second.slice(end))) {
-    throw new Error(`Expected context cells after ${end - 1} to remain static`);
+  if (firstFrame === secondFrame) {
+    throw new Error('Expected the context counter to animate while buffering');
   }
 }
 
 export const omStatusIndicatorScenario: McE2eScenario = {
   name: 'om-status-indicator',
-  description: 'Verifies the unified opposing-fill OM context indicator in the real TUI.',
-  testName: 'renders combined OM usage responsively and confines buffering animation to each segment',
+  description: 'Verifies the OM context counter in the real TUI status line.',
+  testName: 'renders combined OM usage as used/capacity with a percentage and sweeps the counter while buffering',
   async inProcessApp({ startMastraCodeApp }) {
     const app = await startMastraCodeApp({
       onTuiCreated(tui: any) {
@@ -119,15 +92,14 @@ export const omStatusIndicatorScenario: McE2eScenario = {
     try {
       process.stdout.columns = 120;
       setUsage(30_000, 30_000);
-      await checkpoint('balanced', /60\/120k↓/);
+      await checkpoint('balanced', /60\/120k↓ 50%/);
 
       setUsage(45_000, 5_000);
-      await checkpoint('asymmetric', /50\/120k↓/);
+      await checkpoint('asymmetric', /50\/120k↓ 42%/);
 
       process.stdout.columns = 60;
       setUsage(30_000, 30_000);
-      const narrow = await checkpoint('narrow', /60\/120k↓/);
-      expect(narrow).not.toContain('━━━━━━━━━━');
+      await checkpoint('narrow', /60\/120k↓ 50%/);
 
       process.stdout.columns = 120;
       let offset = 0;
@@ -142,8 +114,7 @@ export const omStatusIndicatorScenario: McE2eScenario = {
       offset = 0.5;
       updateStatusLine(state);
       const messageFrame2 = await checkpoint('message-buffer-2', /60\/120k↓/);
-      // Balanced usage renders 2 memory cells, 3 message cells, then 5 unused cells.
-      assertSegmentAnimation(messageFrame1, messageFrame2, [2, 5]);
+      assertCounterSweeps(messageFrame1, messageFrame2);
 
       displayState.bufferingMessages = false;
       displayState.bufferingObservations = true;
@@ -153,7 +124,7 @@ export const omStatusIndicatorScenario: McE2eScenario = {
       offset = 0.5;
       updateStatusLine(state);
       const reflectionFrame2 = await checkpoint('reflection-buffer-2', /60\/120k↓/);
-      assertSegmentAnimation(reflectionFrame1, reflectionFrame2, [0, 2]);
+      assertCounterSweeps(reflectionFrame1, reflectionFrame2);
     } finally {
       state.statusLine.setText = setText;
       state.gradientAnimator = originalGradientAnimator;

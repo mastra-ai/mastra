@@ -33,7 +33,7 @@ export const autocompleteWrappingNavigationScenario = {
 
     await runtime.waitForScreenText(/Project: project/i, terminal);
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     await typeTextSlowly(terminal, '/wrap-');
     await runtime.waitForScreenText(/Alpha wrapped autocomplete description begins/i, terminal, 30_000);
