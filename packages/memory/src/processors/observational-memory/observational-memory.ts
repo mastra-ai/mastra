@@ -3729,12 +3729,14 @@ ${formattedMessages}
       }
     }
 
-    // Above the threshold→blockAfter band, wait (bounded) for an in-process chunk write so its
-    // chunk activates with the rest instead of the sync pass after activation observing the same
-    // messages again. Only the append is awaited, not the op's indexing or title work. This is
-    // about cost, not safety: storage keeps a concurrently appended chunk and skips one the cursor
-    // already covers, so in the band nothing waits and after the timeout activation proceeds.
-    // An op in another process can't be awaited; activate whatever chunks exist.
+    // At or above blockAfter (and for direct API calls), wait (bounded) for an in-process buffer
+    // op that may still append a chunk, so the chunk activates with the rest instead of the sync
+    // pass that follows observing the same messages again. The wait covers the op's Observer call
+    // and append, not its indexing or title work. This is about cost, not safety: storage keeps a
+    // concurrently appended chunk and skips one the cursor already covers. So nothing waits in the
+    // threshold→blockAfter band or for a TTL/provider-change activation (those run before the
+    // step's model call), and after the timeout activation proceeds. An op in another process
+    // can't be awaited; activate whatever chunks exist.
     const obsBufferKey = this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId));
     const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(obsBufferKey);
     if (pendingChunkWrite) {
@@ -3750,7 +3752,7 @@ ${formattedMessages}
         blockAfter !== undefined &&
         livePendingTokens >= threshold &&
         livePendingTokens < blockAfter;
-      if (!inBand) {
+      if (activationTriggeredBy === 'threshold' && !inBand) {
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
           pendingChunkWrite,

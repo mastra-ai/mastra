@@ -23,6 +23,6 @@ await memory.updateObservationalMemoryConfig({
 
 `getStatus()` also returns `observationBlockAfter` and `inAsyncObservationBand`.
 
-At `blockAfter`, activation waits a bounded time for a buffered chunk that is still being saved so it activates with the rest. If the save takes longer, the step observes the remaining messages synchronously, and the late chunk's already-observed messages are not stored again.
+At `blockAfter`, activation waits a bounded time for a buffered observation that is still being produced so it activates with the rest. Activations triggered by the idle TTL or a model change never wait. If the save takes longer, the step observes the remaining messages synchronously, and the late chunk's already-observed messages are not stored again.
 
 Fixed semantic recall missing a turn's new user message when background buffering picked it up on the first step.
