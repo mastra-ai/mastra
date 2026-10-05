@@ -1,0 +1,410 @@
+[
+  {
+    "phase": "before",
+    "theme": "dark",
+    "components": {
+      "codeBlock": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(1 0 0 / 0.076)",
+        "box": {
+          "height": 133,
+          "width": 592,
+          "x": 32,
+          "y": 504.9375
+        },
+        "top": "oklab(1 0 0 / 0.076)"
+      },
+      "codeDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklab(1 0 0 / 0.076)",
+        "box": {
+          "height": 35,
+          "width": 590,
+          "x": 33,
+          "y": 505.9375
+        },
+        "top": "oklab(1 0 0 / 0.076)"
+      },
+      "commandDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklab(1 0 0 / 0.054)",
+        "box": {
+          "height": 113,
+          "width": 590,
+          "x": 33,
+          "y": 243.4375
+        },
+        "top": "oklab(1 0 0 / 0.054)"
+      },
+      "composer": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(1 0 0 / 0.076)",
+        "box": {
+          "height": 203,
+          "width": 592,
+          "x": 32,
+          "y": 242.4375
+        },
+        "top": "oklab(1 0 0 / 0.076)"
+      },
+      "factory": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(1 0 0 / 0.045)",
+        "box": {
+          "height": 65.5,
+          "width": 592,
+          "x": 656,
+          "y": 505.953125
+        },
+        "top": "oklab(1 0 0 / 0.045)"
+      },
+      "header": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(1 0 0 / 0.05)",
+        "box": {
+          "height": 40,
+          "width": 592,
+          "x": 32,
+          "y": 142.9375
+        },
+        "top": "oklch(1 0 0 / 0.05)"
+      },
+      "sidebar": {
+        "borderBottomWidth": "0px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(1 0 0 / 0.045)",
+        "box": {
+          "height": 112,
+          "width": 576,
+          "x": 665,
+          "y": 150.9375
+        },
+        "top": "oklab(1 0 0 / 0.045)"
+      },
+      "workflow": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(1 0 0 / 0.045)",
+        "box": {
+          "height": 74.015625,
+          "width": 592,
+          "x": 656,
+          "y": 330.4375
+        },
+        "top": "oklab(1 0 0 / 0.045)"
+      }
+    }
+  },
+  {
+    "phase": "after",
+    "theme": "dark",
+    "components": {
+      "codeBlock": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(1 0 0 / 0.09)",
+        "box": {
+          "height": 133,
+          "width": 592,
+          "x": 32,
+          "y": 504.9375
+        },
+        "top": "oklch(1 0 0 / 0.09)"
+      },
+      "codeDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(1 0 0 / 0.09)",
+        "box": {
+          "height": 35,
+          "width": 590,
+          "x": 33,
+          "y": 505.9375
+        },
+        "top": "oklch(1 0 0 / 0.09)"
+      },
+      "commandDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(1 0 0 / 0.09)",
+        "box": {
+          "height": 113,
+          "width": 590,
+          "x": 33,
+          "y": 243.4375
+        },
+        "top": "oklch(1 0 0 / 0.09)"
+      },
+      "composer": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(1 0 0 / 0.09)",
+        "box": {
+          "height": 203,
+          "width": 592,
+          "x": 32,
+          "y": 242.4375
+        },
+        "top": "oklch(1 0 0 / 0.09)"
+      },
+      "factory": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(1 0 0 / 0.05)",
+        "box": {
+          "height": 65.5,
+          "width": 592,
+          "x": 656,
+          "y": 505.953125
+        },
+        "top": "oklch(1 0 0 / 0.05)"
+      },
+      "header": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(1 0 0 / 0.09)",
+        "box": {
+          "height": 40,
+          "width": 592,
+          "x": 32,
+          "y": 142.9375
+        },
+        "top": "oklch(1 0 0 / 0.09)"
+      },
+      "sidebar": {
+        "borderBottomWidth": "0px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(1 0 0 / 0.05)",
+        "box": {
+          "height": 112,
+          "width": 576,
+          "x": 665,
+          "y": 150.9375
+        },
+        "top": "oklch(1 0 0 / 0.05)"
+      },
+      "workflow": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(1 0 0 / 0.05)",
+        "box": {
+          "height": 74.015625,
+          "width": 592,
+          "x": 656,
+          "y": 330.4375
+        },
+        "top": "oklch(1 0 0 / 0.05)"
+      }
+    }
+  },
+  {
+    "phase": "before",
+    "theme": "light",
+    "components": {
+      "codeBlock": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(0.205 0 0 / 0.076)",
+        "box": {
+          "height": 133,
+          "width": 592,
+          "x": 32,
+          "y": 504.9375
+        },
+        "top": "oklab(0.205 0 0 / 0.076)"
+      },
+      "codeDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklab(0.205 0 0 / 0.076)",
+        "box": {
+          "height": 35,
+          "width": 590,
+          "x": 33,
+          "y": 505.9375
+        },
+        "top": "oklab(0.205 0 0 / 0.076)"
+      },
+      "commandDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklab(0.205 0 0 / 0.054)",
+        "box": {
+          "height": 113,
+          "width": 590,
+          "x": 33,
+          "y": 243.4375
+        },
+        "top": "oklab(0.205 0 0 / 0.054)"
+      },
+      "composer": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(0.205 0 0 / 0.076)",
+        "box": {
+          "height": 203,
+          "width": 592,
+          "x": 32,
+          "y": 242.4375
+        },
+        "top": "oklab(0.205 0 0 / 0.076)"
+      },
+      "factory": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(0.205 0 0 / 0.045)",
+        "box": {
+          "height": 65.5,
+          "width": 592,
+          "x": 656,
+          "y": 505.953125
+        },
+        "top": "oklab(0.205 0 0 / 0.045)"
+      },
+      "header": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(0 0 0 / 0.08)",
+        "box": {
+          "height": 40,
+          "width": 592,
+          "x": 32,
+          "y": 142.9375
+        },
+        "top": "oklch(0 0 0 / 0.08)"
+      },
+      "sidebar": {
+        "borderBottomWidth": "0px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(0.205 0 0 / 0.045)",
+        "box": {
+          "height": 112,
+          "width": 576,
+          "x": 665,
+          "y": 150.9375
+        },
+        "top": "oklab(0.205 0 0 / 0.045)"
+      },
+      "workflow": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklab(0.205 0 0 / 0.045)",
+        "box": {
+          "height": 74.015625,
+          "width": 592,
+          "x": 656,
+          "y": 330.4375
+        },
+        "top": "oklab(0.205 0 0 / 0.045)"
+      }
+    }
+  },
+  {
+    "phase": "after",
+    "theme": "light",
+    "components": {
+      "codeBlock": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "box": {
+          "height": 133,
+          "width": 592,
+          "x": 32,
+          "y": 504.9375
+        },
+        "top": "oklch(0.205 0 0 / 0.09)"
+      },
+      "codeDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "box": {
+          "height": 35,
+          "width": 590,
+          "x": 33,
+          "y": 505.9375
+        },
+        "top": "oklch(0.205 0 0 / 0.09)"
+      },
+      "commandDivider": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "box": {
+          "height": 113,
+          "width": 590,
+          "x": 33,
+          "y": 243.4375
+        },
+        "top": "oklch(0.205 0 0 / 0.09)"
+      },
+      "composer": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "box": {
+          "height": 203,
+          "width": 592,
+          "x": 32,
+          "y": 242.4375
+        },
+        "top": "oklch(0.205 0 0 / 0.09)"
+      },
+      "factory": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(0 0 0 / 0.08)",
+        "box": {
+          "height": 65.5,
+          "width": 592,
+          "x": 656,
+          "y": 505.953125
+        },
+        "top": "oklch(0 0 0 / 0.08)"
+      },
+      "header": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "0px",
+        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "box": {
+          "height": 40,
+          "width": 592,
+          "x": 32,
+          "y": 142.9375
+        },
+        "top": "oklch(0.205 0 0 / 0.09)"
+      },
+      "sidebar": {
+        "borderBottomWidth": "0px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(0 0 0 / 0.08)",
+        "box": {
+          "height": 112,
+          "width": 576,
+          "x": 665,
+          "y": 150.9375
+        },
+        "top": "oklch(0 0 0 / 0.08)"
+      },
+      "workflow": {
+        "borderBottomWidth": "1px",
+        "borderTopWidth": "1px",
+        "bottom": "oklch(0 0 0 / 0.08)",
+        "box": {
+          "height": 74.015625,
+          "width": 592,
+          "x": 656,
+          "y": 330.4375
+        },
+        "top": "oklch(0 0 0 / 0.08)"
+      }
+    }
+  }
+]
