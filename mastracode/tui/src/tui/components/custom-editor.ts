@@ -12,7 +12,7 @@ import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
 import { displayModeColor, mastra, theme } from '../theme.js';
 import type { GradientAnimator } from './obi-loader.js';
-import { halfBlockPanel, promptSurface } from './surface.js';
+import { fadePanel } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
 
 // Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
@@ -402,7 +402,9 @@ export class CustomEditor extends Editor {
       const line = `${textColorOpen}${content}${textColorClose}`;
       return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
     });
-    result.push(...halfBlockPanel(rows, width, promptSurface()));
+    // The shade fades to the terminal background on the right, starting a little darker than the
+    // sent-message panel (step 2).
+    result.push(...fadePanel(rows, width, 1.5));
 
     // Scroll indicators below the panel
     for (const ind of scrollIndicators) {

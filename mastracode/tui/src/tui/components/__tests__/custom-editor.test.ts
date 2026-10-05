@@ -78,6 +78,9 @@ vi.mock('chalk', () => ({
 
 import { CustomEditor } from '../custom-editor.js';
 
+/** The input's background fades per column, so background SGRs land between characters. */
+const noBg = (s: string) => s.replace(/\x1b\[48;[0-9;]*m/g, '');
+
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
 
@@ -307,7 +310,7 @@ describe('CustomEditor image paste handling', () => {
 
       expect(mocks.superRender).toHaveBeenCalledWith(10, '1234567\n7654321', 0);
       expect(mocks.superRenderCursorLine).toHaveBeenCalledWith(-1);
-      expect(output[1]).toContain(`\x1b[7m${marker}\x1b[0m`);
+      expect(noBg(output[1]!)).toContain(`\x1b[7m${marker}\x1b[0m`);
       expect(editor.getText()).toBe(`${marker}1234567\n7654321`);
       expect(state).toMatchObject({ cursorLine: 0, cursorCol: 0 });
       expect(contentRows).toHaveLength(2);
@@ -346,9 +349,7 @@ describe('CustomEditor image paste handling', () => {
     editor.getText = vi.fn(() => 'hello');
     editor.getModeColor = vi.fn(() => '#16c858');
 
-    const output = editor.render(20).join('\n');
-
-    expect(output).toContain('[rgb:98,246,157]→');
+    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]→');
   });
 
   it('fades the chevron out, fades the pulsing bullet in, then fades back to the chevron on exit', () => {
@@ -366,7 +367,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    expect(editor.render(20).join('\n')).toContain('[rgb:59,148,94]→');
+    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:59,148,94]→');
 
     editor.getPromptAnimator = vi.fn(
       () =>
@@ -378,7 +379,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    const invisibleOutput = editor.render(20).join('\n');
+    const invisibleOutput = noBg(editor.render(20).join('\n'));
     expect(invisibleOutput).not.toContain('→');
     expect(invisibleOutput).not.toContain('•');
 
@@ -392,7 +393,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    const transitionedOutput = editor.render(20).join('\n');
+    const transitionedOutput = noBg(editor.render(20).join('\n'));
     expect(transitionedOutput).toContain('[rgb:59,148,94]•');
     expect(transitionedOutput).not.toContain('→');
 
@@ -406,7 +407,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0.5,
         }) as any,
     );
-    const pulsingOutput = editor.render(20).join('\n');
+    const pulsingOutput = noBg(editor.render(20).join('\n'));
     expect(pulsingOutput).toContain('[rgb:49,123,79]•');
     expect(pulsingOutput).not.toContain('→');
 
@@ -420,7 +421,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    const fadingOutDotOutput = editor.render(20).join('\n');
+    const fadingOutDotOutput = noBg(editor.render(20).join('\n'));
     expect(fadingOutDotOutput).toContain('[rgb:59,148,94]•');
     expect(fadingOutDotOutput).not.toContain('→');
 
@@ -434,7 +435,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    const fadingOutGapOutput = editor.render(20).join('\n');
+    const fadingOutGapOutput = noBg(editor.render(20).join('\n'));
     expect(fadingOutGapOutput).not.toContain('→');
     expect(fadingOutGapOutput).not.toContain('•');
 
@@ -448,7 +449,7 @@ describe('CustomEditor image paste handling', () => {
           getOffset: () => 0,
         }) as any,
     );
-    const returnedChevronOutput = editor.render(20).join('\n');
+    const returnedChevronOutput = noBg(editor.render(20).join('\n'));
     expect(returnedChevronOutput).toContain('[rgb:59,148,94]→');
     expect(returnedChevronOutput).not.toContain('•');
   });
@@ -465,9 +466,9 @@ describe('CustomEditor image paste handling', () => {
         }) as any,
     );
 
-    const output = editor.render(20).join('\n');
+    const output = noBg(editor.render(20).join('\n'));
 
-    expect(output).toContain('[rgb:98,246,157]/');
+    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]/');
   });
 
   it('converts a pasted local image path into an image attachment', () => {
@@ -831,7 +832,7 @@ describe('CustomEditor voice push-to-talk', () => {
     mocks.superRender.mockImplementation(realisticLine);
 
     editor.insertVoiceTranscript('hello world');
-    const out = editor.render(40).join('\n');
+    const out = noBg(editor.render(40).join('\n'));
     // The dictated run is greyed...
     expect(out).toContain(`${greySeq}hello world`);
     // ...while the cursor highlight and trailing padding are left intact.
@@ -864,7 +865,7 @@ describe('CustomEditor voice push-to-talk', () => {
     editor.setVoiceListening(true);
     editor.replaceVoiceTranscript('😀hi');
     expect(text).toBe('hello world! 😀hi');
-    const lines = editor.render(14);
+    const lines = editor.render(14).map(noBg);
     editor.setVoiceListening(false);
     const typedLine = lines.find(l => stripAnsi(l).includes('hello world!'))!;
     expect(typedLine).not.toContain(greySeq);
@@ -878,7 +879,7 @@ describe('CustomEditor voice push-to-talk', () => {
     editor.getModeColor = vi.fn(() => '#16c858');
 
     editor.setVoiceListening(true);
-    const output = editor.render(20).join('\n');
+    const output = noBg(editor.render(20).join('\n'));
     const waveBars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     expect(waveBars.some(bar => output.includes(bar))).toBe(true);
   });

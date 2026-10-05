@@ -59,6 +59,67 @@ export function panelEdge(ch: '▄' | '▀', width: number, bg: string): string 
   return open ? `${open}${ch.repeat(n)}\x1b[39m` : ' '.repeat(n);
 }
 
+// Panels whose shade fades from `step` at the left edge to the terminal background at the right.
+const ESCAPE_TOKEN_RE = /(\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]_][^\x07\x1b]*(?:\x07|\x1b\\)))/;
+const RESET_RE = /^\x1b\[(?:0|49)?m$/;
+const graphemes = new Intl.Segmenter();
+/** Higher = the shade stays strong farther right before fading. 1 is a straight linear fade. */
+const FADE_CURVE = 3;
+
+function fadeShades(width: number, step: number): string[] {
+  const last = Math.max(1, width - 1);
+  // Ease-in curve: the shade holds near full strength across most of the row, then drops off at the end.
+  return Array.from({ length: Math.max(0, width) }, (_, col) => surfaceShade(step * (1 - (col / last) ** FADE_CURVE)));
+}
+
+function fadeRow(line: string, shades: string[]): string {
+  let out = '';
+  let col = 0;
+  let current = '';
+  const cell = (text: string) => {
+    const hex = shades[Math.min(col, shades.length - 1)] ?? '';
+    if (hex !== current) {
+      current = hex;
+      out += bgOpen(hex);
+    }
+    out += text;
+    col += visibleWidth(text);
+  };
+  for (const part of line.split(ESCAPE_TOKEN_RE)) {
+    if (!part) continue;
+    if (part.startsWith('\x1b')) {
+      out += part;
+      if (RESET_RE.test(part) && current) out += bgOpen(current);
+      continue;
+    }
+    for (const { segment } of graphemes.segment(part)) cell(segment);
+  }
+  while (col < shades.length) cell(' ');
+  return `${out}\x1b[49m`;
+}
+
+function fadeEdge(ch: '▄' | '▀', shades: string[]): string {
+  if (chalk.level === 0) return ' '.repeat(shades.length);
+  let out = '';
+  let current = '';
+  for (const hex of shades) {
+    if (hex !== current) {
+      current = hex;
+      out += surfaceOpen(hex, 38);
+    }
+    out += ch;
+  }
+  return `${out}\x1b[39m`;
+}
+
+/** Like halfBlockPanel, but the shade fades out toward the right edge. */
+export function fadePanel(rows: string[], width: number, step: number): string[] {
+  // A 256-color terminal only has a few grays near the background, so the fade would show as hard bands.
+  if (chalk.level === 2) return halfBlockPanel(rows, width, surfaceShade(step));
+  const shades = fadeShades(width, step);
+  return [fadeEdge('▄', shades), ...rows.map(r => fadeRow(r, shades)), fadeEdge('▀', shades)];
+}
+
 /** Background of the prompt and sent messages. */
 export const promptSurface = () => surfaceShade(2);
 /** Background of tool output panels. */
