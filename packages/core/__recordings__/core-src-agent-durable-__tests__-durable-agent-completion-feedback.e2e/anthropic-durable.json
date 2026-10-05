@@ -40,7 +40,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "10000000",
           "anthropic-ratelimit-input-tokens-remaining": "10000000",
           "anthropic-ratelimit-input-tokens-reset": "2026-10-05T22:10:40Z",
@@ -53,7 +52,6 @@
           "anthropic-ratelimit-tokens-limit": "12000000",
           "anthropic-ratelimit-tokens-remaining": "12000000",
           "anthropic-ratelimit-tokens-reset": "2026-10-05T22:10:40Z",
-          "anthropic-workspace-id": "wrkspc_01HCxeweRLDKstVn7ptC7mTU",
           "cache-control": "no-cache",
           "cf-cache-status": "DYNAMIC",
           "cf-ray": "a45fc1f77bd12b13-DFW",
@@ -133,8 +131,6 @@
         "status": 400,
         "statusText": "Bad Request",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
-          "anthropic-workspace-id": "wrkspc_01HCxeweRLDKstVn7ptC7mTU",
           "cf-cache-status": "DYNAMIC",
           "cf-ray": "a45fc200f83d2b13-DFW",
           "connection": "keep-alive",
@@ -215,7 +211,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "10000000",
           "anthropic-ratelimit-input-tokens-remaining": "10000000",
           "anthropic-ratelimit-input-tokens-reset": "2026-10-05T22:10:41Z",
@@ -228,7 +223,6 @@
           "anthropic-ratelimit-tokens-limit": "12000000",
           "anthropic-ratelimit-tokens-remaining": "12000000",
           "anthropic-ratelimit-tokens-reset": "2026-10-05T22:10:41Z",
-          "anthropic-workspace-id": "wrkspc_01HCxeweRLDKstVn7ptC7mTU",
           "cache-control": "no-cache",
           "cf-cache-status": "DYNAMIC",
           "cf-ray": "a45fc201c9ca2b13-DFW",

@@ -16,7 +16,11 @@
  *   LLM_TEST_MODE=record pnpm vitest run --project 'e2e:packages/core' \
  *     src/agent/durable/__tests__/durable-agent-completion-feedback.e2e.test.ts
  *
- * Only commit recordings from a run where every cell passed, and check them for secrets.
+ * Only commit recordings from a run where every cell passed. Before committing, check them for
+ * secrets and remove the `anthropic-organization-id` / `anthropic-workspace-id` response headers.
+ *
+ * Replay uses exact request matching. If replay fails with "No exact match for hash", a request body
+ * changed (for example the completion-feedback template); re-record.
  */
 import { join } from 'node:path';
 import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
@@ -198,7 +202,8 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
         .join('');
       const bodies = requests.map(r => JSON.stringify(r.body ?? ''));
       const repairs = prefillRepairs(requests);
-      const recalled = await memory.recall({ threadId: thread, resourceId: resource, perPage: 50 });
+      // Read everything stored, including signals that recall() hides by default.
+      const recalled = await memory.recall({ threadId: thread, resourceId: resource, perPage: 50, hideSignals: false });
 
       // 1. Every Anthropic request ending on an assistant turn was repaired (F5, COR-1312).
       expect(repairs.unrepaired).toEqual([]);
@@ -217,8 +222,12 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       expect(scores).toEqual([0, 1]);
       // 8. The final completion check graded complete.
       expect(onComplete.at(-1)).toBe(true);
-      // 9. The synthetic continuation turn is not persisted in memory.
-      expect(JSON.stringify(recalled.messages)).not.toContain('Continue.');
+      // 9. The synthetic continuation turn is not persisted in memory. Guard against an empty history:
+      // the prompt and the model's replies must be there.
+      const stored = JSON.stringify(recalled.messages);
+      expect(stored).toContain('Give a one-sentence reply containing the word ALPHA');
+      expect(recalled.messages.some(m => m.role === 'assistant')).toBe(true);
+      expect(stored).not.toContain('Continue.');
 
       // Anthropic must actually take the rejection -> repair path; OpenAI never does.
       if (provider === 'anthropic') {
