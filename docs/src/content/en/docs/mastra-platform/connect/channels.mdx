@@ -73,10 +73,12 @@ export const assistant = new Agent({
     const channel = requestContext?.get('channel') as ChannelContext | undefined
     const all = await connected()
 
-    // Anyone can talk to the agent in a group channel, so keep writes out of reach there.
+    // Anyone can talk to the agent in a group channel, so allow only read-only tools there.
+    // An allowlist is safer than blocking known write verbs: a tool the pattern
+    // doesn't anticipate, such as linear_archive_issue, stays excluded by default.
     if (channel && !channel.isDM) {
       return Object.fromEntries(
-        Object.entries(all).filter(([key]) => !/create|update|delete|send/.test(key)),
+        Object.entries(all).filter(([key]) => /_(get|list|search)_/.test(key)),
       )
     }
     return all

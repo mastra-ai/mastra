@@ -105,8 +105,8 @@ function extractTools(provider) {
     }
     let desc = descMatch ? (descMatch[1] ?? descMatch[2] ?? descMatch[3]) : ''
     desc = desc.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\s+/g, ' ').trim()
-    // escape pipes for markdown tables
-    desc = desc.replace(/\|/g, '\\|')
+    // escape backslashes first, then pipes, for markdown tables
+    desc = desc.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
     tools.push({ id: idMatch[1], desc })
   }
   tools.sort((a, b) => a.id.localeCompare(b.id))
