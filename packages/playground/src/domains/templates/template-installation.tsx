@@ -1,6 +1,7 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
@@ -69,12 +70,14 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="text-muted-foreground mb-5 content-center space-y-6">
+    <Container className="mb-5 content-center space-y-6 text-muted-foreground">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-foreground text-heading">{getPhaseMessage()}</h3>
+        <Txt as="h3" variant="heading" tone="ink">
+          {getPhaseMessage()}
+        </Txt>
         {(streamResult?.runId || runId) && (
-          <div className="text-caption text-muted-foreground mt-2">Run ID: {streamResult?.runId ?? runId}</div>
+          <div className="mt-2 text-caption text-muted-foreground">Run ID: {streamResult?.runId ?? runId}</div>
         )}
       </div>
 
@@ -89,8 +92,8 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-foreground p-4 flex items-center gap-3 text-body bg-red-500/10',
-            '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
+            'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4 text-body text-foreground',
+            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-foreground [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />
@@ -103,7 +106,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-muted-foreground text-body grid justify-items-center gap-4 text-center">
+        <div className="grid justify-items-center gap-4 text-center text-body text-muted-foreground">
           <Spinner />
           <p>This may take some time...</p>
         </div>

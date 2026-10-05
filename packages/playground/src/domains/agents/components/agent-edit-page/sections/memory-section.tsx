@@ -1,19 +1,19 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { useEmbedders, useVectors } from '@mastra/react/hooks';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormSetValue, Control } from 'react-hook-form';
 
+import { RegisteredMemoryNotice } from '../../registered-memory-notice';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -26,6 +26,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
   const [isObserverOpen, setIsObserverOpen] = useState(false);
   const [isReflectorOpen, setIsReflectorOpen] = useState(false);
   const memoryConfig = useWatch({ control, name: 'memory' });
+  const memoryRef = useWatch({ control, name: 'memoryRef' });
   const isEnabled = memoryConfig?.enabled ?? false;
   const semanticRecallEnabled = memoryConfig?.semanticRecall ?? false;
   const observationalMemoryEnabled = memoryConfig?.observationalMemory?.enabled ?? false;
@@ -39,634 +40,570 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
   const embedders = embeddersData?.embedders ?? [];
 
   return (
-    <div className="border-border bg-background rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-card flex w-full items-center gap-1 p-3">
-          <ChevronRight className="text-muted-foreground h-4 w-4" />
+        <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
-            Memory{isEnabled && <span className="text-accent1">(enabled)</span>}
+            Memory{(isEnabled || memoryRef) && <span className="text-success-indicator">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border flex flex-col gap-4 border-t p-3">
-            <Controller
-              name="memory.enabled"
-              control={control}
-              render={({ field }) => (
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="memory-enabled" className="text-foreground">
-                      Enable Memory
-                    </Label>
-                    <span className="text-muted-foreground text-caption">Store and retrieve conversation history</span>
-                  </div>
-                  <Switch
-                    id="memory-enabled"
-                    checked={field.value ?? false}
-                    onCheckedChange={field.onChange}
-                    disabled={readOnly}
+          {memoryRef ? (
+            <div className="border-t border-border p-3">
+              <RegisteredMemoryNotice memoryId={memoryRef.memoryId} />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 border-t border-border p-3">
+              <Controller
+                name="memory.enabled"
+                control={control}
+                render={({ field }) => (
+                  <Field orientation="horizontal" disabled={readOnly}>
+                    <FieldContent className="gap-0.5">
+                      <FieldLabel>Enable Memory</FieldLabel>
+                      <FieldDescription className="mt-0">Store and retrieve conversation history</FieldDescription>
+                    </FieldContent>
+                    <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                  </Field>
+                )}
+              />
+
+              {isEnabled && (
+                <>
+                  <Controller
+                    name="memory.lastMessages"
+                    control={control}
+                    render={({ field }) => (
+                      <Field className="gap-1.5">
+                        <FieldLabel>Last Messages</FieldLabel>
+                        <FieldDescription className="mt-0">
+                          Number of recent messages to include in context
+                        </FieldDescription>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={field.value === false ? '' : (field.value ?? 40)}
+                          onChange={e => {
+                            const value = e.target.value;
+                            field.onChange(value === '' ? false : parseInt(value, 10));
+                          }}
+                          placeholder="40"
+                          className="bg-card"
+                          disabled={readOnly}
+                        />
+                      </Field>
+                    )}
                   />
-                </div>
+
+                  <Controller
+                    name="memory.semanticRecall"
+                    control={control}
+                    render={({ field }) => (
+                      <Field orientation="horizontal" disabled={readOnly}>
+                        <FieldContent className="gap-0.5">
+                          <FieldLabel>Semantic Recall</FieldLabel>
+                          <FieldDescription className="mt-0">Enable semantic search in memory</FieldDescription>
+                        </FieldContent>
+                        <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      </Field>
+                    )}
+                  />
+
+                  {semanticRecallEnabled && (
+                    <>
+                      <Controller
+                        name="memory.vector"
+                        control={control}
+                        render={({ field }) => (
+                          <Field className="gap-1.5">
+                            <FieldLabel>Vector Store</FieldLabel>
+                            <FieldDescription className="mt-0">
+                              Select a vector store for semantic search
+                            </FieldDescription>
+                            <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
+                              <SelectTrigger className="bg-card">
+                                <SelectValue placeholder="Select a vector store" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {vectors.map(vector => (
+                                  <SelectItem key={vector.id} value={vector.id}>
+                                    {vector.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        )}
+                      />
+
+                      <Controller
+                        name="memory.embedder"
+                        control={control}
+                        render={({ field }) => (
+                          <Field className="gap-1.5">
+                            <FieldLabel>Embedder Model</FieldLabel>
+                            <FieldDescription className="mt-0">
+                              Select an embedding model for semantic search
+                            </FieldDescription>
+                            <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
+                              <SelectTrigger className="bg-card">
+                                <SelectValue placeholder="Select an embedder model" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {embedders.map(embedder => (
+                                  <SelectItem key={embedder.id} value={embedder.id}>
+                                    {embedder.name} ({embedder.provider})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        )}
+                      />
+                    </>
+                  )}
+
+                  <Controller
+                    name="memory.readOnly"
+                    control={control}
+                    render={({ field }) => (
+                      <Field orientation="horizontal" disabled={readOnly}>
+                        <FieldContent className="gap-0.5">
+                          <FieldLabel>Read Only</FieldLabel>
+                          <FieldDescription className="mt-0">
+                            Memory is read-only (no new messages stored)
+                          </FieldDescription>
+                        </FieldContent>
+                        <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      </Field>
+                    )}
+                  />
+
+                  <Controller
+                    name="memory.observationalMemory.enabled"
+                    control={control}
+                    render={({ field }) => (
+                      <Field orientation="horizontal" disabled={readOnly}>
+                        <FieldContent className="gap-0.5">
+                          <FieldLabel>Observational Memory</FieldLabel>
+                          <FieldDescription className="mt-0">
+                            Automatically observe and reflect on conversations to build long-term memory
+                          </FieldDescription>
+                        </FieldContent>
+                        <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      </Field>
+                    )}
+                  />
+
+                  {observationalMemoryEnabled && (
+                    <div className="ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                      <Field className="gap-1.5">
+                        <FieldLabel>Provider</FieldLabel>
+                        <FieldDescription className="mt-0">
+                          Provider for the observer and reflector agents
+                        </FieldDescription>
+                        <Controller
+                          name="memory.observationalMemory.model.provider"
+                          control={control}
+                          render={({ field }) => (
+                            <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                              <LLMProviders
+                                value={field.value ?? ''}
+                                onValueChange={v => {
+                                  field.onChange(v);
+                                  setValue('memory.observationalMemory.model.name', '');
+                                }}
+                              />
+                            </div>
+                          )}
+                        />
+                      </Field>
+
+                      <Field className="gap-1.5">
+                        <FieldLabel>Model</FieldLabel>
+                        <FieldDescription className="mt-0">
+                          Model for the observer and reflector agents
+                        </FieldDescription>
+                        <Controller
+                          name="memory.observationalMemory.model.name"
+                          control={control}
+                          render={({ field }) => (
+                            <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                              <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
+                            </div>
+                          )}
+                        />
+                      </Field>
+
+                      <Controller
+                        name="memory.observationalMemory.scope"
+                        control={control}
+                        render={({ field }) => (
+                          <Field className="gap-1.5">
+                            <FieldLabel>Scope</FieldLabel>
+                            <FieldDescription className="mt-0">
+                              Whether observations are scoped per thread or shared across all threads for a resource
+                            </FieldDescription>
+                            <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
+                              <SelectTrigger className="bg-card">
+                                <SelectValue placeholder="Select scope" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="thread">Thread</SelectItem>
+                                <SelectItem value="resource">Resource</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        )}
+                      />
+
+                      <Controller
+                        name="memory.observationalMemory.shareTokenBudget"
+                        control={control}
+                        render={({ field }) => (
+                          <Field orientation="horizontal" disabled={readOnly}>
+                            <FieldContent className="gap-0.5">
+                              <FieldLabel>Share Token Budget</FieldLabel>
+                              <FieldDescription className="mt-0">
+                                Share token budget between observation and reflection
+                              </FieldDescription>
+                            </FieldContent>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                          </Field>
+                        )}
+                      />
+
+                      <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
+                        <CollapsibleTrigger className="flex w-full items-center gap-1">
+                          <ChevronRight
+                            className={`h-3 w-3 text-muted-foreground transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
+                          />
+                          <span className="cursor-pointer text-label text-foreground">Observer</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                            <Field className="gap-1.5">
+                              <FieldLabel>Provider Override</FieldLabel>
+                              <FieldDescription className="mt-0">
+                                Override the default model provider for the observer
+                              </FieldDescription>
+                              <Controller
+                                name="memory.observationalMemory.observation.model.provider"
+                                control={control}
+                                render={({ field }) => (
+                                  <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                    <LLMProviders
+                                      value={field.value ?? ''}
+                                      onValueChange={v => {
+                                        field.onChange(v);
+                                        setValue('memory.observationalMemory.observation.model.name', '');
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              />
+                            </Field>
+
+                            <Field className="gap-1.5">
+                              <FieldLabel>Model Override</FieldLabel>
+                              <FieldDescription className="mt-0">
+                                Override the default model for the observer
+                              </FieldDescription>
+                              <Controller
+                                name="memory.observationalMemory.observation.model.name"
+                                control={control}
+                                render={({ field }) => (
+                                  <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                    <LLMModels
+                                      value={field.value ?? ''}
+                                      onValueChange={field.onChange}
+                                      llmId={observerProvider}
+                                    />
+                                  </div>
+                                )}
+                              />
+                            </Field>
+
+                            <Controller
+                              name="memory.observationalMemory.observation.messageTokens"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Message Tokens</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Token count of unobserved messages that triggers observation (default: 30000)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                    }}
+                                    placeholder="30000"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.observation.maxTokensPerBatch"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Max Tokens Per Batch</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Maximum tokens per batch when observing multiple threads (default: 10000)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                    }}
+                                    placeholder="10000"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.observation.bufferTokens"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Buffer Tokens</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Token interval for async buffering (fraction of messageTokens or absolute count,
+                                    empty to use default 0.2, set 0 to disable)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={field.value === false ? '0' : (field.value ?? '')}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      if (v === '' || v === undefined) {
+                                        field.onChange(undefined);
+                                      } else {
+                                        const n = parseFloat(v);
+                                        field.onChange(n === 0 ? false : n);
+                                      }
+                                    }}
+                                    placeholder="0.2"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.observation.bufferActivation"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Buffer Activation</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Ratio (0-1) of buffered observations to activate (default: 0.8)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseFloat(v));
+                                    }}
+                                    placeholder="0.8"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.observation.blockAfter"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Block After</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Multiplier or absolute token count for synchronous blocking (default: 1.2)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseFloat(v));
+                                    }}
+                                    placeholder="1.2"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
+                        <CollapsibleTrigger className="flex w-full items-center gap-1">
+                          <ChevronRight
+                            className={`h-3 w-3 text-muted-foreground transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
+                          />
+                          <span className="cursor-pointer text-label text-foreground">Reflector</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                            <Field className="gap-1.5">
+                              <FieldLabel>Provider Override</FieldLabel>
+                              <FieldDescription className="mt-0">
+                                Override the default model provider for the reflector
+                              </FieldDescription>
+                              <Controller
+                                name="memory.observationalMemory.reflection.model.provider"
+                                control={control}
+                                render={({ field }) => (
+                                  <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                    <LLMProviders
+                                      value={field.value ?? ''}
+                                      onValueChange={v => {
+                                        field.onChange(v);
+                                        setValue('memory.observationalMemory.reflection.model.name', '');
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              />
+                            </Field>
+
+                            <Field className="gap-1.5">
+                              <FieldLabel>Model Override</FieldLabel>
+                              <FieldDescription className="mt-0">
+                                Override the default model for the reflector
+                              </FieldDescription>
+                              <Controller
+                                name="memory.observationalMemory.reflection.model.name"
+                                control={control}
+                                render={({ field }) => (
+                                  <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                    <LLMModels
+                                      value={field.value ?? ''}
+                                      onValueChange={field.onChange}
+                                      llmId={reflectorProvider}
+                                    />
+                                  </div>
+                                )}
+                              />
+                            </Field>
+
+                            <Controller
+                              name="memory.observationalMemory.reflection.observationTokens"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Observation Tokens</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Token count of observations that triggers reflection (default: 40000)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                    }}
+                                    placeholder="40000"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.reflection.blockAfter"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Block After</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Multiplier or absolute token count for synchronous blocking (default: 1.2)
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseFloat(v));
+                                    }}
+                                    placeholder="1.2"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+
+                            <Controller
+                              name="memory.observationalMemory.reflection.bufferActivation"
+                              control={control}
+                              render={({ field }) => (
+                                <Field className="gap-1.5">
+                                  <FieldLabel>Buffer Activation</FieldLabel>
+                                  <FieldDescription className="mt-0">
+                                    Ratio (0-1) controlling when async reflection buffering starts
+                                  </FieldDescription>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      field.onChange(v === '' ? undefined : parseFloat(v));
+                                    }}
+                                    placeholder="0.8"
+                                    className="bg-card"
+                                    disabled={readOnly}
+                                  />
+                                </Field>
+                              )}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  )}
+                </>
               )}
-            />
-
-            {isEnabled && (
-              <>
-                <Controller
-                  name="memory.lastMessages"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="memory-last-messages" className="text-muted-foreground">
-                        Last Messages
-                      </Label>
-                      <span className="text-muted-foreground text-caption">
-                        Number of recent messages to include in context
-                      </span>
-                      <Input
-                        id="memory-last-messages"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={field.value === false ? '' : (field.value ?? 40)}
-                        onChange={e => {
-                          const value = e.target.value;
-                          field.onChange(value === '' ? false : parseInt(value, 10));
-                        }}
-                        placeholder="40"
-                        className="bg-card"
-                        disabled={readOnly}
-                      />
-                    </div>
-                  )}
-                />
-
-                <Controller
-                  name="memory.semanticRecall"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-semantic-recall" className="text-foreground">
-                          Semantic Recall
-                        </Label>
-                        <span className="text-muted-foreground text-caption">Enable semantic search in memory</span>
-                      </div>
-                      <Switch
-                        id="memory-semantic-recall"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
-                  )}
-                />
-
-                {semanticRecallEnabled && (
-                  <>
-                    <Controller
-                      name="memory.vector"
-                      control={control}
-                      render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-vector" className="text-muted-foreground">
-                            Vector Store
-                          </Label>
-                          <span className="text-muted-foreground text-caption">
-                            Select a vector store for semantic search
-                          </span>
-                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-vector" className="bg-card">
-                              <SelectValue placeholder="Select a vector store" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {vectors.map(vector => (
-                                <SelectItem key={vector.id} value={vector.id}>
-                                  {vector.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    />
-
-                    <Controller
-                      name="memory.embedder"
-                      control={control}
-                      render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-embedder" className="text-muted-foreground">
-                            Embedder Model
-                          </Label>
-                          <span className="text-muted-foreground text-caption">
-                            Select an embedding model for semantic search
-                          </span>
-                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-embedder" className="bg-card">
-                              <SelectValue placeholder="Select an embedder model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {embedders.map(embedder => (
-                                <SelectItem key={embedder.id} value={embedder.id}>
-                                  {embedder.name} ({embedder.provider})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    />
-                  </>
-                )}
-
-                <Controller
-                  name="memory.readOnly"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-read-only" className="text-foreground">
-                          Read Only
-                        </Label>
-                        <span className="text-muted-foreground text-caption">
-                          Memory is read-only (no new messages stored)
-                        </span>
-                      </div>
-                      <Switch
-                        id="memory-read-only"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
-                  )}
-                />
-
-                <Controller
-                  name="memory.observationalMemory.enabled"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-observational" className="text-foreground">
-                          Observational Memory
-                        </Label>
-                        <span className="text-muted-foreground text-caption">
-                          Automatically observe and reflect on conversations to build long-term memory
-                        </span>
-                      </div>
-                      <Switch
-                        id="memory-observational"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
-                  )}
-                />
-
-                {observationalMemoryEnabled && (
-                  <div className="border-border ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-muted-foreground">Provider</Label>
-                      <span className="text-muted-foreground text-caption">
-                        Provider for the observer and reflector agents
-                      </span>
-                      <Controller
-                        name="memory.observationalMemory.model.provider"
-                        control={control}
-                        render={({ field }) => (
-                          <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMProviders
-                              value={field.value ?? ''}
-                              onValueChange={v => {
-                                field.onChange(v);
-                                setValue('memory.observationalMemory.model.name', '');
-                              }}
-                            />
-                          </div>
-                        )}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-muted-foreground">Model</Label>
-                      <span className="text-muted-foreground text-caption">
-                        Model for the observer and reflector agents
-                      </span>
-                      <Controller
-                        name="memory.observationalMemory.model.name"
-                        control={control}
-                        render={({ field }) => (
-                          <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
-                          </div>
-                        )}
-                      />
-                    </div>
-
-                    <Controller
-                      name="memory.observationalMemory.scope"
-                      control={control}
-                      render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-om-scope" className="text-muted-foreground">
-                            Scope
-                          </Label>
-                          <span className="text-muted-foreground text-caption">
-                            Whether observations are scoped per thread or shared across all threads for a resource
-                          </span>
-                          <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-om-scope" className="bg-card">
-                              <SelectValue placeholder="Select scope" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="thread">Thread</SelectItem>
-                              <SelectItem value="resource">Resource</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    />
-
-                    <Controller
-                      name="memory.observationalMemory.shareTokenBudget"
-                      control={control}
-                      render={({ field }) => (
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col gap-0.5">
-                            <Label htmlFor="memory-om-share-budget" className="text-foreground">
-                              Share Token Budget
-                            </Label>
-                            <span className="text-muted-foreground text-caption">
-                              Share token budget between observation and reflection
-                            </span>
-                          </div>
-                          <Switch
-                            id="memory-om-share-budget"
-                            checked={field.value ?? false}
-                            onCheckedChange={field.onChange}
-                            disabled={readOnly}
-                          />
-                        </div>
-                      )}
-                    />
-
-                    {/* Observer Configuration */}
-                    <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center gap-1">
-                        <ChevronRight
-                          className={`text-muted-foreground h-3 w-3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
-                        />
-                        <Label className="text-foreground cursor-pointer">Observer</Label>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="border-border mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-muted-foreground">Provider Override</Label>
-                            <span className="text-muted-foreground text-caption">
-                              Override the default model provider for the observer
-                            </span>
-                            <Controller
-                              name="memory.observationalMemory.observation.model.provider"
-                              control={control}
-                              render={({ field }) => (
-                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                                  <LLMProviders
-                                    value={field.value ?? ''}
-                                    onValueChange={v => {
-                                      field.onChange(v);
-                                      setValue('memory.observationalMemory.observation.model.name', '');
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            />
-                          </div>
-
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-muted-foreground">Model Override</Label>
-                            <span className="text-muted-foreground text-caption">
-                              Override the default model for the observer
-                            </span>
-                            <Controller
-                              name="memory.observationalMemory.observation.model.name"
-                              control={control}
-                              render={({ field }) => (
-                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                                  <LLMModels
-                                    value={field.value ?? ''}
-                                    onValueChange={field.onChange}
-                                    llmId={observerProvider}
-                                  />
-                                </div>
-                              )}
-                            />
-                          </div>
-
-                          <Controller
-                            name="memory.observationalMemory.observation.messageTokens"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-msg-tokens" className="text-muted-foreground">
-                                  Message Tokens
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Token count of unobserved messages that triggers observation (default: 30000)
-                                </span>
-                                <Input
-                                  id="memory-om-obs-msg-tokens"
-                                  type="number"
-                                  min="1"
-                                  step="1000"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
-                                  }}
-                                  placeholder="30000"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.observation.maxTokensPerBatch"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-batch" className="text-muted-foreground">
-                                  Max Tokens Per Batch
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Maximum tokens per batch when observing multiple threads (default: 10000)
-                                </span>
-                                <Input
-                                  id="memory-om-obs-batch"
-                                  type="number"
-                                  min="1"
-                                  step="1000"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
-                                  }}
-                                  placeholder="10000"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.observation.bufferTokens"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-buffer" className="text-muted-foreground">
-                                  Buffer Tokens
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Token interval for async buffering (fraction of messageTokens or absolute count, empty
-                                  to use default 0.2, set 0 to disable)
-                                </span>
-                                <Input
-                                  id="memory-om-obs-buffer"
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={field.value === false ? '0' : (field.value ?? '')}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    if (v === '' || v === undefined) {
-                                      field.onChange(undefined);
-                                    } else {
-                                      const n = parseFloat(v);
-                                      field.onChange(n === 0 ? false : n);
-                                    }
-                                  }}
-                                  placeholder="0.2"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.observation.bufferActivation"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-buf-act" className="text-muted-foreground">
-                                  Buffer Activation
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Ratio (0-1) of buffered observations to activate (default: 0.8)
-                                </span>
-                                <Input
-                                  id="memory-om-obs-buf-act"
-                                  type="number"
-                                  min="0"
-                                  max="1"
-                                  step="0.1"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseFloat(v));
-                                  }}
-                                  placeholder="0.8"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.observation.blockAfter"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-block" className="text-muted-foreground">
-                                  Block After
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
-                                <Input
-                                  id="memory-om-obs-block"
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseFloat(v));
-                                  }}
-                                  placeholder="1.2"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Reflector Configuration */}
-                    <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center gap-1">
-                        <ChevronRight
-                          className={`text-muted-foreground h-3 w-3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
-                        />
-                        <Label className="text-foreground cursor-pointer">Reflector</Label>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="border-border mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-muted-foreground">Provider Override</Label>
-                            <span className="text-muted-foreground text-caption">
-                              Override the default model provider for the reflector
-                            </span>
-                            <Controller
-                              name="memory.observationalMemory.reflection.model.provider"
-                              control={control}
-                              render={({ field }) => (
-                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                                  <LLMProviders
-                                    value={field.value ?? ''}
-                                    onValueChange={v => {
-                                      field.onChange(v);
-                                      setValue('memory.observationalMemory.reflection.model.name', '');
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            />
-                          </div>
-
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-muted-foreground">Model Override</Label>
-                            <span className="text-muted-foreground text-caption">
-                              Override the default model for the reflector
-                            </span>
-                            <Controller
-                              name="memory.observationalMemory.reflection.model.name"
-                              control={control}
-                              render={({ field }) => (
-                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                                  <LLMModels
-                                    value={field.value ?? ''}
-                                    onValueChange={field.onChange}
-                                    llmId={reflectorProvider}
-                                  />
-                                </div>
-                              )}
-                            />
-                          </div>
-
-                          <Controller
-                            name="memory.observationalMemory.reflection.observationTokens"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-obs-tokens" className="text-muted-foreground">
-                                  Observation Tokens
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Token count of observations that triggers reflection (default: 40000)
-                                </span>
-                                <Input
-                                  id="memory-om-ref-obs-tokens"
-                                  type="number"
-                                  min="1"
-                                  step="1000"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
-                                  }}
-                                  placeholder="40000"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.reflection.blockAfter"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-block" className="text-muted-foreground">
-                                  Block After
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
-                                <Input
-                                  id="memory-om-ref-block"
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseFloat(v));
-                                  }}
-                                  placeholder="1.2"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-
-                          <Controller
-                            name="memory.observationalMemory.reflection.bufferActivation"
-                            control={control}
-                            render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-buf-act" className="text-muted-foreground">
-                                  Buffer Activation
-                                </Label>
-                                <span className="text-muted-foreground text-caption">
-                                  Ratio (0-1) controlling when async reflection buffering starts
-                                </span>
-                                <Input
-                                  id="memory-om-ref-buf-act"
-                                  type="number"
-                                  min="0"
-                                  max="1"
-                                  step="0.1"
-                                  value={field.value ?? ''}
-                                  onChange={e => {
-                                    const v = e.target.value;
-                                    field.onChange(v === '' ? undefined : parseFloat(v));
-                                  }}
-                                  placeholder="0.8"
-                                  className="bg-card"
-                                  disabled={readOnly}
-                                />
-                              </div>
-                            )}
-                          />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>

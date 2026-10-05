@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
-import type { FactoryHealthReport } from '../../domains/supervisor/services/supervisor';
+import { findingPrompt, type FactoryHealthReport } from '../../domains/supervisor/services/supervisor';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -90,12 +90,9 @@ describe('SupervisorPage', () => {
       renderSupervisor();
 
       expect(await screen.findByRole('region', { name: 'Supervisor composer' })).toBeInTheDocument();
-      const header = screen.getByRole('region', { name: 'Supervisor session' });
-      expect(within(header).getByRole('link', { name: 'Acme Factory' })).toHaveAttribute(
-        'href',
-        `/factories/${FACTORY_ID}/overview`,
-      );
-      expect(within(header).getByText('Supervisor')).toBeInTheDocument();
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
+      expect(within(breadcrumb).getByText('Supervisor')).toBeInTheDocument();
       await waitFor(() => expect(sessionCreates).toContain(SUPERVISOR_ID));
     });
 
@@ -141,20 +138,17 @@ describe('SupervisorPage', () => {
     });
 
     it('hands the selected finding to the supervisor composer', async () => {
-      stubSupervisorRoute(
-        report([
-          {
-            kind: 'decision-stuck',
-            id: 'dec-1',
-            workItemId: 'wi-1',
-            workItemNumber: 22874,
-            title: 'Plan step could not start',
-            evidence: 'invokeSkill plan failed after 5 attempts: No active Factory binding for role plan.',
-            beganAt: '2026-09-03T04:00:00.000Z',
-            suggestedRepair: null,
-          },
-        ]),
-      );
+      const finding: FactoryHealthReport['findings'][number] = {
+        kind: 'decision-stuck',
+        id: 'dec-1',
+        workItemId: 'wi-1',
+        workItemNumber: 22874,
+        title: 'Plan step could not start',
+        evidence: 'invokeSkill plan failed after 5 attempts: No active Factory binding for role plan.',
+        beganAt: '2026-09-03T04:00:00.000Z',
+        suggestedRepair: null,
+      };
+      stubSupervisorRoute(report([finding]));
       renderSupervisor();
 
       await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
@@ -164,7 +158,7 @@ describe('SupervisorPage', () => {
 
       const composer = screen.getByRole('region', { name: 'Supervisor composer' });
       await waitFor(() =>
-        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox').value).toContain('#22874 (dec-1)'),
+        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox')).toHaveValue(findingPrompt(finding)),
       );
     });
   });

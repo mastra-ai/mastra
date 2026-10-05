@@ -1,27 +1,33 @@
-import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { StoredScorerResponse, UpdateStoredScorerParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
 import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
 import { ScorerEditSidebar } from '@/domains/scores/components/scorer-edit-page/scorer-edit-sidebar';
 import { useScorerEditForm } from '@/domains/scores/components/scorer-edit-page/use-scorer-edit-form';
 import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-page/utils/form-validation';
 import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
-import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
-import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
+import { StoredScorerCrumb } from '@/domains/scores/scorer-crumb';
 
-type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
+const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb }];
+
+type StoredScorerData = StoredScorerResponse;
 
 function buildUpdateParams(values: ScorerFormValues): UpdateStoredScorerParams {
   return {
@@ -58,7 +64,7 @@ function CmsScorersEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredScorer } = useStoredScorerMutations(scorerId);
+  const { updateStoredScorer } = useStoredScorerMutations({ scorerId: scorerId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -66,6 +72,7 @@ function CmsScorersEditForm({
   const { data: versionData } = useScorerVersion({
     scorerId,
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!scorerId && !!selectedVersionId },
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -204,9 +211,9 @@ function CmsScorersEditForm({
           </div>
         </Notice>
       )}
-      <form ref={formRef} className="h-full">
+      <Form ref={formRef} className="h-full">
         <ScorerEditMain form={form} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }
@@ -216,10 +223,15 @@ function CmsScorersEditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
-  const { data: scorer, isLoading } = useStoredScorer(scorerId, { status: 'draft' });
+  const { data: scorer, isLoading } = useStoredScorer({
+    scorerId: scorerId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(scorerId) },
+  });
   const { data: versionsData } = useScorerVersions({
     scorerId: scorerId ?? '',
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!scorerId },
   });
 
   const activeVersionId = scorer?.activeVersionId;
@@ -243,50 +255,41 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
-        <AgentEditLayout
-          leftSlot={
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="size-8" />
-            </div>
-          }
-        >
-          <div className="flex h-full items-center justify-center">
-            <Spinner className="size-8" />
-          </div>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scorerId}</h1>
+        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+          <Spinner fill size="lg" />
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!scorer || !scorerId) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
-        <AgentEditLayout
-          leftSlot={
-            <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
-          }
-        >
-          <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scorerId}</h1>
+        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Scorer not found" />}>
+          <EmptyState variant="fill" titleSlot="Scorer not found" />
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
+  const actions = (
+    <CmsEditHeaderActions hasDraft={hasDraft}>
+      <ScorerVersionCombobox
+        scorerId={scorerId}
+        value={selectedVersionId ?? ''}
+        onValueChange={handleVersionSelect}
+        variant="ghost"
+        activeVersionId={activeVersionId}
+      />
+    </CmsEditHeaderActions>
+  );
+
   return (
-    <MainContentLayout className="grid-rows-[1fr]">
-      <RouteHeaderActions owner="cms-scorer-edit">
-        <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
-          <ScorerVersionCombobox
-            scorerId={scorerId}
-            value={selectedVersionId ?? ''}
-            onValueChange={handleVersionSelect}
-            variant="ghost"
-            activeVersionId={activeVersionId}
-          />
-        </div>
-      </RouteHeaderActions>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{scorerId}</h1>
       <CmsScorersEditForm
         scorer={scorer}
         scorerId={scorerId}
@@ -295,7 +298,7 @@ function CmsScorersEditPage() {
         activeVersionId={activeVersionId}
         onClearVersion={handleClearVersion}
       />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

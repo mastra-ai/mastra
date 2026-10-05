@@ -3,6 +3,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
@@ -13,6 +14,7 @@ import {
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
+import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { resolveCredentialStore } from './credential-resolver.js';
@@ -155,7 +157,12 @@ export function resolveModelId(modelId: string): string {
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: ThinkingLevelSetting; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
+  options?: {
+    thinkingLevel?: ThinkingLevelSetting;
+    remapForCodexOAuth?: boolean;
+    requestContext?: RequestContext;
+    anthropicPromptCacheScope?: AnthropicPromptCacheScope;
+  },
 ): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
@@ -219,6 +226,7 @@ export function resolveModel(
     mastraGatewayApiKey: mgApiKey,
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
+    anthropicPromptCacheScope: options?.anthropicPromptCacheScope,
     customProviders,
     credentialStore,
   });
@@ -231,7 +239,7 @@ export function resolveModel(
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
-    throw new Error(
+    throw new ProviderAuthRequiredError(
       `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
     );
   }

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleSlashIcon, Inbox } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 import { Button } from '../Button';
 import { EmptyState } from './EmptyState';
 
@@ -16,7 +16,6 @@ type Story = StoryObj<typeof EmptyState>;
 
 export const Default: Story = {
   args: {
-    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
     titleSlot: 'No items yet',
     descriptionSlot: 'Get started by creating your first item.',
     actionSlot: <Button>Create Item</Button>,
@@ -25,16 +24,14 @@ export const Default: Story = {
 
 export const NoResults: Story = {
   args: {
-    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
     titleSlot: 'No results found',
     descriptionSlot: 'Try adjusting your search or filters to find what you are looking for.',
-    actionSlot: <Button variant="outline">Clear filters</Button>,
+    actionSlot: <Button>Clear filters</Button>,
   },
 };
 
 export const NoFiles: Story = {
   args: {
-    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
     titleSlot: 'No files',
     descriptionSlot: 'Upload your first file to get started.',
     actionSlot: <Button>Upload File</Button>,
@@ -43,7 +40,6 @@ export const NoFiles: Story = {
 
 export const NoTeamMembers: Story = {
   args: {
-    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
     titleSlot: 'No team members',
     descriptionSlot: 'Invite your team members to collaborate on this project.',
     actionSlot: <Button>Invite Members</Button>,
@@ -52,7 +48,6 @@ export const NoTeamMembers: Story = {
 
 export const WithoutAction: Story = {
   args: {
-    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
     titleSlot: 'All caught up!',
     descriptionSlot: 'You have no pending notifications.',
     actionSlot: null,
@@ -62,9 +57,33 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox className="text-muted-foreground h-auto w-[126px]" />,
+    iconSlot: <Inbox />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get Started</Button>,
+  },
+};
+
+export const Fill: Story = {
+  parameters: { layout: 'fullscreen' },
+  args: {
+    titleSlot: 'Your inbox is empty',
+    descriptionSlot: 'The fill variant centers the block in the full height of its parent.',
+    actionSlot: <Button>Go to traces</Button>,
+    variant: 'fill',
+  },
+  render: args => (
+    <div className="h-120 border border-dashed border-border">
+      <EmptyState {...args} />
+    </div>
+  ),
+};
+
+export const ErrorTone: Story = {
+  args: {
+    tone: 'error',
+    titleSlot: 'Unable to load traces',
+    descriptionSlot: 'The observability store did not respond. Check the connection and try again.',
+    actionSlot: <Button>Try again</Button>,
   },
 };

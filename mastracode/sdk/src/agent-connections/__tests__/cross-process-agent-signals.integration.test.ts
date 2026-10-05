@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const tsxBin = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
 const childScript = fileURLToPath(new URL('./fixtures/cross-process-agent-signals-child.mts', import.meta.url));
@@ -16,8 +17,17 @@ type ChildEvent = {
   [key: string]: unknown;
 };
 
-function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 'request-reply', args: string[] = []) {
-  const child = spawn(tsxBin, [childScript, role, resourceId, scenario, ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
+function startChild(
+  role: 'owner' | 'sender',
+  resourceId: string,
+  scenario = 'request-reply',
+  args: string[] = [],
+  env: Record<string, string> = {},
+) {
+  const child = spawn(tsxBin, [childScript, role, resourceId, scenario, ...args], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, ...env },
+  });
   activeChildren.add(child);
   child.once('close', () => activeChildren.delete(child));
   const events: ChildEvent[] = [];
@@ -69,6 +79,33 @@ function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 're
     },
     result: new Promise<number | null>(resolve => child.on('close', resolve)),
   };
+}
+
+function listUnixSocketFds(pid: number): string[] {
+  let output: string;
+  try {
+    output = execFileSync('lsof', ['-a', '-U', '-p', String(pid)], { encoding: 'utf8' });
+  } catch (error) {
+    // lsof exits 1 when the process has no matching descriptors.
+    output = (error as { stdout?: string }).stdout ?? '';
+  }
+  return output
+    .split('\n')
+    .slice(1)
+    .filter(line => line.trim());
+}
+
+/**
+ * A one-shot discovery reply socket. Paths over the 104-byte socket limit get a
+ * 16-hex hashed name instead, so those count too.
+ */
+function isDiscoveryReplySocket(name: string): boolean {
+  return name.includes('discovery_') || /(^|\/)[0-9a-f]{16}\.sock$/.test(name);
+}
+
+/** Open Unix-socket descriptors in `pid` bound to a one-shot discovery reply socket path. */
+function countDiscoveryReplyFds(pid: number): number {
+  return listUnixSocketFds(pid).filter(isDiscoveryReplySocket).length;
 }
 
 async function waitForChildEvent(
@@ -174,6 +211,9 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     const delayedSend = await owner.waitFor('delayed-send');
     const delayedReply = await sender.waitFor('delayed-reply');
 
+    owner.child.stdin.write('prepare-close\n');
+    sender.child.stdin.write('prepare-close\n');
+    await Promise.all([owner.waitFor('close-ready'), sender.waitFor('close-ready')]);
     owner.child.stdin.write('close\n');
     sender.child.stdin.write('close\n');
     owner.child.stdin.end();
@@ -217,6 +257,45 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     rmSync(`/tmp/mc/${isolatedResourceId}`, { recursive: true, force: true });
   }, 30_000);
 
+  it('keeps discovery reply sockets and descriptors flat across repeated lookups', async () => {
+    // Isolated root: owner-discovery replies live in <root>/_shared, which real instances also use.
+    const root = mkdtempSync('/tmp/mcs-');
+    const env = { MASTRACODE_SIGNALS_SOCKET_ROOT: root };
+    const owner = startChild('owner', resourceId, 'discovery-hammer', [], env);
+    const owned = await owner.waitFor('thread-owned');
+    // Use the pids the children report — `child.pid` is the tsx wrapper, not the node process.
+    const ownerFdsBefore = listUnixSocketFds(owned.pid).length;
+
+    const sender = startChild('sender', resourceId, 'discovery-hammer', [], env);
+    const done = await sender.waitFor('discovery-hammer-done', 90_000);
+
+    // Measured while both processes are still alive: files can be unlinked while descriptors leak.
+    // The responder's client-side reply descriptors carry no path, so the owner is
+    // checked by total Unix-socket growth across the 200 round trips it answered.
+    const replySocketFiles = [join(root, resourceId), join(root, '_shared')]
+      .flatMap(dir => (existsSync(dir) ? readdirSync(dir) : []))
+      .filter(isDiscoveryReplySocket);
+    const ownerFdGrowth = listUnixSocketFds(owned.pid).length - ownerFdsBefore;
+    const senderReplyFds = countDiscoveryReplyFds(done.pid);
+
+    owner.child.stdin.write('close\n');
+    sender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+
+    expect(done).toMatchObject({ found: 100, claimed: 0, rounds: 100 });
+    expect(replySocketFiles).toEqual([]);
+    // A few connections from the sender to long-lived topics the owner brokers are expected.
+    expect(ownerFdGrowth).toBeLessThanOrEqual(10);
+    expect(senderReplyFds).toBeLessThanOrEqual(2);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+    rmSync(root, { recursive: true, force: true });
+  }, 120_000);
+
   it('allows exactly one process to claim ownership of a thread', async () => {
     const owner = startChild('owner', resourceId, 'ownership-contention');
     const ownerClaim = await owner.waitFor('claim-result');
@@ -237,6 +316,294 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(ownerCode).toBe(0);
     expect(contenderCode).toBe(0);
   }, 30_000);
+
+  it('yields a thread to another process once its owner has moved on, but never the current one', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    // The owner is still looking at owner-thread: the contender must lose and
+    // keep retrying instead of taking the thread.
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+    const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
+    expect(contenderAttempts().length).toBeGreaterThan(1);
+    expect(contenderAttempts().every(event => event.claimed === false)).toBe(true);
+
+    // The owner moves to another thread while keeping owner-thread claimed. The
+    // contender's retry loop now asks again and the owner yields.
+    owner.child.stdin.write('switch\n');
+    await owner.waitFor('switched');
+    const yielded = await owner.waitFor('yielded');
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && !contenderAttempts().some(event => event.claimed === true)) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const attemptOutcomes = contenderAttempts().map(event => event.claimed);
+
+    owner.child.stdin.write('probe\n');
+    const discovery = await owner.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(yielded).toMatchObject({ threadId: 'owner-thread' });
+    // Every attempt lost until the owner yielded; the retry after that won.
+    expect(attemptOutcomes.at(-1)).toBe(true);
+    expect(attemptOutcomes.slice(0, -1).every(claimed => claimed === false)).toBe(true);
+    // From the owner's side owner-thread now belongs to the contender while
+    // owner-thread-2 (its current thread) is still its own.
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'sender:owner-thread', selfAdvertised: false },
+      { threadId: 'owner-thread-2', label: 'owner:owner-thread-2', selfAdvertised: true },
+    ]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('uses the live session thread to keep, yield, and reclaim an advertised thread across processes', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing session advertisement. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    // The current owner refuses to yield, so the contender still discovers it
+    // as a remote peer instead of hiding the thread as its own claim.
+    const initialDiscovery = await probe(contender);
+    expect(
+      initialDiscovery,
+      JSON.stringify({ initialDiscovery, ownerEvents: owner.events, contenderEvents: contender.events }),
+    ).toMatchObject({
+      hasPeer: true,
+      selfAdvertised: false,
+    });
+
+    // Re-claiming the current thread replaces its advertisement without first
+    // dropping the live lease, so the waiting contender cannot slip in.
+    owner.child.stdin.write('reclaim\n');
+    await owner.waitFor('reclaimed');
+    expect(await probe(contender)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // Once the owner moves away, the contender's retry atomically receives the
+    // claim. The original owner now sees the shared thread as remote.
+    owner.child.stdin.write('switch-away\n');
+    await owner.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: false,
+        label: 'sender:session-advertisement',
+      });
+
+    // Switching back cannot steal a current claim from the contender.
+    owner.child.stdin.write('switch-back\n');
+    await owner.waitFor('switched');
+    expect(await probe(owner)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // After the contender moves on, the original session's retry reclaims the
+    // shared thread and discovery hides it as self-advertised again.
+    contender.child.stdin.write('switch-away\n');
+    await contender.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: true,
+        label: 'owner:session-advertisement',
+      });
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('keeps exactly one claim when an owner yields and switches back 300 ms later', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing ownership race. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    owner.child.stdin.write('switch-away-and-back\n');
+    await owner.waitFor('switched-away');
+    await owner.waitFor('switched-back');
+    const [ownerDiscovery, contenderDiscovery] = await Promise.all([probe(owner), probe(contender)]);
+
+    expect(ownerDiscovery.leaseOwner).toBe(contenderDiscovery.leaseOwner);
+    expect([ownerDiscovery.selfAdvertised, contenderDiscovery.selfAdvertised].filter(Boolean)).toHaveLength(1);
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('never lets a contender take a thread from a live owner that is merely slow to answer', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+
+    // The owner never leaves owner-thread; its event loop just hitches in
+    // bursts longer than the discovery window while the contender keeps
+    // retrying. Silence from a live owner must not read as "no owner".
+    owner.child.stdin.write('stall\n');
+    await owner.waitFor('stalled', 15_000);
+    // Let a couple more retries land against a responsive owner too.
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+
+    contender.child.stdin.write('probe\n');
+    const discovery = await contender.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    const attempts = contender.events.filter(event => event.event === 'claim-attempt');
+    // The retry loop stops on the first win, so a `true` here means the
+    // contender took the thread from a live owner that never left it.
+    expect(attempts.map(event => event.claimed)).toEqual(attempts.map(() => false));
+    expect(attempts.length).toBeGreaterThan(2);
+    expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+    // From the contender's side owner-thread is still somebody else's, so it
+    // is listed as a real peer rather than hidden as its own claim.
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'owner:owner-thread', selfAdvertised: false },
+    ]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('lets a contender take a thread once its owner has died', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+
+    owner.child.kill('SIGKILL');
+    await owner.result;
+
+    const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline && !contenderAttempts().some(event => event.claimed === true)) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    contender.child.stdin.write('probe\n');
+    const discovery = await contender.waitFor('discovered');
+
+    contender.child.stdin.write('close\n');
+    contender.child.stdin.end();
+    const contenderCode = await contender.result;
+
+    expect(contenderAttempts().at(-1)).toMatchObject({ claimed: true });
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'sender:owner-thread', selfAdvertised: true },
+    ]);
+    expect(contender.stderr).toBe('');
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('lets exactly one contender reclaim a filesystem lease from a killed holder', async () => {
+    const holder = startChild('owner', resourceId, 'stale-lease-takeover');
+    expect(await holder.waitFor('lease-result')).toMatchObject({ acquired: true });
+    holder.child.kill('SIGKILL');
+    await holder.result;
+
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const second = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('lease-result'),
+      second.waitFor('lease-result'),
+    ]);
+
+    first.child.stdin.write('close\n');
+    second.child.stdin.write('close\n');
+    first.child.stdin.end();
+    second.child.stdin.end();
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect([firstResult.acquired, secondResult.acquired].filter(Boolean)).toHaveLength(1);
+    const winner = firstResult.acquired ? firstResult.owner : secondResult.owner;
+    const loser = firstResult.acquired ? secondResult : firstResult;
+    expect(loser).toMatchObject({ acquired: false, owner: winner });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 30_000);
+
+  it('serializes repeated cross-process lease release and reacquisition', async () => {
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('owner', resourceId, 'lease-mutation-hammer', [startAt]);
+    const second = startChild('sender', resourceId, 'lease-mutation-hammer', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('hammer-result', 30_000),
+      second.waitFor('hammer-result', 30_000),
+    ]);
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect(firstResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(secondResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 40_000);
 
   it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
     const startAt = String(Date.now() + 3_000);
@@ -264,8 +631,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
       wakeSender.result,
     ]);
 
-    expect(firstClaim.claimed).toBe(true);
-    expect(secondClaim.claimed).toBe(true);
+    expect([firstClaim.claimed, secondClaim.claimed].filter(Boolean)).toHaveLength(1);
     expect(sendResult.action).toBe('deliver');
     if (modelStreams.length !== 1) {
       throw new Error(
@@ -303,5 +669,268 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(afterDiscovery).toMatchObject({ hasPeer: false });
     expect(before.stderr).toBe('');
     expect(after.stderr).toBe('');
+  }, 30_000);
+});
+
+describe.skipIf(process.platform === 'win32')('cross-project agent signals over a shared discovery scope', () => {
+  let root: string;
+  const suffix = randomUUID().slice(0, 8);
+  const projectA = `proj-a-${suffix}`;
+  const projectB = `proj-b-${suffix}`;
+  const shared = (socketRoot: string) => ({
+    MASTRACODE_SIGNALS_SOCKET_ROOT: socketRoot,
+    MC_TEST_SHARED_DISCOVERY: '1',
+  });
+  const projectOnly = (socketRoot: string) => ({ MASTRACODE_SIGNALS_SOCKET_ROOT: socketRoot });
+  const leaseFile = (key: string) => `${createHash('sha256').update(key).digest('hex')}.json`;
+  const socketFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter(name => name.endsWith('.sock')) : []);
+
+  async function closeAll(...children: Array<ReturnType<typeof startChild>>) {
+    for (const child of children) {
+      child.child.stdin.write('close\n');
+      child.child.stdin.end();
+    }
+    return Promise.all(children.map(child => child.result));
+  }
+
+  beforeEach(() => {
+    // Short root: macOS limits socket paths to 104 bytes.
+    root = mkdtempSync('/tmp/mcs-');
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      [...activeChildren].map(
+        child =>
+          new Promise<void>(resolve => {
+            if (child.exitCode !== null || child.signalCode !== null) return resolve();
+            child.once('close', () => resolve());
+            child.kill('SIGKILL');
+          }),
+      ),
+    );
+    activeChildren.clear();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('discovers and signals across resource namespaces when shared discovery is enabled', async () => {
+    const owner = startChild('owner', projectA, 'request-reply', [], shared(root));
+    await owner.waitFor('thread-owned');
+    const sender = startChild('sender', projectB, 'request-reply', [], shared(root));
+
+    const senderDiscovery = await sender.waitFor('discovered');
+    const ownerRequest = await owner.waitFor('request');
+    const ownerDiscovery = await owner.waitFor('discovered');
+    const ownerSend = await owner.waitFor('send-result');
+    const senderSend = await sender.waitFor('send-result');
+    const senderReply = await sender.waitFor('reply');
+    await sender.waitFor('pass');
+
+    // Each project's lease directory holds only leases for its own thread keys.
+    const leaseFiles = (project: string) =>
+      readdirSync(join(root, project, 'leases')).filter(name => name.endsWith('.json'));
+    const ownLeases = (project: string, threadId: string) =>
+      new Set([leaseFile(`${project}\u0000${threadId}`), leaseFile(`thread-claim:${project}\u0000${threadId}`)]);
+    const senderLeases = leaseFiles(projectB);
+    const ownerLeases = leaseFiles(projectA);
+    // Measured while both processes are alive: one-shot reply sockets must already be gone.
+    // Reply topics are released fire-and-forget, so give the last one a moment to close.
+    const listReplySockets = () =>
+      [join(root, '_shared'), join(root, projectA), join(root, projectB)].flatMap(dir =>
+        // Durable topics here have short names; a 16-hex name is a reply topic whose path was hashed.
+        socketFiles(dir).filter(
+          name => name.includes('discovery_') || name.includes('idle-acceptance') || /^[0-9a-f]{16}\.sock$/.test(name),
+        ),
+      );
+    const replyDeadline = Date.now() + 1_000;
+    while (Date.now() < replyDeadline && listReplySockets().length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const replySockets = listReplySockets();
+    const [ownerCode, senderCode] = await closeAll(owner, sender);
+
+    expect(senderDiscovery).toMatchObject({ peerThreadId: 'owner-thread', peerResourceId: projectA });
+    expect(ownerDiscovery).toMatchObject({ peerThreadId: 'sender-thread', peerResourceId: projectB });
+    expect(ownerRequest.text).toBe('owner-response');
+    expect(senderReply.text).toBe('sender-response');
+    expect(senderSend.action).toBe('deliver');
+    expect(ownerSend.action).toBe('deliver');
+    expect(senderLeases.filter(name => !ownLeases(projectB, 'sender-thread').has(name))).toEqual([]);
+    expect(ownerLeases.filter(name => !ownLeases(projectA, 'owner-thread').has(name))).toEqual([]);
+    expect(senderLeases.length).toBeGreaterThan(0);
+    expect(replySockets).toEqual([]);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+    expect(socketFiles(join(root, '_shared'))).toEqual([]);
+    expect(socketFiles(join(root, projectA))).toEqual([]);
+    expect(socketFiles(join(root, projectB))).toEqual([]);
+  }, 30_000);
+
+  it('does not discover another project when only one side enables shared discovery', async () => {
+    const owner = startChild('owner', projectA, 'claim-only', [], projectOnly(root));
+    await owner.waitFor('thread-owned');
+    const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
+    const discovery = await observer.waitFor('discovered');
+    const codes = await closeAll(owner, observer);
+
+    expect(discovery).toMatchObject({ hasPeer: false });
+    expect(owner.stderr).toBe('');
+    expect(observer.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it('keeps an instance whose resource id cannot be a directory name out of other projects', async () => {
+    const unroutable = `team\\a-${suffix}`;
+    const owner = startChild('owner', unroutable, 'claim-only', [], shared(root));
+    await owner.waitFor('thread-owned');
+    const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
+    const discovery = await observer.waitFor('discovered');
+    const codes = await closeAll(owner, observer);
+
+    expect(discovery).toMatchObject({ hasPeer: false });
+    expect(owner.stderr.match(/Cross-project agent discovery is disabled/g)).toHaveLength(1);
+    expect(owner.stderr).toMatch(/cannot be used as a directory name/);
+    expect(observer.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it("still finds an instance that started over a crashed process's leftover shared socket and election lock", async () => {
+    // What a process killed mid-election leaves behind: a socket file nobody
+    // listens on, and an election lock older than the broker's staleness bound.
+    const sharedDir = join(root, '_shared');
+    const staleSocket = join(sharedDir, 'agent_thread-peer-discovery.sock');
+    mkdirSync(sharedDir, { recursive: true, mode: 0o700 });
+    execFileSync(process.execPath, [
+      '-e',
+      `require('node:net').createServer().listen(${JSON.stringify(staleSocket)}, () => process.exit(0))`,
+    ]);
+    writeFileSync(`${staleSocket}.elect`, '');
+    const longAgo = new Date(Date.now() - 60_000);
+    utimesSync(`${staleSocket}.elect`, longAgo, longAgo);
+    // Inode numbers can be reused once the file is unlinked, so compare ctime too.
+    const fileIdentity = () => {
+      const stat = statSync(staleSocket);
+      return `${stat.ino}:${stat.ctimeMs}`;
+    };
+    const staleIdentity = fileIdentity();
+
+    // The first claim trips over the leftover lock; the ownership manager
+    // retries it, as it does for a session.
+    const owner = startChild('owner', projectA, 'managed-claim', [], shared(root));
+    await owner.waitFor('thread-owned');
+    const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
+    const discovery = await observer.waitFor('discovered');
+    // The owner went through the leftover: a live broker replaced the dead
+    // socket and the stale lock is gone.
+    const liveIdentity = fileIdentity();
+    const lockLeft = existsSync(`${staleSocket}.elect`);
+    const codes = await closeAll(owner, observer);
+
+    expect(discovery).toMatchObject({ hasPeer: true });
+    expect(liveIdentity).not.toBe(staleIdentity);
+    expect(lockLeft).toBe(false);
+    // The retry clears the leftover on its own, so neither side warns.
+    expect(owner.stderr).toBe('');
+    expect(observer.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it('hands a thread over exactly once on a yield claim', async () => {
+    const owner = startChild('owner', projectA, 'yield-on-demand', [], shared(root));
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+    const contender = startChild('sender', projectA, 'yield-on-demand', [], shared(root));
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+
+    owner.child.stdin.write('switch\n');
+    await owner.waitFor('switched');
+    await owner.waitFor('yielded');
+    const won = () => contender.events.some(event => event.event === 'claim-attempt' && event.claimed === true);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && !won()) await new Promise(resolve => setTimeout(resolve, 25));
+    // Let any late duplicate claim request settle.
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    const codes = await closeAll(owner, contender);
+
+    expect(owner.events.filter(event => event.event === 'yielded')).toHaveLength(1);
+    expect(contender.events.filter(event => event.event === 'claim-attempt' && event.claimed === true)).toHaveLength(1);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it('lets exactly one process own a contended thread', async () => {
+    const first = startChild('owner', projectA, 'ownership-contention', [], shared(root));
+    const firstClaim = await first.waitFor('claim-result');
+    const second = startChild('sender', projectA, 'ownership-contention', [], shared(root));
+    const secondClaim = await second.waitFor('claim-result');
+    const codes = await closeAll(first, second);
+
+    expect(firstClaim).toMatchObject({ claimed: true });
+    expect(secondClaim).toMatchObject({ claimed: false });
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it('cross-resource wake while owner is busy is delivered once', async () => {
+    const nonce = randomUUID().slice(0, 8);
+    const owner = startChild('owner', projectA, 'gated-owner', [], shared(root));
+    await owner.waitFor('thread-owned');
+    await owner.waitFor('gated');
+
+    const sender = startChild('sender', projectB, 'gated-owner', [nonce], shared(root));
+    const senderSend = await sender.waitFor('send-result');
+    owner.child.stdin.write('release\n');
+
+    const wakeCount = (event: ChildEvent) =>
+      event.event === 'model-stream' ? String(event.prompt).split(`WAKE-${nonce}`).length - 1 : 0;
+    const wakePrompt = (event: ChildEvent) => wakeCount(event) > 0;
+    const deadline = Date.now() + 15_000;
+    let finishedAt = -1;
+    while (Date.now() < deadline && finishedAt === -1) {
+      const wakeAt = owner.events.findIndex(wakePrompt);
+      if (wakeAt !== -1)
+        finishedAt = owner.events.findIndex((event, i) => i > wakeAt && event.event === 'run-finished');
+      if (finishedAt === -1) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    expect(finishedAt).not.toBe(-1);
+    const eventsAtFinish = owner.events.length;
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+    const codes = await closeAll(owner, sender);
+
+    expect(senderSend.action).toBe('deliver');
+    expect(owner.events.filter(wakePrompt)).toHaveLength(1);
+    expect(owner.events.reduce((total, event) => total + wakeCount(event), 0)).toBe(1);
+    expect(owner.events.slice(eventsAtFinish).filter(event => event.event === 'model-stream')).toEqual([]);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it('thread rekeyed to another resource still round-trips with shared discovery', async () => {
+    const rekeyed = `rekeyed-${suffix}`;
+    const owner = startChild('owner', projectA, 'request-reply', [], {
+      ...shared(root),
+      MC_TEST_THREAD_RESOURCE_ID: rekeyed,
+    });
+    await owner.waitFor('thread-owned');
+    const sender = startChild('sender', projectB, 'request-reply', [], shared(root));
+
+    const senderDiscovery = await sender.waitFor('discovered');
+    const senderSend = await sender.waitFor('send-result');
+    const senderReply = await sender.waitFor('reply');
+    await sender.waitFor('pass');
+    // Closing before the owner observes its own send-result strands the reply's acceptance ack.
+    const ownerSend = await owner.waitFor('send-result');
+    const codes = await closeAll(owner, sender);
+
+    expect(senderDiscovery).toMatchObject({ peerThreadId: 'owner-thread', peerResourceId: rekeyed });
+    expect(senderSend.action).toBe('deliver');
+    expect(ownerSend.action).toBe('deliver');
+    expect(senderReply.text).toBe('sender-response');
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
   }, 30_000);
 });

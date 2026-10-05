@@ -9,7 +9,6 @@ export interface ThreadTraceRowContextValue {
   isCurrent: boolean;
   /** The timeline is shown in full rather than clamped to the messages column. */
   isExpanded: boolean;
-  isAnchor: boolean;
   selectedSpanId: string | undefined;
   featuredSpanIds: string[] | undefined;
   revealSpanId: string | undefined;

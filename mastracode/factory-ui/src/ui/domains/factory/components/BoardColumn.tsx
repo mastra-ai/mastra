@@ -1,10 +1,10 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useRef, useState } from 'react';
 
-import { CARD_MIME, readDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
+import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
 
@@ -19,10 +19,13 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
   const dashOffset = circumference * (1 - ratio);
 
   return (
-    <span
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="bg-fill text-meta text-muted-foreground flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
+      className="bg-fill flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
         <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border" />
@@ -39,28 +42,8 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
         />
       </svg>
       <span aria-hidden>{count}</span>
-    </span>
+    </Txt>
   );
-}
-
-const BOARD_CARD_SELECTOR = '[data-testid="work-item-card"], [data-testid="candidate-card"]';
-const BOARD_CARD_GAP_PX = 10;
-
-function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
-  const cards = cardList.querySelectorAll<HTMLElement>(BOARD_CARD_SELECTOR);
-  if (cards.length === 0) return 0;
-
-  for (let index = 0; index < cards.length; index += 1) {
-    const card = cards.item(index);
-    if (!card) continue;
-    const bounds = card.getBoundingClientRect();
-    if (pointerY < bounds.top + bounds.height / 2) {
-      return Math.max(0, card.offsetTop - (index === 0 ? 0 : BOARD_CARD_GAP_PX / 2));
-    }
-  }
-
-  const lastCard = cards.item(cards.length - 1);
-  return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
 }
 
 const COLUMN_ACTION_REVEAL_CLASS =
@@ -81,7 +64,7 @@ export function BoardColumnHeader({
   label: string;
   taskCount: number;
   totalTaskCount: number;
-  phaseKind?: 'resting' | 'working' | 'terminal';
+  phaseKind?: BoardPhaseKind;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading: boolean;
   collapsed: boolean;
@@ -96,16 +79,19 @@ export function BoardColumnHeader({
           'group/column relative flex min-h-8 items-center justify-end lg:justify-center',
         )}
       >
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden
           className={cn(
-            'text-meta text-muted-foreground flex h-8 items-center tabular-nums',
+            'flex h-8 items-center tabular-nums',
             headerAction &&
               'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
           )}
         >
           {taskCount}
-        </span>
+        </Txt>
         {headerAction ? (
           <div
             className={cn(
@@ -134,11 +120,8 @@ export function BoardColumnHeader({
         <Txt as="h2" variant="label" className="text-muted-foreground m-0 truncate font-semibold">
           {label}
         </Txt>
-        {loading ? (
-          <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-        ) : totalTaskCount > 0 ? (
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-        ) : null}
+        {loading && <Skeleton className="h-6 w-12 shrink-0 rounded-full" />}
+        {!loading && totalTaskCount > 0 && <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />}
       </div>
       {headerExtras || headerAction ? (
         <div className="flex h-8 shrink-0 items-center gap-1">
@@ -165,9 +148,7 @@ export function BoardColumn({
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   children: React.ReactNode;
 }) {
-  const [dragOver, setDragOver] = useState(false);
-  const [dropLineTop, setDropLineTop] = useState(0);
-  const cardListRef = useRef<HTMLDivElement>(null);
+  const dropZone = useBoardDropZone({ stage, onDrop });
 
   return (
     <section
@@ -175,40 +156,12 @@ export function BoardColumn({
       data-testid={`board-column-${stage}`}
       className={cn(
         columnWidthClass(collapsed),
-        'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
-        collapsed && 'rounded-lg',
-        collapsed && dragOver && 'bg-background ring-1 ring-border',
+        'flex flex-col rounded-lg transition-[width,background-color] motion-reduce:transition-none',
+        dropZone.isDragOver && 'bg-background ring-1 ring-border',
       )}
-      onDragOver={event => {
-        if (!event.dataTransfer.types.includes(CARD_MIME)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        setDragOver(true);
-        const cardList = cardListRef.current;
-        if (cardList) setDropLineTop(dropLinePosition(cardList, event.clientY));
-      }}
-      onDragLeave={event => {
-        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-        setDragOver(false);
-      }}
-      onDrop={event => {
-        event.preventDefault();
-        setDragOver(false);
-        const payload = readDragPayload(event);
-        if (payload) onDrop(payload, stage);
-      }}
+      {...dropZone.dropZoneProps}
     >
-      <div ref={cardListRef} className="relative flex min-h-16 flex-1 flex-col gap-2.5 pb-2">
-        {collapsed ? null : children}
-        <div
-          aria-hidden
-          style={{ top: dropLineTop }}
-          className={cn(
-            'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-placeholder transition-opacity motion-reduce:transition-none',
-            dragOver ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-      </div>
+      <div className="flex min-h-16 flex-1 flex-col gap-2.5 pb-2">{collapsed ? null : children}</div>
     </section>
   );
 }

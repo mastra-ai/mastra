@@ -65,7 +65,7 @@ export function SideDialogRoot({
                 'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
                 'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
                 'w-[65vw] 2xl:w-[53vw] 4xl:w-[41vw]': level === 3,
-                'pointer-events-auto bg-background/70 backdrop-blur-sm shadow-none': isConfirmation,
+                'pointer-events-auto bg-background/70 shadow-none backdrop-blur-sm': isConfirmation,
               },
               className,
             )}

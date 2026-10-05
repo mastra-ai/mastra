@@ -1,11 +1,19 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuildBundler } from './mastra-deployer';
 import { MastraPlugin } from './plugin';
 import { buildTemporalActivitiesModule } from './transforms/activities';
 import { buildTemporalWorkflowModule } from './transforms/workflows';
+
+// The generated activities module imports `@mastra/core/di` and is loaded from
+// `<projectRoot>/node_modules/.mastra`, so the project root must be a directory
+// where `@mastra/core` resolves. `process.cwd()` is the repo root when the root
+// vitest workspace runs this file, so anchor on the package directory instead.
+const packageRoot = fileURLToPath(new URL('..', import.meta.url));
+const cachePath = path.join(packageRoot, 'node_modules/.mastra');
 
 function stripInlineSourceMap(code: string): string {
   return code.replace(/\n\/\/# sourceMappingURL=data:application\/json[^\n]*\n?$/, '');
@@ -48,7 +56,7 @@ function mockCompiledBundle({
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await rm(path.resolve(process.cwd(), 'node_modules/.mastra'), { recursive: true, force: true });
+  await rm(cachePath, { recursive: true, force: true });
 });
 
 describe('@mastra/temporal transform exports', () => {
@@ -377,36 +385,32 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = 'export const unused = true;';
     const bundleSpy = mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const workerPlugin = new MastraPlugin(entryPath);
+    const workerPlugin = new MastraPlugin(entryPath, packageRoot);
 
     const workerOptions = await workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
-    await expect(
-      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activity-bindings.json'), 'utf8'),
-    ).resolves.toContain('fetch-weather');
+    await expect(readFile(path.join(cachePath, 'activity-bindings.json'), 'utf8')).resolves.toContain('fetch-weather');
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
     ];
 
-    expect(bundleSpy).toHaveBeenCalledWith(entryPath, path.resolve(process.cwd(), 'node_modules/.mastra'), {
+    expect(bundleSpy).toHaveBeenCalledWith(entryPath, cachePath, {
       toolsPaths: [],
-      projectRoot: process.cwd(),
+      projectRoot: packageRoot,
     });
-    expect(workerOptions.workflowsPath).toBe(path.resolve(process.cwd(), 'node_modules/.mastra/workflow.mjs'));
+    expect(workerOptions.workflowsPath).toBe(path.join(cachePath, 'workflow.mjs'));
     expect(fetchWeather).toBeTypeOf('function');
     await expect(fetchWeather({ inputData: { city: 'SF' } })).resolves.toEqual({
       inputData: { city: 'SF' },
       marker: 'ok',
     });
-    const workflowModule = await readFile(path.resolve(process.cwd(), 'node_modules/.mastra/workflow.mjs'), 'utf8');
+    const workflowModule = await readFile(path.join(cachePath, 'workflow.mjs'), 'utf8');
     expect(workflowModule).toContain('weatherWorkflow');
     expect(workflowModule).not.toContain('export { mastra');
     expect(workflowModule).not.toContain('export const mastra');
-    await expect(
-      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8'),
-    ).resolves.toContain('function createStep(args)');
-    await expect(
-      readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8'),
-    ).resolves.not.toContain('./output/index.mjs');
+    await expect(readFile(path.join(cachePath, 'activities.mjs'), 'utf8')).resolves.toContain(
+      'function createStep(args)',
+    );
+    await expect(readFile(path.join(cachePath, 'activities.mjs'), 'utf8')).resolves.not.toContain('./output/index.mjs');
   });
 
   it('bundles local mastra bindings into the generated activities module', async () => {
@@ -426,13 +430,13 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = `export const unused = true;`;
     mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const workerPlugin = new MastraPlugin(entryPath);
+    const workerPlugin = new MastraPlugin(entryPath, packageRoot);
 
     const workerOptions = await workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
     ];
-    const activitiesModule = await readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activities.mjs'), 'utf8');
+    const activitiesModule = await readFile(path.join(cachePath, 'activities.mjs'), 'utf8');
 
     await expect(fetchWeather({ inputData: { city: 'SF' } })).resolves.toEqual({
       inputData: { city: 'SF' },

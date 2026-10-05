@@ -2,10 +2,7 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
-import {
-  useExperimentsForDatasetFilter,
-  type ExperimentTargetFilter,
-} from '../hooks/use-experiments-for-dataset-filter';
+import { useExperimentsForDatasetFilter, type ExperimentTargetFilter } from '@mastra/react/hooks';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 /** Sentinel value emitted when the "All experiments" option is picked. */
@@ -38,12 +35,15 @@ export function ExperimentCombobox({
   targetType,
   targetId,
 }: ExperimentComboboxProps) {
-  const { data, isLoading, isError } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
+  const { data, isLoading, isError } = useExperimentsForDatasetFilter({
+    datasetId: undefined,
+    target: { targetType, targetId },
+  });
 
   const experimentOptions = (data?.experiments ?? []).map(experiment => ({
     label: getExperimentDisplayName(experiment),
     value: experiment.id,
-    start: <ExperimentsIcon className="text-muted-foreground size-4 shrink-0" data-testid="experiments-icon" />,
+    start: <ExperimentsIcon className="size-4 shrink-0 text-muted-foreground" data-testid="experiments-icon" />,
     description: experiment.description
       ? truncate(experiment.description)
       : (getShortId(experiment.id) ?? experiment.id),

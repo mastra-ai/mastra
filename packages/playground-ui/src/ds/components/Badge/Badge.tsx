@@ -1,59 +1,107 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
 import { Icon } from '../../icons/Icon';
+import { productColors, productSubtleColors } from '../ProductAvatar/product-identity';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type BadgeEmphasis = 'default' | 'muted';
+export type BadgeEmphasis = 'strong' | 'subtle';
 export type BadgeIndicator = 'dot' | 'pulse';
 
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
+const green = {
+  strong: 'bg-badge-green-strong text-badge-green-foreground',
+  subtle: 'bg-badge-green-subtle text-badge-green-foreground',
+  indicator: 'bg-badge-green-indicator',
+};
+const red = {
+  strong: 'bg-badge-red-strong text-badge-red-foreground',
+  subtle: 'bg-badge-red-subtle text-badge-red-foreground',
+  indicator: 'bg-badge-red-indicator',
+};
+const amber = {
+  strong: 'bg-badge-amber-strong text-badge-amber-foreground',
+  subtle: 'bg-badge-amber-subtle text-badge-amber-foreground',
+  indicator: 'bg-badge-amber-indicator',
+};
+const blue = {
+  strong: 'bg-badge-blue-strong text-badge-blue-foreground',
+  subtle: 'bg-badge-blue-subtle text-badge-blue-foreground',
+  indicator: 'bg-badge-blue-indicator',
+};
+
 const badgeToneStyles = {
+  studio: {
+    strong: productColors.studio,
+    subtle: productSubtleColors.studio,
+    indicator: 'bg-product-studio-foreground',
+  },
+  server: {
+    strong: productColors.server,
+    subtle: productSubtleColors.server,
+    indicator: 'bg-product-server-foreground',
+  },
+  observability: {
+    strong: productColors.observability,
+    subtle: productSubtleColors.observability,
+    indicator: 'bg-product-observability-foreground',
+  },
+  factory: {
+    strong: productColors.factory,
+    subtle: productSubtleColors.factory,
+    indicator: 'bg-product-factory-foreground',
+  },
+  workers: {
+    strong: productColors.workers,
+    subtle: productSubtleColors.workers,
+    indicator: 'bg-product-workers-foreground',
+  },
+  'persistent-server': {
+    strong: productColors['persistent-server'],
+    subtle: productSubtleColors['persistent-server'],
+    indicator: 'bg-product-persistent-server-foreground',
+  },
   neutral: {
-    default: 'bg-fill text-badge-neutral-fg',
-    muted: 'bg-fill-subtle text-badge-neutral-fg',
+    strong: 'bg-fill text-badge-neutral-foreground',
+    subtle: 'bg-fill-subtle text-badge-neutral-foreground',
     indicator: 'bg-muted-foreground',
   },
-  green: {
-    default: 'bg-badge-green/20 text-badge-green-fg',
-    muted: 'bg-badge-green/10 text-badge-green-fg',
-    indicator: 'bg-badge-green',
+  success: { ...green, indicator: 'bg-success-indicator' },
+  destructive: {
+    strong: 'bg-badge-red-strong text-badge-red-foreground',
+    subtle: 'bg-badge-red-subtle text-badge-red-foreground',
+    indicator: 'bg-destructive-indicator',
   },
-  red: {
-    default: 'bg-badge-red/20 text-badge-red-fg',
-    muted: 'bg-badge-red/10 text-badge-red-fg',
-    indicator: 'bg-badge-red',
+  info: { ...blue, indicator: 'bg-info-indicator' },
+  warning: {
+    strong: 'bg-badge-amber-strong text-warning-foreground',
+    subtle: 'bg-badge-amber-subtle text-warning-foreground',
+    indicator: 'bg-warning-indicator',
   },
-  blue: {
-    default: 'bg-badge-blue/20 text-badge-blue-fg',
-    muted: 'bg-badge-blue/10 text-badge-blue-fg',
-    indicator: 'bg-badge-blue',
-  },
-  yellow: {
-    default: 'bg-badge-yellow/20 text-badge-yellow-fg',
-    muted: 'bg-badge-yellow/10 text-badge-yellow-fg',
-    indicator: 'bg-badge-yellow',
-  },
+  green,
+  red,
+  amber,
+  blue,
   purple: {
-    default: 'bg-badge-purple/20 text-badge-purple-fg',
-    muted: 'bg-badge-purple/10 text-badge-purple-fg',
-    indicator: 'bg-badge-purple',
+    strong: 'bg-badge-purple-strong text-badge-purple-foreground',
+    subtle: 'bg-badge-purple-subtle text-badge-purple-foreground',
+    indicator: 'bg-badge-purple-indicator',
   },
   orange: {
-    default: 'bg-badge-orange/20 text-badge-orange-fg',
-    muted: 'bg-badge-orange/10 text-badge-orange-fg',
-    indicator: 'bg-badge-orange',
+    strong: 'bg-badge-orange-strong text-badge-orange-foreground',
+    subtle: 'bg-badge-orange-subtle text-badge-orange-foreground',
+    indicator: 'bg-badge-orange-indicator',
   },
   cyan: {
-    default: 'bg-badge-cyan/20 text-badge-cyan-fg',
-    muted: 'bg-badge-cyan/10 text-badge-cyan-fg',
-    indicator: 'bg-badge-cyan',
+    strong: 'bg-badge-cyan-strong text-badge-cyan-foreground',
+    subtle: 'bg-badge-cyan-subtle text-badge-cyan-foreground',
+    indicator: 'bg-badge-cyan-indicator',
   },
   pink: {
-    default: 'bg-badge-pink/20 text-badge-pink-fg',
-    muted: 'bg-badge-pink/10 text-badge-pink-fg',
-    indicator: 'bg-badge-pink',
+    strong: 'bg-badge-pink-strong text-badge-pink-foreground',
+    subtle: 'bg-badge-pink-subtle text-badge-pink-foreground',
+    indicator: 'bg-badge-pink-indicator',
   },
 } satisfies Record<string, BadgeToneStyles>;
 
@@ -73,7 +121,7 @@ const badgeSizeStyles = {
     indicator: 'size-1',
   },
   md: {
-    badge: 'h-5 gap-1 text-column',
+    badge: 'h-5 gap-1 text-column tracking-normal',
     withoutLeadingVisual: 'px-2',
     withLeadingVisual: 'pl-1.5 pr-2',
     indicator: 'size-1.5',
@@ -96,7 +144,7 @@ export const Badge = ({
   icon,
   indicator,
   variant = 'neutral',
-  emphasis = 'default',
+  emphasis = 'strong',
   size = 'md',
   className,
   children,
@@ -111,9 +159,7 @@ export const Badge = ({
     <span
       className={cn(
         'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px]',
-        'inset-ring-1 inset-ring-current/5',
-        'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
-        'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',
+        'shadow-inset',
         badgeToneStyles[variant][emphasis],
         sizeStyles.badge,
         paddingClass,

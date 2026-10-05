@@ -1,16 +1,17 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useExecuteMCPTool, useMCPServerTool } from '@mastra/react/hooks';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
-import { McpAppViewer } from './mcp-app-viewer';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -28,13 +29,35 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+/**
+ * An MCP 2.x tool answers with `{ status: 'suspended' }` when it needs more input before it can finish.
+ * Studio has no way to collect that input, so the response is explained rather than shown as the tool's output.
+ */
+function isSuspendedResult(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as { status?: unknown }).status === 'suspended';
+}
+
+/** Execution failures are shown in the result panel instead of leaving it empty. */
+function describeExecutionError(error: unknown): string {
+  return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2);
+}
+
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
   const client = useMastraClient();
 
-  const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
-  const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
+  const {
+    data: tool,
+    isLoading,
+    error,
+  } = useMCPServerTool({ serverId: serverId, toolId: toolId, queryOptions: { enabled: !!serverId && !!toolId } });
+  const {
+    mutateAsync: executeTool,
+    isPending: isExecuting,
+    data: result,
+    error: executionError,
+  } = useExecuteMCPTool({ serverId: serverId, toolId: toolId });
 
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 
@@ -52,7 +75,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   const handleToolCall = useCallback(
     async (_toolName: string, args: Record<string, unknown>) => {
-      const response = await executeTool(args);
+      const response = await executeTool({ data: args });
       return response;
     },
     [executeTool],
@@ -65,10 +88,11 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
 
-    return await executeTool(data);
+    // Failures are rendered in the result panel via `executionError`.
+    return await executeTool({ data, requestContext }).catch(() => undefined);
   };
 
   if (isLoading) {
@@ -112,17 +136,28 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   return (
     <div className="flex flex-col gap-4">
       {appHtml && (
-        <div className="border-border border-b p-4">
+        <div className="border-b border-border p-4">
           <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
+        </div>
+      )}
+      {isSuspendedResult(result) && (
+        <div className="px-4 pt-4">
+          <Notice variant="warning">
+            This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it needs.
+            Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
+          </Notice>
         </div>
       )}
       <ToolExecutor
         executionResult={result}
+        errorString={executionError ? describeExecutionError(executionError) : undefined}
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
         toolId={tool.name}
+        requestContextEntityType="mcp-tool"
+        requestContextEntityId={`${serverId}:${tool.name}`}
       />
     </div>
   );

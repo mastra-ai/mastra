@@ -1,4 +1,5 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
@@ -7,7 +8,6 @@ import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 interface MobileLink {
   name: string;
@@ -63,7 +63,7 @@ export function AgentBuilderMobileBottomBar() {
   return (
     <nav
       aria-label="Primary"
-      className="border-border bg-sidebar/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
         {links.map(link => {
@@ -74,7 +74,7 @@ export function AgentBuilderMobileBottomBar() {
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'text-caption relative flex flex-col items-center justify-center gap-1 py-2',
+                  'relative flex flex-col items-center justify-center gap-1 py-2 text-caption',
                   controlStateColorTransition,
                   isActive
                     ? 'text-foreground before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'

@@ -1,6 +1,10 @@
+import { isAbsolute } from 'node:path';
+import { PROTOCOL_VERSION, RequestError } from '@agentclientprotocol/sdk';
 import type {
   Agent,
   AgentSideConnection,
+  AuthenticateRequest,
+  AuthMethod,
   InitializeRequest,
   InitializeResponse,
   NewSessionRequest,
@@ -9,200 +13,516 @@ import type {
   PromptResponse,
   CancelNotification,
   ContentBlock,
+  SessionConfigOption,
+  SetSessionConfigOptionRequest,
+  SetSessionConfigOptionResponse,
+  AvailableCommand,
 } from '@agentclientprotocol/sdk';
-import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
+import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
+import { seedProviderOMDefault } from '../onboarding/om-settings.js';
+import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
+import { getCurrentVersion } from '../utils/update-check.js';
+import { withCleanupFailure } from './errors.js';
 import { handleAgentControllerEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
+import { expandSkillCommand, listSkillCommands } from './skills.js';
+import type { AcpSkills } from './skills.js';
 
-/**
- * ACP Agent implementation that wraps a mastracode Controller.
- * Each instance represents one ACP connection from a client.
- */
+export interface AcpSessionRuntime {
+  controller: AgentController;
+  session: Session;
+  modes: AgentControllerMode[];
+  getThinkingLevel?: () => ThinkingLevelSetting;
+  getSkills?: () => Promise<AcpSkills | undefined>;
+  cleanup?: () => Promise<void>;
+}
+
+export type AcpSessionFactory = (request: NewSessionRequest) => Promise<AcpSessionRuntime>;
+
+interface SessionEntry extends AcpSessionRuntime {
+  models: { modelId: string; name: string }[];
+  state: PromptState | null;
+  queue: Promise<void>;
+  turns: Set<{ cancelled: boolean }>;
+  unsubscribe: () => void;
+  commands?: AvailableCommand[];
+}
+
+const TERMINAL_LOGIN_METHOD_ID = 'mastracode-login';
+const BROWSER_LOGIN_PROVIDER_IDS = ['openai-codex', 'kimi-for-coding', 'xai'];
+const TERMINAL_LOGIN_PROVIDER_IDS = ['anthropic', 'github-copilot'];
+
+function terminalLogin(id: string, name: string, description: string, loginArgs: string[]): AuthMethod {
+  return {
+    id,
+    name,
+    description,
+    type: 'terminal',
+    args: loginArgs,
+    _meta: {
+      'terminal-auth': {
+        command: process.execPath,
+        args: [...process.argv.slice(1, 2), ...loginArgs],
+        label: name,
+      },
+    },
+  };
+}
+
+function listAuthMethods({ auth, _meta }: InitializeRequest['clientCapabilities'] = {}): AuthMethod[] {
+  const providers = getOAuthProviders();
+  const methods: AuthMethod[] = providers
+    .filter(provider => BROWSER_LOGIN_PROVIDER_IDS.includes(provider.id))
+    .map(provider => ({
+      id: provider.id,
+      name: `Log in with ${provider.name}`,
+      description: 'Opens your browser to sign in',
+    }));
+  if (!auth?.terminal && _meta?.['terminal-auth'] !== true) return methods;
+  return [
+    ...methods,
+    ...providers
+      .filter(provider => TERMINAL_LOGIN_PROVIDER_IDS.includes(provider.id))
+      .map(provider =>
+        terminalLogin(provider.id, `Log in with ${provider.name}`, 'Sign in from a terminal', [
+          'login',
+          '--provider',
+          provider.id,
+        ]),
+      ),
+    terminalLogin(
+      TERMINAL_LOGIN_METHOD_ID,
+      'Log in with Mastra Code',
+      'Sign in to another provider or add an API key from a terminal',
+      ['login'],
+    ),
+  ];
+}
+
+function hasUsableModel(available: { id: string; hasApiKey: boolean }[], currentModelId: string): boolean {
+  if (available.some(model => model.hasApiKey)) return true;
+  return currentModelId !== '' && !available.some(model => model.id === currentModelId);
+}
+
+function credentialedDefaultModel(
+  available: { id: string; hasApiKey: boolean }[],
+  currentModelId: string,
+): string | undefined {
+  const current = available.find(model => model.id === currentModelId);
+  if (!current || current.hasApiKey) return undefined;
+  const credentialed = new Set(available.filter(model => model.hasApiKey).map(model => model.id));
+  return Object.values(PROVIDER_DEFAULT_MODELS).find(modelId => credentialed.has(modelId));
+}
+
+/** One ACP connection, with an independent Mastra Code runtime for each conversation. */
 export class MastraCodeAcpAgent implements Agent {
-  private readonly connection: AgentSideConnection;
-  private readonly controller: AgentController;
-  private readonly session: Session;
-  private readonly modes: AgentControllerMode[];
-  private readonly unsubscribeSessionEvents: () => void;
-  private readonly sessionMap = new Map<string, string>(); // sessionId -> threadId
-  private currentPromptState: PromptState | null = null;
-  private promptMutex: Promise<void> = Promise.resolve();
-
-  private getThreadIdOrThrow(sessionId: string): string {
-    const threadId = this.sessionMap.get(sessionId);
-    if (!threadId) {
-      throw new Error(`Unknown ACP sessionId: ${sessionId}`);
-    }
-    return threadId;
-  }
+  private readonly sessions = new Map<string, SessionEntry>();
+  private readonly pendingCreations = new Set<Promise<NewSessionResponse>>();
+  private readonly startupCleanupFailures: unknown[] = [];
+  private disposed = false;
+  private disposal?: Promise<void>;
 
   constructor(
-    connection: AgentSideConnection,
-    controller: AgentController,
-    session: Session,
-    modes: AgentControllerMode[],
-  ) {
-    this.connection = connection;
-    this.controller = controller;
-    this.session = session;
-    this.modes = modes;
+    private readonly connection: AgentSideConnection,
+    private readonly createSession: AcpSessionFactory,
+  ) {}
 
-    // Register persistent event listener
-    this.unsubscribeSessionEvents = this.session.subscribe(event => {
-      handleAgentControllerEvent(event, this.currentPromptState, this.connection, this.session);
+  private getSession(sessionId: string): SessionEntry {
+    const entry = this.sessions.get(sessionId);
+    if (!entry || this.disposed) throw RequestError.invalidParams({ sessionId }, 'Unknown ACP session');
+    return entry;
+  }
+
+  private enqueue<T>(entry: SessionEntry, operation: () => Promise<T>): Promise<T> {
+    const result = entry.queue.then(operation);
+    entry.queue = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
+    this.disposed = true;
+    const entries = [...this.sessions.values()];
+    this.sessions.clear();
+    const cleanup = Promise.allSettled([
+      // A runtime under construction owns its cleanup until it joins sessions.
+      Promise.allSettled([...this.pendingCreations]),
+      ...entries.map(async entry => {
+        for (const turn of entry.turns) turn.cancelled = true;
+        if (entry.state) {
+          entry.state.cancelled = true;
+          entry.session.abort();
+          entry.state?.resolve('aborted');
+        }
+        entry.unsubscribe();
+        await entry.cleanup?.();
+      }),
+    ]).then(results => {
+      const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+      failures.push(...this.startupCleanupFailures);
+      if (failures.length) throw new AggregateError(failures, 'ACP session cleanup failed');
     });
+    // A provider or MCP startup can stall. Keep its cleanup ownership, but let
+    // the host terminate the connection if shutdown cannot finish in time.
+    this.disposal = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('ACP shutdown timed out after 10 seconds')), 10_000);
+      void cleanup.then(resolve, reject).finally(() => clearTimeout(timeout));
+    });
+    return this.disposal;
   }
 
-  dispose(): void {
-    this.unsubscribeSessionEvents();
-  }
-
-  async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
+  async initialize({ clientCapabilities }: InitializeRequest): Promise<InitializeResponse> {
     return {
       protocolVersion: PROTOCOL_VERSION,
-      agentInfo: {
-        name: 'mastracode',
-        title: 'Mastra Code',
-        version: '0.1.0',
-      },
-      agentCapabilities: {
-        loadSession: false,
-      },
+      agentInfo: { name: 'mastracode', title: 'Mastra Code', version: getCurrentVersion() },
+      agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: false } },
+      authMethods: listAuthMethods(clientCapabilities),
     };
   }
 
-  async authenticate(): Promise<void> {
-    // No-op: mastracode handles its own auth
-  }
-
-  async newSession(_request: NewSessionRequest): Promise<NewSessionResponse> {
-    const thread = await this.session.thread.create();
-    const sessionId = thread.id;
-    this.sessionMap.set(sessionId, thread.id);
-
-    // Switch to the new thread
-    await this.session.thread.switch({ threadId: thread.id });
-
-    // Build modes list from constructor param
-    const availableModes = this.modes.map((m: AgentControllerMode) => ({
-      id: m.id,
-      name: m.name ?? m.id,
-    }));
-
-    const currentModeId = this.session.mode.get();
-
-    // Build models list (best-effort)
-    let models: NewSessionResponse['models'];
-    try {
-      const availableModels = await this.controller.listAvailableModels();
-      const currentModelId = this.session.model.get();
-      models = {
-        currentModelId: currentModelId ?? '',
-        availableModels: availableModels.map(m => ({
-          modelId: m.id,
-          name: m.modelName,
-        })),
-      };
-    } catch {
-      // Model listing may fail if no providers are configured
+  async authenticate({ methodId }: AuthenticateRequest): Promise<void> {
+    if (methodId === TERMINAL_LOGIN_METHOD_ID || TERMINAL_LOGIN_PROVIDER_IDS.includes(methodId)) return;
+    if (!BROWSER_LOGIN_PROVIDER_IDS.includes(methodId)) {
+      throw RequestError.invalidParams(undefined, `Unknown authentication method: ${methodId}`);
     }
-
-    return {
-      sessionId,
-      modes: {
-        currentModeId,
-        availableModes,
+    const needsTerminal = () =>
+      RequestError.internalError(
+        undefined,
+        "Browser sign-in can't finish on its own. Run `mastracode login` in a terminal to sign in.",
+      );
+    await new AuthStorage().login(methodId, {
+      authMode: 'browser',
+      onAuth: ({ url, userCode }) => {
+        if (userCode && !url.includes(userCode)) throw needsTerminal();
+        process.stderr.write(`Open ${url} to sign in\n`);
+        openUrlInBrowser(url);
       },
-      models,
-    };
+      onPrompt: async () => {
+        throw needsTerminal();
+      },
+    });
+    try {
+      seedProviderOMDefault(methodId);
+    } catch (error) {
+      process.stderr.write(`[acp] memory model unchanged after sign-in: ${error}\n`);
+    }
+  }
+
+  newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
+    const creating = Promise.resolve().then(() => this.createNewSession(request));
+    this.pendingCreations.add(creating);
+    void creating.then(
+      () => this.pendingCreations.delete(creating),
+      () => this.pendingCreations.delete(creating),
+    );
+    return creating;
+  }
+
+  private async createNewSession(request: NewSessionRequest): Promise<NewSessionResponse> {
+    if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+    if (!isAbsolute(request.cwd)) throw RequestError.invalidParams(undefined, 'cwd must be an absolute path');
+    const runtime = await this.createSession(request);
+    try {
+      if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+      const available = await runtime.controller.listAvailableModels();
+      if (!hasUsableModel(available, runtime.session.model.get() ?? '')) {
+        throw RequestError.authRequired(undefined, 'Sign in to a model provider or add an API key to use Mastra Code');
+      }
+      const thread = await runtime.session.thread.create();
+      await runtime.session.thread.switch({ threadId: thread.id });
+      const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
+      if (defaultModelId) await runtime.session.model.switch({ modelId: defaultModelId });
+      const models: NewSessionResponse['models'] = {
+        currentModelId: runtime.session.model.get() ?? '',
+        availableModels: includeCurrentModel(
+          [
+            ...new Map(
+              available
+                .filter(model => model.hasApiKey || model.id === runtime.session.model.get())
+                .map(
+                  model =>
+                    [
+                      model.id,
+                      {
+                        modelId: model.id,
+                        name: model.hasApiKey ? model.id : `${model.id} (provider not configured)`,
+                      },
+                    ] as const,
+                ),
+            ).values(),
+          ],
+          runtime.session.model.get() ?? '',
+        ),
+      };
+      if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+      const entry: SessionEntry = {
+        ...runtime,
+        models: models.availableModels,
+        state: null,
+        queue: Promise.resolve(),
+        turns: new Set(),
+        unsubscribe: () => {},
+        commands: [],
+      };
+      if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+      entry.unsubscribe = runtime.session.subscribe(event => {
+        handleAgentControllerEvent(event, entry.state, this.connection, entry.session);
+        if (event.type === 'mode_changed') {
+          void this.connection
+            .sessionUpdate({
+              sessionId: thread.id,
+              update: { sessionUpdate: 'current_mode_update', currentModeId: entry.session.mode.get() },
+            })
+            .catch(error => process.stderr.write(`[acp] mode update failed: ${error}\n`));
+        }
+        if (
+          event.type === 'mode_changed' ||
+          event.type === 'model_changed' ||
+          (event.type === 'state_changed' && event.changedKeys.includes('thinkingLevel'))
+        ) {
+          void this.connection
+            .sessionUpdate({
+              sessionId: thread.id,
+              update: { sessionUpdate: 'config_option_update', configOptions: this.configOptions(entry) },
+            })
+            .catch(error => process.stderr.write(`[acp] configuration update failed: ${error}\n`));
+        }
+      });
+      const response: NewSessionResponse = {
+        sessionId: thread.id,
+        modes: {
+          currentModeId: runtime.session.mode.get(),
+          availableModes: runtime.modes.map(mode => ({ id: mode.id, name: mode.name ?? mode.id })),
+        },
+        models,
+        configOptions: this.configOptions(entry),
+      };
+      this.sessions.set(thread.id, entry);
+      // Let the SDK send session/new before clients receive updates for this ID.
+      setImmediate(() => {
+        void this.enqueue(entry, async () => {
+          if (!this.disposed) await this.refreshCommands(thread.id, entry);
+        }).catch(error => process.stderr.write(`[acp] command discovery failed: ${error}\n`));
+      });
+      return response;
+    } catch (error) {
+      try {
+        await runtime.cleanup?.();
+      } catch (cleanupError) {
+        if (this.disposed) this.startupCleanupFailures.push(cleanupError);
+        throw withCleanupFailure(error, cleanupError);
+      }
+      throw error;
+    }
+  }
+
+  private async refreshCommands(sessionId: string, entry: SessionEntry): Promise<AcpSkills | undefined> {
+    const skills = await entry.getSkills?.();
+    const commands = await listSkillCommands(skills);
+    if (JSON.stringify(commands) !== JSON.stringify(entry.commands)) {
+      await this.connection.sessionUpdate({
+        sessionId,
+        update: { sessionUpdate: 'available_commands_update', availableCommands: commands },
+      });
+      entry.commands = commands;
+    }
+    return skills;
+  }
+
+  private configOptions(entry: SessionEntry): SessionConfigOption[] {
+    const modelId = entry.session.model.get() ?? '';
+    const options: SessionConfigOption[] = [];
+    const models = includeCurrentModel(entry.models, modelId);
+    if (models.length)
+      options.push({
+        id: 'model',
+        name: 'Model',
+        category: 'model',
+        type: 'select',
+        currentValue: modelId,
+        options: models.map(model => ({ value: model.modelId, name: model.name })),
+      });
+    options.push({
+      id: 'mode',
+      name: 'Mode',
+      category: 'mode',
+      type: 'select',
+      currentValue: entry.session.mode.get(),
+      options: entry.modes.map(mode => ({ value: mode.id, name: mode.name ?? mode.id })),
+    });
+    if (entry.getThinkingLevel)
+      options.push({
+        id: 'thought_level',
+        name: 'Reasoning effort',
+        category: 'thought_level',
+        type: 'select',
+        description: 'Requested reasoning level. The provider may adjust it for the selected model.',
+        currentValue: this.thinkingLevel(entry),
+        options: getAvailableThinkingLevelsForModel(modelId).map(value => ({
+          value,
+          name: value[0]!.toUpperCase() + value.slice(1),
+        })),
+      });
+    return options;
+  }
+
+  private thinkingLevel(entry: SessionEntry): ThinkingLevelSetting {
+    const level = entry.getThinkingLevel?.() ?? 'off';
+    const levels = getAvailableThinkingLevelsForModel(entry.session.model.get() ?? '');
+    return levels.includes(level) ? level : 'xhigh';
+  }
+
+  async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+    const entry = this.getSession(params.sessionId);
+    return this.enqueue(entry, async () => {
+      this.getSession(params.sessionId);
+      const option = this.configOptions(entry).find(option => option.id === params.configId);
+      if (
+        !option ||
+        option.type !== 'select' ||
+        !option.options.some(item => 'value' in item && item.value === params.value)
+      ) {
+        throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
+      }
+      if (params.configId === 'model') {
+        await entry.session.model.switch({ modelId: String(params.value) });
+      } else if (params.configId === 'mode') {
+        await entry.session.mode.switch({ modeId: String(params.value) });
+      } else if (isThinkingLevelSetting(params.value)) {
+        await entry.session.state.set({ thinkingLevel: params.value });
+      }
+      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
+        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
+      }
+      return { configOptions: this.configOptions(entry) };
+    });
   }
 
   async prompt(request: PromptRequest): Promise<PromptResponse> {
-    const { sessionId, prompt: contentBlocks } = request;
-
-    // Extract text from content blocks
-    const text = extractTextFromContentBlocks(contentBlocks);
-
-    const threadId = this.getThreadIdOrThrow(sessionId);
-
-    // Serialize prompts via mutex
-    const prevMutex = this.promptMutex;
-    let resolveMutex: () => void;
-    this.promptMutex = new Promise<void>(resolve => {
-      resolveMutex = resolve;
-    });
-
-    await prevMutex;
-
+    const entry = this.getSession(request.sessionId);
+    const content = extractTextFromContentBlocks(request.prompt);
+    const turn = { cancelled: false };
+    entry.turns.add(turn);
     try {
-      // Ensure we're on the right thread while prompts are serialized
-      await this.session.thread.switch({ threadId });
-
-      // Create prompt state that will be resolved when agent_end fires
-      const result = new Promise<{
-        reason: 'complete' | 'aborted' | 'error' | 'suspended';
-        usage: PromptState['usage'];
-      }>(resolve => {
-        const usage: PromptState['usage'] = {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-        };
-
-        this.currentPromptState = {
-          sessionId,
-          lastTextLength: 0,
+      return await this.enqueue(entry, async () => {
+        if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
+        const usage: PromptState['usage'] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        let complete!: PromptState['resolve'];
+        const completion = new Promise<Parameters<PromptState['resolve']>[0]>(resolve => {
+          complete = resolve;
+        });
+        const state: PromptState = {
+          sessionId: request.sessionId,
           usage,
           resolve: reason => {
-            resolve({ reason, usage });
-            this.currentPromptState = null;
+            state.finished = true;
+            complete(reason);
           },
         };
+        entry.state = state;
+        try {
+          const skills = await this.refreshCommands(request.sessionId, entry);
+          const expanded = await expandSkillCommand(content, skills, entry.commands ?? []);
+          if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
+          await entry.session.sendMessage({ content: expanded });
+          const reason = await completion;
+          if (reason === 'error' && !state.cancelled && !state.stopReason) {
+            throw RequestError.internalError(undefined, state.error?.message ?? 'Mastra Code turn failed');
+          }
+          return {
+            stopReason: state.cancelled ? 'cancelled' : (state.stopReason ?? mapStopReason(reason)),
+            usage: {
+              inputTokens: usage.promptTokens,
+              outputTokens: usage.completionTokens,
+              totalTokens: usage.totalTokens,
+              thoughtTokens: usage.reasoningTokens,
+              cachedReadTokens: usage.cachedInputTokens,
+              cachedWriteTokens: usage.cacheCreationInputTokens,
+            },
+          };
+        } catch (error) {
+          if (state.cancelled) return { stopReason: 'cancelled' };
+          if (error instanceof RequestError) throw error;
+          throw RequestError.internalError(
+            undefined,
+            error instanceof Error ? error.message : 'Mastra Code turn failed',
+          );
+        } finally {
+          state.finished = true;
+          if (entry.state === state) entry.state = null;
+        }
       });
-
-      // Send the message to the session
-      try {
-        await this.session.sendMessage({ content: text });
-      } catch (error) {
-        this.currentPromptState = null;
-        throw error;
-      }
-
-      // Wait for agent_end to resolve
-      const { reason, usage } = await result;
-
-      return {
-        stopReason: mapStopReason(reason),
-        usage: {
-          inputTokens: usage.promptTokens,
-          outputTokens: usage.completionTokens,
-          totalTokens: usage.totalTokens,
-          thoughtTokens: usage.reasoningTokens,
-          cachedReadTokens: usage.cachedInputTokens,
-          cachedWriteTokens: usage.cacheCreationInputTokens,
-        },
-      };
     } finally {
-      resolveMutex!();
+      entry.turns.delete(turn);
     }
   }
 
-  async cancel(_notification: CancelNotification): Promise<void> {
-    this.session.abort();
+  async cancel(notification: CancelNotification): Promise<void> {
+    const entry = this.sessions.get(notification.sessionId);
+    if (!entry) return;
+    for (const turn of entry.turns) turn.cancelled = true;
+    if (entry.state && !entry.state.finished && !entry.state.cancelled) {
+      const state = entry.state;
+      state.cancelled = true;
+      // Persist denial before aborting, otherwise a parked snapshot can replay on the next turn.
+      for (const deny of state.cancelSuspensions?.values() ?? []) {
+        try {
+          await deny();
+        } catch {
+          /* Still abort if the suspended run is no longer available. */
+        }
+      }
+      state.cancelSuspensions?.clear();
+      if (entry.state !== state) return;
+      entry.session.abort();
+      // A suspended run has already ended and will not emit another agent_end.
+      if (entry.state?.suspended) {
+        entry.session.stream.detach();
+        entry.state.resolve('aborted');
+      }
+    }
   }
 
   async setSessionMode(params: { sessionId: string; modeId: string }): Promise<void> {
-    const threadId = this.getThreadIdOrThrow(params.sessionId);
-    await this.session.thread.switch({ threadId });
-    this.session.mode.set({ modeId: params.modeId });
+    const entry = this.getSession(params.sessionId);
+    if (!entry.modes.some(mode => mode.id === params.modeId))
+      throw RequestError.invalidParams(undefined, 'Unknown mode');
+    await this.enqueue(entry, async () => {
+      if (this.disposed) return;
+      await entry.session.mode.switch({ modeId: params.modeId });
+    });
   }
 
   async unstable_setSessionModel(params: { sessionId: string; modelId: string }): Promise<void> {
-    const threadId = this.getThreadIdOrThrow(params.sessionId);
-    await this.session.thread.switch({ threadId });
-    this.session.model.set({ modelId: params.modelId });
+    const entry = this.getSession(params.sessionId);
+    await this.enqueue(entry, async () => {
+      if (this.disposed) return;
+      if (
+        !includeCurrentModel(entry.models, entry.session.model.get() ?? '').some(
+          model => model.modelId === params.modelId,
+        )
+      ) {
+        throw RequestError.invalidParams(
+          undefined,
+          'Model is unavailable or its provider is not configured. Refresh the model list.',
+        );
+      }
+      await entry.session.model.switch({ modelId: params.modelId });
+    });
   }
+}
+
+function includeCurrentModel(models: SessionEntry['models'], currentModelId: string): SessionEntry['models'] {
+  // Saved/custom model IDs may work even when discovery only returns a gateway-qualified alias.
+  return currentModelId && !models.some(model => model.modelId === currentModelId)
+    ? [{ modelId: currentModelId, name: currentModelId }, ...models]
+    : models;
 }
 
 export function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
@@ -214,6 +534,11 @@ export function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
       parts.push(`[resource: ${block.uri}]`);
     } else if (block.type === 'resource') {
       parts.push(`[resource: ${block.resource.uri}]`);
+      if (!('text' in block.resource))
+        throw RequestError.invalidParams(undefined, 'Binary prompt resources are not supported');
+      parts.push(block.resource.text);
+    } else {
+      throw RequestError.invalidParams(undefined, `Unsupported prompt content: ${block.type}`);
     }
   }
   return parts.join('\n');
@@ -228,7 +553,7 @@ export function mapStopReason(
     case 'aborted':
       return 'cancelled';
     case 'error':
-      return 'end_turn';
+      throw RequestError.internalError(undefined, 'Mastra Code turn failed');
     case 'suspended':
       return 'end_turn';
   }

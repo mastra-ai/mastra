@@ -309,6 +309,127 @@ describe('StructuredOutputProcessor', () => {
       expect(abort).toHaveBeenCalledTimes(1);
     });
 
+    describe('when the run is aborted during structuring', () => {
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+      const objectChunk = (n: number) => ({ runId: 'test-run', from: ChunkFrom.AGENT, type: 'object', object: { n } });
+
+      const createLoggingProcessor = () => {
+        const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+        const p = new StructuredOutputProcessor({
+          schema: testSchema,
+          model: mockModel,
+          errorStrategy: 'strict',
+          logger: logger as any,
+        });
+        return { p, logger };
+      };
+
+      it('stops enqueuing, forwards the signal, and records no error or retry', async () => {
+        const { p, logger } = createLoggingProcessor();
+        const abortController = new AbortController();
+        const enqueued: unknown[] = [];
+        let closed = false;
+        const controller = {
+          get desiredSize() {
+            return closed ? null : 1;
+          },
+          enqueue: vi.fn((chunk: unknown) => {
+            if (closed) throw new TypeError('Invalid state: Controller is already closed');
+            enqueued.push(chunk);
+          }),
+        };
+
+        const fullStream = new ReadableStream({
+          async pull(c) {
+            const i = enqueued.length;
+            if (i === 1) {
+              abortController.abort();
+              closed = true;
+            }
+            if (i < 4) c.enqueue(objectChunk(i));
+            else c.close();
+          },
+        });
+        const streamSpy = vi.spyOn(p['structuringAgent'], 'stream').mockResolvedValue({ fullStream } as any);
+
+        const abort = createMockAbort();
+        const state = { controller };
+        await p.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state,
+          abort,
+          retryCount: 0,
+          abortSignal: abortController.signal,
+        });
+
+        expect(streamSpy.mock.calls[0]?.[1]).toMatchObject({ abortSignal: abortController.signal });
+        expect(enqueued).toHaveLength(1);
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
+        const stepArgs = outputStepArgs(state, abort);
+        expect(p.processOutputStep(stepArgs)).toBe(stepArgs.messages);
+        expect(abort).not.toHaveBeenCalled();
+      });
+
+      it('skips the structuring stream when already aborted', async () => {
+        const { p, logger } = createLoggingProcessor();
+        const streamSpy = vi.spyOn(p['structuringAgent'], 'stream');
+        const { controller } = createMockController();
+        await p.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort: createMockAbort(),
+          retryCount: 0,
+          abortSignal: AbortSignal.abort(),
+        });
+        expect(streamSpy).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+      });
+
+      it('does not enqueue into a closed controller', async () => {
+        const { p, logger } = createLoggingProcessor();
+        let controller!: TransformStreamDefaultController<any>;
+        const stream = new TransformStream({
+          start(c) {
+            controller = c;
+          },
+        });
+        await stream.readable.cancel();
+        const enqueueSpy = vi.spyOn(controller, 'enqueue');
+        const structuringStream = vi.spyOn(p['structuringAgent'], 'stream').mockResolvedValue({
+          fullStream: convertArrayToReadableStream([objectChunk(0), objectChunk(1)]),
+        } as any);
+        await p.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort: createMockAbort(),
+          retryCount: 0,
+        });
+        expect(structuringStream).toHaveBeenCalled();
+        // The first enqueue fails on the cancelled stream; processing stops instead of retrying each chunk.
+        expect(enqueueSpy).toHaveBeenCalledTimes(1);
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(logger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('Output stream closed; stopping structuring'),
+          expect.anything(),
+        );
+      });
+    });
+
     it('should preserve upstream error details in strict logs', async () => {
       const upstreamError = new Error('No recording found for gpt-5.4');
       (upstreamError as any).statusCode = 404;
@@ -452,7 +573,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -541,7 +662,7 @@ describe('StructuredOutputProcessor', () => {
           },
           memory: {
             thread: 'thread-123',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -639,7 +760,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );
@@ -760,7 +881,7 @@ describe('StructuredOutputProcessor', () => {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',
-            options: { readOnly: true },
+            options: { readOnly: true, retainFullInput: true },
           },
         }),
       );

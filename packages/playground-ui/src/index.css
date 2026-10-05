@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 
 @import '../theme.css';
+@import './ds/components/CodeEditor/syntax-colors.css';
 
 @plugin '@tailwindcss/typography';
 
@@ -37,6 +38,27 @@
     inset 0 0 0 1px var(--surface-rim),
     inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-raised);
+}
+
+@utility shadow-input {
+  --surface-tint: transparent;
+  --surface-rim: var(--field-rim);
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+
+@utility shadow-inset {
+  box-shadow:
+    inset 0 1px 0 var(--inset-highlight),
+    inset 0 0 0 1px var(--inset-rim);
+}
+
+@utility shadow-rim {
+  box-shadow: inset 0 0 0 1px var(--surface-rim);
 }
 
 @utility shadow-overlay {
@@ -132,6 +154,20 @@
   * {
     border-color: var(--border);
   }
+
+  :where(code, samp, pre, .font-mono) {
+    font-size-adjust: var(--font-mono-size-adjust, none);
+  }
+
+  kbd {
+    font-size-adjust: none;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--border-focus);
+    outline-offset: 0;
+  }
+
   body {
     background-color: var(--sidebar);
     color: var(--foreground);
@@ -141,7 +177,7 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent) transparent;
+    scrollbar-color: var(--border-strong) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -151,13 +187,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+    background-color: var(--border-strong);
     border-radius: 9999px;
     border: 3px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+    background-color: var(--border-focus);
   }
   ::-webkit-scrollbar-corner {
     background: transparent;

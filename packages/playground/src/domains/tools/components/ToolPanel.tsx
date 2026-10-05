@@ -1,16 +1,13 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useTool, useExecuteTool, useAgents } from '@mastra/react/hooks';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import ToolExecutor from './ToolExecutor';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useTool } from '@/domains/tools/hooks';
-import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -36,12 +33,11 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   }, [agents, toolId]);
 
   // Only fetch from API if tool not found in agents
-  const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
+  const { data: apiTool, isLoading, error } = useTool({ toolId: toolId!, queryOptions: { enabled: !agentTool } });
 
   const tool: any = agentTool || apiTool;
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
-  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (error) {
@@ -50,22 +46,20 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
+  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
 
-    // Merge global playground request context with schema request context.
-    // Schema values take precedence and explicitly override global values,
-    // including when schema values are empty strings (user intentionally cleared them).
-    const requestContext = {
-      ...(playgroundRequestContext ?? {}),
-      ...(schemaRequestContext ?? {}),
-    };
-
-    return executeTool({
-      toolId: tool.id,
-      input: data,
-      requestContext,
-    });
+    try {
+      return await executeTool({
+        toolId: tool.id,
+        input: data,
+        requestContext,
+      });
+    } catch (error) {
+      toast.error('Error executing dev tool');
+      console.error('Error executing dev tool:', error);
+      throw error;
+    }
   };
 
   const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});
@@ -107,7 +101,8 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
-      requestContextSchema={tool.requestContextSchema}
+      requestContextEntityType="tool"
+      requestContextEntityId={tool.id}
     />
   );
 };

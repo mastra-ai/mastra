@@ -171,14 +171,30 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, cleanup } = await durableResearcher.observe(runId)
+const { output } = await durableResearcher.observe(runId)
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
 }
-
-cleanup()
 ```
+
+Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. If an offset skips earlier text deltas, aggregated text is partial and structured output may be invalid. On transports with numeric offset support, an offset beyond the highest retained index also skips live events with lower indexes. Events arrive only when the published index reaches the requested offset. If the index counter restarts below that offset and never reaches it, observation remains pending indefinitely. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+
+Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
+
+```typescript title="src/server/reconnect.ts"
+const { output, detach } = await durableResearcher.observe(runId)
+
+request.signal.addEventListener('abort', detach, { once: true })
+
+if (request.signal.aborted) detach()
+
+for await (const chunk of output.fullStream) {
+  // Stops when the run finishes or the client disconnects
+}
+```
+
+If you pass `idleTimeoutMs` and no chunks arrive for that long, Mastra checks `isAlive` when you provide it. If `isAlive` returns `true` or throws, the timer restarts and the stream stays open. Otherwise the stream ends with an error chunk and detaches the observer. The run itself is only cleaned up when `isAlive` returns `false`.
 
 `createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
@@ -239,7 +255,11 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 ## Cleanup
 
-Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
+Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
+
+When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
+
+Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 
 ## Tool approval
 
@@ -267,6 +287,12 @@ Durable agents can checkpoint each run's state to storage while it executes. If 
 Under the default persistence policy, these `running` checkpoints are only written when crash recovery is enabled. With `recovery.durableAgents: 'off'` (the default), durable agents persist snapshots only for `pending`, `paused`, and `suspended` runs (the artifacts human-in-the-loop resume depends on) and skip the per-step `running` writes entirely. A custom `shouldPersistSnapshot` predicate can keep `running` checkpoints even with recovery off. See [snapshot persistence](#snapshot-persistence) for the full policy and how to override it.
 
 Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
+
+:::warning
+
+Automatic and manual recovery re-run the agentic loop from the last persisted snapshot, which can reissue LLM calls (with real cost) and re-execute tool calls. A sub-agent delegation is one generated `agent-<name>` tool call, and recovery doesn't checkpoint the LLM or tool calls inside that delegation independently. If recovery replays the delegation step, the entire sub-agent run starts again and can repeat inner LLM calls and already-completed tool side effects. Make tools, including tools used by sub-agents, idempotent, or deduplicate their external side effects.
+
+:::
 
 ### Snapshot persistence
 
@@ -302,12 +328,6 @@ export const mastra = new Mastra({
 ```
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
-
-:::warning
-
-Recovery re-runs the agentic loop from the last snapshot, which re-issues LLM calls (real cost) and re-executes tool calls. Make sure your tools are idempotent before enabling automatic recovery.
-
-:::
 
 ### Manual recovery
 

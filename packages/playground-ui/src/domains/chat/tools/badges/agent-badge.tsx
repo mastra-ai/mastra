@@ -1,0 +1,202 @@
+import React from 'react';
+import Markdown from 'react-markdown';
+import { ToolCard } from '../tool-card';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import type { MessageMetadata } from '@/domains/chat';
+import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@/domains/chat/components/section-label';
+import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
+import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { ToolCallMono } from '@/ds/components/ai/tool-call';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+
+type TextMessage = {
+  type: 'text';
+  content: string;
+};
+
+type ToolMessage = {
+  type: 'tool';
+  toolName: string;
+  toolOutput?: any;
+  args?: any;
+  toolCallId: string;
+  result?: any;
+};
+
+export type AgentMessage = TextMessage | ToolMessage;
+
+export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+  agentId: string;
+  messages: AgentMessage[];
+  metadata?: MessageMetadata;
+  suspendPayload?: any;
+  toolCalled?: boolean;
+  isComplete?: boolean;
+  keepOpenForStreamingChildMessages?: boolean;
+  status?: ActivityStatus;
+  errorText?: string;
+  onLoadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
+}
+
+export const AgentBadge = ({
+  agentId,
+  messages = [],
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+  toolName,
+  isNetwork,
+  suspendPayload,
+  toolCalled: toolCalledProp,
+  isComplete = false,
+  keepOpenForStreamingChildMessages = false,
+  status = 'idle',
+  errorText,
+  onLoadPrevious,
+  isLoadingPrevious = false,
+}: AgentBadgeProps) => {
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
+
+  const parentSuspendedTools =
+    metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
+      ? metadata?.suspendedTools
+      : undefined;
+
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
+      : undefined;
+
+  const allChildToolsComplete =
+    messages.length > 0 &&
+    messages.every(message => {
+      if (message.type === 'text') {
+        return true;
+      }
+      return message.toolOutput !== undefined;
+    });
+
+  let toolCalled = isComplete && allChildToolsComplete;
+
+  if (isNetwork) {
+    toolCalled = toolCalledProp ?? allChildToolsComplete;
+  }
+
+  const isError = status === 'error';
+  const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+  const shownError = isError ? errorText : undefined;
+  const hasBody =
+    Boolean(onLoadPrevious) ||
+    messages.length > 0 ||
+    Boolean(shownError) ||
+    Boolean(suspendPayload) ||
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled });
+
+  let suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
+        {suspendPayload}
+      </ToolCallMono>
+    ) : (
+      <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+    );
+
+  return (
+    <BadgeWrapper
+      data-testid="agent-badge"
+      icon={<AgentIcon className="text-span-agent" />}
+      title={agentId}
+      status={status}
+      initialCollapsed={shouldCollapseContent}
+      extraInfo={
+        metadata?.mode === 'network' ? (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={selectionReason ?? ''}
+            input={agentNetworkInput as string | Record<string, unknown> | undefined}
+          />
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+        ) : null
+      }
+    >
+      {hasBody && (
+        <>
+          {onLoadPrevious && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadPrevious}
+              disabled={isLoadingPrevious}
+              data-testid="agent-badge-load-previous"
+            >
+              {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
+            </Button>
+          )}
+
+          {messages.map((message, index) => {
+            if (message.type === 'text') {
+              return <Markdown key={index}>{message.content}</Markdown>;
+            }
+
+            let result;
+
+            try {
+              result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+            } catch {
+              result = message.toolOutput;
+            }
+
+            return (
+              <React.Fragment key={index}>
+                <ToolCard
+                  toolName={message.toolName}
+                  input={message.args}
+                  output={result}
+                  state="output-available"
+                  toolCallId={message.toolCallId}
+                  metadata={{
+                    mode: 'stream',
+                    requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
+                    suspendedTools: parentSuspendedTools,
+                  }}
+                />
+              </React.Fragment>
+            );
+          })}
+
+          {shownError && (
+            <ToolCallMono copyText={shownError} data-testid="agent-error" className="text-destructive-foreground">
+              {shownError}
+            </ToolCallMono>
+          )}
+
+          {suspendPayloadSlot !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Agent suspend payload</SectionLabel>
+              {suspendPayloadSlot}
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
+      )}
+    </BadgeWrapper>
+  );
+};

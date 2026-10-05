@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
@@ -183,7 +183,7 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute();
     sessionGate.resolve();
 
-    const header = await screen.findByRole('region', { name: 'Factory session' });
+    const header = await findPageHeader();
     // The messages-loading window is now covered by the session-prepare step
     // loader (with "Loading messages" as its active tail step) rather than
     // the old skeleton bars — keeps the composer's spinning ring meaningful
@@ -193,7 +193,7 @@ describe('ThreadPage loading shell', () => {
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
+    expect(await findPageHeader()).toBeInTheDocument();
   });
 
   it('reveals loaded history without briefly rendering the empty thread state', async () => {

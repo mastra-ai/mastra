@@ -9,15 +9,18 @@
  * Closure-valued options and closure predicates must hard-fail at serialize
  * time — silent loss would ship broken workflows unnoticed.
  */
+import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { Classifier } from '../../classifier';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
-import { rehydrateWorkflow, toStorableGraph } from '../dynamic';
+import { rehydrateWorkflow, toStorableGraph, validateDynamicWorkflow } from '../dynamic';
 import type { SerializedStepFlowEntry } from '../types';
 import { createStepFromTool } from '../workflow';
 
@@ -104,6 +107,38 @@ const plusOneStep = createStepFromTool(plusOneTool as any) as any;
 const shoutStep = createStepFromTool(shoutTool as any) as any;
 const whisperStep = createStepFromTool(whisperTool as any) as any;
 
+function createRoutingClassifier() {
+  const model: EvaluationModelV4 = {
+    specificationVersion: 'v4',
+    provider: 'test',
+    modelId: 'test-classifier',
+    supportedQuestionTypes: ['choice'],
+    doEvaluate: async ({ state }) => ({
+      answers: {
+        route: {
+          type: 'choice',
+          choice: (state as { route?: string }).route === 'support' ? 'support' : 'billing',
+          probabilities: { billing: 0.8, support: 0.2 },
+        },
+      },
+      usage: { inputTokens: 1, outputTokens: 1 },
+      warnings: [],
+    }),
+  };
+
+  return new Classifier({
+    id: 'round-trip-router',
+    model,
+    questions: {
+      route: {
+        type: 'choice',
+        instructions: 'Choose a route',
+        criteria: { billing: 'Billing', support: 'Support' },
+      },
+    },
+  });
+}
+
 function buildOriginalWorkflow() {
   return createWorkflow({
     id: 'round-trip-wf',
@@ -184,6 +219,55 @@ describe('storage round-trip', () => {
     expect(rehydratedResult.status).toBe('success');
     expect((rehydratedResult as any).result).toEqual((originalResult as any).result);
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
+  });
+
+  it('preserves the `initData: true` map source through serialize → validate → rehydrate → execute', async () => {
+    const build = () =>
+      createWorkflow({
+        id: 'init-data-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .tool(doubleTool)
+        .map({ value: { initData: true, path: 'value' } })
+        .commit();
+
+    const stored = toStorableGraph(build().stepGraph);
+    const mapping = stored[1] as Extract<(typeof stored)[number], { type: 'mapping' }>;
+    expect(JSON.parse(mapping.mapConfig).value).toEqual({ initData: true, path: 'value' });
+
+    const def = {
+      id: 'init-data-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: JSON.parse(JSON.stringify(stored)),
+    };
+    expect(validateDynamicWorkflow(def as any)).toEqual([]);
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'init-data' }),
+    });
+    const { workflow } = await rehydrateWorkflow(def, mastra);
+    mastra.addWorkflow(workflow, 'init-data-wf');
+    const result = await (await mastra.getWorkflow('init-data-wf').createRun()).start({ inputData: { value: 5 } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 5 });
+  });
+
+  it('serializes the workflow-instance `initData` form as the workflow id', () => {
+    const wf = createWorkflow({
+      id: 'init-ref-wf',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    });
+    wf.tool(doubleTool)
+      .map({ value: { initData: wf, path: 'value' } })
+      .commit();
+
+    const mapping = toStorableGraph(wf.stepGraph)[1] as Extract<SerializedStepFlowEntry, { type: 'mapping' }>;
+    expect(JSON.parse(mapping.mapConfig).value).toEqual({ initData: 'init-ref-wf', path: 'value' });
   });
 
   it('rehydrates workflow-level description and metadata from the stored definition', async () => {
@@ -913,6 +997,99 @@ describe('rehydrate agent/tool step options', () => {
 });
 
 describe('predicate round-trip', () => {
+  it.each([
+    { name: 'default', evented: false },
+    { name: 'evented', evented: true },
+  ])('classifier branch round-trips and executes on the $name engine', async ({ evented }) => {
+    const classifier = createRoutingClassifier();
+    const billingTool = createTool({
+      id: 'billing-route',
+      description: 'Routes to billing',
+      inputSchema: z.any(),
+      outputSchema: z.object({ routedTo: z.literal('billing') }),
+      execute: async () => ({ routedTo: 'billing' as const }),
+    });
+    const supportTool = createTool({
+      id: 'support-route',
+      description: 'Routes to support',
+      inputSchema: z.any(),
+      outputSchema: z.object({ routedTo: z.literal('support') }),
+      execute: async () => ({ routedTo: 'support' as const }),
+    });
+    const workflow = createWorkflow({
+      id: 'classifier-round-trip',
+      inputSchema: z.object({ route: z.string() }),
+      outputSchema: z.any(),
+    })
+      .classifier(classifier, { retries: 2, maxRetries: 3, metadata: { source: 'round-trip' } })
+      .branch([
+        [
+          {
+            predicate: {
+              op: 'eq',
+              left: { path: 'inputData.answers.route.choice' },
+              right: { literal: 'billing' },
+            },
+          },
+          createStepFromTool(billingTool as any) as any,
+        ],
+        [
+          {
+            predicate: {
+              op: 'eq',
+              left: { path: 'inputData.answers.route.choice' },
+              right: { literal: 'support' },
+            },
+          },
+          createStepFromTool(supportTool as any) as any,
+        ],
+      ])
+      .commit();
+
+    const wire = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(wire[0]).toEqual({
+      type: 'classifier',
+      id: 'round-trip-router',
+      classifierId: 'round-trip-router',
+      options: { retries: 2, maxRetries: 3, metadata: { source: 'round-trip' } },
+    });
+
+    const mastra = new Mastra({
+      logger: false,
+      classifiers: { router: classifier },
+      tools: { 'billing-route': billingTool, 'support-route': supportTool } as any,
+      storage: new InMemoryStore({ id: `classifier-round-trip-${evented}` }),
+      pubsub: evented ? new EventEmitterPubSub() : undefined,
+    });
+    const { workflow: rehydrated } = await rehydrateWorkflow(
+      {
+        id: 'classifier-round-trip',
+        inputSchema: { type: 'object', properties: { route: { type: 'string' } }, required: ['route'] },
+        outputSchema: {},
+        graph: wire,
+      },
+      mastra,
+      { engineType: evented ? 'evented' : 'default' },
+    );
+    expect(rehydrated.engineType === 'evented').toBe(evented);
+    mastra.addWorkflow(rehydrated, 'classifier-round-trip');
+
+    try {
+      if (evented) await mastra.startWorkers();
+      const result = await (
+        await mastra.getWorkflow('classifier-round-trip').createRun()
+      ).start({
+        inputData: { route: 'billing' },
+      });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ 'billing-route': { routedTo: 'billing' } });
+      }
+    } finally {
+      if (evented) await mastra.stopWorkers?.();
+    }
+  });
+
   it('branch with declarative predicates round-trips and executes on rehydrated instance', async () => {
     const wf = createWorkflow({
       id: 'branch-wf',

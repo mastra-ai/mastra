@@ -7,10 +7,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileText, Search } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
@@ -75,64 +76,58 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogHeader>
           <DialogTitle>Select a prompt block</DialogTitle>
           <DialogDescription>Choose a saved prompt block to reference</DialogDescription>
+          <SearchInput
+            label="Search prompt blocks"
+            className="mt-2"
+            placeholder="Search prompt blocks..."
+            value={search}
+            onValueChange={handleSearchChange}
+          />
         </DialogHeader>
         <DialogBody>
-          <div className="flex flex-col gap-3">
-            <div className="border-border bg-background flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search className="text-muted-foreground h-4 w-4" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => handleSearchChange(e.target.value)}
-                placeholder="Search prompt blocks..."
-                className="text-caption text-foreground placeholder:text-muted-foreground flex-1 bg-transparent outline-hidden"
-              />
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+              <Spinner />
+              <Txt variant="caption">Loading prompt blocks...</Txt>
             </div>
-
-            {isLoading ? (
-              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
-                <Spinner className="h-6 w-6" />
-                <Txt variant="caption">Loading prompt blocks...</Txt>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
-                <FileText className="h-8 w-8" />
-                <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
-              </div>
-            ) : (
-              <div className="max-h-dropdown flex flex-col gap-1 overflow-y-auto">
-                {filtered.map(block => (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => handleSelect(block.id)}
-                    className={cn(
-                      'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-fill-subtle active:bg-fill',
-                    )}
-                  >
-                    <Txt variant="column" tone="ink">
-                      {block.name}
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
+              <FileText className="h-8 w-8" />
+              <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {filtered.map(block => (
+                <button
+                  key={block.id}
+                  type="button"
+                  onClick={() => handleSelect(block.id)}
+                  className={cn(
+                    'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
+                    'hover:bg-fill-subtle active:bg-fill',
+                  )}
+                >
+                  <Txt variant="column" tone="ink">
+                    {block.name}
+                  </Txt>
+                  {block.description && (
+                    <Txt variant="meta" tone="muted" className="line-clamp-1">
+                      {block.description}
                     </Txt>
-                    {block.description && (
-                      <Txt variant="meta" tone="muted" className="line-clamp-1">
-                        {block.description}
-                      </Txt>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
-            {(page > 0 || hasMore) && (
-              <DataList.Pagination
-                currentPage={page}
-                hasMore={hasMore}
-                onNextPage={handleNextPage}
-                onPrevPage={handlePrevPage}
-              />
-            )}
-          </div>
+          {(page > 0 || hasMore) && (
+            <DataList.Pagination
+              currentPage={page}
+              hasMore={hasMore}
+              onNextPage={handleNextPage}
+              onPrevPage={handlePrevPage}
+            />
+          )}
         </DialogBody>
       </DialogContent>
     </Dialog>

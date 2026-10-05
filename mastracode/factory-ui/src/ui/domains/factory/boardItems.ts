@@ -24,9 +24,8 @@ export function hasLabel(labels: readonly string[], label: string): boolean {
 }
 
 export function metadataLabels(metadata: Record<string, unknown>): string[] {
-  return Array.isArray(metadata.labels)
-    ? metadata.labels.filter((label): label is string => typeof label === 'string')
-    : [];
+  if (!Array.isArray(metadata.labels)) return [];
+  return metadata.labels.filter((label): label is string => typeof label === 'string');
 }
 
 export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
@@ -139,40 +138,39 @@ export function externalLinkLabel(source: WorkItemSource): string {
   return 'Open in GitHub';
 }
 
-export function workItemMeta(item: WorkItem): string {
-  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
-  // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
-  // when the factory first saw it, which is "just now" for every backfilled card.
-  const sourceCreatedAt =
-    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
-      ? item.metadata.sourceCreatedAt
-      : undefined;
-  const age = relativeTime(sourceCreatedAt ?? item.createdAt);
+/** When the issue/PR was opened upstream; `createdAt` is only when the factory first saw it, "just now" for every backfilled card. */
+export function sourceCreatedAt(metadata: Record<string, unknown>): string | undefined {
+  const value = metadata.sourceCreatedAt;
+  return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
+}
+
+/** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
+export function workItemKey(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   const githubNumber = githubNumberForItem(item);
-  if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const issueIdentifier =
+  if (githubNumber !== undefined) return `#${githubNumber}`;
+  return (
     gitlabIdentifierForItem(item) ??
     linearIdentifierForItem(item) ??
     jiraIdentifierForItem(item) ??
-    incidentioIdentifierForItem(item);
-  const issueOwner = assignee ?? author;
-  if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
-  return `${SOURCE_LABELS[item.source]} · ${age}`;
+    incidentioIdentifierForItem(item)
+  );
+}
+
+export function workItemMeta(item: WorkItem): string {
+  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
+  const age = relativeTime(sourceCreatedAt(item.metadata) ?? item.createdAt);
+  const key = workItemKey(item);
+  if (key === undefined) return `${SOURCE_LABELS[item.source]} · ${age}`;
+  const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
+  return `${key}${owner ? ` · ${owner}` : ''} · ${age}`;
 }
 
 /** Free-text card match over what names it on the board: its title and its issue key. */
 export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | 'title'>, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
-  const number = githubNumberForItem(card);
-  const identifier =
-    gitlabIdentifierForItem(card) ??
-    linearIdentifierForItem(card) ??
-    jiraIdentifierForItem(card) ??
-    incidentioIdentifierForItem(card);
-  const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
-  return named.some(text => text.toLowerCase().includes(needle));
+  return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
 }
 
 /**
@@ -188,11 +186,13 @@ export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: 
  * The card's single conversation. A work item keeps one threadId for its whole
  * lifecycle — every run reuses the worktree's thread — so the card title links
  * to exactly one thread. Items filed while session scoping was broken may
- * still carry divergent role refs; the last-filed ref wins (runs converge them
- * back onto one thread the next time they file).
+ * still carry divergent role refs; prefer the earliest lifecycle role because
+ * JSON object key order is not a stable record of which ref was filed first.
  */
 export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | undefined {
-  return Object.values(sessions).at(-1);
+  return (
+    sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
+  );
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

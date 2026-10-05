@@ -1,11 +1,22 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { createContext, useContext } from 'react';
 import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
 import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
+import type { FactoryProject } from '../services/github';
 import { SessionRunObserver } from './SessionRunObserver';
+
+const ActiveFactoryContext = createContext<FactoryProject | null>(null);
+
+/** The routed factory; only valid below `FactoryLayout`, which guarantees it exists. */
+export function useActiveFactory(): FactoryProject {
+  const factory = useContext(ActiveFactoryContext);
+  if (!factory) throw new Error('useActiveFactory must be used below FactoryLayout');
+  return factory;
+}
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
@@ -35,7 +46,7 @@ export function FactoryLayout() {
   }
 
   return (
-    <>
+    <ActiveFactoryContext.Provider value={factory}>
       <GitHubAppCallbackHandler />
       <FeedEventsProvider factoryProjectId={factory.id}>
         {factory.repositories.map(repository => (
@@ -46,6 +57,6 @@ export function FactoryLayout() {
         ))}
         <Outlet />
       </FeedEventsProvider>
-    </>
+    </ActiveFactoryContext.Provider>
   );
 }

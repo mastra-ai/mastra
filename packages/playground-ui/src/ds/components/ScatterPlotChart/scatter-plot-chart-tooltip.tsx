@@ -1,5 +1,6 @@
 import type { ScatterPlotChartFormatter } from './scatter-plot-chart';
 import { ChartTooltip } from '@/ds/components/ChartTooltip';
+import { Txt } from '@/ds/components/Txt';
 
 type ScatterTooltipPayload = Array<{
   color?: string;
@@ -34,8 +35,12 @@ export function ScatterPlotChartTooltip({
 
   return (
     <ChartTooltip>
-      {label !== undefined && <p className="text-foreground text-column mb-1">{String(label)}</p>}
-      <div className="text-placeholder grid gap-1">
+      {label !== undefined && (
+        <Txt variant="column" tone="ink" className="mb-1">
+          {String(label)}
+        </Txt>
+      )}
+      <div className="grid gap-1 text-placeholder">
         <p>
           <span className="text-muted-foreground">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>

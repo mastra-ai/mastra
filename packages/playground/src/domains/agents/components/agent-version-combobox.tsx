@@ -1,18 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { useAgentVersions } from '../hooks/use-agent-versions';
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useAgentVersions } from '@mastra/react/hooks';
 
 export interface AgentVersionComboboxProps {
   agentId: string;
@@ -36,6 +26,7 @@ export function AgentVersionCombobox({
   const { data, isLoading } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = data?.versions ?? [];
@@ -51,7 +42,7 @@ export function AgentVersionCombobox({
 
       const trimmedMessage = version.changeMessage?.trim();
       const description = [
-        formatTimestamp(version.createdAt),
+        formatDate(version.createdAt, 'date-time') ?? '',
         trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
       ]
         .filter(Boolean)
@@ -62,9 +53,9 @@ export function AgentVersionCombobox({
         value: version.id,
         description,
         end: isPublished ? (
-          <Badge variant="green">Published</Badge>
+          <Badge variant="success">Published</Badge>
         ) : isDraft ? (
-          <Badge variant="blue">Draft</Badge>
+          <Badge variant="info">Draft</Badge>
         ) : undefined,
       };
     }),

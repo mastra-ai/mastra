@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -15,6 +13,7 @@ import type {
 import pg from 'pg';
 import type { Pool, PoolClient } from 'pg';
 
+import { toPgJson } from './db/sanitize-json';
 import { PostgresStore } from './index';
 
 export type PgFactoryStorageConfig =
@@ -131,7 +130,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
         return Boolean(value);
       case 'json':
         // Explicit stringify: node-pg would otherwise turn JS arrays into pg arrays.
-        return JSON.stringify(value);
+        return toPgJson(value);
       case 'bigint':
       case 'integer':
         return Number(value);
@@ -313,7 +312,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
 
     const values: Record<string, unknown> = { ...row };
     if (schema.columns[pk]!.type === 'uuid-pk' && values[pk] === undefined) {
-      values[pk] = randomUUID();
+      values[pk] = globalThis.crypto.randomUUID();
     }
 
     const columns = Object.keys(values).filter(column => values[column] !== undefined);

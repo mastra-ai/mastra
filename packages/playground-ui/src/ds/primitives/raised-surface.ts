@@ -12,9 +12,10 @@
  * never clipped, has to separate from arbitrary content beneath it, and so
  * carries the long falloff.
  *
- * Both tokens carry the rim as well as the elevation (the rim is `--border`
- * itself, plus a top inset highlight in dark), so neither draws a border of its
- * own: adding `border` on top doubles the edge.
+ * Both recipes carry a `--surface-rim` inset edge, a top highlight in dark,
+ * and elevation drops. Adding a CSS border on that same edge doubles it.
+ * Content dividers use `--border`; frame headers use `border-surface-rim`
+ * and stay inside the inset pixel reserved by MainCard.
  *
  * Radius is deliberately absent — it belongs to the family (`rounded-xl` for a
  * popup, `rounded-studio-frame` for the app frame).
@@ -26,9 +27,17 @@
  * site that genuinely wants another fill still overrides it, since its own
  * classes come after these.
  */
-export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised';
+const fieldsOnSurface =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
+const fieldsOnDialog =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
+const fieldsOnPage = '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)]';
 
-export const overlaySurfaceStyle = 'bg-card shadow-overlay';
+export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
+
+export const overlaySurfaceStyle = 'bg-card shadow-overlay ' + fieldsOnSurface;
+
+export const dialogSurfaceStyle = 'bg-dialog shadow-overlay ' + fieldsOnDialog;
 
 /**
  * The app frame and the panels docked beside it. Same elevation as a card, one
@@ -36,7 +45,7 @@ export const overlaySurfaceStyle = 'bg-card shadow-overlay';
  * cards, fields, tables — needs a step to rise above. `Card` is for that
  * content, never for the frame around it.
  */
-export const frameSurfaceStyle = 'bg-background shadow-raised';
+export const frameSurfaceStyle = 'bg-background shadow-raised ' + fieldsOnPage;
 
 /**
  * Interaction states for a surface that already carries an opaque fill. The

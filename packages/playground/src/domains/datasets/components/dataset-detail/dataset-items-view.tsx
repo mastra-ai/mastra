@@ -2,13 +2,11 @@ import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
-import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -57,14 +55,20 @@ export function DatasetItemsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const {
     data: items = [],
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion, orderBy);
+  } = useDatasetItems({
+    datasetId: datasetId,
+    search: debouncedSearch || undefined,
+    version: activeDatasetVersion,
+    orderBy: orderBy,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const { deleteItems } = useDatasetMutations();
 
   // Clicking the already-open item closes the URL-driven panel.

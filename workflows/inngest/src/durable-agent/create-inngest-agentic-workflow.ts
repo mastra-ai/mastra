@@ -29,6 +29,19 @@ import type { Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
+import type { InngestFlowControlConfig } from '../types';
+
+// Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
+// persisted so a finished run's snapshot replaces its stale suspended one and
+// resume() rejects it instead of re-running the suspended tool.
+const PERSISTED_SNAPSHOT_STATUSES = new Set<string>([
+  'suspended',
+  'success',
+  'failed',
+  'canceled',
+  'bailed',
+  'tripwire',
+]);
 
 /**
  * Input schema for the durable agentic workflow.
@@ -64,6 +77,8 @@ export interface InngestDurableAgenticWorkflowOptions {
   inngest: Inngest;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
+  /** Inngest function-level retries for the agentic loop and iteration functions (defaults to 0) */
+  retries?: InngestFlowControlConfig['retries'];
 }
 
 /**
@@ -110,7 +125,7 @@ export const InngestDurableStepIds = {
 } as const;
 
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
-  const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS } = options;
+  const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
@@ -128,6 +143,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
     id: InngestDurableStepIds.AGENTIC_EXECUTION,
+    retries,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
@@ -136,8 +152,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // This makes the trace structure match regular agents (agent_run -> model_generation -> tool_call)
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+      evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
+      emitStepEvents: false,
     },
     steps: [],
   })
@@ -164,6 +182,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
+          accumulatedSteps: state.accumulatedSteps,
         };
       },
       { id: 'map-to-llm-input' },
@@ -257,6 +276,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   return (
     createWorkflow({
       id: InngestDurableStepIds.AGENTIC_LOOP,
+      retries,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
@@ -265,8 +285,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // This makes the trace structure match regular agents (agent_run -> model_generation -> tool_call)
           internal: InternalSpans.WORKFLOW,
         },
-        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+        evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
+        emitStepEvents: false,
       },
       steps: [],
     })
@@ -306,6 +328,13 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async ({ inputData }) => {
         const state = inputData as IterationState;
 
+        // bail() from a delegation hook is a hard stop. The flag travels on
+        // serialized iteration state (set by the tool-call step, aggregated by
+        // llm-mapping), so it survives the wire to this cross-process predicate.
+        if (state.delegationBailed) {
+          return false;
+        }
+
         // Check if we should continue
         const shouldContinue = state.lastStepResult?.isContinued === true;
         // Use maxSteps from options (per-request), falling back to workflow-level default
@@ -329,7 +358,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           let finalText = lastStep?.text;
 
           // Run finish side effects directly. This mapping already executes inside the
-          // engine's durable boundary (`wrapDurableOperation` -> `inngestStep.run`), so
+          // engine's durable step boundary (`inngestStep.run`), so
           // wrapping this call in `params.engine.step.run(...)` would create a nested
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and
@@ -372,15 +401,23 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // End MODEL_GENERATION span with final output (children before parent)
           // This span was created BEFORE the workflow started and stayed open for all iterations.
-          // Same shape as the core durable agent: `text` is the output, usage goes to the
-          // attributes through the tracker so consumers find it where every other model span puts it.
+          // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
+          // usage goes to the attributes through the tracker so consumers find it where every
+          // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(
               state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
             ) as AIModelGenerationSpan | undefined;
+            const toolCalls = state.accumulatedSteps.flatMap(step =>
+              ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: tc.args,
+              })),
+            );
             modelSpan?.createTracker()?.endGeneration({
-              output: { text: finalText },
+              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
               usage: state.accumulatedUsage,
             });

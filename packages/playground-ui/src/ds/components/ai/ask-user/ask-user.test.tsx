@@ -13,6 +13,9 @@ const renderAskUser = (payload: AskUserPayload, overrides: Partial<ComponentProp
 
 afterEach(cleanup);
 
+// Base UI's Radio synthesizes a PointerEvent on click, which jsdom does not
+// implement. Polyfill it with the available MouseEvent constructor.
+
 describe('AskUser', () => {
   describe('when free text is submitted with Enter', () => {
     it('submits the trimmed answer', () => {
@@ -78,7 +81,7 @@ describe('AskUser', () => {
     });
   });
 
-  describe('when a single selection is chosen', () => {
+  describe('when a single-select option is clicked', () => {
     it('submits the chosen label immediately', () => {
       const { onSubmit } = renderAskUser({
         question: 'Pick a fruit',
@@ -86,7 +89,7 @@ describe('AskUser', () => {
         selectionMode: 'single_select',
       });
 
-      fireEvent.click(screen.getByRole<HTMLInputElement>('radio', { name: 'Apple' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Apple' }));
 
       expect(onSubmit).toHaveBeenCalledWith('Apple');
     });
@@ -112,8 +115,8 @@ describe('AskUser', () => {
         selectionMode: 'multi_select',
       });
 
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Cheese' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Olives' }));
 
       expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -127,12 +130,12 @@ describe('AskUser', () => {
         selectionMode: 'multi_select',
       });
 
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }));
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Cheese' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Olives' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Cheese' }));
 
-      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }).checked).toBe(false);
-      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }).checked).toBe(true);
+      expect(screen.getByRole('checkbox', { name: 'Cheese' }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('checkbox', { name: 'Olives' }).getAttribute('aria-checked')).toBe('true');
 
       fireEvent.click(screen.getByRole('button', { name: /confirm|submit/i }));
 
@@ -140,13 +143,13 @@ describe('AskUser', () => {
     });
   });
 
-  describe('when a single selection is chosen', () => {
+  describe('when a single-select option is clicked without an explicit selection mode', () => {
     it('shows the choice as made', () => {
       renderAskUser({ question: 'Pick a fruit', options: [{ label: 'Apple' }, { label: 'Pear' }] });
 
-      fireEvent.click(screen.getByRole<HTMLInputElement>('radio', { name: /Apple/ }));
+      fireEvent.click(screen.getByRole('radio', { name: /Apple/ }));
 
-      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Apple/ }).checked).toBe(true);
+      expect(screen.getByRole('radio', { name: /Apple/ }).getAttribute('aria-checked')).toBe('true');
     });
   });
 
@@ -158,8 +161,8 @@ describe('AskUser', () => {
           onSubmit={vi.fn()}
         />,
       );
-      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Apple' }));
-      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Apple' }).checked).toBe(true);
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Apple' }));
+      expect(screen.getByRole('checkbox', { name: 'Apple' }).getAttribute('aria-checked')).toBe('true');
 
       rerender(
         <AskUser
@@ -168,7 +171,7 @@ describe('AskUser', () => {
         />,
       );
 
-      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Pear' }).checked).toBe(false);
+      expect(screen.getByRole('checkbox', { name: 'Pear' }).getAttribute('aria-checked')).toBe('false');
     });
   });
 
@@ -191,8 +194,8 @@ describe('AskUser', () => {
         selectionMode: 'multi_select',
       });
       const group = screen.getByRole('group', { name: 'Pick toppings' });
-      fireEvent.click(within(group).getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
-      fireEvent.click(within(group).getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }));
+      fireEvent.click(within(group).getByRole('checkbox', { name: 'Cheese' }));
+      fireEvent.click(within(group).getByRole('checkbox', { name: 'Olives' }));
 
       fireEvent.click(within(group).getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }));
 
@@ -210,7 +213,7 @@ describe('AskUser', () => {
     it('disables the option controls', () => {
       renderAskUser(payload, { isSubmitting: true });
 
-      expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Apple' }).disabled).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Apple' }).getAttribute('aria-disabled')).toBe('true');
     });
 
     it('announces the pending state', () => {

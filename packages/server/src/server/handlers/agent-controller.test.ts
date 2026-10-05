@@ -20,6 +20,8 @@ import {
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
+  CREATE_AGENT_CONTROLLER_THREAD_ROUTE,
+  SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
@@ -262,6 +264,7 @@ describe('agent-controller routes', () => {
         const session = await getRouteSession(`user-bg-${name}`);
         const failure = new Error('signal failed before stream started');
         vi.spyOn(session, method as any).mockRejectedValue(failure);
+        vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
         const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
 
         const events: any[] = [];
@@ -335,6 +338,77 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
     });
 
+    it('forwards requestContext to session.thread.switch', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.switch when renaming another thread', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      vi.spyOn(session.thread, 'rename').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await RENAME_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        title: 'Renamed',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.create', async () => {
+      const session = await getRouteSession('user-rc');
+      const now = new Date();
+      const spy = vi
+        .spyOn(session.thread, 'create')
+        .mockResolvedValue({ id: 't', resourceId: 'user-rc', title: 'New', createdAt: now, updatedAt: now } as any);
+      const requestContext = makeRequestContext();
+
+      await CREATE_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        title: 'New',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ title: 'New', requestContext });
+    });
+
+    it('forwards requestContext to session.sendNotificationSignal', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendNotificationSignal').mockResolvedValue({} as any);
+      const requestContext = makeRequestContext();
+
+      await SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        source: 'test',
+        kind: 'info',
+        summary: 'hi',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ source: 'test' }), { requestContext });
+    });
+
     it('forwards files to session.sendMessage', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
@@ -400,7 +474,8 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolApproval', async () => {
       const session = await getRouteSession('user-rc');
-      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue(undefined);
+      vi.spyOn(session.approval, 'isArmed').mockReturnValue(true);
+      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue({ accepted: true });
       const requestContext = makeRequestContext();
 
       await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
@@ -415,8 +490,29 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-1', decision: 'approve', requestContext });
     });
 
+    it('answers an approval with no parked gate through the stored suspended run', async () => {
+      const session = await getRouteSession('user-rc');
+      const gate = vi.spyOn(session, 'respondToToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        toolCallId: 'restored-call',
+        approved: false,
+        requestContext,
+      } as any);
+
+      expect(gate).not.toHaveBeenCalled();
+      expect(persisted).toHaveBeenCalledWith({ toolCallId: 'restored-call', approved: false, requestContext });
+    });
+
     it('forwards requestContext to session.respondToToolSuspension', async () => {
       const session = await getRouteSession('user-rc');
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -434,6 +530,7 @@ describe('agent-controller routes', () => {
 
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
 
       const result = await Promise.race([
@@ -448,6 +545,106 @@ describe('agent-controller routes', () => {
       ]);
 
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  // mastra-ai/mastra#24779: the ack must reflect whether a pending target claimed the command.
+  describe('approval and suspension acks', () => {
+    async function getRouteSession(resourceId: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    const approve = (resourceId: string, toolCallId?: string) =>
+      AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        toolCallId,
+        approved: true,
+      } as any);
+
+    it('accepts the armed call once, then rejects a duplicate decision', async () => {
+      const session = await getRouteSession('user-ack-dup');
+      const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: true });
+      await expect(decision).resolves.toMatchObject({ decision: 'approve' });
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a stale tool call id and leaves the armed gate in place', async () => {
+      const session = await getRouteSession('user-ack-stale');
+      session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+
+      expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'stale_tool_call' });
+      expect(persisted).not.toHaveBeenCalled();
+      expect(session.approval.isArmed({ toolCallId: 'current' })).toBe(true);
+    });
+
+    it('rejects an approval without a tool call id when nothing is armed', async () => {
+      await getRouteSession('user-ack-none');
+      expect(await approve('user-ack-none')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a suspension answer when no question is pending', async () => {
+      const session = await getRouteSession('user-ack-suspend');
+      const spy = vi.spyOn(session, 'respondToToolSuspension');
+
+      const res = await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ack-suspend',
+        toolCallId: 'missing',
+        resumeData: 'Yes',
+      } as any);
+
+      expect(res).toEqual({ ok: false, reason: 'no_pending_suspension' });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('acks only one of two concurrent answers to the same suspension', async () => {
+      const session = await getRouteSession('user-ack-race');
+      vi.spyOn(session.suspensions, 'resolveToolCallId').mockReturnValue('q-1');
+      let finish!: () => void;
+      const spy = vi
+        .spyOn(session, 'respondToToolSuspension')
+        .mockReturnValue(new Promise<void>(resolve => (finish = resolve)));
+      const answer = () =>
+        AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-ack-race',
+          toolCallId: 'q-1',
+          resumeData: 'Yes',
+        } as any);
+
+      const results = await Promise.all([answer(), answer()]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      finish();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(session.claimToolResponse('q-1')).toBe(true);
+    });
+
+    it('acks only one of two concurrent answers to the same persisted approval', async () => {
+      const session = await getRouteSession('user-ack-persisted-race');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const persisted = vi
+        .spyOn(session, 'respondToPersistedToolApproval')
+        .mockReturnValue(new Promise<void>(() => {}));
+
+      const results = await Promise.all([
+        approve('user-ack-persisted-race', 'restored'),
+        approve('user-ack-persisted-race', 'restored'),
+      ]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(persisted).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -606,19 +803,41 @@ describe('agent-controller routes', () => {
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+      session.emit({
+        type: 'tool_approval_required',
+        toolCallId: 'call-2',
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
 
-      let received: unknown;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      type WireDisplay = {
+        displayState: {
+          activeTools: Record<string, unknown>;
+          pendingApprovals: Record<string, unknown>;
+        };
+      };
+      let received: WireDisplay | undefined;
+      for (let i = 0; i < 20 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
-          received = value;
+        if (
+          value &&
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'display_state_changed' &&
+          typeof (value as WireDisplay).displayState.pendingApprovals?.['call-2'] === 'object'
+        ) {
+          received = value as WireDisplay;
         }
       }
       await reader.cancel();
 
       expect(received).toBeDefined();
-      const wire = JSON.parse(JSON.stringify(received));
+      const wire = JSON.parse(JSON.stringify(received)) as WireDisplay;
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+      expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
     });
   });
 

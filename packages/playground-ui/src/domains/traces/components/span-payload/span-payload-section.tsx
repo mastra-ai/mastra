@@ -1,8 +1,10 @@
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { cn } from '@/lib/utils';
@@ -29,9 +31,8 @@ export interface SpanPayloadSectionProps {
 
 function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view: SpanPayloadView) => void }) {
   return (
-    <ButtonsGroup aria-label="Payload view" data-slot="span-payload-view-toggle">
+    <ButtonsGroup size="sm" aria-label="Payload view" data-slot="span-payload-view-toggle">
       <Button
-        size="sm"
         variant={view === 'rich' ? 'primary' : 'default'}
         aria-pressed={view === 'rich'}
         onClick={() => onChange('rich')}
@@ -39,7 +40,6 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
         Preview
       </Button>
       <Button
-        size="sm"
         variant={view === 'raw' ? 'primary' : 'default'}
         aria-pressed={view === 'raw'}
         onClick={() => onChange('raw')}
@@ -65,6 +65,7 @@ export function SpanPayloadSection({
   className,
 }: SpanPayloadSectionProps) {
   const [view, setView] = useState<SpanPayloadView>(defaultView);
+  const box = useCollapsibleBox();
   if (raw == null) return null;
 
   const hasRich = hasPreview && children != null;
@@ -81,11 +82,21 @@ export function SpanPayloadSection({
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
+          {(box.isClipped || box.isExpanded) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={box.isExpanded ? <Minimize2 /> : <Maximize2 />}
+              onClick={box.toggleExpanded}
+            >
+              {box.isExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
           <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" variant="ghost" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>
-      <div className="min-w-0">{showJson ? <SpanPayloadJson value={raw} /> : children}</div>
+      <CollapsibleBox state={box}>{showJson ? <SpanPayloadJson value={raw} /> : children}</CollapsibleBox>
     </div>
   );
 }

@@ -136,7 +136,6 @@ describe('Board comment deep link', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
     expect(await within(dialog).findByText('the mentioned words')).toBeInTheDocument();
     await waitFor(() => expect(client.isFetching()).toBe(0));
-    // No hunting: the anchor rides on the first request, and there is no second.
     expect(anchors).toEqual(['c-target']);
   });
 
@@ -149,8 +148,8 @@ describe('Board comment deep link', () => {
     const { router } = renderBoard(`?item=${ITEM_ID}&comment=c1`);
 
     await screen.findByRole('dialog', { name: 'Fix login bug' });
-    const filters = within(screen.getByLabelText('Board filters'));
-    await user.type(filters.getByRole('textbox', { name: 'Search cards' }), 'login');
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'login{Enter}');
 
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);

@@ -236,9 +236,24 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'upsertLinkedWorkItem': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'claimKey', 'title', 'url', 'stage', 'metadata'],
+        [
+          'type',
+          'idempotencyKey',
+          'board',
+          'source',
+          'sourceKey',
+          'claimKey',
+          'title',
+          'url',
+          'stage',
+          'skipRules',
+          'metadata',
+        ],
         'Factory linked work item decision',
       );
+      if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
+      }
       const claimKey = optionalBoundedString(
         value.claimKey,
         'Factory linked work item claimKey',
@@ -259,6 +274,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
+        ...(value.skipRules === true ? { skipRules: true } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }
@@ -363,6 +379,35 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         title: boundedString(value.title, 'Factory notification title', MAX_TITLE_LENGTH),
         ...(body ? { body } : {}),
         ...(level ? { level } : {}),
+      };
+    }
+    case 'dismissStaleReviews': {
+      assertExactKeys(
+        value,
+        [
+          'type',
+          'idempotencyKey',
+          'installationId',
+          'repository',
+          'pullRequestNumber',
+          'approvingReviewId',
+          'approvingAuthor',
+        ],
+        'Factory dismiss stale reviews decision',
+      );
+      for (const key of ['installationId', 'pullRequestNumber'] as const) {
+        if (!Number.isSafeInteger(value[key]) || (value[key] as number) <= 0) {
+          throw new FactoryRuleValidationError(`Factory dismiss stale reviews ${key} must be a positive integer.`);
+        }
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        installationId: value.installationId as number,
+        repository: boundedString(value.repository, 'Factory dismiss stale reviews repository', MAX_TITLE_LENGTH),
+        pullRequestNumber: value.pullRequestNumber as number,
+        approvingReviewId: boundedString(value.approvingReviewId, 'Factory approving review id', MAX_TITLE_LENGTH),
+        approvingAuthor: boundedString(value.approvingAuthor, 'Factory approving review author', MAX_TITLE_LENGTH),
       };
     }
     default:

@@ -3,9 +3,13 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
+import { useCardRepositorySlug } from './useCardRepositorySlug';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+
+const PREPARING_SESSION_LABEL = 'Preparing session…';
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
@@ -15,8 +19,14 @@ export function useBoardRuns({
   factoryProjectId: string;
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
-  const { start, enabled } = useStartFactoryRun();
+  const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
+  const repositorySlugFor = useCardRepositorySlug();
   const navigate = useNavigate();
+  const [repositorySelection, setRepositorySelection] = useState<{
+    item: WorkItem;
+    branch: string;
+    threadTitle: string;
+  }>();
 
   // A card click refetches items before it can decide whether to open an
   // existing thread or mint a new session. That wait is a round trip long and
@@ -64,7 +74,7 @@ export function useBoardRuns({
   };
 
   const openOrCreateSession = async (item: WorkItem) => {
-    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    if (!beginPreparingItem(item.id, PREPARING_SESSION_LABEL)) return;
     try {
       const refreshed = await refreshItem(item.id);
       if (!refreshed) return;
@@ -74,6 +84,16 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed);
+      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
+      const hasLinkedTarget = repositories.some(repository => repository.slug === targetSlug);
+      if (!targetSlug && repositories.length > 1) {
+        setRepositorySelection({ item: refreshed, ...spec });
+        return 'repository-selection-required' as const;
+      }
+      if (targetSlug && !hasLinkedTarget) {
+        toast.error(`Repository ${targetSlug} is not linked to this Factory`);
+        return;
+      }
       await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
@@ -83,6 +103,7 @@ export function useBoardRuns({
           source: refreshed.source,
           sourceKey: refreshed.sourceKey,
           title: refreshed.title,
+          metadata: refreshed.metadata,
         },
       });
     } finally {
@@ -90,10 +111,38 @@ export function useBoardRuns({
     }
   };
 
+  const selectRepository = async (repository: LinkedRepositoryPayload) => {
+    if (!repositorySelection) return;
+    const { item, branch, threadTitle } = repositorySelection;
+    setRepositorySelection(undefined);
+    try {
+      await start.mutateAsync({
+        branch,
+        threadTitle,
+        repositorySlug: repository.slug,
+        workItem: {
+          id: item.id,
+          role: 'chat',
+          source: item.source,
+          sourceKey: item.sourceKey,
+          title: item.title,
+          metadata: item.metadata,
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to start the run');
+    }
+  };
+
   return {
     enabled,
     error: start.error,
-    preparingFor: (itemId: string): string | undefined => preparingItems[itemId],
+    repositories,
+    repositorySelection,
+    selectRepository,
+    closeRepositorySelection: () => setRepositorySelection(undefined),
+    preparingFor: (itemId: string): string | undefined =>
+      preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? PREPARING_SESSION_LABEL : undefined),
     openThread,
     refreshItem,
     openOrCreateSession,

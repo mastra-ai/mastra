@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -31,13 +33,13 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="border-border border-b border-l-4 py-2">
+    <div className="border-b border-l-4 border-border py-2">
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-2">
             <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
 
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-card w-full" />
+            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="w-full [&_button]:bg-card" />
             <JSONSchemaForm.FieldRemove variant="default" className="shrink-0" />
           </div>
 
@@ -134,71 +136,50 @@ export function AgentEditSidebar({
             <div className="flex flex-col gap-4 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
-              <TextFieldBlock
-                label="Name"
-                required
-                placeholder="My Agent"
-                {...register('name')}
-                errorMsg={errors.name?.message}
-                disabled={readOnly}
-              />
+              <Field invalid={Boolean(errors.name)} disabled={readOnly}>
+                <FieldLabel required>Name</FieldLabel>
+                <Input placeholder="My Agent" required {...register('name')} />
+                <FieldError>{errors.name?.message}</FieldError>
+              </Field>
 
-              <TextareaFieldBlock
-                label="Description"
-                placeholder="Describe what this agent does"
-                {...register('description')}
-                errorMsg={errors.description?.message}
-                disabled={readOnly}
-              />
+              <Field invalid={Boolean(errors.description)} disabled={readOnly}>
+                <FieldLabel>Description</FieldLabel>
+                <Textarea placeholder="Describe what this agent does" {...register('description')} />
+                <FieldError>{errors.description?.message}</FieldError>
+              </Field>
 
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-provider" required>
-                    Provider
-                  </FieldBlock.Label>
-                  <Controller
-                    name="model.provider"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMProviders
-                          id="input-model-provider"
-                          name="model-provider"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          container={formRef}
-                          error={errors.model?.provider?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+              <Field invalid={Boolean(errors.model?.provider?.message)}>
+                <FieldLabel required>Provider</FieldLabel>
+                <Controller
+                  name="model.provider"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.provider?.message}</FieldError>
+              </Field>
 
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-name" required>
-                    Model
-                  </FieldBlock.Label>
-                  <Controller
-                    name="model.name"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMModels
-                          id="input-model-name"
-                          name="model-name"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          llmId={form.watch('model.provider') || ''}
-                          container={formRef}
-                          error={errors.model?.name?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+              <Field invalid={Boolean(errors.model?.name?.message)}>
+                <FieldLabel required>Model</FieldLabel>
+                <Controller
+                  name="model.name"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMModels
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        llmId={form.watch('model.provider') || ''}
+                        container={formRef}
+                      />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.name?.message}</FieldError>
+              </Field>
             </div>
           </ScrollArea>
         </TabContent>
@@ -227,14 +208,14 @@ export function AgentEditSidebar({
 
         <TabContent value="variables" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="border-border flex flex-col gap-4 border-b p-4">
+            <div className="flex flex-col gap-4 border-b border-border p-4">
               <SectionHeader
                 title="Variables"
                 subtitle={
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
-                    agent's instructions with the <code className="text-warning font-medium">{'{{variableName}}'}</code>{' '}
-                    syntax.
+                    agent's instructions with the{' '}
+                    <code className="font-medium text-warning-foreground">{'{{variableName}}'}</code> syntax.
                   </>
                 }
               />
@@ -249,7 +230,7 @@ export function AgentEditSidebar({
                 </JSONSchemaForm.FieldList>
 
                 <div className="p-2">
-                  <JSONSchemaForm.AddField variant="outline" size="sm">
+                  <JSONSchemaForm.AddField size="sm">
                     <PlusIcon className="mr-2 h-4 w-4" />
                     Add variable
                   </JSONSchemaForm.AddField>
@@ -260,7 +241,6 @@ export function AgentEditSidebar({
         </TabContent>
       </Tabs>
 
-      {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
         <div className="shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">

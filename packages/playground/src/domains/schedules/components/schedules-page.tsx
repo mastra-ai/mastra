@@ -1,7 +1,7 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { useSchedules } from '@mastra/react/hooks';
 import { useState } from 'react';
-import { useSchedules } from '../hooks/use-schedules';
 import { SchedulesList } from './schedules-list';
 import type { SchedulesSort } from './schedules-list';
 
@@ -11,7 +11,7 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   const [sort, setSort] = useState<SchedulesSort>();
 
   if (error) {
-    return <ErrorState title="Failed to load schedules" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load schedules" descriptionSlot={error.message} />;
   }
 
   return (

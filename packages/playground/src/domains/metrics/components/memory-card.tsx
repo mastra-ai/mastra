@@ -1,12 +1,12 @@
 import { MemoryCardView } from '@mastra/playground-ui/domains/metrics/components/memory-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
-import { useTopActiveThreadsMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-top-active-threads-metrics';
-import { useTopResourcesByThreadsMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-top-resources-by-threads-metrics';
-import { useLinkComponent } from '@/lib/framework';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useTopActiveThreadsMetrics, useTopResourcesByThreadsMetrics } from '@mastra/react/hooks';
 
 export function MemoryCard() {
-  const threads = useTopActiveThreadsMetrics();
-  const resources = useTopResourcesByThreadsMetrics();
+  const threads = useTopActiveThreadsMetrics(useMetricsFilters());
+  const resources = useTopResourcesByThreadsMetrics(useMetricsFilters());
   const { getTracesHref } = useDrilldown();
   const { Link } = useLinkComponent();
 

@@ -599,6 +599,7 @@ export class ModelSpanTracker {
         ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
         ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
         ...(ctx?.availableTools !== undefined ? { availableTools: ctx.availableTools } : {}),
+        ...(ctx?.tools !== undefined ? { tools: ctx.tools } : {}),
         ...(ctx?.toolChoice !== undefined ? { toolChoice: ctx.toolChoice } : {}),
         ...(ctx?.responseFormat !== undefined ? { responseFormat: ctx.responseFormat } : {}),
       },
@@ -653,11 +654,14 @@ export class ModelSpanTracker {
 
     // Remove verbose/redundant fields from metadata:
     // - request: too verbose
+    // - body: raw provider HTTP response body; duplicates output/usage and can be very large.
+    //   `headers` is intentionally kept: it carries provider request IDs and rate-limit info
+    //   that are useful when debugging with the provider.
     // - id/timestamp: chunk-level data, not step-related
     // - modelId/modelVersion/modelProvider: duplicates of modelMetadata
     const cleanMetadata = metadata ? { ...metadata } : undefined;
     if (cleanMetadata) {
-      for (const key of ['request', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
+      for (const key of ['request', 'body', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
         delete cleanMetadata[key];
       }
     }

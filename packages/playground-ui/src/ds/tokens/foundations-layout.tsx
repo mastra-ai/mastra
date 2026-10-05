@@ -2,12 +2,6 @@ import type { ReactNode } from 'react';
 import { Txt } from '../components/Txt/Txt';
 import { cn } from '@/lib/utils';
 
-// Shared shell for the foundation stories, so the whole token guideline reads
-// as one document: a page header, sections built from a label column plus a
-// specimen area, and one way to name a token under its specimen.
-// Local to this folder on purpose — it is documentation scaffolding, not part
-// of the package surface, so it is not re-exported from the DS index.
-
 interface FoundationPageProps {
   eyebrow: string;
   title: string;
@@ -27,7 +21,7 @@ export const FoundationPage = ({
   noteAside,
   children,
 }: FoundationPageProps) => (
-  <div className="bg-background max-w-320 px-5 sm:px-8">
+  <div className="max-w-320 bg-background px-5 sm:px-8">
     <header
       className={cn(
         'grid gap-5 border-y border-border py-6 sm:py-8',
@@ -66,7 +60,6 @@ export const FoundationPage = ({
 interface FoundationSectionProps {
   label: string;
   description: string;
-  /** `sidebar` bleeds the section to the page edges and repaints it, so a rung can be read on a second surface. */
   surface?: 'canvas' | 'sidebar';
   children: ReactNode;
 }
@@ -102,7 +95,7 @@ export const Specimen = ({ name, note, children }: { name: string; note?: string
   <div className="flex min-w-0 flex-col gap-2">
     {children}
     <div className="flex min-w-0 flex-col gap-0.5">
-      <Txt variant="meta" font="mono" tone="muted" className="truncate" title={name}>
+      <Txt variant="meta" font="mono" tone="muted" className="break-all" title={name}>
         {name}
       </Txt>
       {note && (

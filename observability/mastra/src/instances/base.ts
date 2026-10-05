@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { InternalSpans, SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -262,6 +262,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
+    // A caller-supplied name replaces the default entity name on root spans only,
+    // so one workflow or agent can label each run for trace lists.
+    const name = !options.parent && tracingOptions?.rootSpanName ? tracingOptions.rootSpanName : rest.name;
+
     // Extract traceId and parent ids from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace.
     // tracingOptions.parentSpanId is the public external-correlation channel,
@@ -274,6 +278,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const span = this.createSpan<TType>({
       ...rest,
+      name,
       traceId,
       parentSpanId,
       externalParentSpanId,
@@ -335,6 +340,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
@@ -818,7 +824,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitSpanEnded(
     span: AnySpan,
-    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string },
+    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean },
   ): void {
     let processedSpan: AnySpan | undefined;
     let spanWasProcessed = false;
@@ -840,6 +846,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
               excludedModelUsage.usage,
               excludedModelUsage.provider,
               excludedModelUsage.model,
+              excludedModelUsage.usageIncomplete,
               this.getMetricsContext(processedSpan),
             );
           }
@@ -901,7 +908,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureModelUsageRollup<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string } | undefined {
+  ):
+    | { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean }
+    | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     // If the span itself will be exported, the existing auto-extract pipeline
     // emits its metrics; nothing to roll up.
@@ -921,8 +930,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
     const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { ancestor, usage, provider, model };
+    return { ancestor, usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -935,7 +945,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureExcludedModelUsage<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { usage: UsageStats; provider?: string; model?: string } | undefined {
+  ): { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean } | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     if (span.isInternal) return undefined;
     if (!this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) return undefined;
@@ -956,8 +966,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       liveAttrs?.model,
       stashed?.model,
     );
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { usage, provider, model };
+    return { usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -966,8 +977,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * ancestor's metrics context so cost / token labels point at the visible
    * span instead of the hidden agent that incurred them.
    */
-  private applyUsageRollup(target: { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string }): void {
-    const { ancestor, usage, provider, model } = target;
+  private applyUsageRollup(target: {
+    ancestor: AnySpan;
+    usage: UsageStats;
+    provider?: string;
+    model?: string;
+    usageIncomplete?: boolean;
+  }): void {
+    const { ancestor, usage, provider, model, usageIncomplete } = target;
 
     // Mutate the live ancestor's attributes directly. BaseSpan's constructor
     // guarantees `attributes` is always at least `{}` (see spans/base.ts),
@@ -977,7 +994,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
 
     try {
-      emitTokenMetricsForUsage(usage, provider, model, this.getMetricsContext(ancestor));
+      emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
     } catch (err) {
       this.logger.error('[Observability] Usage rollup metric emission error:', err);
     }

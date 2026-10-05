@@ -1,4 +1,3 @@
-export { ChatHeader } from './components/ChatHeader';
 export { ChatOverlays } from './components/ChatOverlays';
 export { ComposerPanel } from './components/ComposerPanel';
 export { Composer } from './components/Composer';

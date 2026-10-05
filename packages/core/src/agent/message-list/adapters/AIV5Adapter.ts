@@ -21,6 +21,7 @@ import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
+import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
@@ -627,10 +628,7 @@ export class AIV5Adapter {
         if (p.state === 'output-available') {
           return {
             args: p.input,
-            result:
-              typeof p.output === 'object' && p.output && 'value' in p.output
-                ? (p.output as { value: unknown }).value
-                : p.output,
+            result: unwrapLegacyToolOutput(p.output),
             toolCallId: p.toolCallId,
             toolName,
             state: 'result',
@@ -682,11 +680,27 @@ export class AIV5Adapter {
                 toolCallId: p.toolCallId,
                 toolName,
                 args: p.input,
-                result:
-                  typeof p.output === 'object' && p.output && 'value' in p.output
-                    ? (p.output as { value: unknown }).value
-                    : p.output,
+                result: unwrapLegacyToolOutput(p.output),
                 state: 'result' as const,
+              },
+              providerMetadata: callProviderMetadata,
+              createdAt: getMastraCreatedAt(callProviderMetadata),
+            };
+            if (toolProviderExecuted !== undefined) {
+              (toolInvocationPart as { providerExecuted?: boolean }).providerExecuted = toolProviderExecuted;
+            }
+            return toolInvocationPart;
+          }
+          if (p.state === 'output-error') {
+            const toolInvocationPart: MastraToolInvocationPart = {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                toolCallId: p.toolCallId,
+                toolName,
+                args: p.input,
+                state: 'output-error' as const,
+                errorText: p.errorText,
+                ...('rawInput' in p && p.rawInput !== undefined ? { rawInput: p.rawInput } : {}),
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
@@ -935,11 +949,13 @@ export class AIV5Adapter {
         );
 
         const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
-          matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
+          const normalized = normalizeToolOutput(toolResultPart.output);
+          matchingCall.state = normalized.isError ? 'output-error' : 'result';
+          matchingCall.result = normalized.output;
+          if (normalized.isError) {
+            matchingCall.errorText =
+              typeof normalized.output === 'string' ? normalized.output : JSON.stringify(normalized.output);
+          }
         };
 
         // When the matching tool-call isn't in this same model message (e.g. the

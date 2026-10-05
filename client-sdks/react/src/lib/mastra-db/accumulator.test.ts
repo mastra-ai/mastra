@@ -3,7 +3,7 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
@@ -118,20 +118,25 @@ const redactedReasoningChunk = (data: string, providerMetadata?: Record<string, 
     payload: { data, ...(providerMetadata ? { providerMetadata } : {}) },
   }) as unknown as ChunkType;
 
-const toolCallChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
+const toolCallChunk = (
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  title?: string,
+): ChunkType =>
   ({
     type: 'tool-call',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName, args },
+    payload: { toolCallId, toolName, args, title },
   }) as unknown as ChunkType;
 
-const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string): ChunkType =>
+const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string, title?: string): ChunkType =>
   ({
     type: 'tool-call-input-streaming-start',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName },
+    payload: { toolCallId, toolName, title },
   }) as unknown as ChunkType;
 
 const toolCallDeltaChunk = (toolCallId: string, argsTextDelta: string): ChunkType =>
@@ -869,6 +874,27 @@ describe('accumulateChunk - tool calls', () => {
     });
   });
 
+  it('copies the tool title onto the part from both tool-call and streaming-start', () => {
+    const direct = reduce([startChunk(), toolCallChunk('tc-1', 'search', { q: 'x' }, 'Search the web')]);
+    expect(direct[0].content.parts[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+
+    const streamed = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-2', 'search', 'Search the web'),
+      toolCallDeltaChunk('tc-2', '{"q":"x"}'),
+      toolCallInputStreamingEndChunk('tc-2'),
+      toolCallChunk('tc-2', 'search', { q: 'x' }),
+    ]);
+    expect(streamed[0].content.parts[0]).toMatchObject({
+      type: 'tool-invocation',
+      title: 'Search the web',
+      toolInvocation: { state: 'call', args: { q: 'x' } },
+    });
+
+    const untitled = reduce([startChunk(), toolCallChunk('tc-3', 'plain', {})]);
+    expect((untitled[0].content.parts[0] as MastraToolInvocationPart).title).toBeUndefined();
+  });
+
   it('tool-call without prior assistant creates one', () => {
     const out = reduce([toolCallChunk('tc-1', 'search', { q: 'x' })]);
     expect(out).toHaveLength(1);
@@ -1130,6 +1156,40 @@ describe('accumulateChunk - tool calls', () => {
         },
       },
     });
+  });
+
+  it('tool-call-resumed clears the matching suspendedTools entry (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'longRun', { x: 1 }),
+      toolCallChunk('tc-2', 'other', {}),
+      toolCallSuspendedChunk('tc-1', 'longRun', { x: 1 }, { reason: 'wait' }),
+      toolCallSuspendedChunk('tc-2', 'other', {}, { reason: 'wait' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'longRun', kind: 'suspension' },
+      } as unknown as ChunkType,
+    ]);
+    const suspendedTools = (out[0].content.metadata as { suspendedTools: Record<string, unknown> }).suspendedTools;
+    expect(Object.keys(suspendedTools)).toEqual(['other']);
+  });
+
+  it('tool-call-resumed clears a live approval from requireApprovalMetadata (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'deploy', { env: 'prod' }),
+      toolCallApprovalChunk('tc-1', 'deploy', { env: 'prod' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'deploy', kind: 'approval' },
+      } as unknown as ChunkType,
+    ]);
+    const meta = out[0].content.metadata as { requireApprovalMetadata?: Record<string, unknown> };
+    expect(meta.requireApprovalMetadata).toEqual({});
   });
 
   it('tool-output appends non-workflow output onto a partial-call result array', () => {
@@ -2056,6 +2116,35 @@ describe('accumulateChunk - workflow tool finish', () => {
     expect(result.status).toBe('success');
     // Terminal scalar payload is still surfaced for downstream renderers
     expect(result.output).toEqual({ result: 'suh', runId: RUN_ID });
+  });
+
+  it('rebuilds workflow steps when chunks are replayed onto a finished tool result', () => {
+    const run = () =>
+      reduce([
+        startChunk(),
+        toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+        toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-start', { runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-step-start', { id: 'step-a' }),
+        workflowOutputChunk('wf-1', 'workflow-step-result', { id: 'step-a', status: 'success', output: { value: 1 } }),
+        workflowOutputChunk('wf-1', 'workflow-finish', { runId: RUN_ID, workflowStatus: 'success' }),
+      ]);
+
+    expect(run).not.toThrow();
+    const toolPart = run()
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    const result = (toolPart.toolInvocation as { result: Record<string, any> }).result;
+    expect(result.steps['step-a'].status).toBe('success');
+    expect(result.status).toBe('success');
+  });
+
+  it('mapWorkflowStreamChunkToWatchResult ignores a previous value without steps', () => {
+    const chunk = { type: 'workflow-step-start', runId: RUN_ID, from: 'WORKFLOW', payload: { id: 'step-a' } } as any;
+    for (const prev of [{ result: 'suh', runId: RUN_ID }, {}]) {
+      const next = mapWorkflowStreamChunkToWatchResult(prev as any, chunk);
+      expect(next.steps['step-a']).toEqual({ id: 'step-a' });
+    }
   });
 
   it('detects workflow tools by toolName prefix even with no prior tool-output', () => {

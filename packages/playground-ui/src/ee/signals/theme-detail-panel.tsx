@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
@@ -17,8 +17,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -96,11 +96,14 @@ export function ThemeDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border border-b">
+        <DrawerHeader className="border-b border-border">
           {signalName !== undefined && (
-            <span
-              className="text-column font-mono tracking-widest"
-              style={{ color: nodeColor(getSignalHue(signalName)) }}
+            <Txt
+              as="span"
+              variant="column"
+              font="mono"
+              className="tracking-widest"
+              style={{ color: getSignalColor(signalName) }}
             >
               {signalDisplayDescription ? (
                 <Tooltip>
@@ -112,7 +115,7 @@ export function ThemeDetailPanel({
               ) : (
                 <span className="uppercase">{signalDisplayLabel}</span>
               )}
-            </span>
+            </Txt>
           )}
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription className="sr-only">
@@ -125,51 +128,67 @@ export function ThemeDetailPanel({
           )}
           {insightTraceId === undefined && (
             <>
-              {detailQuery.isPending && <p className="text-muted-foreground text-body">Loading theme details…</p>}
-              {detailQuery.isError && <p className="text-body text-red-500">Unable to load theme details.</p>}
+              {detailQuery.isPending && <Txt tone="muted">Loading theme details…</Txt>}
+              {detailQuery.isError && <Txt className="text-destructive-foreground">Unable to load theme details.</Txt>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
-                  <h2 className="text-foreground text-subheading">Not present in this snapshot</h2>
-                  <p className="text-muted-foreground text-body mt-2">
+                  <Txt as="h2" variant="subheading" tone="ink">
+                    Not present in this snapshot
+                  </Txt>
+                  <Txt tone="muted" className="mt-2">
                     This theme has no data in the selected snapshot.
-                  </p>
+                  </Txt>
                 </section>
               )}
               {detailQuery.data?.theme && (
                 <>
                   <section aria-labelledby="theme-summary-heading">
-                    <h2
+                    <Txt
+                      as="h2"
+                      variant="caption"
+                      tone="muted"
+                      font="mono"
                       id="theme-summary-heading"
-                      className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
+                      className="tracking-wider uppercase"
                     >
                       Summary
-                    </h2>
-                    <p className="text-foreground text-body mt-3">
+                    </Txt>
+                    <Txt tone="ink" className="mt-3">
                       {detailQuery.data.theme.description ?? 'No description available.'}
-                    </p>
-                    <p className="text-foreground text-body mt-3 font-mono tabular-nums">
+                    </Txt>
+                    <Txt tone="ink" font="mono" className="mt-3 tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
                       )}
-                    </p>
+                    </Txt>
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
-                    <h2
+                    <Txt
+                      as="h2"
+                      variant="caption"
+                      tone="muted"
+                      font="mono"
                       id="theme-examples-heading"
-                      className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
+                      className="tracking-wider uppercase"
                     >
                       Examples
-                    </h2>
+                    </Txt>
                     {examplesQuery.isPending && (
-                      <p className="text-muted-foreground text-body mt-3">Loading examples…</p>
+                      <Txt tone="muted" className="mt-3">
+                        Loading examples…
+                      </Txt>
                     )}
-                    {examplesQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load examples.</p>}
+                    {examplesQuery.isError && (
+                      <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
+                    )}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
-                          <p className="text-muted-foreground text-body mt-3">No examples in this snapshot.</p>
+                          <Txt tone="muted" className="mt-3">
+                            No examples in this snapshot.
+                          </Txt>
                         ) : (
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
@@ -179,7 +198,7 @@ export function ThemeDetailPanel({
                                   aria-label={`View trace insight for ${example.signalText}`}
                                   className={cn(
                                     raisedSurfaceStyle,
-                                    'state-layer text-foreground text-body w-full cursor-pointer rounded-md p-3 text-left',
+                                    'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
                                   )}
                                   onClick={() => setInsightTraceId(example.traceId)}
                                 >
@@ -200,29 +219,36 @@ export function ThemeDetailPanel({
 
                   {snapshotTotal > 1 && (
                     <section aria-labelledby="theme-trend-heading">
-                      <h2
+                      <Txt
+                        as="h2"
+                        variant="caption"
+                        tone="muted"
+                        font="mono"
                         id="theme-trend-heading"
-                        className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
+                        className="tracking-wider uppercase"
                       >
                         Trend
-                      </h2>
-                      {historyQuery.isPending && <p className="text-muted-foreground text-body mt-3">Loading trend…</p>}
-                      {historyQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load the trend.</p>}
+                      </Txt>
+                      {historyQuery.isPending && (
+                        <Txt tone="muted" className="mt-3">
+                          Loading trend…
+                        </Txt>
+                      )}
+                      {historyQuery.isError && (
+                        <Txt className="mt-3 text-destructive-foreground">Unable to load the trend.</Txt>
+                      )}
                       {oldestHistoryPoint !== undefined && (
                         <>
-                          <p className="text-foreground text-body mt-3">
+                          <Txt tone="ink" className="mt-3">
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
                             {historyQuery.data?.nextCursor
                               ? `Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length}+ snapshots`
                               : `First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)} · in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}{' '}
                             · {themeTrendDirection(historyPoints)}
-                          </p>
+                          </Txt>
                           {historyPoints.length >= 2 && (
-                            <ThemeTrendChart
-                              points={historyPoints}
-                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
-                            />
+                            <ThemeTrendChart points={historyPoints} signalName={signalName ?? 'goal'} />
                           )}
                         </>
                       )}

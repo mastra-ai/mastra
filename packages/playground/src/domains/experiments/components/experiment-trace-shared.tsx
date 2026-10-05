@@ -1,7 +1,17 @@
 import { getSpanTypeUi } from '@mastra/playground-ui/domains/traces/components/shared';
+import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
 import type { ExperimentUISpanStyle } from '../types';
 
-const styledSpanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'workspace'];
+const spanBadgeHues: Record<string, CategoricalHue> = {
+  agent: 'blue',
+  workflow: 'cyan',
+  model: 'purple',
+  mcp: 'green',
+  tool: 'amber',
+  workspace: 'orange',
+};
+
+const styledSpanTypePrefixes = Object.keys(spanBadgeHues);
 
 export const spanTypePrefixes = [...styledSpanTypePrefixes, 'other'];
 
@@ -18,7 +28,7 @@ export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | n
     icon,
     color,
     label,
-    bgColor: color ? `color-mix(in oklch, ${color} 10%, transparent)` : undefined,
+    bgColor: `var(--badge-${spanBadgeHues[typePrefix]}-subtle)`,
     typePrefix,
   };
 }

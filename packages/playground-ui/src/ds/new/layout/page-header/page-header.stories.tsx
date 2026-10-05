@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon } from 'lucide-react';
+import { ArrowLeftIcon, BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
 import { Badge } from '@/ds/components/Badge';
@@ -43,8 +43,8 @@ function PageHeaderStory({
         {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
         {showMeta && (
           <PageHeader.Meta beside={metaBeside}>
-            <Badge variant="green">Active</Badge>
-            {!metaBeside && <span className="text-meta text-placeholder font-mono">agent_8f3a91b2</span>}
+            <Badge variant="success">Active</Badge>
+            {!metaBeside && <span className="font-mono text-meta text-placeholder">agent_8f3a91b2</span>}
           </PageHeader.Meta>
         )}
         {showDescription && <PageHeader.Description isLoading={isLoading}>{description}</PageHeader.Description>}
@@ -104,7 +104,7 @@ export const MetaBeside: Story = {
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
@@ -115,20 +115,97 @@ export const MetaBeside: Story = {
   ),
 };
 
+export const MetaBesideLargeIcon: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Icon>
+          <span className="grid size-8 place-items-center">
+            <BotIcon />
+          </span>
+        </PageHeader.Icon>
+        <PageHeader.Title>Frontend Notion</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green" emphasis="subtle" size="sm">
+            Active
+          </Badge>
+        </PageHeader.Meta>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EyebrowBackLink: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#alerts">
+            <ArrowLeftIcon aria-hidden />
+            Back to alerts
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Action>
+          <Button size="sm">Save draft</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EverySlotWrapping: Story = {
+  render: () => (
+    <div className="w-80 py-10">
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#agents">
+            <ArrowLeftIcon aria-hidden />
+            Back to agents
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Icon>
+          <BotIcon strokeWidth={2.5} />
+        </PageHeader.Icon>
+        <PageHeader.Title>Customer support escalation agent</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Description>Routes urgent tickets to the on-call team.</PageHeader.Description>
+        <PageHeader.Action>
+          <Button size="sm">Edit</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
 export const MetaBoth: Story = {
   render: () => (
     <StoryFrame>
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Meta>
-          <span className="text-meta text-placeholder font-mono">env_01j9</span>
+          <span className="font-mono text-meta text-placeholder">env_01j9</span>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
         </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const MetaText: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>Updated 2 hours ago</PageHeader.Meta>
+        <PageHeader.Description>Runtime configuration for the production environment.</PageHeader.Description>
       </PageHeader>
     </StoryFrame>
   ),
@@ -161,7 +238,7 @@ export const MetaOnly: Story = {
     <StoryFrame>
       <PageHeader>
         <PageHeader.Meta>
-          <Badge variant="green">Meta only</Badge>
+          <Badge variant="success">Meta only</Badge>
         </PageHeader.Meta>
       </PageHeader>
     </StoryFrame>
@@ -190,6 +267,21 @@ export const ActionOnly: Story = {
   ),
 };
 
+export const LargeAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>API Keys</PageHeader.Title>
+        <PageHeader.Action>
+          <Button variant="primary" size="lg">
+            Create API key
+          </Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
 export const TallAction: Story = {
   render: () => (
     <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
@@ -201,9 +293,7 @@ export const TallAction: Story = {
         <PageHeader.Action>
           <div className="flex flex-col gap-2">
             <Button size="sm">Create environment</Button>
-            <Button size="sm" variant="outline">
-              Import
-            </Button>
+            <Button size="sm">Import</Button>
           </div>
         </PageHeader.Action>
       </PageHeader>
@@ -218,31 +308,6 @@ export const Loading: Story = {
         <PageHeader.Title isLoading />
         <PageHeader.Description isLoading />
       </PageHeader>
-    </StoryFrame>
-  ),
-};
-
-export const LegacyProps: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageHeader
-        title="Legacy header"
-        description="The legacy prop API remains supported."
-        icon={<BotIcon strokeWidth={2.5} />}
-      />
-    </StoryFrame>
-  ),
-};
-
-export const LegacyLoading: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageHeader
-        title="Legacy header"
-        description="The legacy prop API remains supported."
-        icon={<BotIcon strokeWidth={2.5} />}
-        isLoading
-      />
     </StoryFrame>
   ),
 };

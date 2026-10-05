@@ -8,6 +8,7 @@ import type {
   ProcessorState,
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
@@ -16,6 +17,7 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import type { ToolsInput } from '../../types';
 import { globalRunRegistry } from '../run-registry';
 import type {
   RunRegistryEntry,
@@ -52,8 +54,8 @@ export interface ResolvedRuntimeDependencies {
   workspace?: Workspace;
   /** Resolved input processors (rebuilt from the agent when the registry is empty) */
   inputProcessors?: InputProcessorOrWorkflow[];
-  /** Uncombined input processors for processLLMRequest */
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  /** Uncombined processors for processLLMRequest: input processors plus error-phase processors */
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
   /** Resolved output processors */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors */
@@ -203,7 +205,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let workspace: Workspace | undefined = globalEntry?.workspace;
   let memory: MastraMemory | undefined = globalEntry?.memory;
   let inputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.inputProcessors;
-  let llmRequestInputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
+  let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
   let outputProcessors: OutputProcessorOrWorkflow[] | undefined = globalEntry?.outputProcessors;
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
@@ -231,6 +233,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         requestContext: resolveRequestContext,
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
+        clientTools: input.options?.clientTools as ToolsInput | undefined,
       });
 
       model =
@@ -258,9 +261,17 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the cross-process system prompt. Mirrors preparation.ts.
       try {
         inputProcessors = await (agent as any).listInputProcessors?.(resolveRequestContext);
-        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(resolveRequestContext);
         outputProcessors = await (agent as any).listOutputProcessors?.(resolveRequestContext);
-        errorProcessors = await (agent as any).listErrorProcessors?.(resolveRequestContext);
+        // A call-time `errorProcessors: []` replaced the resolved list, defaults included. Honor
+        // it here too, and resolve the error list once so both lanes share its instances.
+        const errorProcessorOverride = input.options?.emptyErrorProcessorOverride ? [] : undefined;
+        errorProcessors = (
+          await (agent as any).__resolveRunErrorProcessors?.(resolveRequestContext, errorProcessorOverride)
+        )?.errorProcessors;
+        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(
+          resolveRequestContext,
+          errorProcessors,
+        );
         // A fresh processor-state map is correct here: on a cross-process worker
         // there is no prior state to carry, and processors are re-run per step.
         processorStates = globalEntry?.processorStates ?? new Map<string, ProcessorState>();
@@ -353,6 +364,14 @@ export interface RebuiltRunTools {
   workspace?: Workspace;
   memory?: MastraMemory;
   saveQueueManager?: SaveQueueManager;
+  /**
+   * The restored RequestContext the rebuilt tools were BUILT with (their
+   * closures capture this instance, not the step's own). Exposed so the
+   * tool-call step can read back by-reference signals a tool wrapper writes
+   * to its build-time context — e.g. the delegation bail flag — which would
+   * otherwise be invisible cross-process.
+   */
+  requestContext: RequestContext;
 }
 
 /**
@@ -416,6 +435,7 @@ export async function rebuildRunToolsFromMastra(options: {
       requestContext: resolveRequestContext,
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+      clientTools: execOptions?.clientTools as ToolsInput | undefined,
     });
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
@@ -435,7 +455,7 @@ export async function rebuildRunToolsFromMastra(options: {
       globalRunRegistry.set(runId, patch as RunRegistryEntry);
     }
 
-    return { tools, workspace, memory, saveQueueManager };
+    return { tools, workspace, memory, saveQueueManager, requestContext: resolveRequestContext };
   } catch (error) {
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;

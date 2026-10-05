@@ -1,7 +1,7 @@
-import { CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from './chart-card';
-const LABEL_COLOR = '#a1a1aa';
 
 type Series = {
   dataKey: string;
@@ -30,13 +30,20 @@ export function DashboardLineChart({
             <div key={s.dataKey}>
               <div className="flex items-center gap-2">
                 <div className="h-0.5 w-3 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="text-meta text-muted-foreground uppercase">{s.label}</span>
+                <Txt as="span" variant="meta" tone="muted" className="uppercase">
+                  {s.label}
+                </Txt>
               </div>
               {aggregated && (
-                <p className="text-body text-muted-foreground pl-5">
+                <Txt tone="muted" className="pl-5">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
-                </p>
+                  {aggregated.suffix && (
+                    <Txt as="span" variant="caption" tone="faint">
+                      {' '}
+                      {aggregated.suffix}
+                    </Txt>
+                  )}
+                </Txt>
               )}
             </div>
           );
@@ -45,16 +52,16 @@ export function DashboardLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+            <CartesianGrid stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               interval={5}
             />
             <YAxis
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               width={30}

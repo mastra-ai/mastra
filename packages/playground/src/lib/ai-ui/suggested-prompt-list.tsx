@@ -7,6 +7,9 @@ interface SuggestedPromptListProps {
   prompts: string[];
 }
 
+const STAGGER_BASE_MS = 240;
+const STAGGER_STEP_MS = 60;
+
 /** Renders agent-configured prompts as chat actions that respect send permissions. */
 export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
   const send = useChatSend();
@@ -19,20 +22,23 @@ export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
   const isDisabled = sendBlocked || !canExecute('agents');
 
   return (
-    <div className="mt-6 flex max-w-full flex-row gap-2 overflow-x-auto px-4">
-      {prompts.map(prompt => (
-        <Button
+    <ul className="flex w-full flex-col gap-1 px-3" data-testid="suggested-prompt-list">
+      {prompts.map((prompt, index) => (
+        <li
           key={prompt}
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-auto"
-          disabled={isDisabled}
-          onClick={() => send({ message: prompt })}
+          className="starter-chip"
+          style={{ animationDelay: `${STAGGER_BASE_MS + index * STAGGER_STEP_MS}ms` }}
         >
-          {prompt}
-        </Button>
+          <Button
+            variant="ghost"
+            className="h-auto w-full justify-start py-2 text-left whitespace-normal"
+            disabled={isDisabled}
+            onClick={() => send({ message: prompt })}
+          >
+            {prompt}
+          </Button>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 };

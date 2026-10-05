@@ -1,15 +1,13 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
+import { useProviderTools } from '@mastra/react/hooks';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
-import { useProviderTools } from '../hooks/use-provider-tools';
 
 interface ToolListProps {
   providerId: string;
@@ -19,6 +17,7 @@ interface ToolListProps {
 }
 
 export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolListProps) {
+  const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedCallback((value: string) => {
     setSearch(value);
@@ -26,26 +25,29 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const { data, isLoading } = useProviderTools(providerId, {
-    toolkit,
-    search: search || undefined,
+  const { data, isLoading } = useProviderTools({
+    providerId: providerId,
+    params: {
+      toolkit,
+      search: search || undefined,
+    },
+    queryOptions: { enabled: !!providerId },
   });
   const tools = data?.data ?? [];
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
-      <div className="border-border border-b px-3 py-2.5">
-        <InputGroup size="sm">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Search tools"
-            placeholder="Search tools..."
-            onChange={event => debouncedSearch(event.target.value)}
-          />
-        </InputGroup>
+      <div className="border-b border-border px-3 py-2.5">
+        <SearchInput
+          label="Search tools"
+          size="sm"
+          placeholder="Search tools..."
+          value={query}
+          onValueChange={value => {
+            setQuery(value);
+            debouncedSearch(value);
+          }}
+        />
       </div>
 
       <ScrollArea className="h-full">

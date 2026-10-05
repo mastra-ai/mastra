@@ -1,8 +1,25 @@
+import { SessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { messageWorkerSession } from './session-messaging.js';
 
 describe('messageWorkerSession', () => {
+  it.each(['send', 'queue'] as const)(
+    'reports interrupted %s delivery without hiding transport errors',
+    async delivery => {
+      const dispatch = vi.fn().mockRejectedValueOnce(new SessionStartupCancelledError());
+      const controller = {
+        getSessionByResource: vi.fn(async () => ({ sendMessage: dispatch, queueMessage: dispatch })),
+      };
+      const input = { controller, sessionId: 'worker-session', message: 'Guidance', delivery };
+      await expect(messageWorkerSession(input)).resolves.toEqual({ status: 'interrupted' });
+
+      const error = new DOMException('MCP transport aborted', 'AbortError');
+      dispatch.mockRejectedValueOnce(error);
+      await expect(messageWorkerSession(input)).rejects.toBe(error);
+    },
+  );
+
   it('dispatches queued worker guidance through Session.queueMessage', async () => {
     const sendMessage = vi.fn();
     const queueMessage = vi.fn();

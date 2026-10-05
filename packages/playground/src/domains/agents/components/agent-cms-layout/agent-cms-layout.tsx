@@ -14,18 +14,18 @@ export function AgentsCmsLayout({ children, currentPath, basePath, versionId, ri
   return (
     <div
       className={cn(
-        'grid overflow-y-auto h-full',
+        'grid h-full overflow-y-auto',
         rightPanel ? 'grid-cols-[240px_1fr_240px]' : 'grid-cols-[240px_1fr]',
       )}
     >
-      <div className="border-border h-full overflow-y-auto border-r">
+      <div className="h-full overflow-y-auto border-r border-border">
         <AgentCmsSidebar basePath={basePath} currentPath={currentPath} versionId={versionId} />
       </div>
       <div className="flex h-full flex-col overflow-hidden">
         <div className="w-full max-w-5xl flex-1 overflow-y-auto p-5">{children}</div>
         <AgentCmsBottomBar basePath={basePath} currentPath={currentPath} />
       </div>
-      {rightPanel && <div className="border-border h-full overflow-y-auto border-l">{rightPanel}</div>}
+      {rightPanel && <div className="h-full overflow-y-auto border-l border-border">{rightPanel}</div>}
     </div>
   );
 }

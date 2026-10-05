@@ -1,10 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import {
+  Field,
+  FieldError,
+  FieldItem,
+  FieldLabel,
+  Fieldset,
+  FieldsetLegend,
+} from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
@@ -49,70 +57,49 @@ export function ScorerEditSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your scorer's name, type, and settings." />
 
-          <TextFieldBlock
-            label="Name"
-            required
-            placeholder="My Scorer"
-            {...register('name')}
-            errorMsg={errors.name?.message}
-          />
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My Scorer" required {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
 
-          <TextareaFieldBlock
-            label="Description"
-            required
-            placeholder="Describe what this scorer does"
-            {...register('description')}
-            errorMsg={errors.description?.message}
-          />
+          <Field invalid={Boolean(errors.description)}>
+            <FieldLabel required>Description</FieldLabel>
+            <Textarea placeholder="Describe what this scorer does" required {...register('description')} />
+            <FieldError>{errors.description?.message}</FieldError>
+          </Field>
 
-          <FieldBlock.Layout>
-            <FieldBlock.Column>
-              <FieldBlock.Label name="model-provider" required>
-                Provider
-              </FieldBlock.Label>
-              <Controller
-                name="model.provider"
-                control={control}
-                render={({ field }) => (
-                  <LLMProviders
-                    id="input-model-provider"
-                    name="model-provider"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    container={formRef}
-                    error={errors.model?.provider?.message}
-                  />
-                )}
-              />
-            </FieldBlock.Column>
-          </FieldBlock.Layout>
+          <Field invalid={Boolean(errors.model?.provider)}>
+            <FieldLabel required>Provider</FieldLabel>
+            <Controller
+              name="model.provider"
+              control={control}
+              render={({ field }) => (
+                <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
+              )}
+            />
+            <FieldError>{errors.model?.provider?.message}</FieldError>
+          </Field>
 
-          <FieldBlock.Layout>
-            <FieldBlock.Column>
-              <FieldBlock.Label name="model-name" required>
-                Model
-              </FieldBlock.Label>
-              <Controller
-                name="model.name"
-                control={control}
-                render={({ field }) => (
-                  <LLMModels
-                    id="input-model-name"
-                    name="model-name"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    llmId={watchedProvider || ''}
-                    container={formRef}
-                    error={errors.model?.name?.message}
-                  />
-                )}
-              />
-            </FieldBlock.Column>
-          </FieldBlock.Layout>
+          <Field invalid={Boolean(errors.model?.name)}>
+            <FieldLabel required>Model</FieldLabel>
+            <Controller
+              name="model.name"
+              control={control}
+              render={({ field }) => (
+                <LLMModels
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  llmId={watchedProvider || ''}
+                  container={formRef}
+                />
+              )}
+            />
+            <FieldError>{errors.model?.name?.message}</FieldError>
+          </Field>
 
-          {/* Score Range */}
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-foreground">Score Range</Label>
+          <Fieldset className="flex flex-col gap-1.5">
+            <FieldsetLegend>Score Range</FieldsetLegend>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -126,7 +113,9 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-muted-foreground text-caption">to</span>
+              <Txt as="span" variant="caption" tone="muted">
+                to
+              </Txt>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -140,29 +129,29 @@ export function ScorerEditSidebar({
                 )}
               />
             </div>
-          </div>
+          </Fieldset>
 
-          {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-foreground">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
               render={({ field }) => (
-                <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-foreground">
-                      None
-                    </Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-foreground">
-                      Ratio
-                    </Label>
-                  </div>
-                </RadioGroup>
+                <Field>
+                  <Fieldset
+                    className="flex flex-col gap-1.5"
+                    render={<RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange} />}
+                  >
+                    <FieldsetLegend>Default Sampling</FieldsetLegend>
+                    <FieldItem>
+                      <RadioGroupItem value="none" />
+                      <FieldLabel>None</FieldLabel>
+                    </FieldItem>
+                    <FieldItem>
+                      <RadioGroupItem value="ratio" />
+                      <FieldLabel>Ratio</FieldLabel>
+                    </FieldItem>
+                  </Fieldset>
+                </Field>
               )}
             />
             {watchedSamplingType === 'ratio' && (
@@ -186,11 +175,10 @@ export function ScorerEditSidebar({
         </div>
       </ScrollArea>
 
-      {/* Sticky footer */}
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
+            <Button onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />

@@ -1,6 +1,23 @@
 import type { Preview } from '@storybook/react-vite';
+import { createElement } from 'react';
 import { themes } from 'storybook/theming';
+import { ThemeContext } from '../src/ds/components/ThemeProvider/theme-context';
 import './tailwind.css';
+
+// A redeploy deletes the hashed chunks an open tab still points at.
+const staleChunkReloadAtKey = 'storybook:stale-chunk-reload-at';
+const staleChunkReloadCooldownMs = 10_000;
+
+window.addEventListener('vite:preloadError', () => {
+  try {
+    const lastReloadAt = Number(sessionStorage.getItem(staleChunkReloadAtKey));
+    if (Date.now() - lastReloadAt < staleChunkReloadCooldownMs) return;
+    sessionStorage.setItem(staleChunkReloadAtKey, String(Date.now()));
+  } catch {
+    return;
+  }
+  window.location.reload();
+});
 
 // The three canvas steps of the product, in the order a screen stacks them:
 // `background-1` is the sidebar rail, `background-2` the page a route renders
@@ -33,7 +50,11 @@ const preview: Preview = {
       const theme = context.globals?.theme === 'light' ? 'light' : 'dark';
       document.documentElement.classList.remove('light', 'dark');
       document.documentElement.classList.add(theme);
-      return Story();
+      return createElement(
+        ThemeContext.Provider,
+        { value: { theme, resolvedTheme: theme, systemTheme: theme, setTheme: () => {} } },
+        createElement(Story),
+      );
     },
   ],
   parameters: {
@@ -47,6 +68,9 @@ const preview: Preview = {
       },
     },
     backgrounds: { options: surfaces },
+    options: {
+      storySort: { order: ['*', 'Hooks', 'Helpers'] },
+    },
   },
   initialGlobals: {
     theme: 'dark',

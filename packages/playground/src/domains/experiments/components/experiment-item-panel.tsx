@@ -1,19 +1,23 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks';
 import { useCallback, useMemo } from 'react';
 
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
+export interface ExperimentItemPanelProps {
+  withQueryTrace: boolean;
+  withFeedback: boolean;
+}
+
 /**
  * Result drawer for the `items/:itemId` child route. Always mounted by the
  * experiment page so the drawer animates in and out; `currentItemId` drives `open`.
  */
-export function ExperimentItemPanel() {
+export function ExperimentItemPanel({ withQueryTrace, withFeedback }: ExperimentItemPanelProps) {
   const {
     currentItemId: itemId,
     experimentId,
@@ -29,7 +33,11 @@ export function ExperimentItemPanel() {
 
   const result = useMemo(() => (itemId ? results.find(r => r.itemId === itemId) : undefined), [results, itemId]);
 
-  const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   const flagForReview = useCallback(
@@ -83,6 +91,8 @@ export function ExperimentItemPanel() {
       }
       scores={resultScores}
       state={detailState}
+      withQueryTrace={withQueryTrace}
+      withFeedback={withFeedback}
       onPrevious={goToPreviousItem}
       onNext={goToNextItem}
       onClose={close}

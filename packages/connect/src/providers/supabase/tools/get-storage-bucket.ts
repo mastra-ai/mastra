@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -14,7 +14,7 @@ const ProviderBucketSchema = z.object({
   owner: z.string().optional(),
   owner_id: z.string().optional(),
   public: z.boolean(),
-  type: z.enum(['STANDARD', 'ANALYTICS']).optional(),
+  type: z.enum(['STANDARD', 'ANALYTICS']).or(z.string()).optional(),
   file_size_limit: z.number().nullable().optional(),
   allowed_mime_types: z.array(z.string()).nullable().optional(),
   created_at: z.string().optional(),
@@ -27,7 +27,7 @@ export const getStorageBucketOutputSchema = z.object({
   owner: z.string().optional(),
   owner_id: z.string().optional(),
   public: z.boolean(),
-  type: z.enum(['STANDARD', 'ANALYTICS']).optional(),
+  type: z.enum(['STANDARD', 'ANALYTICS']).or(z.string()).optional(),
   file_size_limit: z.number().nullable().optional(),
   allowed_mime_types: z.array(z.string()).nullable().optional(),
   created_at: z.string().optional(),

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -10,6 +9,7 @@ import type { Context } from 'hono';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type {
@@ -267,7 +267,7 @@ function projectSessionRoutes(
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
         const requestedSessionId = body.sessionId as string | undefined;
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
@@ -367,6 +367,14 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
+          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
+          // A failed drain only costs the snapshot; it must not block teardown.
+          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+            console.warn('[Factory Sessions] Failed to drain filesystem capture before delete', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           await options.controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {

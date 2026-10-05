@@ -89,7 +89,7 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
     <div className={cn('relative', className)}>
       <Icon
         size="xs"
-        className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2"
+        className="pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2 text-muted-foreground"
       >
         <ToggleLeft />
       </Icon>
@@ -127,7 +127,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="xs" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
         <Hash />
       </Icon>
       <Input
@@ -135,7 +135,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}
-        className="bg-muted min-w-35 pl-7"
+        className="min-w-35 bg-muted pl-7"
         size="sm"
       />
     </div>
@@ -157,14 +157,14 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="xs" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
         <Type />
       </Icon>
       <Input
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter value'}
-        className="bg-muted min-w-35 pl-7"
+        className="min-w-35 bg-muted pl-7"
         size="sm"
       />
     </div>

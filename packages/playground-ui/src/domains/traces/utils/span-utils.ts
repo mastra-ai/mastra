@@ -1,60 +1,16 @@
-import { format } from 'date-fns';
 import type { SpanRecord } from '../types';
+import { toDate } from '@/utils/date-format';
 
 type MessageLike = { role?: string; content?: unknown };
 
-function toTimestamp(value: Date | string | null | undefined): number | undefined {
-  if (value == null) return undefined;
-  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function getSpanDurationMs(
+export function getSpanDurationMs(
   startedAt: Date | string | null | undefined,
   endedAt: Date | string | null | undefined,
 ): number | undefined {
-  const startedAtMs = toTimestamp(startedAt);
-  const endedAtMs = toTimestamp(endedAt);
+  const startedAtMs = toDate(startedAt)?.getTime();
+  const endedAtMs = toDate(endedAt)?.getTime();
   if (startedAtMs === undefined || endedAtMs === undefined || endedAtMs < startedAtMs) return undefined;
   return endedAtMs - startedAtMs;
-}
-
-export function formatSpanDuration(
-  startedAt: Date | string | null | undefined,
-  endedAt: Date | string | null | undefined,
-): string | undefined {
-  const durationMs = getSpanDurationMs(startedAt, endedAt);
-  if (durationMs === undefined) return undefined;
-  return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`;
-}
-
-export function formatSpanDurationExact(
-  startedAt: Date | string | null | undefined,
-  endedAt: Date | string | null | undefined,
-): string | undefined {
-  const durationMs = getSpanDurationMs(startedAt, endedAt);
-  if (durationMs === undefined) return undefined;
-  return durationMs < 1000 ? `${durationMs}ms` : `${durationMs / 1000}s`;
-}
-
-/** `X.XXX s`, matching the timeline timing column. */
-export function formatSpanDurationSeconds(
-  startedAt: Date | string | null | undefined,
-  endedAt: Date | string | null | undefined,
-): string | undefined {
-  const durationMs = getSpanDurationMs(startedAt, endedAt);
-  if (durationMs === undefined) return undefined;
-  return `${(durationMs / 1000).toFixed(3)} s`;
-}
-
-export function formatSpanTimestamp(value: Date | string | null | undefined): string | undefined {
-  const timestamp = toTimestamp(value);
-  return timestamp === undefined ? undefined : format(new Date(timestamp), 'h:mm:ss a');
-}
-
-export function formatSpanTimestampExact(value: Date | string | null | undefined): string | undefined {
-  const timestamp = toTimestamp(value);
-  return timestamp === undefined ? undefined : format(new Date(timestamp), 'MMM d, yyyy, h:mm:ss.SSS a');
 }
 
 /**

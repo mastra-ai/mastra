@@ -1,4 +1,5 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -14,32 +15,41 @@ interface AutosaveIndicatorProps {
 export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndicatorProps) => {
   if (status === 'saving') {
     return (
-      <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+      <Txt
+        as="span"
+        variant="caption"
+        tone="muted"
+        className="flex items-center gap-1.5"
         data-testid="agent-builder-autosave-saving"
       >
         <Spinner size="sm" />
         Saving…
-      </span>
+      </Txt>
     );
   }
 
   if (status === 'saved') {
     return (
-      <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+      <Txt
+        as="span"
+        variant="caption"
+        tone="muted"
+        className="flex items-center gap-1.5"
         data-testid="agent-builder-autosave-saved"
       >
         <CheckIcon className="h-3.5 w-3.5" />
         Saved
-      </span>
+      </Txt>
     );
   }
 
   if (status === 'error') {
     return (
-      <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+      <Txt
+        as="span"
+        variant="caption"
+        tone="muted"
+        className="flex items-center gap-1.5"
         data-testid="agent-builder-autosave-error"
       >
         <span title={lastError?.message}>Failed to save</span>
@@ -51,7 +61,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
         >
           Retry
         </button>
-      </span>
+      </Txt>
     );
   }
 

@@ -9,6 +9,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useWorkspaceInfo, useStoredWorkspaces, useAuthCapabilities } from '@mastra/react/hooks';
 import {
   AlertTriangle,
   ChevronDown,
@@ -37,10 +38,7 @@ import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useWorkspaceInfo } from '@/domains/workspace/hooks';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 type DialogMode = 'simple' | 'advanced';
 
@@ -99,7 +97,10 @@ export function SkillEditDialog({
         .map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
-  const { data: workspaceInfo } = useWorkspaceInfo(workspaceId || undefined);
+  const { data: workspaceInfo } = useWorkspaceInfo({
+    workspaceId: workspaceId || undefined,
+    queryOptions: { enabled: !!workspaceId },
+  });
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
 
   const builderDefaultWorkspaceId = useMemo(() => {
@@ -268,12 +269,12 @@ export function SkillEditDialog({
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex flex-1 items-center gap-2">
+        <SideDialog.Heading as="h2" className="flex-1 items-center">
           {dialogTitle}
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-muted-foreground shrink-0" aria-label="Private skill">
+                <span className="shrink-0 text-muted-foreground" aria-label="Private skill">
                   <Icon size="xs">
                     <LockIcon />
                   </Icon>
@@ -282,17 +283,17 @@ export function SkillEditDialog({
               <TooltipContent>Only visible to you</TooltipContent>
             </Tooltip>
           )}
-        </span>
+        </SideDialog.Heading>
         <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
+            <Button size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
               Edit
             </Button>
           )}
           {isViewMode && !isOwner && onCopy && skill && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
+                <Button size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
                   Copy
                 </Button>
               </TooltipTrigger>
@@ -366,11 +367,11 @@ export function SkillEditDialog({
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
-              <div className="border-border border-t pt-4">
+              <div className="border-t border-border pt-4">
                 <button
                   onClick={() => setShowForm(false)}
                   className={cn(
-                    'text-caption mb-3 flex items-center gap-1.5',
+                    'mb-3 flex items-center gap-1.5 text-caption',
                     quietTextHover,
                     controlStateColorTransition,
                   )}
@@ -380,7 +381,7 @@ export function SkillEditDialog({
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="text-caption mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-600">
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-caption text-warning-subtle-foreground">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId
@@ -418,7 +419,7 @@ export function SkillEditDialog({
                           setMode('advanced');
                         }}
                         className={cn(
-                          'text-caption mt-3 flex items-center gap-1.5',
+                          'mt-3 flex items-center gap-1.5 text-caption',
                           quietTextHover,
                           controlStateColorTransition,
                         )}
@@ -442,7 +443,7 @@ export function SkillEditDialog({
                           setMode('simple');
                         }}
                         className={cn(
-                          'text-caption mb-3 flex items-center gap-1.5',
+                          'mb-3 flex items-center gap-1.5 text-caption',
                           quietTextHover,
                           controlStateColorTransition,
                         )}
@@ -464,10 +465,10 @@ export function SkillEditDialog({
                 )}
               </div>
             ) : (
-              <div className="border-border border-t pt-3">
+              <div className="border-t border-border pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className={cn('text-caption flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
+                  className={cn('flex items-center gap-1.5 text-caption', quietTextHover, controlStateColorTransition)}
                 >
                   <ChevronRight className="h-3 w-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}

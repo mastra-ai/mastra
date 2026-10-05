@@ -15,9 +15,12 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
 function createAbortableModel(onCall?: () => void) {
@@ -64,6 +67,27 @@ function createAbortableModel(onCall?: () => void) {
   });
 }
 
+function createErrorModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          });
+          controller.enqueue({ type: 'error', error: new Error('Terminal provider failure') });
+          controller.close();
+        },
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+}
+
 describe('DurableAgent abort signal', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -106,6 +130,65 @@ describe('DurableAgent abort signal', () => {
     expect(abortPayload).toBeDefined();
 
     cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s abort emits an abort chunk and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `abort-parity-${_kind}`,
+      name: `Abort Parity ${_kind}`,
+      instructions: 'Test',
+      model: createAbortableModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', { onAbort, onFinish });
+    const chunks: any[] = [];
+    const consumption = (async () => {
+      try {
+        for await (const chunk of result.output.fullStream) chunks.push(chunk);
+      } catch {
+        // The provider stream terminates with AbortError after the public abort chunk.
+      }
+    })();
+
+    await new Promise(r => setTimeout(r, 10));
+    result.abort();
+    await consumption;
+
+    expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s failure invokes onError and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `error-parity-${_kind}`,
+      name: `Error Parity ${_kind}`,
+      instructions: 'Test',
+      model: createErrorModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onError = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', {
+      modelSettings: { maxRetries: 0 },
+      onError,
+      onFinish,
+    });
+
+    await result.output.consumeStream().catch(() => undefined);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
   });
 
   it('onAbort receives the text streamed before the abort', async () => {
@@ -158,6 +241,7 @@ describe('DurableAgent abort signal', () => {
     }
 
     expect(abortPayload?.text).toBe('Hello');
+    expect(await output.text).toBe('Hello');
 
     cleanup();
   });
@@ -320,11 +404,13 @@ describe('DurableAgent abort signal', () => {
     const source = await durableAgent.stream('Go');
     await new Promise(r => setTimeout(r, 10));
 
-    let finishReason: string | undefined;
+    let abortPayload: unknown;
+    const onFinish = vi.fn();
     const observed = await durableAgent.observe(source.runId, {
-      onFinish: result => {
-        finishReason = result.finishReason;
+      onAbort: data => {
+        abortPayload = data;
       },
+      onFinish,
     });
 
     const sourceConsumption = source.output.consumeStream().catch(() => undefined);
@@ -335,7 +421,8 @@ describe('DurableAgent abort signal', () => {
 
     await Promise.all([sourceConsumption, observedConsumption]);
 
-    expect(finishReason).toBe('abort');
+    expect(abortPayload).toBeDefined();
+    expect(onFinish).not.toHaveBeenCalled();
 
     source.cleanup();
   });
@@ -396,46 +483,187 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
-  it('abortThreadStream stops a durable run that is already executing', async () => {
-    // A durable run keeps its controller on the durable run registry, not in
-    // the thread runtime's prepared-run map, so the base implementation reaches
-    // neither: without the durable abort request the run streams on.
-    // Resolves when the model is actually streaming, so the abort below lands
-    // on a run under way rather than on one that has not started yet.
-    let streaming: () => void;
+  it.each([undefined, false, true])(
+    'abortThreadStream stops a durable run with clearPendingSignals=%s',
+    async clearPendingSignals => {
+      // A durable run keeps its controller on the durable run registry, not in
+      // the thread runtime's prepared-run map, so the base implementation reaches
+      // neither: without the durable abort request the run streams on.
+      // Resolves when the model is actually streaming, so the abort below lands
+      // on a run under way rather than on one that has not started yet.
+      let streaming: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const baseAgent = new Agent({
+        id: 'abort-thread-stream-agent',
+        name: 'Abort Thread Stream Agent',
+        instructions: 'Test',
+        model: createAbortableModel(() => streaming()) as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const threadId = 'abort-thread-stream-thread';
+      const resourceId = 'abort-thread-stream-resource';
+
+      let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+      const { output, runId, cleanup } = await durableAgent.stream('Go', {
+        memory: { thread: threadId, resource: resourceId },
+        onAbort: data => {
+          abortPayload = data;
+        },
+      });
+
+      await modelCalled;
+      expect(
+        durableAgent.abortThreadStream({ threadId, resourceId, clearPendingSignals, expectedRunId: 'completed-run' }),
+      ).toBe(false);
+      expect(durableAgent.abortThreadStream({ threadId, resourceId, clearPendingSignals, expectedRunId: runId })).toBe(
+        true,
+      );
+
+      // Awaited without a catch: the run has to end through the abort path,
+      // rather than by surfacing some unrelated stream failure.
+      await output.consumeStream();
+
+      expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+
+      cleanup();
+    },
+  );
+
+  it.each(['absent', 'disconnected'] as const)(
+    'handles durable remote cancellation with thread observer %s',
+    async observerState => {
+      const scope = { threadId: 'durable-cancel-thread', resourceId: 'durable-cancel-resource' };
+      let streaming!: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const blocking = createAbortableModel(streaming);
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          if (++calls === 1) return blocking.doStream(options);
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 'survivor' });
+                controller.enqueue({ type: 'text-delta', id: 'survivor', delta: 'survivor answer' });
+                controller.enqueue({ type: 'text-end', id: 'survivor' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'durable-cancel',
+        name: 'Durable cancel',
+        instructions: 'Test',
+        model,
+        pubsub,
+      });
+      const agent = createDurableAgent({ agent: baseAgent, pubsub });
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+      const observer = observerState === 'disconnected' ? await agent.subscribeToThread(scope) : undefined;
+      const result = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+      try {
+        await modelCalled;
+        observer?.unsubscribe();
+        const removed = agent.sendSignal({ type: 'user-message', contents: 'cancelled durable input' }, scope);
+        await removed.accepted;
+        await agent.queueMessage('surviving durable input', scope).accepted;
+        await pubsub.publish(
+          `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+          {
+            type: 'signals-cancelled',
+            data: { type: 'signals-cancelled', signalIds: [removed.signal.id] },
+          },
+        );
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id] })).toEqual({
+          cancelledSignalIds: [],
+        });
+        expect(agent.abortThreadStream(scope)).toBe(true);
+        await result.output.consumeStream();
+        await vi.waitFor(() => expect(calls).toBe(2));
+        await vi.waitFor(() =>
+          expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, agent.getPubSub())).toBeUndefined(),
+        );
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('surviving durable input');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('cancelled durable input');
+      } finally {
+        observer?.unsubscribe();
+        agent.abortThreadStream({ ...scope, clearPendingSignals: true });
+        result.cleanup();
+      }
+    },
+  );
+
+  it.each(['local', 'remote'] as const)('clears pending durable input on %s abort without observers', async origin => {
+    const scope = { threadId: 'durable-clear-thread', resourceId: 'durable-clear-resource' };
+    let streaming!: () => void;
     const modelCalled = new Promise<void>(resolve => {
       streaming = resolve;
     });
-    const baseAgent = new Agent({
-      id: 'abort-thread-stream-agent',
-      name: 'Abort Thread Stream Agent',
-      instructions: 'Test',
-      model: createAbortableModel(() => streaming()) as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const threadId = 'abort-thread-stream-thread';
-    const resourceId = 'abort-thread-stream-resource';
-
-    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
-    const { output, runId, cleanup } = await durableAgent.stream('Go', {
-      memory: { thread: threadId, resource: resourceId },
-      onAbort: data => {
-        abortPayload = data;
+    const model = createAbortableModel(streaming);
+    const baseAgent = new Agent({ id: 'durable-clear', name: 'Durable clear', instructions: 'Test', model, pubsub });
+    const agent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ agents: { agent }, pubsub, logger: false });
+    const publish = vi.spyOn(pubsub, 'publish');
+    let aborted = false;
+    const result = await agent.stream('initial', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      onAbort: () => {
+        aborted = true;
       },
     });
-
-    await modelCalled;
-    expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'completed-run' })).toBe(false);
-    expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: runId })).toBe(true);
-
-    // Awaited without a catch: the run has to end through the abort path,
-    // rather than by surfacing some unrelated stream failure.
-    await output.consumeStream();
-
-    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
-
-    cleanup();
+    try {
+      await modelCalled;
+      const pending = agent.sendSignal({ type: 'user-message', contents: 'clear pending durable' }, scope);
+      await pending.accepted;
+      const idle = agent.queueMessage('clear queued durable', scope);
+      await idle.accepted;
+      if (origin === 'local') {
+        expect(agent.abortThreadStream({ ...scope, clearPendingSignals: true })).toBe(true);
+      } else {
+        const registration = publish.mock.calls
+          .map(([, event]) => event.data)
+          .find(data => data?.type === 'run-registered');
+        await pubsub.publish(
+          `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+          {
+            type: 'run-abort-requested',
+            data: {
+              type: 'run-abort-requested',
+              runId: result.runId,
+              streamId: registration?.streamId,
+              clearPendingSignals: true,
+            },
+          },
+        );
+      }
+      await vi.waitFor(() => expect(aborted).toBe(true));
+      await result.output.consumeStream();
+      expect(agent.cancelQueuedMessages({ ...scope, signalIds: [pending.signal.id, idle.signal.id] })).toEqual({
+        cancelledSignalIds: [],
+      });
+      expect(model.doStreamCalls).toHaveLength(1);
+      await vi.waitFor(() =>
+        expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, agent.getPubSub())).toBeUndefined(),
+      );
+    } finally {
+      agent.abortThreadStream({ ...scope, clearPendingSignals: true });
+      result.cleanup();
+      publish.mockRestore();
+    }
   });
 
   it('abortRunStream stops a durable run that is already executing', async () => {

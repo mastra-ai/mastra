@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon, MailIcon, MinusIcon, PlusIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
-import { useState } from 'react';
+import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Kbd } from '../Kbd';
 import { Txt } from '../Txt/Txt';
 import {
@@ -193,14 +193,16 @@ export const Disabled: Story = {
 
 export const Invalid: Story = {
   render: () => (
-    <div className="w-80">
+    <Field invalid className="w-80">
+      <FieldLabel>Email</FieldLabel>
       <InputGroup>
         <InputGroupAddon>
           <MailIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Invalid" defaultValue="not an email" error />
+        <InputGroupInput placeholder="Invalid" defaultValue="not an email" />
       </InputGroup>
-    </div>
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
   ),
 };
 
@@ -214,40 +216,10 @@ export const Textarea: Story = {
   ),
 };
 
-const NumberWithStepperDemo = () => {
-  const [value, setValue] = useState(0);
-  return (
-    <div className="w-80">
-      <InputGroup>
-        <InputGroupInput
-          type="number"
-          value={value}
-          onChange={event => {
-            const next = Number(event.target.value);
-            setValue(Number.isNaN(next) ? 0 : next);
-          }}
-        />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton aria-label="Decrement" onClick={() => setValue(v => v - 1)}>
-            <MinusIcon />
-          </InputGroupButton>
-          <InputGroupButton aria-label="Increment" onClick={() => setValue(v => v + 1)}>
-            <PlusIcon />
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-    </div>
-  );
-};
-
-export const NumberWithStepper: Story = {
-  render: () => <NumberWithStepperDemo />,
-};
-
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
-      <div className="border-border bg-sidebar rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
@@ -258,7 +230,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-background rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
@@ -280,7 +252,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-popover rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>

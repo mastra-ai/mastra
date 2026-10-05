@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import fs from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
@@ -39,7 +40,9 @@ describe('getPnpmIgnoredBuildPackages', () => {
 });
 
 describe('copyPnpmWorkspaceSettings', () => {
-  it('copies pnpm install policy without copying source workspace packages', () => {
+  // Source patch declarations are never copied verbatim: their paths are relative to the source
+  // workspace root. They are re-emitted from options once rewritten for the output directory.
+  it('copies pnpm install policy without copying source workspace packages or raw patch paths', () => {
     const output = copyPnpmWorkspaceSettings(
       `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
     );
@@ -116,6 +119,242 @@ describe('copyPnpmWorkspaceSettings', () => {
       `packages:\n  - '.'\n\nnodeLinker: hoisted\n`,
     );
   });
+
+  it('writes output-relative patched dependencies and tolerates patches unused by the bundle', () => {
+    const output = copyPnpmWorkspaceSettings('', {
+      patchedDependencies: { '@ai-sdk/amazon-bedrock@2.0.0': 'pnpm-patches/bedrock.patch' },
+    });
+
+    expect(output).toBe(
+      `packages:\n  - '.'\n\npatchedDependencies:\n  \"@ai-sdk/amazon-bedrock@2.0.0\": \"pnpm-patches/bedrock.patch\"\n\nallowUnusedPatches: true\n`,
+    );
+  });
+
+  it('omits patch configuration when no patches were resolved', () => {
+    expect(copyPnpmWorkspaceSettings('', { patchedDependencies: {} })).toBe(`packages:\n  - '.'\n`);
+  });
+});
+
+describe('writePnpmConfig patch handling', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    const base = await mkdtemp(join(tmpdir(), 'mastra-deps-'));
+    sourceRoot = join(base, 'source');
+    outputDir = join(base, 'output');
+    await mkdir(join(sourceRoot, 'patches'), { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), '');
+  });
+
+  async function writeWorkspace(contents: string) {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), contents);
+  }
+
+  async function run() {
+    const deps = new DepsService(sourceRoot);
+    await (deps as unknown as { writePnpmConfig(dir: string): Promise<void> }).writePnpmConfig(outputDir);
+    return readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf-8');
+  }
+
+  it('copies declared patch files into the output and rewrites their paths', async () => {
+    await writeFile(join(sourceRoot, 'patches', 'foo.patch'), 'PATCH CONTENTS');
+    await writeWorkspace(`packages:\n  - packages/*\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`);
+
+    const output = await run();
+
+    expect(output).toContain(`patchedDependencies:\n  "foo@1.0.0": "pnpm-patches/foo.patch"`);
+    expect(output).toContain('allowUnusedPatches: true');
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe('PATCH CONTENTS');
+  });
+
+  it('keeps patches with colliding file names distinct', async () => {
+    await mkdir(join(sourceRoot, 'patches', 'nested'), { recursive: true });
+    await writeFile(join(sourceRoot, 'patches', 'foo.patch'), 'FIRST');
+    await writeFile(join(sourceRoot, 'patches', 'nested', 'foo.patch'), 'SECOND');
+    await writeWorkspace(
+      `patchedDependencies:\n  foo@1.0.0: patches/foo.patch\n  bar@2.0.0: patches/nested/foo.patch\n`,
+    );
+
+    const output = await run();
+
+    expect(output).toContain(`"foo@1.0.0": "pnpm-patches/foo.patch"`);
+    expect(output).toContain(`"bar@2.0.0": "pnpm-patches/bar_2.0.0-foo.patch"`);
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe('FIRST');
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'bar_2.0.0-foo.patch'), 'utf-8')).toBe('SECOND');
+  });
+
+  it('skips declarations whose patch file is missing instead of failing the build', async () => {
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: patches/missing.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
+  it('skips declarations whose patch file is outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: ../outside.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
+  it('skips an in-workspace symlink whose target resolves outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await symlink(outsidePatch, join(sourceRoot, 'patches', 'escape.patch'));
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: patches/escape.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
+  it('leaves output untouched when the source declares no patches', async () => {
+    await writeWorkspace(`packages:\n  - packages/*\n\nminimumReleaseAge: 1440\n`);
+
+    const output = await run();
+
+    expect(output).toBe(`packages:\n  - '.'\n\nminimumReleaseAge: 1440\n`);
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+});
+
+describe('Yarn Berry patch directory copying', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    const base = await mkdtemp(join(tmpdir(), 'mastra-deps-yarn-patches-'));
+    sourceRoot = join(base, 'source');
+    outputDir = join(base, 'output');
+    await mkdir(sourceRoot, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(sourceRoot, 'yarn.lock'), 'yarn lockfile v6', 'utf-8');
+  });
+
+  it('copies declared patch files into the output .yarn/patches/ directory', async () => {
+    await mkdir(join(sourceRoot, '.yarn', 'patches'), { recursive: true });
+    await writeFile(join(sourceRoot, '.yarn', 'patches', 'lodash.patch'), 'FIRST PATCH');
+    await writeFile(join(sourceRoot, '.yarn', 'patches', 'react.patch'), 'SECOND PATCH');
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(await readFile(join(outputDir, '.yarn', 'patches', 'lodash.patch'), 'utf-8')).toBe('FIRST PATCH');
+    expect(await readFile(join(outputDir, '.yarn', 'patches', 'react.patch'), 'utf-8')).toBe('SECOND PATCH');
+  });
+
+  it('no-ops when the source workspace has no .yarn/patches/ directory', async () => {
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, '.yarn'))).toBe(false);
+  });
+});
+
+describe('bun patchedDependencies handling', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    const base = await mkdtemp(join(tmpdir(), 'mastra-deps-bun-patches-'));
+    sourceRoot = join(base, 'source');
+    outputDir = join(base, 'output');
+    await mkdir(sourceRoot, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(sourceRoot, 'bun.lock'), 'bun lockfile', 'utf-8');
+  });
+
+  it('copies bun patches to output and rewrites package.json paths', async () => {
+    await mkdir(join(sourceRoot, 'patches'), { recursive: true });
+    await writeFile(join(sourceRoot, 'patches', 'foo.patch'), 'PATCH CONTENTS');
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', patchedDependencies: { 'foo@1.0.0': 'patches/foo.patch' } }),
+      'utf-8',
+    );
+    await writeFile(join(outputDir, 'package.json'), JSON.stringify({ name: 'test-app-output' }), 'utf-8');
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(await readFile(join(outputDir, 'bun-patches', 'foo.patch'), 'utf-8')).toBe('PATCH CONTENTS');
+    const outputPkg = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+    expect(outputPkg).toMatchObject({ patchedDependencies: { 'foo@1.0.0': 'bun-patches/foo.patch' } });
+  });
+
+  it('no-ops when source package.json has no patchedDependencies', async () => {
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', dependencies: { foo: '1.0.0' } }),
+      'utf-8',
+    );
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+
+  it('skips missing patch files instead of failing the install', async () => {
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', patchedDependencies: { 'foo@1.0.0': 'patches/missing.patch' } }),
+      'utf-8',
+    );
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+
+  it('skips declarations whose patch file is outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', patchedDependencies: { 'foo@1.0.0': '../outside.patch' } }),
+      'utf-8',
+    );
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+
+  it('skips an in-workspace symlink whose target resolves outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await mkdir(join(sourceRoot, 'patches'), { recursive: true });
+    await symlink(outsidePatch, join(sourceRoot, 'patches', 'escape.patch'));
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', patchedDependencies: { 'foo@1.0.0': 'patches/escape.patch' } }),
+      'utf-8',
+    );
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+
+  it('no-ops when source has no package.json', async () => {
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
 });
 
 describe('DepsService lockfile installation', () => {
@@ -164,6 +403,37 @@ describe('DepsService lockfile installation', () => {
     },
   );
 
+  it('does not reuse a Bun workspace lockfile when output installs packed workspace tarballs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-bun-workspace-'));
+    tempDirs.push(root);
+    const appDir = join(root, 'apps', 'api');
+    const outputDir = join(appDir, '.mastra', 'output');
+    await mkdir(outputDir, { recursive: true });
+    const sourceLock = JSON.stringify({
+      workspaces: {
+        '': { name: 'source' },
+        'apps/api': { dependencies: { foo: 'workspace:*' } },
+        'packages/foo': { name: 'foo', version: '1.0.0' },
+      },
+      packages: { foo: ['foo@workspace:packages/foo'] },
+    });
+    await writeFile(join(root, 'bun.lock'), sourceLock);
+    await writeFile(join(outputDir, 'bun.lock'), 'stale lockfile');
+    await writeFile(
+      join(outputDir, 'package.json'),
+      JSON.stringify({
+        dependencies: { foo: 'file:./workspace-module/foo-1.0.0.tgz' },
+        resolutions: { foo: 'file:./workspace-module/foo-1.0.0.tgz' },
+      }),
+    );
+
+    await new DepsService(appDir).install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun.lock'))).toBe(false);
+    expect(await readFile(join(root, 'bun.lock'), 'utf-8')).toBe(sourceLock);
+    expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
+  });
+
   it('updates Yarn Classic lockfiles while installing without a Berry-only flag', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-yarn-classic-'));
     tempDirs.push(root);
@@ -210,5 +480,69 @@ describe('DepsService lockfile installation', () => {
     expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe('pnpm source');
     await expect(readFile(join(outputDir, 'package-lock.json'), 'utf-8')).rejects.toThrow();
     expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('pnpm install --no-frozen-lockfile --loglevel=error');
+  });
+});
+
+describe('Deps.pack', () => {
+  const destination = '/tmp/mastra-out/workspace-module';
+
+  async function packWith(lockfile: string, contents: string) {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, lockfile), contents, 'utf-8');
+
+    await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'scope-utilities', version: '1.2.3' });
+
+    return runChildProcess.mock.calls[0]?.[0].cmd;
+  }
+
+  it('uses --filename with the resolved version for Yarn classic', async () => {
+    const lockfile =
+      '# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.\n# yarn lockfile v1\n\n\n' +
+      'a@1:\n  version "1"\n'.repeat(50_000);
+
+    expect(await packWith('yarn.lock', lockfile)).toBe(`yarn pack --filename ${destination}/scope-utilities-1.2.3.tgz`);
+  });
+
+  it('rejects a Yarn classic workspace version containing shell metacharacters', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'yarn.lock'), '# yarn lockfile v1\n', 'utf-8');
+
+    await expect(
+      new DepsService(root).pack({
+        dir: root,
+        destination,
+        sanitizedName: 'scope-utilities',
+        version: '1.0.0; touch pwned',
+      }),
+    ).rejects.toThrow('Invalid version "1.0.0; touch pwned"');
+    expect(runChildProcess).not.toHaveBeenCalled();
+  });
+
+  it('keeps --out with the %v placeholder for Yarn Berry', async () => {
+    expect(await packWith('yarn.lock', '__metadata:\n  version: 8\n')).toBe(
+      `yarn pack --out ${destination}/scope-utilities-%v.tgz`,
+    );
+  });
+
+  it('does not treat a Yarn classic header beyond the lockfile head as classic', async () => {
+    const lockfile = '__metadata:\n  version: 8\n' + 'x'.repeat(1024) + '\n# yarn lockfile v1\n';
+
+    expect(await packWith('yarn.lock', lockfile)).toBe(`yarn pack --out ${destination}/scope-utilities-%v.tgz`);
+  });
+
+  it('uses --pack-destination for npm', async () => {
+    expect(await packWith('package-lock.json', '{}')).toBe(`npm pack --pack-destination ${destination}`);
+  });
+
+  it('uses --pack-destination for pnpm', async () => {
+    expect(await packWith('pnpm-lock.yaml', "lockfileVersion: '9.0'\n")).toBe(
+      `pnpm pack --pack-destination ${destination}`,
+    );
+  });
+
+  it('uses pm pack --destination for bun', async () => {
+    expect(await packWith('bun.lock', '{}')).toBe(`bun pm pack --destination ${destination}`);
   });
 });

@@ -9,7 +9,9 @@ import { AuditLogList } from '../domains/factory/components/audit/AuditLogList';
 import { AuditCategoryFilter } from '../domains/factory/components/audit/AuditCategoryFilter';
 import { AuditRangePicker } from '../domains/factory/components/audit/AuditRangePicker';
 import { AuditTimeline } from '../domains/factory/components/audit/AuditTimeline';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import {
   AUDIT_CATEGORIES,
   auditEventBounds,
@@ -20,6 +22,7 @@ import {
   type AuditTimeRange,
 } from '../domains/factory/auditPresentation';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function AuditLogEmptyState({
   hasCategoryFilter,
@@ -54,12 +57,12 @@ function AuditLogEmptyState({
     <EmptyState
       className="min-h-48"
       as="h2"
-      iconSlot={<ScrollText className="text-muted-foreground size-5" aria-hidden />}
+      iconSlot={<ScrollText aria-hidden />}
       titleSlot={state.title}
       descriptionSlot={state.description}
       actionSlot={
         state.reset ? (
-          <Button variant="outline" size="sm" onClick={state.reset.onClick}>
+          <Button size="sm" onClick={state.reset.onClick}>
             {state.reset.label}
           </Button>
         ) : undefined
@@ -69,8 +72,12 @@ function AuditLogEmptyState({
 }
 
 export function AuditPage() {
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
   return (
-    <DocumentFactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
+    <PageLayout {...slots}>
+      <AuditContent factoryProjectId={factory.id} />
+    </PageLayout>
   );
 }
 
@@ -121,7 +128,6 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
       <div className="min-h-control-sm flex items-center justify-end">
         {portalUrl ? (
           <Button
-            variant="outline"
             size="sm"
             onClick={() => {
               window.open(portalUrl, '_blank', 'noopener,noreferrer');
@@ -139,7 +145,9 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             <AuditTimeline events={events} bounds={bounds} range={selectedRange} />
           </AuditRangePicker>
         ) : (
-          <p className="text-meta text-placeholder flex h-28 items-center justify-center">Nothing recorded yet</p>
+          <Txt variant="meta" tone="faint" className="flex h-28 items-center justify-center">
+            Nothing recorded yet
+          </Txt>
         )}
         <AuditCategoryFilter
           selectedCategories={selectedCategories}

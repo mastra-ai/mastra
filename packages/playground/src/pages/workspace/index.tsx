@@ -1,55 +1,55 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
+import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
-import { useState, useCallback } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router';
-import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
-import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
-import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
-import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
-import type { SkillsSort } from '@/domains/workspace/components/skills-table';
-import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
-import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
-import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
-import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
 import {
+  isWorkspaceNotSupportedError,
+  useInstallSkill,
+  useRemoveSkill,
+  useUpdateSkills,
   useWorkspaceInfo,
   useWorkspaces,
-  useWorkspaceFiles,
-  useSearchWorkspace,
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
-  useWorkspaceFile,
-} from '@/domains/workspace/hooks/use-workspace';
-import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
-import type { WorkspaceItem } from '@/domains/workspace/types';
+  useWorkspaceSkills,
+} from '@mastra/react/hooks';
+import type { WorkspaceItem } from '@mastra/react/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { navCrumb } from '@/domains/navigation/crumbs';
+import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
+import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
+import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { WorkspaceNotices } from '@/domains/workspace/components/workspace-notices';
 
-type TabType = 'files' | 'skills';
+const crumbs = [navCrumb('/workspaces')];
+
+const errorMessage = (error: unknown) =>
+  is403ForbiddenError(error)
+    ? "you don't have permission to modify this workspace"
+    : error instanceof Error
+      ? error.message
+      : 'Unknown error';
 
 export default function Workspace() {
   const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [showSearch, setShowSearch] = useState(false);
-  const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
-  const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
-  const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
-  // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
-  const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
-  const [skillsSort, setSkillsSort] = useState<SkillsSort>();
+  const queryClient = useQueryClient();
 
   // Get state from URL query params (path, file, tab are still query params)
   const fileFromUrl = searchParams.get('file');
-  const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
   const { data: workspacesData, error: workspacesError, isLoading: isLoadingWorkspaces } = useWorkspaces();
@@ -63,15 +63,13 @@ export default function Workspace() {
     data: workspaceInfo,
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
-  } = useWorkspaceInfo(effectiveWorkspaceId);
+  } = useWorkspaceInfo({ workspaceId: effectiveWorkspaceId, queryOptions: { enabled: !!effectiveWorkspaceId } });
 
   // Check if 401 unauthorized (session expired)
   const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
 
   // Check if 403 forbidden (permission denied)
   const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
-
-  const pathFromUrl = searchParams.get('path') || '.';
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -97,77 +95,92 @@ export default function Workspace() {
 
   // Navigate to a different workspace (changes path, resets query params)
   const setSelectedWorkspaceId = (id: string) => {
-    setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
-    setShowSearch(false);
     void navigate(`/workspaces/${id}`);
   };
 
-  const setCurrentPath = (path: string) => {
-    updateSearchParams({ path: path === '.' || path === '' ? null : path, file: null });
+  const setSelectedFile = (file: string | undefined) => {
+    updateSearchParams({ file: file ?? null });
   };
 
-  const setSelectedFile = (file: string | null) => {
-    updateSearchParams({ file });
-  };
+  const selectedFile = fileFromUrl ?? undefined;
 
-  const setActiveTab = (tab: TabType) => {
-    updateSearchParams({ tab });
-  };
-
-  // Use URL-derived values
-  const currentPath = pathFromUrl;
-  const selectedFile = fileFromUrl;
-
-  // Files - pass workspaceId to get files from the selected workspace
-  const {
-    data: filesData,
-    isLoading: isLoadingFiles,
-    error: filesError,
-    refetch: refetchFiles,
-  } = useWorkspaceFiles(currentPath, {
-    enabled: workspaceInfo?.isWorkspaceConfigured && workspaceInfo?.capabilities?.hasFilesystem,
-    workspaceId: effectiveWorkspaceId,
-  });
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Selected file content - pass workspaceId. Request base64 for images and
-  // videos: reading binary content as text (the default) corrupts it, and
-  // previewing that text as if it were base64 throws "btoa: characters
-  // outside Latin1 range" downstream (images) or renders raw garbled bytes
-  // (videos, no crash but useless). isImageFile/isVideoFile are the same
-  // predicates FileViewer uses to decide how to render — they must stay in
-  // sync, or a file requested as text gets rendered as media (or vice versa).
-  const selectedFileIsMedia = isImageFile(selectedFile ?? '') || isVideoFile(selectedFile ?? '');
-  const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
-    enabled: !!selectedFile,
-    workspaceId: effectiveWorkspaceId,
-    encoding: selectedFileIsMedia ? 'base64' : undefined,
-  });
-
   // Skills - pass workspaceId to get skills from the selected workspace
-  const {
-    data: skillsData,
-    isLoading: isLoadingSkills,
-    refetch: refetchSkills,
-  } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({
+    workspaceId: effectiveWorkspaceId,
+    queryOptions: { enabled: !!effectiveWorkspaceId },
+  });
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
   const updateSkills = useUpdateSkills();
   const removeSkill = useRemoveSkill();
 
+  // Skills installed from skills.sh live in `.agents/skills/<name>`; map a tree folder back to its skill name.
+  const installedSkillName = (path: string) => {
+    const match = /^\.agents\/skills\/([^/]+)$/.exec(path);
+    if (!match) return undefined;
+    const skill = skills.find(s => s.path?.replace(/^\.?\/+|\/+$/g, '') === path);
+    return skill?.name ?? match[1];
+  };
+
+  // Re-fetches every installed skill; the whole tree is refreshed afterwards, so this lives with the header actions.
+  const handleUpdateSkills = async () => {
+    if (!effectiveWorkspaceId) return;
+    try {
+      const result = await updateSkills.mutateAsync({ workspaceId: effectiveWorkspaceId });
+      const failed = result.updated.filter(u => !u.success);
+      if (failed.length > 0) {
+        toast.error(`Failed to update ${failed.map(u => u.skillName).join(', ')}`);
+      } else {
+        toast.success(`${result.updated.length} skill(s) updated`);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['workspace', effectiveWorkspaceId, 'fs'] });
+    } catch (error) {
+      toast.error(`Failed to update skills: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Deleting an installed skill folder uninstalls the skill instead of only removing its files.
+  const handleDelete = async ({ path, type }: { path: string; type: 'file' | 'directory' }) => {
+    if (!effectiveWorkspaceId) return;
+    const skillName = type === 'directory' ? installedSkillName(path) : undefined;
+    if (!skillName) {
+      try {
+        await deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId });
+      } catch (error) {
+        toast.error(`Failed to delete ${path}: ${errorMessage(error)}`);
+        throw error;
+      }
+      return;
+    }
+    try {
+      const result = await removeSkill.mutateAsync({ workspaceId: effectiveWorkspaceId, skillName });
+      if (!result.success) throw new Error(`Failed to remove skill "${skillName}"`);
+      toast.success(`Skill "${skillName}" removed`);
+      void refetchSkills();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove skill');
+      throw error;
+    }
+  };
+
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
-  const canBM25 = workspaceInfo?.capabilities?.canBM25 ?? false;
-  const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
 
   // Can manage skills (install/remove/check/update) if we have filesystem and not read-only
   // None of these operations require sandbox - all are done via GitHub API + filesystem
-  const canManageSkills = hasFilesystem && !isReadOnly;
+  // RBAC: actions stay hidden until permissions resolve so they never flash in and out.
+  const { canEdit, canDelete, canExecute, isLoading: isLoadingPermissions } = usePermissions();
+  const canWrite = !isLoadingPermissions && canEdit('workspaces') && !isReadOnly;
+  const canRemove = !isLoadingPermissions && canDelete('workspaces') && !isReadOnly;
+  const canSearch = !isLoadingPermissions && canExecute('workspaces');
+  const canManageSkills = hasFilesystem && hasSkills && canWrite;
 
   // Derive writable mounts for CompositeFilesystem
   const mounts = workspaceInfo?.mounts;
@@ -175,165 +188,72 @@ export default function Workspace() {
     ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
 
-  // Skills.sh handlers
-  const handleInstallSkill = useCallback(
-    (params: { repository: string; skillName: string; mount?: string }) => {
-      if (!effectiveWorkspaceId) return;
-
-      installSkill.mutate(
-        { ...params, workspaceId: effectiveWorkspaceId },
-        {
-          onSuccess: async result => {
-            if (result.success) {
-              setShowAddSkillDialog(false);
-
-              // Refetch skills and check if the installed skill appears in the list
-              const { data: refreshedData, error } = await refetchSkills();
-
-              // If refetch failed, just show success (can't verify discovery)
-              if (error || !refreshedData) {
-                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-                return;
-              }
-
-              const installedSkillFound = refreshedData.skills.some(s => s.name === result.skillName);
-
-              if (installedSkillFound) {
-                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-              } else {
-                // Skill was installed but not discovered - likely missing path config
-                setHasUndiscoveredInstall(true);
-                toast.warning(
-                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
-                );
-              }
-            } else {
-              toast.error('Failed to install skill');
-            }
-          },
-          onError: error => {
-            toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          },
-        },
-      );
-    },
-    [effectiveWorkspaceId, installSkill, refetchSkills],
-  );
-
-  const handleUpdateSkill = useCallback(
-    (skillName: string) => {
-      if (!effectiveWorkspaceId) return;
-
-      setUpdatingSkillName(skillName);
-      updateSkills.mutate(
-        { workspaceId: effectiveWorkspaceId, skillName },
-        {
-          onSuccess: result => {
-            setUpdatingSkillName(null);
-            if (result.updated.length > 0) {
-              const updated = result.updated[0];
-              if (updated.success) {
-                toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
-                void refetchSkills();
-              } else {
-                toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
-              }
-            } else {
-              toast.error(`Failed to update skill: No update result returned`);
-            }
-          },
-          onError: error => {
-            setUpdatingSkillName(null);
-            toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          },
-        },
-      );
-    },
-    [effectiveWorkspaceId, updateSkills, refetchSkills],
-  );
-
-  const handleRemoveSkill = useCallback(
-    (skillName: string) => {
-      if (!effectiveWorkspaceId) return;
-
-      setRemovingSkillName(skillName);
-      removeSkill.mutate(
-        { workspaceId: effectiveWorkspaceId, skillName },
-        {
-          onSuccess: result => {
-            setRemovingSkillName(null);
-            if (result.success) {
-              toast.success(`Skill "${result.skillName}" removed successfully`);
-              void refetchSkills();
-            } else {
-              toast.error(`Failed to remove skill "${result.skillName}"`);
-            }
-          },
-          onError: error => {
-            setRemovingSkillName(null);
-            toast.error(`Failed to remove skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          },
-        },
-      );
-    },
-    [effectiveWorkspaceId, removeSkill, refetchSkills],
-  );
-
-  // Compute active tab based on URL and workspace capabilities
-  // If URL specifies a tab, use it only if the workspace supports it
-  // Otherwise, fall back to the first available capability
-  const getEffectiveTab = (): TabType => {
-    if (tabFromUrl === 'files' && hasFilesystem) return 'files';
-    if (tabFromUrl === 'skills' && hasSkills) return 'skills';
-    // No valid tab from URL, pick the first available
-    if (hasFilesystem) return 'files';
-    if (hasSkills) return 'skills';
-    return 'files'; // fallback
+  const handleInstallSkill = async (params: WorkspaceSkillInstallParams) => {
+    if (!effectiveWorkspaceId) return;
+    try {
+      const result = await installSkill.mutateAsync({ ...params, workspaceId: effectiveWorkspaceId });
+      if (!result.success) throw new Error('Unknown error');
+      void queryClient.invalidateQueries({ queryKey: ['workspace', effectiveWorkspaceId, 'fs'] });
+      void refetchSkills();
+      toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+    } catch (error) {
+      toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
   };
-  const activeTab = getEffectiveTab();
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
-  const files = filesData?.entries ?? [];
 
   // Whether any search functionality is actually available
-  const canSearchFiles = hasFilesystem && (canBM25 || canVector);
-  const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
-  const hasSearchCapability = canSearchFiles || canSearchSkills;
+  const canSearchFiles =
+    canSearch &&
+    hasFilesystem &&
+    Boolean(workspaceInfo?.capabilities?.canBM25 || workspaceInfo?.capabilities?.canVector);
+  const canSearchSkills = canSearch && hasSkills && isSkillsConfigured && skills.length > 0;
+
+  // Mount paths are absolute (`/data`); tree paths are workspace-relative (`data`).
+  const readOnlyPaths = isReadOnly
+    ? ['.']
+    : (mounts ?? []).filter(m => m.readOnly).map(m => m.path.replace(/^\/+|\/+$/g, '') || '.');
 
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout>
-        <Spinner />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="workspaces" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <PermissionDenied variant="fill" resource="workspaces" />
+      </PageLayout>
     );
   }
 
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -341,18 +261,25 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load workspace"
+          descriptionSlot={genericError.message}
+        />
+      </PageLayout>
     );
   }
 
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -360,298 +287,130 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
-  const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
+  const workspaceOptions = workspaces.map(workspace => ({
+    value: workspace.id,
+    label: workspace.name,
+    description: workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace',
+    end: (
+      <span className="flex shrink-0 gap-1">
+        {workspace.safety?.readOnly && (
+          <Badge size="xs" variant="warning">
+            Read-only
+          </Badge>
+        )}
+        {workspace.capabilities.hasFilesystem && <Badge size="xs">FS</Badge>}
+        {workspace.capabilities.hasSandbox && <Badge size="xs">Sandbox</Badge>}
+        {workspace.capabilities.hasSkills && <Badge size="xs">Skills</Badge>}
+      </span>
+    ),
+  }));
 
   return (
-    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
-      {hasSearchCapability && (
-        <PageLayout.TopArea>
-          <PageLayout.Row className="justify-end">
-            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
-              <Search />
-            </Button>
-          </PageLayout.Row>
-        </PageLayout.TopArea>
-      )}
-
-      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
-        {/* Workspace Selector - shown when multiple workspaces exist */}
-        {workspaces.length > 1 && (
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  size="md"
-                  className="w-full max-w-md justify-start"
-                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-accent1" /> : <Server />}
-                >
-                  <span className="flex-1 truncate text-left">
-                    {selectedWorkspace?.name ?? 'Select workspace'}
-                    {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                      <span className="text-muted-foreground ml-1">({selectedWorkspace.agentName})</span>
-                    )}
-                  </span>
-                  <ChevronDown className="text-muted-foreground shrink-0" />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="start" className="w-full max-w-md">
-              <DropdownMenu.RadioGroup value={selectedWorkspace?.id} onValueChange={setSelectedWorkspaceId}>
-                {workspaces.map(workspace => (
-                  <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
-                    {workspace.source === 'agent' ? (
-                      <Bot className="text-accent1 shrink-0" />
-                    ) : (
-                      <Server className="shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-foreground text-body-sm truncate">{workspace.name}</div>
-                      <div className="text-muted-foreground text-caption truncate">
-                        {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      {workspace.safety?.readOnly && (
-                        <Badge size="xs" variant="yellow">
-                          Read-only
-                        </Badge>
-                      )}
-                      {workspace.capabilities.hasFilesystem && <Badge size="xs">FS</Badge>}
-                      {workspace.capabilities.hasSandbox && <Badge size="xs">Sandbox</Badge>}
-                      {workspace.capabilities.hasSkills && <Badge size="xs">Skills</Badge>}
-                    </div>
-                  </DropdownMenu.RadioItem>
-                ))}
-              </DropdownMenu.RadioGroup>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        )}
-
-        {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-muted-foreground text-body flex items-center gap-2">
-            {selectedWorkspace.source === 'agent' ? (
-              <Bot className="text-accent1 h-4 w-4" />
-            ) : (
-              <Server className="h-4 w-4" />
-            )}
-            <span>{selectedWorkspace.name}</span>
-            {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
-              <span className="text-muted-foreground">({selectedWorkspace.agentName})</span>
-            )}
-            {isReadOnly && (
-              <Badge size="xs" variant="yellow">
-                Read-only
-              </Badge>
-            )}
-          </div>
-        )}
-
-        {/* Search Panel - keyed on workspace so hooks reset on switch */}
-        {showSearch && hasSearchCapability && effectiveWorkspaceId && (
-          <WorkspaceSearchPanel
-            key={effectiveWorkspaceId}
-            workspaceId={effectiveWorkspaceId}
-            canSearchFiles={canSearchFiles}
-            canSearchSkills={canSearchSkills}
-            canBM25={canBM25}
-            canVector={canVector}
-            showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
-            onViewFileResult={id => {
-              updateSearchParams({ file: id, tab: 'files' });
-            }}
-            onViewSkillResult={(skillName, skillPath) => {
-              if (effectiveWorkspaceId) {
-                void navigate(
-                  `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
-                );
-              }
-            }}
+    <PageLayout
+      variant="fit"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={
+        <div className="flex items-center gap-2">
+          <Combobox
+            aria-label="Workspace"
+            variant="ghost"
+            className="w-auto"
+            options={workspaceOptions}
+            value={selectedWorkspace?.id}
+            onValueChange={setSelectedWorkspaceId}
+            placeholder="Select workspace"
+            searchPlaceholder="Search workspaces..."
+            emptyText="No workspaces found."
           />
-        )}
-
-        {(hasFilesystem || hasSkills) && (
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            defaultTab={activeTab}
-            className={showSkillsEmptyState ? 'flex flex-1 flex-col' : undefined}
-          >
-            <TabList>
-              {hasFilesystem && (
-                <Tab value="files">
-                  <FileText className="h-4 w-4" />
-                  Files
-                </Tab>
-              )}
-              {hasSkills && (
-                <Tab value="skills">
-                  <Wand2 className="h-4 w-4" />
-                  Skills
-                  {isSkillsConfigured && skills.length > 0 && <Badge size="xs">{skills.length}</Badge>}
-                </Tab>
-              )}
-            </TabList>
-
-            {hasFilesystem && (
-              <TabContent value="files" className="pb-8">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <FileBrowser
-                    entries={files}
-                    currentPath={currentPath}
-                    isLoading={isLoadingFiles}
-                    error={filesError instanceof Error ? filesError : null}
-                    onNavigate={setCurrentPath}
-                    onFileSelect={setSelectedFile}
-                    onRefresh={() => refetchFiles()}
-                    onCreateDirectory={
-                      isReadOnly
-                        ? undefined
-                        : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
-                    }
-                    onDelete={
-                      isReadOnly
-                        ? undefined
-                        : path =>
-                            deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
-                    }
-                  />
-                  {selectedFile && (
-                    <FileViewer
-                      path={selectedFile}
-                      content={fileContent?.content ?? ''}
-                      isLoading={isLoadingFileContent}
-                      mimeType={fileContent?.mimeType}
-                      onClose={() => setSelectedFile(null)}
-                    />
-                  )}
-                </div>
-              </TabContent>
-            )}
-
-            {hasSkills && (
-              <TabContent value="skills" className={showSkillsEmptyState ? 'flex-1 pb-8' : 'pb-8'}>
-                <SkillsTable
-                  skills={skills}
-                  isLoading={isLoadingSkills}
-                  sort={skillsSort}
-                  onSortChange={(direction, key) => setSkillsSort({ key, direction })}
-                  isSkillsConfigured={isSkillsConfigured}
-                  hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
-                  basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
-                  onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-                  onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
-                  onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
-                  updatingSkillName={updatingSkillName ?? undefined}
-                  removingSkillName={removingSkillName ?? undefined}
-                />
-              </TabContent>
-            )}
-          </Tabs>
-        )}
-
-        {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-muted-foreground py-8 text-center">
-            <p>No workspace capabilities are configured.</p>
-          </div>
-        )}
-      </PageLayout.MainArea>
-
-      {/* Add Skill Dialog */}
-      {effectiveWorkspaceId && canManageSkills && (
-        <AddSkillDialog
-          open={showAddSkillDialog}
-          onOpenChange={setShowAddSkillDialog}
-          workspaceId={effectiveWorkspaceId}
-          onInstall={handleInstallSkill}
-          isInstalling={installSkill.isPending}
-          // Pass precise IDs for skills with source info (format: owner/repo/name)
-          installedSkillIds={skills
-            .filter(s => s.skillsShSource)
-            .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
-          // Fallback to names for skills without source info
-          installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
-          writableMounts={writableMounts}
-          installedSkillPaths={Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path]))}
-        />
-      )}
-    </PageLayout>
-  );
-}
-
-function WorkspaceSearchPanel({
-  workspaceId,
-  canSearchFiles,
-  canSearchSkills,
-  canBM25,
-  canVector,
-  showInitWarning,
-  onViewFileResult,
-  onViewSkillResult,
-}: {
-  workspaceId: string;
-  canSearchFiles: boolean;
-  canSearchSkills: boolean;
-  canBM25: boolean;
-  canVector: boolean;
-  showInitWarning: boolean;
-  onViewFileResult: (id: string) => void;
-  onViewSkillResult: (skillName: string, skillPath: string) => void;
-}) {
-  const searchWorkspace = useSearchWorkspace();
-  const searchSkills = useSearchWorkspaceSkills();
-
-  return (
-    <div className="border-border bg-fill-subtle space-y-4 rounded-lg border p-4">
-      {canSearchFiles && (
-        <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Search Indexed Files
-          </h3>
-          {showInitWarning && (
-            <p className="text-caption mb-3 text-amber-400">
-              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
-              configured <code className="text-amber-300">autoIndexPaths</code>.
-            </p>
+          {isReadOnly && (
+            <Badge size="xs" variant="warning">
+              Read-only
+            </Badge>
           )}
-          <SearchWorkspacePanel
-            onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
-            isSearching={searchWorkspace.isPending}
-            searchResults={
-              searchWorkspace.data
-                ? {
-                    ...searchWorkspace.data,
-                    results: searchWorkspace.data.results.filter(r => !r.id.startsWith('skill:')),
-                  }
-                : undefined
-            }
-            canBM25={canBM25}
-            canVector={canVector}
-            onViewResult={onViewFileResult}
-          />
         </div>
-      )}
+      }
+    >
+      <h1 className="sr-only">Workspaces</h1>
+      <div className="flex min-h-0 flex-col">
+        {hasFilesystem && effectiveWorkspaceId && (
+          <WorkspaceNotices
+            workspaceId={effectiveWorkspaceId}
+            showInitWarning={canSearchFiles && !isLoadingInfo && workspaceInfo?.status !== 'ready'}
+            skills={hasSkills && skillsData ? skills : undefined}
+          />
+        )}
+        {hasFilesystem && effectiveWorkspaceId && (
+          <div className="min-h-0 flex-1">
+            <WorkspaceTreeView
+              key={effectiveWorkspaceId}
+              workspaceId={effectiveWorkspaceId}
+              activeFilePath={selectedFile}
+              onActiveFileChange={setSelectedFile}
+              readOnlyPaths={readOnlyPaths}
+              skillCount={hasSkills && skillsData ? skills.length : undefined}
+              searchFiles={canSearchFiles}
+              searchSkills={canSearchSkills}
+              onCreateDirectory={
+                canWrite
+                  ? async path => {
+                      try {
+                        await createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId });
+                      } catch (error) {
+                        toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
+                        throw error;
+                      }
+                    }
+                  : undefined
+              }
+              asideActions={
+                canManageSkills && skills.some(s => s.path?.includes('.agents/skills/')) ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    tooltip="Update skills"
+                    disabled={updateSkills.isPending}
+                    onClick={() => void handleUpdateSkills()}
+                  >
+                    <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                  </Button>
+                ) : undefined
+              }
+              addSkill={
+                canManageSkills
+                  ? {
+                      onInstall: handleInstallSkill,
+                      // Precise IDs for skills with source info (owner/repo/name); names as fallback.
+                      installedSkillIds: skills
+                        .filter(s => s.skillsShSource)
+                        .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`),
+                      installedSkillNames: skills.filter(s => !s.skillsShSource).map(s => s.name),
+                      writableMounts,
+                      installedSkillPaths: Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path])),
+                    }
+                  : undefined
+              }
+              onDelete={canRemove ? handleDelete : undefined}
+            />
+          </div>
+        )}
 
-      {canSearchSkills && (
-        <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
-            <Wand2 className="h-4 w-4" />
-            Search Skills
-          </h3>
-          <SearchSkillsPanel
-            onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
-            results={searchSkills.data?.results ?? []}
-            isSearching={searchSkills.isPending}
-            onResultClick={result => onViewSkillResult(result.skillName, result.skillPath)}
-          />
-        </div>
-      )}
-    </div>
+        {!hasFilesystem && !isLoadingInfo && (
+          <div className="min-h-0 flex-1">
+            <EmptyState
+              variant="fill"
+              titleSlot="No filesystem or skills configured"
+              descriptionSlot="Add a filesystem or skills to this workspace to browse its files here."
+            />
+          </div>
+        )}
+      </div>
+    </PageLayout>
   );
 }

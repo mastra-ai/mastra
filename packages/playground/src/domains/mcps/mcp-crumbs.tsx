@@ -1,8 +1,7 @@
-import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
+import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { useMCPServerTool, useMCPServers } from '@mastra/react/hooks';
 import { useParams } from 'react-router';
 import { MCPServerCombobox } from './components/mcp-server-combobox';
-import { useMCPServerTool } from './hooks/use-mcp-server-tool';
-import { useMCPServers } from './hooks/use-mcp-servers';
 
 export function McpServerCrumb() {
   const { serverId } = useParams<{ serverId: string }>();
@@ -13,18 +12,20 @@ export function McpServerCrumb() {
   return mcpServers?.find(server => server.id === serverId)?.name || serverId;
 }
 
-export function McpServerSwitcherAction() {
+export function McpServerSwitcher() {
   const { serverId } = useParams<{ serverId: string }>();
   if (!serverId) return null;
 
-  return (
-    <MCPServerCombobox value={serverId} variant="ghost" size="icon-sm" align="end" aria-label="Switch MCP server" />
-  );
+  return <MCPServerCombobox value={serverId} {...crumbSwitcherTriggerProps} aria-label="Switch MCP server" />;
 }
 
 export function McpServerToolCrumb() {
   const { serverId, toolId } = useParams<{ serverId: string; toolId: string }>();
-  const { data: tool } = useMCPServerTool(serverId ?? '', toolId ?? '', { enabled: !!serverId && !!toolId });
+  const { data: tool } = useMCPServerTool({
+    serverId: serverId ?? '',
+    toolId: toolId ?? '',
+    queryOptions: { enabled: !!serverId && !!toolId },
+  });
 
   return tool?.name ?? toolId ?? null;
 }

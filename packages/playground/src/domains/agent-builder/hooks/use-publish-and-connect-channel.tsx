@@ -1,6 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -8,16 +9,15 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChevronRight, X } from 'lucide-react';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks';
+import { useStoredAgentMutations } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { ChannelDialog } from '../components/agent-edit/publish-channel-dialogs';
 import { useEditPage } from '../contexts/edit-page-context';
 import type { AgentBuilderEditFormValues } from '../schemas';
-import { useConnectChannelAction } from '@/domains/agents/hooks/use-channels';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 interface PendingRequest {
   platform: ChannelPlatformInfo;
@@ -51,16 +51,12 @@ export interface UsePublishAndConnectChannelResult {
 export function usePublishAndConnectChannel(agentId: string): UsePublishAndConnectChannelResult {
   const { canPublishToChannel } = useEditPage();
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeChannelDialog, setActiveChannelDialog] = useState<PendingRequest | null>(null);
 
-  // Per-platform connect action is needed before we know which platform was
-  // clicked, so we instantiate the Slack one here (currently the only
-  // platform with a direct-connect shortcut). When more platforms gain
-  // shortcuts, this lookup can be expanded.
   const slackConnect = useConnectChannelAction('slack');
 
   const runChannelAction = useCallback(
@@ -113,7 +109,7 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
 
   const dialog = useMemo(
     () => (
-      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()}>
+      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()} pending={updateStoredAgent.isPending}>
         <DialogContent data-testid="agent-builder-publish-before-connect-dialog">
           <DialogHeader>
             <DialogTitle>Add this agent to your library to connect {platformName}?</DialogTitle>
@@ -123,24 +119,10 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              icon={<X />}
-              variant="ghost"
-              onClick={handleCancel}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              icon={<ChevronRight />}
-              variant="default"
-              onClick={handleConfirm}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-confirm"
-            >
+            <DialogCancel data-testid="agent-builder-publish-before-connect-dialog-cancel">Cancel</DialogCancel>
+            <DialogAction onConfirm={handleConfirm} data-testid="agent-builder-publish-before-connect-dialog-confirm">
               Add to library &amp; continue
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>

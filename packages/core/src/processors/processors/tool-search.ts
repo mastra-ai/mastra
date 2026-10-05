@@ -77,7 +77,12 @@ export interface ToolSearchProcessorOptions {
     topK?: number;
 
     /**
-     * Minimum relevance score (0-1) for including a tool in search results
+     * Minimum relevance score for including a tool in search results.
+     * Scores are raw BM25 relevance plus name-match boosts (+5 exact ID term,
+     * +2 ID substring), are not normalized, and can exceed 1. Scores depend on
+     * the tool catalog, so thresholds may not carry over between tool sets.
+     * Tools scoring less than or equal to this value are excluded. Small values
+     * such as 0 to 0.5 require some term overlap.
      * @default 0
      */
     minScore?: number;
@@ -413,8 +418,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * Resolution:
    * - If `stepArgs` are supplied, resolve through the store with the live messages.
    * - Otherwise (resume path) resolve from the store using the thread ID derived
-   *   from the request context. The context store falls back to its same-process
-   *   supplemental set.
+   *   from the request context. The context store derives loaded names from the
+   *   thread messages returned by `getMessages` (e.g. after a restart, when no
+   *   in-process state survives) plus its same-process supplemental set.
    *
    * `tools` carries the resumed request's resolved tools. Without them a loaded
    * request-scoped tool has no entry in the static catalog, so the approved call
@@ -424,6 +430,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     requestContext?: RequestContext;
     stepArgs?: ProcessInputStepArgs;
     tools?: Record<string, unknown>;
+    getMessages?: () => Promise<ProcessInputStepArgs['messages']>;
   }): Promise<Record<string, Tool<any, any>>> {
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
@@ -437,7 +444,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
 
     const threadId = this.resolveThreadId(args?.requestContext);
-    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
+    const messages =
+      this.store instanceof ContextLoadedToolStore && args?.getMessages ? await args.getMessages() : undefined;
+    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined, messages });
     return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
   }
 
@@ -616,6 +625,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             score: z.number(),
           }),
         ),
+        loaded: z.array(z.string()).optional(),
         message: z.string(),
       }),
       execute: async ({ query }) => {
@@ -644,6 +654,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
           return {
             results,
+            loaded: results.map(r => r.name),
             message:
               `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
               `They are available on your next turn — call them directly.` +

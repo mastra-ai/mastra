@@ -1,6 +1,8 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useWorkflows } from '@mastra/react/hooks';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -9,7 +11,6 @@ import { Controller, useWatch } from 'react-hook-form';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 interface WorkflowsSectionProps {
   control: Control<AgentFormValues>;
@@ -38,16 +39,16 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
   };
 
   return (
-    <div className="border-border bg-background rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-card flex w-full items-center gap-1 p-3">
-          <ChevronRight className="text-muted-foreground h-4 w-4" />
-          <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
+        <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <SectionTitle icon={<WorkflowIcon className="text-span-workflow" />}>
             Workflows{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border border-t p-3">
+          <div className="border-t border-border p-3">
             <Controller
               name="workflows"
               control={control}
@@ -80,19 +81,20 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
 
                 return (
                   <div className="flex flex-col gap-2">
-                    <Combobox
-                      multiple
-                      name="workflows"
-                      aria-label="Workflows"
-                      options={options}
-                      value={selectedIds}
-                      onValueChange={handleValueChange}
-                      placeholder="Select workflows..."
-                      searchPlaceholder="Search workflows..."
-                      emptyText="No workflows available"
-                      disabled={isLoading || readOnly}
-                      error={error}
-                    />
+                    <Field invalid={Boolean(error)}>
+                      <Combobox
+                        multiple
+                        aria-label="Workflows"
+                        options={options}
+                        value={selectedIds}
+                        onValueChange={handleValueChange}
+                        placeholder="Select workflows..."
+                        searchPlaceholder="Search workflows..."
+                        emptyText="No workflows available"
+                        disabled={isLoading || readOnly}
+                      />
+                      <FieldError>{error}</FieldError>
+                    </Field>
                     {selectedOptions.length > 0 && (
                       <div className="mt-2 flex flex-col gap-3">
                         {selectedOptions.map(workflow => (
@@ -100,7 +102,7 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
                             key={workflow.value}
                             id={workflow.value}
                             name={workflow.label}
-                            icon={<WorkflowIcon className="text-accent3" />}
+                            icon={<WorkflowIcon className="text-span-workflow" />}
                             description={field.value?.[workflow.value]?.description || ''}
                             onDescriptionChange={
                               readOnly ? undefined : desc => handleDescriptionChange(workflow.value, desc)

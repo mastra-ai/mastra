@@ -1,11 +1,19 @@
 import type { EntityType } from '@mastra/core/observability';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
-import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
+import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
+import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
+import { ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
+import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
+import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -15,22 +23,18 @@ import {
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import {
-  createTraceQueryValuesResolver,
-  useTraceMetadataFilterFields,
-} from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
-import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
-import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
+import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
+  buildTraceListFilters,
   createTraceFilterBarFields,
+  filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   TRACE_FILTER_BAR_OPERATORS,
+  traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
@@ -43,20 +47,25 @@ import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/trace
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
+import {
+  createTraceQueryValuesResolver,
+  useTraceMetadataFilterFields,
+  useEntityNames,
+  useEnvironments,
+  useSpanFeedback,
+  useTraceFeedback,
+  useTraceOrBranchSpans,
+  useTraceUsage,
+  useTraceSpanScores,
+} from '@mastra/react/hooks';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { useTracesListSource } from './hooks/use-traces-list-source';
+import { useNavigate, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
-import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
-import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
-import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import { navCrumb } from '@/domains/navigation/crumbs';
+import { traceScoreLink } from '@/lib/app-routing';
+
+const crumbs = [navCrumb('/traces')];
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -68,7 +77,10 @@ const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
+  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
+  const breadcrumbs = isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />;
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
   // `setSearchParams` updates against the render-time params, so within one commit the last
@@ -127,10 +139,23 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // another trace (row click, prev/next) falls back to the trace panel without an effect.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
+  // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
+  // Older servers without the capabilities endpoint fall back to the trace-query API.
+  const traceQuery = useTraceQueryAvailable();
+  const withQueryTrace = traceQuery.enabled;
+  const withFeedback = useFeedbackAvailable().enabled;
+
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam });
-  const { data: spanFeedbackData } = useSpanFeedback({ traceId: url.traceIdParam, spanId: url.spanIdParam });
+  const { data: traceFeedbackData } = useTraceFeedback({
+    traceId: url.traceIdParam,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam },
+  });
+  const { data: spanFeedbackData } = useSpanFeedback({
+    traceId: url.traceIdParam,
+    spanId: url.spanIdParam,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam && !!url.spanIdParam },
+  });
 
   const {
     spans: traceSpans,
@@ -152,6 +177,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const { data: spanScoresData } = useTraceSpanScores({
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
+    queryOptions: { enabled: !!url.traceIdParam && !!anchorSpan?.spanId },
   });
 
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
@@ -182,6 +208,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
+    queryOptions: { enabled: withQueryTrace },
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -198,11 +225,28 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
-        valueSuggestions,
+        valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
+        withQueryTrace,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
+    [
+      rootEntityNameSuggestions,
+      discoveredEnvironments,
+      hiddenFieldIds,
+      metadataFields,
+      valueSuggestions,
+      withQueryTrace,
+    ],
   );
+  // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
+  const availableMetadataKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const field of metadataFields) {
+      const key = field.path.replace(/^metadata\./, '').split('.')[0];
+      if (key) keys.add(key);
+    }
+    return [...keys].sort();
+  }, [metadataFields]);
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(
     () => allFilterBarItems.filter(item => !scopedFieldIds.has(item.fieldId)),
@@ -210,16 +254,39 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
-  const filterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  // Expression mode so root-level AND/OR groups render as "Advanced filter" chips.
+  const filterBarValue = useMemo<FilterBarExpression>(() => {
+    const expression = traceFiltersToFilterBarExpression([], url.filterGroups);
+    return { ...expression, nodes: [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...expression.nodes] };
+  }, [filterBarItems, url.filterGroups]);
   // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
   // edit can never drop the scope from the URL.
   const handleFilterBarChange = useCallback(
-    (items: FilterBarItem[]) => {
+    (expression: FilterBarExpression) => {
       const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
-      const rest = items.filter(item => item.fieldId !== TRACE_TIME_RANGE_FIELD_ID);
-      url.handleFilterTokensChange(filterBarItemsToTraceTokens([...scoped, ...rest]));
+      const { tokens, groups } = filterBarExpressionToTraceFilters({
+        ...expression,
+        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+      });
+      url.handleFilterTokensChange([...filterBarItemsToTraceTokens(scoped), ...tokens], groups);
     },
     [allFilterBarItems, scopedFieldIds, url],
+  );
+  // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs in flat mode, which never offers
+  // "Advanced filter".
+  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  const handleFlatFilterBarChange = useCallback(
+    (items: FilterBarItem[]) => handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items }),
+    [handleFilterBarChange],
+  );
+  const handleFilterByField = useCallback(
+    (fieldId: string, value: string) => {
+      const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
+      const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
+      const groups = filterBarValue.nodes.filter(isFilterBarGroup);
+      handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups] });
+    },
+    [filterBarItems, filterBarValue, handleFilterBarChange],
   );
 
   const {
@@ -240,9 +307,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,
+        groups: url.filterGroups,
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
+    withQueryTrace,
+    enabled: !traceQuery.isLoading,
+    legacyFilters: buildTraceListFilters({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+    }),
   });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
@@ -292,115 +369,108 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     !!url.selectedEntityOption ||
     !!url.selectedStatus ||
     url.filterTokens.length > 0 ||
+    url.filterGroups.length > 0 ||
     url.datePreset !== 'last-7d' ||
     !!url.selectedDateTo;
 
-  const toolbarControls = (
-    <>
-      <FilterBar
-        fields={filterBarFields}
-        operators={TRACE_FILTER_BAR_OPERATORS}
-        value={filterBarValue}
-        onValueChange={handleFilterBarChange}
-        // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
-        // draft that id so the chip survives the round trip without remounting.
-        createItemId={fieldId => fieldId}
-        aria-label="Trace filters"
-        className="min-w-64 flex-1"
-      >
-        <FilterBar.Chips
-          renderChip={item =>
-            item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-              <TraceTimeRangeChip
-                preset={url.datePreset}
-                onPresetChange={url.handleDatePresetChange}
-                dateFrom={url.selectedDateFrom}
-                dateTo={url.selectedDateTo}
-                onDateChange={url.handleDateChange}
-                onDateRangeChange={url.handleDateRangeChange}
-                disabled={isTracesLoading}
-                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-              />
-            ) : (
-              <FilterBar.Chip item={item} />
-            )
-          }
-        />
-        <FilterBar.Input placeholder="Filter traces…" />
-      </FilterBar>
-      <div className="min-h-control-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+  const actionRow = (
+    <ActionRow>
+      <ActionRow.Start>
+        <FilterBar
+          fields={filterBarFields}
+          operators={TRACE_FILTER_BAR_OPERATORS}
+          {...(withQueryTrace
+            ? { value: filterBarValue, onValueChange: handleFilterBarChange }
+            : { value: flatFilterBarValue, onValueChange: handleFlatFilterBarChange })}
+          // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+          // draft that id so the chip survives the round trip without remounting.
+          createItemId={fieldId => fieldId}
+          maxDepth={3}
+          aria-label="Trace filters"
+          className="min-w-64 flex-1"
+        >
+          <FilterBar.Chips
+            renderChip={item =>
+              item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+                <TraceTimeRangeChip
+                  preset={url.datePreset}
+                  onPresetChange={url.handleDatePresetChange}
+                  dateFrom={url.selectedDateFrom}
+                  dateTo={url.selectedDateTo}
+                  onDateChange={url.handleDateChange}
+                  onDateRangeChange={url.handleDateRangeChange}
+                  disabled={isTracesLoading}
+                  presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+                />
+              ) : (
+                <FilterBar.Chip item={item} />
+              )
+            }
+          />
+          <FilterBar.Input placeholder="Filter traces…" />
+        </FilterBar>
+      </ActionRow.Start>
+      <ActionRow.End>
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
+          availableMetadataKeys={availableMetadataKeys}
           usageDisabledReason={usageDisabledReason}
+          withQueryTrace={withQueryTrace}
           onToggleColumn={traceColumns.toggleColumn}
+          onAddCustomColumn={traceColumns.addCustomColumn}
+          onRemoveCustomColumn={traceColumns.removeCustomColumn}
           onAddMetadataColumn={traceColumns.addMetadataColumn}
           onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
           onReset={traceColumns.resetColumns}
         />
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="auto-refetch"
-            checked={autoRefetchTraces}
-            onCheckedChange={checked => setAutoRefetchTraces(checked === true)}
-            disabled={isTracesLoading}
-          />
-          <Label htmlFor="auto-refetch">Auto refresh</Label>
-        </div>
-      </div>
-    </>
-  );
-
-  const pageTopArea = (
-    <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
-          {toolbarControls}
-        </PageLayout.Column>
-      </PageLayout.Row>
-    </PageLayout.TopArea>
+        <Field orientation="horizontal" disabled={isTracesLoading}>
+          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
+          <FieldLabel>Auto refresh</FieldLabel>
+        </Field>
+      </ActionRow.End>
+    </ActionRow>
   );
 
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
   // FilterBar never appears without the metadata fields it will offer. Only `isLoading` (never
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
-  if (isDiscoveryLoading) {
+  if (traceQuery.isLoading || isDiscoveryLoading) {
     return (
-      <PageLayout width="wide" height="full">
-        <PageLayout.MainArea>
+      <PageLayout breadcrumbs={breadcrumbs}>
+        <h1 className="sr-only">Traces</h1>
+        <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
   if (tracesError) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <div className="flex h-full items-center justify-center">
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
-  const contentFiltersApplied = !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0;
+  const contentFiltersApplied =
+    !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0 || url.filterGroups.length > 0;
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
-          <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </PageLayout.MainArea>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      {pageTopArea}
-
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+      <h1 className="sr-only">Traces</h1>
       <TracesListView
         traces={traces}
         isLoading={isTracesLoading}
@@ -414,6 +484,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         usageByTraceId={traceUsage.data}
         createdSort={sortDirection}
         onSortChange={onSortChange}
+        onFilterByField={handleFilterByField}
         onTraceClick={trace => {
           const isBranches = url.listMode === 'branches';
           const isSameRow = isBranches
@@ -444,6 +515,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           url.handleTraceClose();
         }}
         isFullThreadOpen={isFullThreadOpen}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
+        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
         onSpanSelect={id => url.handleSpanChange(id ?? null)}
         onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
@@ -454,8 +528,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         showPartialThread
         featuredSpanIds={url.highlightSpanIdsParam}
         onHighlightSpans={url.handleHighlightSpans}
-        feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
-        feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+        feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
+        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
@@ -464,12 +538,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onSpanViewChange={url.handleSpanViewChange}
         spanActiveTab={url.spanTabParam ?? 'details'}
         onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-        spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
-        spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-          tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+        spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
+        spanFeedbackTabSlot={
+          withFeedback
+            ? ({ traceId: tid, spanId: sid }) =>
+                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+            : undefined
         }
       />
-      <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />
+      <ScoreDataPanel
+        depth={isFullThreadOpen ? 3 : 2}
+        score={featuredScore}
+        onClose={() => url.handleScoreChange(null)}
+      />
 
       <TraceAsItemDialog
         rootSpanId={datasetDialogTarget?.rootSpanId}

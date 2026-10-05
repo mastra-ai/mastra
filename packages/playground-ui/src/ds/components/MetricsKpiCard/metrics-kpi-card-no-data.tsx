@@ -1,5 +1,9 @@
-import { cn } from '@/lib/utils';
+import { Txt } from '@/ds/components/Txt';
 
 export function MetricsKpiCardNoData({ message = 'No data yet', className }: { message?: string; className?: string }) {
-  return <span className={cn('text-body text-placeholder', className)}>{message}</span>;
+  return (
+    <Txt as="span" variant="meta" tone="faint" className={className}>
+      {message}
+    </Txt>
+  );
 }

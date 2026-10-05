@@ -1,5 +1,6 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -12,7 +13,6 @@ import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-se
 import type { AgentCmsSection } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { useLinkComponent } from '@/lib/framework';
 
 /** Maps section names to builder feature keys. Sections without a mapping are always shown. */
 const SECTION_FEATURE_GATE: Record<string, keyof ReturnType<typeof useBuilderAgentFeatures>> = {
@@ -101,18 +101,19 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 text-body border-r-2 border-transparent',
+          'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2 text-body',
           controlStateColorTransition,
-          active ? 'bg-fill-hover text-foreground border-accent1' : `hover:bg-fill-subtle ${quietTextHover}`,
+          active ? 'border-border-strong bg-fill-hover text-foreground' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >
         {done ? (
-          <div className="bg-accent1 flex size-6 shrink-0 items-center justify-center rounded-full">
-            <Check className="size-3.5 text-white" />
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
+            <Check className="size-3.5" />
           </div>
         ) : (
           <Txt
-            className="border-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            font="mono"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full border border-placeholder"
             variant="caption"
             tone="faint"
           >
@@ -131,7 +132,7 @@ const SidebarLink = ({
         </div>
       </Link>
 
-      {!isLast && <div className="bg-card ml-6 inline-block h-2 w-0.5" />}
+      {!isLast && <div className="ml-6 inline-block h-2 w-0.5 bg-card" />}
     </li>
   );
 };

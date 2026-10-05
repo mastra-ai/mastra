@@ -122,6 +122,17 @@ The default implementation is a no-op because transports that retain nothing per
 await pubsub.clearTopic('workflow.events.v2.run-123')
 ```
 
+#### `trimTopic(topic, { runId, producedBefore? })`
+
+Deletes every retained entry on the topic that was published with `runId`. Other entries are untouched. Mastra calls this once a run completes successfully and its messages are saved to storage, so finished runs leave the topic while runs still in progress or waiting for approval stay. The default implementation is a no-op. [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) overrides it. Same best-effort contract as `clearTopic`.
+
+With `producedBefore` (epoch ms), only entries whose `data.producedAt` is at or before it are deleted, and entries marked `data.pinned` (approval and suspension prompts) are kept. Mastra uses this while a run continues: each time the run's messages are saved mid-run, the parts up to the last finished step leave the topic.
+
+```typescript
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123', producedBefore: Date.now() })
+```
+
 ### Replay methods
 
 These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](/reference/pubsub/caching-pubsub) overrides them to replay cached events.

@@ -372,6 +372,184 @@ describe('buildTraceQueryRequest', () => {
   });
 });
 
+describe('buildTraceQueryRequest with groups', () => {
+  const eqStatus = { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } };
+  const eqModel = { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-4o' } };
+  const gtDuration = { op: 'gt', left: { path: 'durationMs' }, right: { literal: 100 } };
+
+  describe('when an or group holds two trace-level tokens', () => {
+    it('emits an or predicate inside the root and', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [{ fieldId: 'traceId', value: 't1' }],
+        groups: [
+          {
+            id: 'g',
+            logic: 'or',
+            nodes: [
+              { id: 'a', fieldId: 'status', value: 'error' },
+              { id: 'b', fieldId: 'environment', value: 'prod' },
+            ],
+          },
+        ],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'traceId' }, right: { literal: 't1' } },
+          { op: 'or', args: [eqStatus, { op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } }] },
+        ],
+      });
+    });
+  });
+
+  describe('when a group has no nodes yet', () => {
+    it('contributes nothing to the where clause', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [{ fieldId: 'traceId', value: 't1' }],
+        groups: [{ id: 'g', logic: 'or', nodes: [] }],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [{ op: 'eq', left: { path: 'traceId' }, right: { literal: 't1' } }],
+      });
+    });
+  });
+
+  describe('when an or group holds two tokens on the same related scope', () => {
+    it('keeps one some predicate per token instead of merging them', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [],
+        groups: [
+          {
+            id: 'g',
+            logic: 'or',
+            nodes: [
+              { id: 'a', fieldId: 'spans.model', value: 'gpt-4o' },
+              { id: 'b', fieldId: 'spans.durationMs', operatorId: 'gt', value: '100' },
+            ],
+          },
+        ],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [{ op: 'or', args: [{ spans: { some: eqModel } }, { spans: { some: gtDuration } }] }],
+      });
+    });
+  });
+
+  describe('when an and group holds two tokens on the same related scope', () => {
+    it('merges them into a single some predicate', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [],
+        groups: [
+          {
+            id: 'g',
+            logic: 'and',
+            nodes: [
+              { id: 'a', fieldId: 'spans.model', value: 'gpt-4o' },
+              { id: 'b', fieldId: 'spans.durationMs', operatorId: 'gt', value: '100' },
+            ],
+          },
+        ],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [{ spans: { some: { op: 'and', args: [eqModel, gtDuration] } } }],
+      });
+    });
+  });
+
+  describe('when groups are nested and contain a negated related token', () => {
+    it('emits nested predicates and none for the negation', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [],
+        groups: [
+          {
+            id: 'g',
+            logic: 'or',
+            nodes: [
+              { id: 'a', fieldId: 'status', value: 'error' },
+              {
+                id: 'n',
+                logic: 'and',
+                nodes: [
+                  { id: 'b', fieldId: 'spans.model', operatorId: 'isNot', value: 'gpt-4o' },
+                  { id: 'c', fieldId: 'threadId', operatorId: 'isNot', value: 'th' },
+                ],
+              },
+            ],
+          },
+        ],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              eqStatus,
+              {
+                op: 'and',
+                args: [
+                  { spans: { none: eqModel } },
+                  {
+                    op: 'or',
+                    args: [
+                      { op: 'ne', left: { path: 'threadId' }, right: { literal: 'th' } },
+                      { op: 'notExists', path: 'threadId' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a group only holds unsupported or empty tokens', () => {
+    it('emits nothing for it', () => {
+      const request = buildTraceQueryRequest({
+        tokens: [],
+        groups: [
+          {
+            id: 'g',
+            logic: 'or',
+            nodes: [
+              { id: 'a', fieldId: 'tags', value: ['x'] },
+              { id: 'b', fieldId: 'status', value: '' },
+            ],
+          },
+        ],
+        now,
+      });
+      expect(request.where).toBeUndefined();
+    });
+  });
+
+  describe('when a group reduces to a single predicate', () => {
+    it('inlines it without a wrapping logic node', () => {
+      const where = buildTraceQueryRequest({
+        tokens: [],
+        groups: [{ id: 'g', logic: 'or', nodes: [{ id: 'a', fieldId: 'status', value: 'error' }] }],
+        now,
+      }).where;
+      expect(where).toEqual({ op: 'and', args: [eqStatus] });
+    });
+  });
+});
+
 describe('clampTraceDiscoveryTimeRange', () => {
   const to = '2026-09-15T12:00:00.000Z';
 

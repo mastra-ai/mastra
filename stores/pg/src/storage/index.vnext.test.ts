@@ -1,8 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { createObservabilityVNextTests, normalizeTraceQueryResponse } from '@internal/storage-test-utils';
+import {
+  createObservabilityVNextTests,
+  normalizeTraceQueryResponse,
+  TRACE_AGGREGATE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_FIXTURE_DATA,
+  traceAggregateResponseMismatch,
+  writeTraceQueryFixture,
+} from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
-import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import {
+  parseTraceAggregateRequest,
+  parseTraceQueryRequest,
+  planTraceAggregate,
+  planTraceQuery,
+} from '@mastra/core/storage';
+import type { TraceQueryTenantScope } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -106,19 +119,43 @@ describe('PostgresStoreVNext', () => {
         expect(observability.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'delta-polling',
           'trace-query',
+          'trace-aggregate',
+          'span-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
+          'feedback',
+          'trace-query-context-ids',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
         expect(observability.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'trace-query',
+          'trace-aggregate',
+          'span-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
+          'feedback',
+          'trace-query-context-ids',
         ]);
       } finally {
         coreFeatures.clear();
@@ -338,5 +375,48 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     } finally {
       await sharedStorage.dangerouslyClearAll();
     }
+  });
+
+  describe('aggregateTraces', () => {
+    const TIME_RANGE = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+
+    beforeAll(async () => {
+      if (!sharedStorage) throw new Error('shared observability storage was not initialized');
+      await sharedStorage.dangerouslyClearAll();
+      await writeTraceQueryFixture(sharedStorage, TRACE_AGGREGATE_FIXTURE_DATA, 'event-sourced');
+    });
+    afterAll(async () => {
+      await sharedStorage?.dangerouslyClearAll();
+    });
+
+    it.each(TRACE_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await sharedStorage!.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it.each<[string, Record<string, unknown> | undefined, TraceQueryTenantScope | undefined]>([
+      ['the whole window', undefined, undefined],
+      ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
+      ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+      ['a tenant scope', undefined, { organizationId: 'org-b' }],
+    ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
+      const aggregate = await sharedStorage!.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] }), {
+          scope,
+        }),
+      );
+      const traces = await sharedStorage!.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 1 } }), {
+          scope,
+        }),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBeGreaterThan(0);
+      expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
+    });
   });
 });

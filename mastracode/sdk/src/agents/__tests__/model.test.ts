@@ -40,7 +40,7 @@ const mockAnthropicOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
-  promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
+  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v3', transformParams: vi.fn() })),
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
   createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
@@ -51,6 +51,9 @@ vi.mock('../../providers/openai-codex.js', () => ({
   openaiCodexProvider: vi.fn(() => ({ __provider: 'openai-codex' })),
   buildOpenAICodexOAuthFetch: vi.fn(() => mockCodexOAuthFetch),
   createCodexMiddleware: vi.fn((effort?: string) => ({ __middleware: 'codex', effort })),
+  createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
+    effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
+  ),
   getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
@@ -207,7 +210,12 @@ import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
-import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
+import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
+import {
+  opencodeClaudeMaxProvider,
+  buildAnthropicOAuthFetch,
+  createPromptCacheMiddleware,
+} from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
@@ -407,6 +415,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -428,6 +437,7 @@ describe('resolveModel', () => {
           'x-resource-id': 'resource-456',
         },
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -444,6 +454,71 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
+      });
+    });
+
+    describe('anthropicPromptCacheScope: system (observational memory calls)', () => {
+      const oauthCred = () => ({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      it('reaches the Claude Max provider on the direct OAuth route', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the Claude Max provider when no credential is stored', () => {
+        mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the prompt-cache middleware on the stored API-key route', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the env API-key route', () => {
+        process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the OAuth route through the Mastra gateway', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+        process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+        resolveModel('mastra/anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('defaults to the conversation scope when the option is omitted', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-sonnet-4-5');
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('conversation');
       });
     });
 
@@ -508,6 +583,12 @@ describe('resolveModel', () => {
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
         'No usable openai credential is configured for this signed-in Factory account.',
       );
+      expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
+      try {
+        resolveModel('openai/gpt-4o', { requestContext });
+      } catch (error) {
+        expect((error as Error).name).toBe('ProviderAuthRequiredError');
+      }
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {
@@ -1015,6 +1096,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });

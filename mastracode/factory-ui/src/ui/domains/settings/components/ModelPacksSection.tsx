@@ -1,8 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Check, Hammer, Map, Plus, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -42,7 +44,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           render={
             <span
               aria-label={`${label}: ${description}`}
-              className="focus-visible:ring-accent1 inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2"
+              className={`inline-flex size-5 shrink-0 items-center justify-center rounded-md ${focusRing}`}
               tabIndex={0}
             >
               <Icon aria-hidden size={12} className="text-muted-foreground" />
@@ -136,17 +138,15 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
         runs continue to use the Factory default model.
       </Txt>
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}
 
       {draft && (
         <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Name
-            </Txt>
+          <Field className="gap-1">
+            <FieldLabel>Name</FieldLabel>
             <Input
               size="sm"
               placeholder="e.g. my-pack"
@@ -154,25 +154,19 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Build model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Build model</FieldLabel>
             {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Plan model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Plan model</FieldLabel>
             {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Fast model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Fast model</FieldLabel>
             {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
-          </label>
+          </Field>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveDraft()}>
               Add
@@ -196,13 +190,13 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
             <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  {p.active && <Check size={13} className="text-accent1 shrink-0" />}
+                  {p.active && <Check size={13} className="text-success-indicator shrink-0" />}
                   <Txt as="span" variant="body" className="text-foreground truncate">
                     {p.name}
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}
                   {p.active && (
-                    <Badge size="sm" variant="green">
+                    <Badge size="sm" variant="success">
                       Default
                     </Badge>
                   )}
@@ -239,7 +233,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   </Button>
                 )}
                 {p.custom && (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+                  <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
                     Remove
                   </Button>
                 )}
@@ -251,7 +245,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
       {!draft && !loading && (
         <div>
-          <Button variant="outline" size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
+          <Button size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
             <Plus size={13} /> New pack
           </Button>
         </div>

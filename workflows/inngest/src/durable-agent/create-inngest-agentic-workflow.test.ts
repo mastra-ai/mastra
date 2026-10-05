@@ -7,7 +7,7 @@ import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -272,6 +272,7 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     // Usage belongs on the attributes, normalized to UsageStats the way every other
     // model span records it, rather than raw in the output.
     expect(endedModel!.output).toEqual({ text: 'final answer' });
+    expect(endedModel!.output).not.toHaveProperty('toolCalls');
     expect(endedModel!.attributes).toMatchObject({
       finishReason: 'stop',
       usage: { inputTokens: 3, outputTokens: 5, inputDetails: { text: 3 }, outputDetails: { text: 5 } },
@@ -282,6 +283,64 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     expect(endedAgent!.output).toEqual({ text: 'final answer' });
     expect(endedAgent!.output).not.toHaveProperty('usage');
     expect(endedAgent!.output).not.toHaveProperty('steps');
+  });
+
+  it('records tool calls from every step on the model span output (#25807)', async () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-final-span-tool-calls-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      entry => entry.type === 'mapping' && entry.id === 'map-final-output',
+    );
+
+    const ended: AnyExportedSpan[] = [];
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'inngest-final-span-tool-calls-test',
+          exporters: [
+            {
+              name: 'capture',
+              async exportTracingEvent(event: TracingEvent) {
+                if (event.type === TracingEventType.SPAN_ENDED) ended.push(event.exportedSpan);
+              },
+              async shutdown() {},
+            } satisfies ObservabilityExporter,
+          ],
+        },
+      },
+    });
+    const instance = observability.getSelectedInstance({})!;
+    const agentSpan = instance.startSpan({ type: SpanType.AGENT_RUN, name: "agent run: 'a'" });
+    const modelSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_GENERATION, name: "llm: 'm'" });
+
+    await entry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        accumulatedSteps: [
+          { text: '', toolCalls: [{ toolCallId: 'c1', toolName: 'echo', args: { text: 'a' }, stepSpanData: {} }] },
+          { text: '', toolCalls: [{ toolCallId: 'c2', toolName: 'echo', args: { text: 'b' } }] },
+          { text: 'final answer' },
+        ],
+        accumulatedUsage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
+        lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        modelSpanData: modelSpan.exportSpan(),
+        agentSpanData: agentSpan.exportSpan(),
+        messageListState: emptyMessageListState(),
+        state: {},
+      },
+      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      mastra: { observability, getLogger: () => undefined },
+    });
+
+    const endedModel = ended.find(span => span.type === SpanType.MODEL_GENERATION);
+    expect(endedModel!.output).toEqual({
+      text: 'final answer',
+      toolCalls: [
+        { toolCallId: 'c1', toolName: 'echo', args: { text: 'a' } },
+        { toolCallId: 'c2', toolName: 'echo', args: { text: 'b' } },
+      ],
+    });
   });
 
   it('keeps usage and steps on the workflow result', async () => {
@@ -309,5 +368,65 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     });
 
     expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
+  it('configures both workflows to skip no-op durable bookkeeping', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-events-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    expect(workflow.options.emitStepEvents).toBe(false);
+    expect(iterationWorkflow.options.emitStepEvents).toBe(false);
+    expect(workflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+    expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
+  it('persists suspended and terminal snapshots so finished runs are not resumable', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-snapshot-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    for (const wf of [workflow, iterationWorkflow]) {
+      const persist = (workflowStatus: string) => wf.options.shouldPersistSnapshot({ workflowStatus, stepResults: {} });
+      for (const status of ['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']) {
+        expect(persist(status)).toBe(true);
+      }
+      for (const status of ['running', 'waiting', 'pending']) {
+        expect(persist(status)).toBe(false);
+      }
+    }
+  });
+});
+
+describe('Inngest per-step processor history (#25193)', () => {
+  it('forwards accumulated steps to the LLM execution step on later iterations', async () => {
+    const inngest = new Inngest({ id: 'inngest-processor-history-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+    expect(entry).toBeDefined();
+
+    const priorStep = { text: 'read_context completed', toolCalls: [{ toolName: 'read_context' }] };
+    const inputData = {
+      runId: 'run-1',
+      agentId: 'agent-1',
+      messageId: 'msg-1',
+      messageListState: emptyMessageListState(),
+      toolsMetadata: [],
+      modelConfig: {},
+      options: {},
+      state: {},
+      stepIndex: 1,
+      accumulatedSteps: [priorStep],
+    };
+    const mapped = await entry.mapConfig({ inputData });
+    expect(mapped.stepIndex).toBe(1);
+    expect(mapped.accumulatedSteps).toEqual([priorStep]);
   });
 });

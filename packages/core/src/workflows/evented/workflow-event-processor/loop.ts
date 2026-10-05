@@ -27,6 +27,7 @@ export async function processWorkflowLoop(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     retryCount = 0,
     perStep,
     state,
@@ -61,6 +62,7 @@ export async function processWorkflowLoop(
     stepResults,
     state: currentState,
     requestContext: reqContext,
+    actor,
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
@@ -95,6 +97,7 @@ export async function processWorkflowLoop(
     resumeData: undefined,
     activeStepsPath,
     requestContext,
+    actor,
     retryCount,
     perStep,
     state: currentState,
@@ -111,6 +114,7 @@ export async function processWorkflowLoop(
     resumeData,
     activeStepsPath,
     requestContext,
+    actor,
     perStep,
     state: currentState,
     outputOptions,
@@ -145,6 +149,7 @@ export async function processWorkflowForEach(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     perStep,
     state,
     outputOptions,
@@ -169,6 +174,74 @@ export async function processWorkflowForEach(
   const idx = currentResult?.output?.length ?? 0;
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
+  const publishSuspendedState = async (suspendedForEachIndex: number | undefined) => {
+    const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
+    for (const iterResult of currentResult.output) {
+      if (iterResult?.status === 'suspended') {
+        if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+          Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+        }
+        if (firstSuspendedIterationPayload === undefined) {
+          firstSuspendedIterationPayload = iterResult.suspendPayload;
+        }
+      }
+    }
+
+    const suspendMeta: {
+      foreachIndex?: number;
+      resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+    } = {
+      foreachIndex: suspendedForEachIndex,
+    };
+    if (Object.keys(collectedResumeLabels).length > 0) {
+      suspendMeta.resumeLabels = collectedResumeLabels;
+    }
+
+    const aggregatedSuspendPayload = {
+      ...firstSuspendedIterationPayload,
+      __workflow_meta: {
+        ...currentResult?.suspendPayload?.__workflow_meta,
+        ...(firstSuspendedIterationPayload?.__workflow_meta as Record<string, unknown> | undefined),
+        ...suspendMeta,
+      },
+    };
+
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.end',
+      runId,
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath,
+        resumeSteps,
+        stepResults: {
+          ...stepResults,
+          [getEntryId(step.step)]: {
+            ...currentResult,
+            status: 'suspended',
+            suspendedAt: Date.now(),
+            suspendPayload: aggregatedSuspendPayload,
+          },
+        },
+        prevResult: {
+          status: 'suspended',
+          output: currentResult.output,
+          suspendPayload: aggregatedSuspendPayload,
+          payload: currentResult.payload,
+          startedAt: currentResult.startedAt,
+          suspendedAt: Date.now(),
+        },
+        activeStepsPath,
+        requestContext,
+        actor,
+        state: currentState,
+        outputOptions,
+      },
+    });
+  };
+
   // Handle resume with forEachIndex: kick off the targeted iteration resume
   if (forEachIndex !== undefined && resumeSteps?.length > 0 && idx > 0) {
     // Validate forEachIndex is within bounds to fail loudly instead of silently no-op
@@ -192,6 +265,7 @@ export async function processWorkflowForEach(
           prevResult: { status: 'failed', error },
           activeStepsPath,
           requestContext,
+          actor,
           state: currentState,
           outputOptions,
         },
@@ -226,6 +300,7 @@ export async function processWorkflowForEach(
           resumeData,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -239,73 +314,8 @@ export async function processWorkflowForEach(
     // If so, re-suspend the workflow to wait for those to be resumed.
     const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
     if (pendingIterations.length > 0) {
-      // Collect resumeLabels from all suspended iterations and capture the first
-      // suspended iteration's full suspendPayload so non-__workflow_meta keys
-      // (e.g. __streamState stashed by the agent loop) survive aggregation.
-      const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
-      let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
-      for (let i = 0; i < currentResult.output.length; i++) {
-        const iterResult = currentResult.output[i];
-        if (iterResult?.status === 'suspended') {
-          if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-            Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
-          }
-          if (firstSuspendedIterationPayload === undefined) {
-            firstSuspendedIterationPayload = iterResult.suspendPayload;
-          }
-        }
-      }
-
-      // Build the suspend metadata with all collected resumeLabels
-      const suspendMeta: {
-        foreachIndex?: number;
-        resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
-      } = {
-        foreachIndex: forEachIndex,
-      };
-      if (Object.keys(collectedResumeLabels).length > 0) {
-        suspendMeta.resumeLabels = collectedResumeLabels;
-      }
-
-      const aggregatedSuspendPayload = {
-        ...firstSuspendedIterationPayload,
-        __workflow_meta: suspendMeta,
-      };
-
-      // Re-suspend the workflow - there are still pending iterations
-      // Use workflow.step.end with suspended status to update storage
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults: {
-            ...stepResults,
-            [getEntryId(step.step)]: {
-              ...currentResult,
-              status: 'suspended',
-              suspendedAt: Date.now(),
-              suspendPayload: aggregatedSuspendPayload,
-            },
-          },
-          prevResult: {
-            status: 'suspended',
-            output: currentResult.output,
-            suspendPayload: aggregatedSuspendPayload,
-            payload: currentResult.payload,
-            startedAt: currentResult.startedAt,
-            suspendedAt: Date.now(),
-          },
-          activeStepsPath,
-          requestContext,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      // Re-suspend the workflow - there are still pending iterations.
+      await publishSuspendedState(forEachIndex);
       return;
     }
 
@@ -391,6 +401,7 @@ export async function processWorkflowForEach(
               resumeData,
               activeStepsPath,
               requestContext,
+              actor,
               perStep,
               state: currentState,
               outputOptions,
@@ -480,6 +491,7 @@ export async function processWorkflowForEach(
             resumeData,
             activeStepsPath,
             requestContext,
+            actor,
             perStep,
             state: currentState,
             outputOptions,
@@ -490,9 +502,32 @@ export async function processWorkflowForEach(
     return;
   }
 
+  const concurrency =
+    idx === 0
+      ? undefined
+      : resolveForeachConcurrency(step.opts, {
+          inputData: (prevResult as any)?.output,
+          getInitData: () => (stepResults as any)?.input,
+        });
+  const runningIterations = currentResult?.output?.filter((result: any) => result === null).length ?? 0;
+  const suspendedIndices =
+    currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
+    [];
+  const activeIterations = runningIterations + suspendedIndices.length;
+
+  if (
+    suspendedIndices.length > 0 &&
+    runningIterations === 0 &&
+    (idx >= targetLen || (concurrency !== undefined && activeIterations >= concurrency))
+  ) {
+    await publishSuspendedState(suspendedIndices[0]);
+    return;
+  }
+
   if (
     (idx >= targetLen &&
-      currentResult?.output?.filter((r: any) => r !== null && !isQueuedForeachIteration(r))?.length >= targetLen) ||
+      currentResult?.output?.filter((r: any) => r !== null && r?.status !== 'suspended' && !isQueuedForeachIteration(r))
+        ?.length >= targetLen) ||
     (prevResult as any)?.output?.length === 0
   ) {
     // Foreach completed all iterations or the previous result is an empty array - advance to next step
@@ -532,6 +567,7 @@ export async function processWorkflowForEach(
         resumeData: undefined, // No resumeData when advancing past foreach
         activeStepsPath,
         requestContext,
+        actor,
         perStep,
         state: currentState,
         outputOptions,
@@ -594,6 +630,7 @@ export async function processWorkflowForEach(
           resumeData,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -601,6 +638,10 @@ export async function processWorkflowForEach(
       });
     }
 
+    return;
+  }
+
+  if (concurrency !== undefined && activeIterations >= concurrency) {
     return;
   }
 
@@ -643,6 +684,7 @@ export async function processWorkflowForEach(
       resumeData,
       activeStepsPath,
       requestContext,
+      actor,
       perStep,
       state: currentState,
       outputOptions,

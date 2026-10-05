@@ -22,7 +22,7 @@ function buildSideDialogDarkTheme(): Extension {
       fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--muted-foreground)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -62,16 +62,16 @@ function buildSideDialogLightTheme(): Extension {
 
   const highlightStyle = HighlightStyle.define([
     { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
+    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
@@ -110,10 +110,13 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           {icon}
           {title}
         </Section.Heading>
-        <ButtonsGroup>
+        <ButtonsGroup size="sm">
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
-            <Button onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button
+              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+              onClick={() => setShowAsMultilineText(!showAsMultilineText)}
+            >
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}
@@ -121,10 +124,10 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
       </Section.Header>
       {codeStr && (
         <div
-          className={`${raisedSurfaceStyle} text-body text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 break-all`}
+          className={`${raisedSurfaceStyle} max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 text-body break-all text-muted-foreground`}
         >
           {simplified ? (
-            <div className="text-muted-foreground px-2 font-mono break-all">
+            <div className="px-2 font-mono break-all text-muted-foreground">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (

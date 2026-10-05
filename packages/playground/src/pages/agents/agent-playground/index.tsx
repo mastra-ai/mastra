@@ -1,29 +1,39 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useMemory, useAgent, useAgentVersions, useAgentVersion, useStoredAgent } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
-import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
-import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
-import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 function AgentPlayground() {
   const { agentId } = useParams();
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
-  const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const {
+    data: codeAgent,
+    isLoading: isLoadingCodeAgent,
+    error,
+  } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory } = useMemory({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const editorSource = useEditorSource();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
@@ -31,13 +41,15 @@ function AgentPlayground() {
   const { data: versionsData, isLoading: isLoadingVersions } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent({
+    agentId: agentId!,
     status: 'draft',
-    enabled: hasVersions,
+    queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
@@ -53,6 +65,7 @@ function AgentPlayground() {
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!agentId && !!selectedVersionId },
   });
 
   const activeVersionId = storedAgent?.activeVersionId;
@@ -117,27 +130,15 @@ function AgentPlayground() {
   );
 
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
-    );
+    return <PermissionDenied variant="fill" resource="agents" />;
   }
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Spinner className="h-6 w-6" />
-      </div>
-    );
+    return <Spinner fill />;
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
@@ -146,7 +147,7 @@ function AgentPlayground() {
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!codeAgent) {

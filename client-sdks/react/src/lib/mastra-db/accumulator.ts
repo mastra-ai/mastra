@@ -308,7 +308,11 @@ export const mapWorkflowStreamChunkToWatchResult = (
   prev: WorkflowStreamResult<any, any, any, any> | undefined,
   chunk: StreamChunk,
 ): WorkflowStreamResult<any, any, any, any> => {
-  const previous = prev ?? { status: 'running', input: undefined, steps: {} };
+  // On replay, `prev` may be a finished tool result (e.g. `{ result, runId }`) with no `steps`.
+  const previous =
+    prev && typeof prev === 'object' && prev.steps && typeof prev.steps === 'object'
+      ? prev
+      : { status: 'running' as const, input: undefined, steps: {} };
   if (chunk.type === 'workflow-start') {
     return { input: previous.input, status: 'running', steps: previous.steps };
   }
@@ -337,11 +341,15 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
+  // writer.custom events carry `data` and no payload: nothing to fold into a step.
+  const stepId = chunk.payload?.id;
+  if (stepId === undefined) return previous;
+
+  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload;
   const newSteps = {
     ...previous.steps,
-    [chunk.payload.id]: {
-      ...previous.steps[chunk.payload.id],
+    [stepId]: {
+      ...previous.steps[stepId],
       ...newPayload,
     },
   };
@@ -376,8 +384,8 @@ export const mapWorkflowStreamChunkToWatchResult = (
       ...previous,
       steps: {
         ...previous.steps,
-        [chunk.payload.id]: {
-          ...previous.steps[chunk.payload.id],
+        [stepId]: {
+          ...previous.steps[stepId],
           foreachProgress: {
             completedCount: chunk.payload.completedCount,
             totalCount: chunk.payload.totalCount,
@@ -949,6 +957,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         providerMetadata: chunk.payload.providerMetadata,
       };
 
@@ -974,9 +983,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolName: chunk.payload.toolName,
                 toolCallId: chunk.payload.toolCallId,
                 args: chunk.payload.args,
-              } as MastraToolInvocation,
+              },
+              title: chunk.payload.title ?? prev.title,
               providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
-            } as MastraMessagePart;
+            };
             return replaceAt(result, messageIndex, withParts(targetMessage, parts));
           }
         }
@@ -1003,6 +1013,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart & { argsText?: string } = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         argsText: '',
       };
 
@@ -1542,6 +1553,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       );
 
       return replaceAt(result, messageIndex, withMetadata(targetMessage, nextMetadata));
+    }
+
+    case 'tool-call-resumed': {
+      const resumedToolCallId = chunk.payload.toolCallId;
+      for (let i = result.length - 1; i >= 0; i--) {
+        const message = result[i];
+        if (!message || message.role !== 'assistant') continue;
+        const meta = message.content.metadata as MastraDBMessageMetadata | undefined;
+        // Hydrated messages carry `pendingToolApprovals`; live ones carry `requireApprovalMetadata`.
+        const metadataKeys =
+          chunk.payload.kind === 'approval'
+            ? (['pendingToolApprovals', 'requireApprovalMetadata'] as const)
+            : (['suspendedTools'] as const);
+        let nextMeta: Record<string, any> | undefined;
+        for (const metadataKey of metadataKeys) {
+          const entries = meta?.[metadataKey] as Record<string, { toolCallId?: string }> | undefined;
+          if (!entries) continue;
+          const key = Object.keys(entries).find(k => (entries[k]?.toolCallId ?? k) === resumedToolCallId);
+          if (!key) continue;
+          const { [key]: _removed, ...remaining } = entries;
+          nextMeta = { ...(nextMeta ?? meta), [metadataKey]: remaining };
+        }
+        if (nextMeta) return replaceAt(result, i, withMetadata(message, nextMeta as MastraDBMessageMetadata));
+      }
+      return result;
     }
 
     case 'finish':

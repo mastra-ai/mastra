@@ -708,6 +708,36 @@ describe('useTraceUrlState.applyFilterTokens', () => {
 
     expect(api.handleFilterTokensChange).toBe(api.applyFilterTokens);
   });
+
+  describe('when advanced filter groups are applied with the tokens', () => {
+    const group = {
+      id: 'g1',
+      logic: 'or' as const,
+      nodes: [
+        { id: 'a', fieldId: 'status', value: 'error' },
+        { id: 'b', fieldId: 'spans.model', value: 'gpt-4o' },
+      ],
+    };
+
+    it('exposes them back from the URL', () => {
+      render(<Harness initial="" />);
+
+      act(() => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }], [group]));
+
+      expect(paramsNow().getAll('filterGroup')).toHaveLength(1);
+      expect(api.filterGroups).toEqual([group]);
+      expect(api.filterTokens).toEqual([{ fieldId: 'traceId', value: 'abc' }]);
+    });
+
+    it('drops existing groups when none are passed', () => {
+      render(<Harness initial={`filterGroup=${encodeURIComponent(JSON.stringify(group))}`} />);
+      expect(api.filterGroups).toEqual([group]);
+
+      act(() => api.applyFilterTokens([]));
+
+      expect(api.filterGroups).toEqual([]);
+    });
+  });
 });
 
 describe('useTraceUrlState pass-through', () => {

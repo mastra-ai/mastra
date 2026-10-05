@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type {
   DraftStage,
@@ -47,6 +47,11 @@ export const segmentClass = cn(
 // competes with the page's own controls. Chip and typeahead pill read this one rung so they
 // stay the same height by construction rather than by two call sites agreeing.
 export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
+
+// Typed out of ComboboxRoot but honoured at runtime; keepHighlight stops Base UI re-lighting row 0 when the pointer reaches a row's text.
+export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: true } as unknown as {
+  autoHighlight: boolean;
+};
 
 // A chip is a field whose value is edited in place, so it wears the field material rather than a
 // fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
@@ -93,6 +98,11 @@ export const formatValue = (value: FilterBarValue, field: FilterBarField | undef
   const options = Array.isArray(suggestions) ? suggestions : undefined;
   const label = (v: FilterBarScalar) => options?.find(o => o.value === String(v))?.label ?? String(v);
   return Array.isArray(value) ? value.map(label).join(', ') : label(value);
+};
+
+const formatValueCompact = (value: FilterBarValue, field: FilterBarField | undefined): string => {
+  if (!Array.isArray(value) || value.length < 2) return formatValue(value, field);
+  return `${formatValue(value.slice(0, 1), field)} +${value.length - 1}`;
 };
 
 type ChipContext = {
@@ -290,6 +300,7 @@ export function FilterBarChip({
 type SegmentComboboxProps<T> = {
   segment: Exclude<FilterBarSegment, 'remove'>;
   label: string;
+  fullLabel?: string;
   ariaLabel: string;
   items: readonly T[];
   itemToString: (item: T) => string;
@@ -345,6 +356,7 @@ function SegmentSearchInput<T>({
 function SegmentCombobox<T>({
   segment,
   label,
+  fullLabel = label,
   ariaLabel,
   items,
   itemToString,
@@ -374,7 +386,7 @@ function SegmentCombobox<T>({
       <span
         className={cn(segmentClass, isField && 'text-foreground')}
         style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
-        title={label}
+        title={fullLabel}
       >
         {content}
       </span>
@@ -385,6 +397,7 @@ function SegmentCombobox<T>({
     <ComboboxPrimitive.Root<T>
       items={items}
       itemToStringLabel={itemToString}
+      itemToStringValue={itemToString}
       filter={filter}
       value={value}
       onValueChange={(item, details) => {
@@ -403,8 +416,7 @@ function SegmentCombobox<T>({
         else onQueryChange('');
         chip.setOpenSegment(next ? segment : null);
       }}
-      // See FilterBarInput: the runtime supports 'always' although ComboboxRoot types it as boolean.
-      autoHighlight={'always' as unknown as boolean}
+      {...alwaysHighlightProps}
       modal={false}
     >
       <ComboboxPrimitive.Trigger
@@ -414,8 +426,8 @@ function SegmentCombobox<T>({
             type="button"
             data-filter-bar-segment=""
             tabIndex={segment === 'value' ? 0 : -1}
-            aria-label={`${ariaLabel}: ${label}`}
-            title={label}
+            aria-label={`${ariaLabel}: ${fullLabel}`}
+            title={fullLabel}
             className={cn(editableSegmentClass, isField && 'text-foreground')}
             style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
@@ -559,7 +571,8 @@ function ValueEditor() {
     <SegmentCombobox<FilterBarOption>
       segment="value"
       ariaLabel="Value"
-      label={formatValue(chip.item.value, chip.field) || '…'}
+      label={formatValueCompact(chip.item.value, chip.field) || '…'}
+      fullLabel={formatValue(chip.item.value, chip.field) || '…'}
       items={step.options}
       itemToString={optionLabel}
       filter={null}
@@ -592,7 +605,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
-          renderOption={o => o.label ?? o.value}
+          renderOption={option => <FilterBarOptionLabel option={option} />}
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
@@ -600,7 +613,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
         />
       )}
       {step.isMany && (
-        <div className="border-border flex items-center justify-end gap-1 border-t p-1">
+        <div className="flex items-center justify-end gap-1 border-t border-border p-1">
           <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
@@ -612,6 +625,12 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
       )}
     </>
   );
+}
+
+function freeTextPlaceholder(step: ValueInputProps['step'], noun: string) {
+  if (!step.hasSuggestions) return `Type a ${noun}…`;
+  if (step.allowFreeText) return `Search or type a ${noun}…`;
+  return `Search ${noun}s…`;
 }
 
 /** Free-text (optionally suggestion-backed) value input; text and number share it. */
@@ -626,13 +645,7 @@ function FreeTextValueInput({
       <SegmentSearchInput<FilterBarOption>
         icon={step.hasSuggestions ? SearchIcon : PencilIcon}
         inputMode={inputMode}
-        placeholder={
-          step.hasSuggestions
-            ? step.allowFreeText
-              ? `Search or type a ${noun}…`
-              : `Search ${noun}s…`
-            : `Type a ${noun}…`
-        }
+        placeholder={freeTextPlaceholder(step, noun)}
         onKeyDown={(event, highlighted) => {
           const highlightedOption = step.hasSuggestions ? highlighted : null;
           const handled = step.handleKeyDown(event, highlightedOption);

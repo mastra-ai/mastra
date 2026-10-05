@@ -110,8 +110,12 @@ async function fixture(integrationId = 'gitlab') {
   }));
   const resolveReviewThread = vi.fn(async () => undefined);
   const listReviews = vi.fn(async () => ({ reviews: [], nextCursor: null }));
+  const getPullRequest = vi.fn(async () => ({ id: '17', headSha: 'cd1e5903851234567890abcdef1234567890abcd' }));
+  const createReview = vi.fn(async () => ({ id: 'review-1' }));
   const versionControl = {
     getRepositoryTarget,
+    getPullRequest,
+    createReview,
     createPullRequest,
     createReviewComment,
     resolveReviewThread,
@@ -126,6 +130,8 @@ async function fixture(integrationId = 'gitlab') {
     createReviewComment,
     resolveReviewThread,
     listReviews,
+    getPullRequest,
+    createReview,
     getRepositoryTarget,
     audit,
     emitAgent,
@@ -242,6 +248,74 @@ describe('createSourceControlTools', () => {
     });
   });
 
+  it('publishes diff-comment input as one object schema admitting either mode', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    const schema = tools.source_control_create_diff_comment!.inputSchema as {
+      safeParse(input: unknown): { success: boolean };
+      '~standard': { jsonSchema: { input(options: { target: string }): { type?: unknown } } };
+    };
+
+    // Provider function parameters must be an object schema at the root.
+    expect(schema['~standard'].jsonSchema.input({ target: 'draft-07' }).type).toBe('object');
+
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Please cover this branch.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+      }).success,
+    ).toBe(true);
+    expect(schema.safeParse({ changeRequestId: 17, body: 'Addressed.', replyToId: 'discussion-note-1' }).success).toBe(
+      true,
+    );
+    expect(schema.safeParse({ changeRequestId: 17, body: 'No target.' }).success).toBe(false);
+    expect(
+      schema.safeParse({ changeRequestId: 17, body: 'Half an anchor.', commitId: 'abc', path: 'src/index.ts' }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Both modes at once.',
+        replyToId: 'discussion-note-1',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Unpaired range.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+        startLine: 3,
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Paired range.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+        startLine: 3,
+        startSide: 'right',
+      }).success,
+    ).toBe(true);
+  });
+
   it('validates review bodies before execution', async () => {
     const setup = await fixture();
     const tools = createSourceControlTools({
@@ -315,5 +389,153 @@ describe('createSourceControlTools', () => {
         audit: setup.audit,
       }),
     ).toEqual({});
+  });
+
+  describe('review verdict consistency', () => {
+    const head = 'cd1e5903851234567890abcdef1234567890abcd';
+    async function submit(input: Record<string, unknown>) {
+      const setup = await fixture();
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const run = (tools.source_control_review_change_request!.execute as any)({ changeRequestId: 17, ...input });
+      return { setup, run };
+    }
+
+    async function schemaError(input: Record<string, unknown>) {
+      const { setup } = await submit({});
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const parsed = (tools.source_control_review_change_request!.inputSchema as any).safeParse({
+        changeRequestId: 17,
+        ...input,
+      });
+      expect(parsed.success).toBe(false);
+      return parsed.error.issues.map((issue: { message: string }) => issue.message).join('\n');
+    }
+
+    it('rejects an approval whose body requests changes', async () => {
+      expect(await schemaError({ event: 'approve', body: 'Verdict: request changes\n\nFix it.' })).toMatch(
+        /Verdict: request changes.*event is "approve"/,
+      );
+    });
+
+    it('rejects a request-changes review whose body approves', async () => {
+      expect(await schemaError({ event: 'request-changes', body: 'Verdict: approve\n\nLGTM.' })).toMatch(
+        /Verdict: approve.*event is "request-changes"/,
+      );
+    });
+
+    it('rejects a comment review whose body approves', async () => {
+      expect(await schemaError({ event: 'comment', body: 'Verdict: approve\n\nLGTM.' })).toMatch(/event is "comment"/);
+    });
+
+    it.each(['`ce79aaafad`', head.slice(0, 10), 'the latest commit'])(
+      'rejects a reviewed head that is not a full SHA: %s',
+      async value => {
+        expect(await schemaError({ event: 'approve', body: `Verdict: approve\nReviewed head: ${value}\n` })).toMatch(
+          /full 40- or 64-character commit SHA/,
+        );
+      },
+    );
+
+    it('rejects a body whose Reviewed head lines disagree', async () => {
+      expect(
+        await schemaError({
+          event: 'approve',
+          body: `Verdict: approve\nReviewed head: ${head}\n\nReviewed head: ${'c'.repeat(40)}\n`,
+        }),
+      ).toMatch(/same full 40- or 64-character commit SHA/);
+    });
+
+    it.each([
+      '**Verdict: request changes**',
+      '**Verdict:** request changes',
+      '# Verdict: request changes',
+      'Verdict: changes requested',
+    ])('rejects an approval whose markdown-wrapped first line requests changes: %s', async firstLine => {
+      expect(await schemaError({ event: 'approve', body: `${firstLine}\n\nFindings` })).toMatch(
+        /Verdict: request changes.*event is "approve"/,
+      );
+    });
+
+    it('rejects a request-changes review whose markdown-wrapped first line approves', async () => {
+      expect(await schemaError({ event: 'request-changes', body: '**Verdict:** approve\n' })).toMatch(
+        /Verdict: approve.*event is "request-changes"/,
+      );
+    });
+
+    it('accepts consistent verdict and full-SHA bodies in the schema', async () => {
+      const { setup } = await submit({});
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const schema = tools.source_control_review_change_request!.inputSchema as any;
+      for (const input of [
+        { event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` },
+        { event: 'approve', body: `Verdict: approve\nReviewed head: ${'a'.repeat(64)}\n` },
+        {
+          event: 'approve',
+          body: `Verdict: approve\nReviewed head: ${head}\n\nReviewed head: ${head.toUpperCase()}\n`,
+        },
+        { event: 'comment', body: 'Verdict: request changes\n\nFix it.' },
+        { event: 'comment', body: 'Looks fine overall, one question inline.' },
+      ]) {
+        expect(schema.safeParse({ changeRequestId: 17, ...input }).success).toBe(true);
+      }
+    });
+
+    it.each([
+      ['approve', 'Verdict: approve\n\nLGTM.'],
+      ['request-changes', 'Verdict: request changes\n\nFix it.'],
+      ['comment', 'Verdict: request changes\n\nFix it.'],
+      ['comment', 'Looks fine overall, one question inline.'],
+    ])('publishes a consistent %s review', async (event, body) => {
+      const { setup, run } = await submit({ event, body });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledWith(expect.objectContaining({ event, body }));
+    });
+
+    it('rejects a body whose reviewed head is not the current head', async () => {
+      const { setup, run } = await submit({
+        event: 'approve',
+        body: `Verdict: approve\nReviewed head: \`${'c'.repeat(40)}\`\n\nLGTM.`,
+      });
+      await expect(run).rejects.toThrow(/current change-request head/);
+      expect(setup.createReview).not.toHaveBeenCalled();
+    });
+
+    it('rejects a body whose reviewed head disagrees with commitId in the schema', async () => {
+      expect(
+        await schemaError({
+          event: 'approve',
+          commitId: 'ce79aaafad',
+          body: `Verdict: approve\n**Reviewed head:** ${head}\n`,
+        }),
+      ).toMatch(/commitId is ce79aaafad/);
+    });
+
+    it('publishes when the reviewed head matches the current head', async () => {
+      const { setup, run } = await submit({
+        event: 'approve',
+        commitId: head,
+        body: `Verdict: approve\nReviewed head: ${head.toUpperCase()}\n`,
+      });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledOnce();
+    });
+
+    it('pins the review to the checked head when commitId is omitted', async () => {
+      const { setup, run } = await submit({ event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` });
+      await expect(run).resolves.toEqual({ id: 'review-1' });
+      expect(setup.createReview).toHaveBeenCalledWith(expect.objectContaining({ commitId: head }));
+    });
   });
 });

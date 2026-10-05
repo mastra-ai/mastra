@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -7,9 +8,6 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import type { UseFormSetValue } from 'react-hook-form';
 
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
-import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
-import { useExistingConnections } from '../../../../tool-providers/hooks/use-existing-connections';
-import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import type { ToolProviderConnectionFormValue, ToolProvidersFormValue } from '../../../../tool-providers/schemas';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
@@ -141,12 +139,15 @@ export const ToolkitConnectionControl = ({
   const { setValue } = useFormContext<AgentBuilderEditFormValues>();
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
-  const connectionsQuery = useExistingConnections(providerId, toolkit, { scopeToSelf: true });
+  const connectionsQuery = useExistingConnections({ providerId: providerId, toolkit: toolkit, scopeToSelf: true });
 
   const [manageOpen, setManageOpen] = useState(false);
 
   // Only resolve the toolkit icon while the manage dialog is open.
-  const toolkitsQuery = useToolkits(manageOpen ? providerId : null);
+  const toolkitsQuery = useToolkits({
+    providerId: manageOpen ? providerId : null,
+    queryOptions: { enabled: !!(manageOpen ? providerId : null) },
+  });
   const iconUrl = useMemo(
     () => toolkitsQuery.data?.data?.find(entry => entry.slug === toolkit)?.icon,
     [toolkitsQuery.data?.data, toolkit],
@@ -225,7 +226,6 @@ export const ToolkitConnectionControl = ({
       <Button
         icon={<Plug />}
         type="button"
-        variant="outline"
         size="sm"
         onClick={handleConnect}
         disabled={disabled || authorize.isPending}

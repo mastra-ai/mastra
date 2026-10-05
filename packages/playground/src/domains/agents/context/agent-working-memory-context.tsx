@@ -1,6 +1,8 @@
+/* eslint-disable react-refresh/only-export-components -- context and hooks intentionally co-located with their provider */
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useAgentWorkingMemory } from '@mastra/react/hooks';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
-import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-memory';
 
 type AgentWorkingMemoryContextType = {
   threadExists: boolean;
@@ -30,7 +32,7 @@ export interface AgentWorkingMemoryProviderProps {
 }
 
 export function WorkingMemoryProvider({ agentId, threadId, resourceId, children }: AgentWorkingMemoryProviderProps) {
-  const value = useAgentWorkingMemory(agentId, threadId, resourceId);
+  const value = useAgentWorkingMemory(agentId, threadId, resourceId, useEntityRequestContext('agent', agentId)[0]);
   return <WorkingMemoryContext.Provider value={value}>{children}</WorkingMemoryContext.Provider>;
 }
 

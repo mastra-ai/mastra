@@ -362,7 +362,13 @@ export function createMcpManager(
           authProvider: createOAuthProvider(name, httpCfg),
         };
       } else {
-        defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };
+        defs[name] = {
+          command: cfg.command,
+          args: cfg.args,
+          env: cfg.env,
+          ...(cfg.cwd ? { cwd: cfg.cwd } : {}),
+          stderr: 'pipe',
+        };
       }
     }
     return defs;

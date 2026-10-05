@@ -598,6 +598,67 @@ describe('RecordedTrace', () => {
     });
   });
 
+  it('picks the true root over an orphan span when spans arrive newest-first', async () => {
+    const emitRecordedEvent = vi.fn().mockResolvedValue(undefined);
+    const baseSpan = {
+      traceId: 'trace-orphan',
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: new Date('2026-01-01T00:00:05Z'),
+    };
+
+    const trace = hydrateRecordedTrace({
+      trace: {
+        traceId: 'trace-orphan',
+        // Newest-first order (e.g. startedAt DESC). The orphan's parent span was never persisted.
+        spans: [
+          {
+            ...baseSpan,
+            spanId: 'orphan-span',
+            parentSpanId: 'missing-span',
+            name: 'tool-call',
+            spanType: SpanType.TOOL_CALL,
+            entityType: EntityType.TOOL,
+            entityId: 'tool-1',
+            entityName: 'lookup',
+            startedAt: new Date('2026-01-01T00:00:02Z'),
+          },
+          {
+            ...baseSpan,
+            spanId: 'root-span',
+            parentSpanId: null,
+            name: 'agent-root',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-1',
+            entityName: 'support-agent',
+            tags: ['prod'],
+          },
+        ],
+      },
+      emitRecordedEvent,
+      canEmitRecordedEvent: () => true,
+    });
+
+    expect(trace!.rootSpan.id).toBe('root-span');
+    expect(trace!.rootSpan.isRootSpan).toBe(true);
+
+    await trace!.getSpan('orphan-span')!.addScore({ scorerId: 'manual-review', score: 1 });
+
+    expect(emitRecordedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        score: expect.objectContaining({
+          correlationContext: expect.objectContaining({
+            tags: ['prod'],
+            rootEntityType: EntityType.AGENT,
+            rootEntityId: 'agent-1',
+            rootEntityName: 'support-agent',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('debug-logs when a top-level recorded annotation is dropped because no observability instance is registered', async () => {
     const storage = new MockStore();
     const debug = vi.fn();

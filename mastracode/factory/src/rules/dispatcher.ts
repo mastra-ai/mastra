@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
@@ -12,6 +10,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -36,10 +35,11 @@ import type {
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
+import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -66,6 +66,15 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
+/**
+ * Decisions that may start or wake an agent run and so hold a run slot. A
+ * transition's message is queued as a separate sendMessage, so the transition
+ * itself stays bookkeeping.
+ */
+const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
+  decision.type === 'invokeSkill' || decision.type === 'sendMessage';
+const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
+const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
 // path bypassed, or pre-dating terminal-stage revocation) are revoked on a
 // slow cadence so the per-tick reconcile walk stays bounded.
@@ -75,6 +84,9 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // exists to catch results missed at run end, so it runs on a slow cadence off
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
+
+/** The card moved on before this run could act; it settles as superseded, not succeeded. */
+class FactoryDecisionSuperseded extends Error {}
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
@@ -314,7 +326,7 @@ export interface FactoryBindingPreparationInput {
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
   controller: FactoryController;
-  transitionService: Pick<FactoryTransitionService, 'transition'>;
+  transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
   boards?: BoardRegistry;
@@ -338,6 +350,8 @@ export interface FactoryDecisionDispatcherOptions {
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
+  /** Dismisses superseded Factory change requests on a GitHub pull request. */
+  dismissStaleReviews?: (decision: Extract<FactoryCommitDecision, { type: 'dismissStaleReviews' }>) => Promise<void>;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
     factoryProjectId: string;
@@ -373,23 +387,7 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>) {
-  const [integrationId, type] =
-    decision.source === 'github-pr'
-      ? ['github', 'pull-request']
-      : decision.source === 'github-issue'
-        ? ['github', 'issue']
-        : decision.source === 'gitlab-pr'
-          ? ['gitlab', 'pull-request']
-          : decision.source === 'gitlab-issue'
-            ? ['gitlab', 'issue']
-            : decision.source === 'linear-issue'
-              ? ['linear', 'issue']
-              : decision.source === 'jira-issue'
-                ? ['jira', 'issue']
-                : decision.source === 'incidentio-follow-up'
-                  ? ['incidentio', 'issue']
-                  : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  return externalSourceForWorkItem(decision.source, decision.sourceKey, decision.url ?? undefined);
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {
@@ -437,6 +435,17 @@ function requestsConsent(
   if (decision.type !== 'transition' || !externalActor(record.actor)) return false;
   // Fail closed: a phase the installed board does not declare is treated as working, so consent is asked.
   return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
+}
+
+// The Factory reviewing code it wrote is part of the same work, not new work to
+// consent to: a push to a Factory-authored PR re-reviews without a person's click.
+function reviewsFactoryAuthoredCode(
+  item: { metadata: Record<string, unknown> | null },
+  decision: FactoryCommitDecision,
+): boolean {
+  if (item.metadata?.factoryAuthored !== true) return false;
+  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
 function leaseIdentity(
@@ -490,7 +499,7 @@ async function awaitNotification(
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
-  readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
+  readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
@@ -504,6 +513,7 @@ export class FactoryDecisionDispatcher {
   }) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
+  readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
@@ -515,7 +525,12 @@ export class FactoryDecisionDispatcher {
   #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeClaim?: Promise<void>;
-  readonly #inFlight = new Set<Promise<void>>();
+  /** Starts and run-bearing decisions; capped by `maxInFlight`. */
+  readonly #runInFlight = new Set<Promise<void>>();
+  /** Fast board bookkeeping (transitions, linked-card upserts); its own small cap. */
+  readonly #bookkeepingInFlight = new Set<Promise<void>>();
+  /** Background work awaited on stop but outside both caps. */
+  readonly #backgroundInFlight = new Set<Promise<void>>();
   readonly #bindingSkillRuns = new Map<string, Promise<void>>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
@@ -524,7 +539,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
-    this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
+    this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -532,6 +547,7 @@ export class FactoryDecisionDispatcher {
     this.#refreshManagedMemorySettings = options.refreshManagedMemorySettings;
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
+    this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
@@ -558,7 +574,7 @@ export class FactoryDecisionDispatcher {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = undefined;
     await this.#activeClaim;
-    await Promise.allSettled([...this.#inFlight]);
+    await Promise.allSettled([...this.#runInFlight, ...this.#bookkeepingInFlight, ...this.#backgroundInFlight]);
   }
 
   async runOnce(now = new Date()): Promise<void> {
@@ -577,34 +593,54 @@ export class FactoryDecisionDispatcher {
     // binding, so awaiting it would stretch the tick as the active set grows.
     void this.#maybeSweepStaleBindings(now);
     this.#maybeReconcileToolResults(now);
-    const capacity = this.#maxInFlight - this.#inFlight.size;
-    if (capacity <= 0) return [];
-    const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    // Starts are claimed before deferred decisions: a pending start is a user
-    // waiting on a brand-new session, while a deferred decision is a background
-    // continuation of one that is already running. A deep decision queue must
-    // never starve new sessions out of the tick.
-    const starts = await this.#storage.claimPendingStarts({
-      ownerId: this.#ownerId,
-      now,
-      leaseExpiresAt,
-      limit,
-    });
-    const decisionsLimit = limit - starts.length;
-    const decisions =
-      decisionsLimit > 0
-        ? await this.#storage.claimDeferredDecisions({
-            ownerId: this.#ownerId,
-            now,
-            leaseExpiresAt,
-            limit: decisionsLimit,
-          })
-        : [];
-    return [
-      ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
-      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
-    ];
+    const dispatches: Array<Promise<void>> = [];
+    // Run slots are held for whole agent runs (minutes), so bookkeeping that
+    // only mirrors the board is claimed from its own pool and never waits
+    // behind them.
+    const runCapacity = this.#maxInFlight - this.#runInFlight.size;
+    if (runCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, runCapacity);
+      // Starts are claimed before deferred decisions: a pending start is a user
+      // waiting on a brand-new session, while a deferred decision is a background
+      // continuation of one that is already running. A deep decision queue must
+      // never starve new sessions out of the tick.
+      const starts = await this.#storage.claimPendingStarts({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit,
+      });
+      const decisionsLimit = limit - starts.length;
+      const decisions =
+        decisionsLimit > 0
+          ? await this.#storage.claimDeferredDecisions({
+              ownerId: this.#ownerId,
+              now,
+              leaseExpiresAt,
+              limit: decisionsLimit,
+              decisionFilter: isRunBearingDecision,
+            })
+          : [];
+      dispatches.push(
+        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
+        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
+      );
+    }
+    const bookkeepingCapacity = BOOKKEEPING_MAX_IN_FLIGHT - this.#bookkeepingInFlight.size;
+    if (bookkeepingCapacity > 0) {
+      const decisions = await this.#storage.claimDeferredDecisions({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit: Math.min(BATCH_SIZE, bookkeepingCapacity),
+        decisionFilter: isBookkeepingDecision,
+      });
+      dispatches.push(
+        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),
+      );
+    }
+    return dispatches;
   }
 
   /**
@@ -624,7 +660,7 @@ export class FactoryDecisionDispatcher {
         this.#reconcileInFlight = undefined;
       });
     this.#reconcileInFlight = run;
-    this.#track(run);
+    this.#track(this.#backgroundInFlight, run);
   }
 
   /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
@@ -648,9 +684,9 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  #track(dispatch: Promise<void>): Promise<void> {
-    this.#inFlight.add(dispatch);
-    void dispatch.catch(() => {}).then(() => this.#inFlight.delete(dispatch));
+  #track(pool: Set<Promise<void>>, dispatch: Promise<void>): Promise<void> {
+    pool.add(dispatch);
+    void dispatch.catch(() => {}).then(() => pool.delete(dispatch));
     return dispatch;
   }
 
@@ -695,6 +731,10 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
+      if (error instanceof FactoryDecisionSuperseded) {
+        await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
@@ -767,6 +807,7 @@ export class FactoryDecisionDispatcher {
     // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
+    if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
@@ -804,43 +845,42 @@ export class FactoryDecisionDispatcher {
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
         const transitionMessage = decision.message;
         if (!transitionMessage) return;
-        // Best-effort recipient lookup: no active binding (or no authenticated
-        // session owner) means nobody is engaged with this item, so the
-        // transition itself is the whole effect. A retry after a delivery
-        // failure is safe because the transition replays by ingress identity.
-        const binding = await this.#findBinding(record, transitionMessage.role);
-        if (!binding) return;
-        const startedBy = item.sessions[binding.role]?.startedBy;
-        if (!startedBy) return;
-        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#findSession(binding);
-        if (!session) return;
-        const requestContext = factoryRequestContext({
-          session,
-          binding,
-          userId: startedBy,
+        // The message may wake an idle session and hold it for a whole agent
+        // run, so it is queued as its own sendMessage decision for the run
+        // pool; the stage change above never waits on run capacity. Keyed by
+        // this decision, so a retry replays rather than queueing it twice.
+        const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
+        if (!moved) return;
+        const messageKey = `${record.idempotencyKey}:message`;
+        // Keyed by revision too: a stale commit is recorded as rejected under
+        // its identity, so the retry needs a fresh one to queue the message.
+        const queued = await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+          workItemId: item.id,
+          ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
+          configVersion: this.#transitionService.configVersion,
+          expectedRevision: moved.revision,
+          actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
+          outcome: { status: 'accepted' },
+          decisions: [
+            {
+              type: 'sendMessage',
+              idempotencyKey: messageKey,
+              message: transitionMessage.text,
+              priority: 'high',
+              idleBehavior: 'wake',
+              ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
+            },
+          ],
+          causalChain: nextChain,
+          now: new Date(),
         });
-        await awaitNotification(
-          () =>
-            session.sendNotificationSignal(
-              {
-                source: 'factory',
-                kind: 'rule-message',
-                summary: transitionMessage.text,
-                priority: 'high',
-                payload: { message: transitionMessage.text },
-                sourceId: record.id,
-                dedupeKey: record.idempotencyKey,
-              },
-              {
-                ifActive: { behavior: 'deliver' },
-                ifIdle: { behavior: 'wake' },
-                requestContext,
-              },
-            ),
-          true,
-        );
+        if (queued.status === 'missing') return;
+        const queuedStatus = (queued.result as { status?: string }).status;
+        if (queuedStatus !== 'accepted') {
+          throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
+        }
         return;
       }
       case 'upsertLinkedWorkItem': {
@@ -850,7 +890,13 @@ export class FactoryDecisionDispatcher {
       case 'invokeSkill': {
         // A retry for a role the card has already been handed past cannot win:
         // no seat can be minted for it, and the work it was for is done.
-        if (await this.#roleSuperseded(record, decision.role)) return;
+        // Checked before a seat is prepared: a stale run must not mint one for a role the card left.
+        if (
+          (await this.#roleSuperseded(record, decision.role)) ||
+          (await this.#decisionOvertaken(record, decision.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
         const binding = await this.#requireOrPrepareBinding(record, decision.role);
         await this.#withBindingSkillRun(binding.id, async () => {
           const item = record.workItemId
@@ -886,6 +932,12 @@ export class FactoryDecisionDispatcher {
           await this.#switchThread(session, binding);
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
+          const kickoffLanded = async () =>
+            (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
+          const kickoffStale = async () =>
+            (await this.#roleSuperseded(record, decision.role)) ||
+            (await this.#findBinding(record, decision.role))?.id !== binding.id ||
+            (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
           // Only a *live* run on this binding can be duplicated by a second
@@ -921,7 +973,7 @@ export class FactoryDecisionDispatcher {
             }
             await waitForSessionRunAudit(session);
           }
-          if (await this.#roleSuperseded(record, decision.role)) return;
+          if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
             throw new FactoryDispatchError(
@@ -929,8 +981,8 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          const delivered = await session.thread.listActiveMessages();
-          if (delivered.some(message => message.id === deliveryId)) return;
+          if (await kickoffLanded()) return;
+          if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
@@ -965,7 +1017,7 @@ export class FactoryDecisionDispatcher {
           // the break is invisible on the card.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record, item),
+            approvePlans: await this.#plansAreAutoApproved(record),
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -1000,7 +1052,7 @@ export class FactoryDecisionDispatcher {
 
           try {
             let settled = await sendKickoff();
-            if (settled.action === 'deliver') {
+            while (settled.action === 'deliver') {
               // `deliver` means the signal was queued onto a run that was already
               // in flight. If that run ends before draining its queue the prompt
               // is dropped silently: no turn starts, no error surfaces, and the
@@ -1008,29 +1060,26 @@ export class FactoryDecisionDispatcher {
               // nobody working. Signals persist under their generation-scoped id
               // (the same identity the replay guard above reads), so confirm the
               // message actually landed in the thread rather than trusting the ack.
-              const landed = await session.thread.listActiveMessages();
-              if (!landed.some(message => message.id === deliveryId)) {
-                // The condition that resolves this is the in-flight run ending, so
-                // wait for exactly that and redeliver into the idle session. A
-                // backoff cannot work here: retries are sized in seconds and a turn
-                // takes minutes, so every attempt lands on the same busy run and
-                // the card burns its whole budget without the session ever having
-                // had a chance to be free.
-                if (!(await run.wait())) {
-                  throw new FactoryDispatchError(
-                    'run_terminal_event_missing',
-                    'Factory skill invocation is waiting on a run whose terminal event was not observed.',
-                  );
-                }
-                run.arm();
-                settled = await sendKickoff();
-                if (settled.action !== 'wake') {
-                  throw new FactoryDispatchError(
-                    'skill_delivery_ambiguous',
-                    'Factory skill invocation was queued onto an ending run and never reached the agent.',
-                  );
-                }
+              if (await kickoffLanded()) break;
+
+              // Another run can start while the previous run is finishing, so one
+              // redelivery is not enough to prove the session is idle. Follow each
+              // run boundary until the kickoff either lands on an active run or
+              // wakes a new one.
+              if (!(await run.wait())) {
+                throw new FactoryDispatchError(
+                  'run_terminal_event_missing',
+                  'Factory skill invocation is waiting on a run whose terminal event was not observed.',
+                );
               }
+              // The queued copy often surfaces only once the run it was queued
+              // onto ends. Resend only when it is still missing, and never once
+              // the card has moved on or the seat was handed over or revoked —
+              // a stale kickoff would restart a phase that already finished.
+              if (await kickoffLanded()) break;
+              if (await kickoffStale()) throw new FactoryDecisionSuperseded();
+              run.arm();
+              settled = await sendKickoff();
             }
             await this.#recordRunStart(
               session,
@@ -1097,6 +1146,11 @@ export class FactoryDecisionDispatcher {
         );
         return;
       }
+      case 'dismissStaleReviews': {
+        if (!this.#dismissStaleReviews) throw new Error('GitHub review dismissal is not configured.');
+        await this.#dismissStaleReviews(decision);
+        return;
+      }
       case 'notify': {
         const binding = await this.#requireBinding(record);
         const session = await this.#requireSession(binding);
@@ -1127,6 +1181,10 @@ export class FactoryDecisionDispatcher {
       source: externalSourceForDecision(decision),
     });
     if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
+      // Filing the card *was* the placement, so a retry of the same decision has
+      // nothing left to apply — and must not drag a card that has since moved
+      // back down to the stage this decision filed it at.
+      if (decision.skipRules === true) return;
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1140,6 +1198,12 @@ export class FactoryDecisionDispatcher {
     const definition = this.#boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
+    // `skipRules` files the card at the stage the decision names, as its first
+    // entry, and runs none of the board's phase rules. Without it the card
+    // enters through the board's initial phase and transitions from there, so
+    // arrival and destination-entry rules both run.
+    const skipRules = decision.skipRules === true;
+    const entryStage = skipRules ? decision.stage : initialPhase;
     const parentWorkItemId =
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
@@ -1160,7 +1224,7 @@ export class FactoryDecisionDispatcher {
           parentWorkItemId,
           title: decision.title,
           board: decision.board,
-          stages: [initialPhase],
+          stages: [entryStage],
           sessions: {},
           metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
         },
@@ -1183,7 +1247,7 @@ export class FactoryDecisionDispatcher {
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
-    if (itemBoard !== decision.board) {
+    if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
@@ -1198,7 +1262,10 @@ export class FactoryDecisionDispatcher {
       });
       if (item) result = { ...result, item };
     }
-    if (!result.created) {
+    // A `skipRules` decision is a placement and nothing else: the backfill would
+    // otherwise walk the arrival decision's facts back onto an existing card,
+    // restamping trust the sweep deliberately left unanswered.
+    if (!result.created && !skipRules) {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
@@ -1216,6 +1283,23 @@ export class FactoryDecisionDispatcher {
         });
         if (filled) result = { ...result, item: filled.item };
       }
+    }
+    if (skipRules) {
+      // Creation already filed the card at `stage`. An existing card — a
+      // reconcile pass reacting to a label change, say — is placed there the
+      // same way, through the relocation the label routes use, so no phase rule
+      // runs for it and no transition is recorded.
+      if (!result.created) {
+        await moveCardToBoard({
+          workItems: this.#storage,
+          boardRegistry: this.#boards,
+          userId: 'factory-rule-dispatcher',
+          item: result.item,
+          targetBoard: decision.board,
+          targetStage: decision.stage,
+        });
+      }
+      return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
@@ -1238,7 +1322,8 @@ export class FactoryDecisionDispatcher {
         initialEntry: true,
       });
       if (initial.status === 'rejected') {
-        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        if (result.created)
+          await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
         throw new Error(`${initial.code}: ${initial.reason}`);
       }
       expectedRevision = initial.revision;
@@ -1315,6 +1400,15 @@ export class FactoryDecisionDispatcher {
    * fresh decision for the role (the card came back to it) must still dispatch
    * even though an older revoked binding for that role is on record.
    */
+  async #decisionOvertaken(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const [item, siblings] = await Promise.all([
+      this.#storage.get({ orgId: record.orgId, id: record.workItemId }),
+      this.#storage.listDecisionsForEvaluations(record.orgId, record.factoryProjectId, [record.evaluationId]),
+    ]);
+    return decisionOvertaken({ boards: this.#boards, item, record, role, siblings });
+  }
+
   async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
@@ -1376,11 +1470,13 @@ export class FactoryDecisionDispatcher {
   }
 
   /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
-  async #plansAreAutoApproved(
-    { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
-    item?: { plansPreapprovedAt: Date | null } | null,
-  ): Promise<boolean> {
-    if (item?.plansPreapprovedAt) return true;
+  async #plansAreAutoApproved({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<boolean> {
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
@@ -1523,7 +1619,7 @@ export class FactoryDecisionDispatcher {
           // alone strands the card with a success ledger entry.
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record, item),
+            approvePlans: await this.#plansAreAutoApproved(record),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
@@ -1547,23 +1643,23 @@ export class FactoryDecisionDispatcher {
             );
           try {
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
-            if (settled?.action === 'deliver') {
+            let deliveryGeneration = 0;
+            while (settled?.action === 'deliver') {
               // `deliver` only proves the signal was queued onto a run already
               // in flight. If that run ends without draining its queue the
-              // kickoff is dropped silently. There is no per-notification
-              // "processed" signal, so wait for the in-flight run to end and
-              // redeliver into the idle session unconditionally — the
-              // generation-scoped dedupeKey defeats inbox dedupe and the
-              // kickoff key keeps a duplicate run bounded, while a dropped
-              // kickoff strands the card forever.
+              // kickoff is dropped silently. Another run can start while the
+              // previous one is finishing, so follow every run boundary until
+              // the kickoff wakes an idle session. The generation-scoped
+              // dedupeKey defeats inbox dedupe and the kickoff key keeps a
+              // duplicate run bounded, while a dropped kickoff strands the card.
               if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
               run.arm();
-              settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}:retry:${record.attempts}`);
-              if (settled?.action !== 'wake') {
-                throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
-              }
+              deliveryGeneration += 1;
+              settled = await sendKickoff(
+                `factory-kickoff:${record.kickoffKey}:retry:${record.attempts}:${deliveryGeneration}`,
+              );
             }
             await this.#recordRunStart(
               session,

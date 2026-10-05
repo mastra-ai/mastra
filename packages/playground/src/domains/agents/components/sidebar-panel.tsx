@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 export function SidebarPanel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
+      data-slot="sidebar-panel"
       className={cn(
-        'bg-card border-t border-r border-border/50 rounded-tr-studio-panel flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden',
+        'ml-px flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-tr-studio-panel border-t border-r border-surface-rim bg-card',
         className,
       )}
     >

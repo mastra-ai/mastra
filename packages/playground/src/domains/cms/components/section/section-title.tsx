@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type SectionTitleProps = {
@@ -8,15 +9,14 @@ export type SectionTitleProps = {
 
 export function SectionTitle({ icon, children, className }: SectionTitleProps) {
   return (
-    <h3
-      className={cn(
-        'flex items-center gap-2 text-column text-muted-foreground',
-        '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em]',
-        className,
-      )}
+    <Txt
+      as="h3"
+      variant="column"
+      tone="muted"
+      className={cn('flex items-center gap-2', '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em]', className)}
     >
       {icon}
       {children}
-    </h3>
+    </Txt>
   );
 }

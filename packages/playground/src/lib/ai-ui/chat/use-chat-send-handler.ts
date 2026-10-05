@@ -1,15 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
-import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { injectBufferingEnds } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
 import { useMastraClient } from '@mastra/react';
+import { memoryStatusQueryKey, memoryThreadMessagesQueryKey, observationalMemoryQueryKey } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { injectBufferingEnds } from '@/services/om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
@@ -56,7 +54,7 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 
 interface SendDeps {
   model?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
@@ -69,7 +67,7 @@ interface SendDeps {
 
 interface UseChatSendHandlerArgs {
   agentId: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;

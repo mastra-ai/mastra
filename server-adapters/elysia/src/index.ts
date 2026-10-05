@@ -17,7 +17,8 @@ import {
 import type { AnyElysia, MaybePromise } from 'elysia';
 import type Elysia from 'elysia';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-export { createAuthMiddleware } from './auth-middleware';
+import { applyAuthRefreshHeaders } from './auth-middleware';
+export { applyAuthRefreshHeaders, createAuthMiddleware } from './auth-middleware';
 export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 
 // Export helper functions for OpenAPI integration
@@ -740,7 +741,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         const result = await route.handler(handlerParams);
         return this.sendResponse(route, ctx as any, result, prefix);
       } catch (error) {
-        this.mastra.getLogger()?.error('Error calling handler', {
+        const httpStatus =
+          error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
+        // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+        const logLevel = httpStatus === 501 ? 'warn' : 'error';
+        this.mastra.getLogger()?.[logLevel]('Error calling handler', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           path: route.path,
           method: route.method,
@@ -888,6 +893,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
   registerContextMiddleware(): void {
     this.app.derive(this.createContextMiddleware());
+    this.app.onAfterHandle({ as: 'global' }, applyAuthRefreshHeaders);
+    this.app.onError({ as: 'global' }, applyAuthRefreshHeaders);
   }
 
   registerAuthMiddleware(): void {

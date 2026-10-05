@@ -1,4 +1,3 @@
-import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -21,9 +20,7 @@ async function renderSettingsPage() {
     <QueryClientProvider client={queryClient}>
       <StudioConfigProvider endpoint={BASE_URL}>
         <ThemeProvider>
-          <PageHeadingContext.Provider value="Settings">
-            <StudioSettingsPage />
-          </PageHeadingContext.Provider>
+          <StudioSettingsPage />
         </ThemeProvider>
       </StudioConfigProvider>
     </QueryClientProvider>,
@@ -41,11 +38,11 @@ afterEach(() => {
 
 describe('StudioSettingsPage', () => {
   describe('when the settings page is visited', () => {
-    it('exposes the route heading and settings controls inside the main landmark', async () => {
+    it('exposes the settings breadcrumb and settings controls inside the main landmark', async () => {
       await renderSettingsPage();
 
+      expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('Settings')).toBeDefined();
       const main = within(screen.getByRole('main'));
-      expect(main.getByRole('heading', { level: 1, name: 'Settings' })).toBeDefined();
       expect(
         within(main.getByRole('radiogroup', { name: 'Theme' }))
           .getByRole('radio', { name: 'System' })

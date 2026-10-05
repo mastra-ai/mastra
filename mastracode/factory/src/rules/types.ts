@@ -10,6 +10,30 @@ export type WorkItemSource =
   | 'incidentio-follow-up'
   | 'manual';
 
+export function externalSourceForWorkItem(
+  source: WorkItemSource,
+  sourceKey: string,
+  url?: string,
+): ExternalWorkItemSource {
+  const [integrationId, type] =
+    source === 'github-pr'
+      ? ['github', 'pull-request']
+      : source === 'github-issue'
+        ? ['github', 'issue']
+        : source === 'gitlab-pr'
+          ? ['gitlab', 'pull-request']
+          : source === 'gitlab-issue'
+            ? ['gitlab', 'issue']
+            : source === 'linear-issue'
+              ? ['linear', 'issue']
+              : source === 'jira-issue'
+                ? ['jira', 'issue']
+                : source === 'incidentio-follow-up'
+                  ? ['incidentio', 'issue']
+                  : ['factory', 'manual'];
+  return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
+}
+
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
@@ -258,10 +282,21 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    * is installed. Absent for pull requests and for issues whose labels select nothing.
    */
   intake?: FactoryRuleIntakeTarget;
+  /**
+   * Set on the one evaluation per pull request delivery that files the pull
+   * request's own Review card. Opening a pull request concerns two cards — that
+   * Review card and the Work item that authored the pull request — so the rule
+   * answers for the two separately: the arrival carries this flag and is
+   * committed against the authoring item when resolution found one, which is
+   * what links the new card to it, while the authoring item's own evaluation
+   * leaves the flag unset.
+   */
+  pullRequestIntake?: boolean;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
-  repository: { id: number; fullName: string };
+  /** `installationId` is the GitHub App installation the delivery arrived through. */
+  repository: { id: number; fullName: string; installationId?: number };
   issue?: {
     number: number;
     title: string;
@@ -305,7 +340,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   /** Present when a PR comment uses Factory's exact review command. */
   reviewCommand?: { command: 'review' | 're-review'; target: string };
   /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
-  review?: { id: number; state: string; url: string };
+  review?: { id: number; state: string; url: string; author?: string; body?: string };
 }
 
 /**
@@ -390,6 +425,8 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     labels: readonly string[];
     createdAt: string;
     updatedAt: string;
+    sourceId?: string | null;
+    projectId?: string | null;
   };
 }
 
@@ -510,6 +547,18 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
+  /**
+   * File the card at `stage` as its first entry and run none of the board's
+   * phase rules for it — no arrival, no destination entry. The card is filed
+   * (or, if it already exists, moved) and left parked for a person; nothing is
+   * started for it. For external records that arrive already past the board's
+   * first step: a GitHub issue whose triage is already recorded, for instance.
+   *
+   * Placement is the whole decision. An existing card it reaches is moved to
+   * that stage through the same relocation the label routes use, and its
+   * metadata is left alone.
+   */
+  skipRules?: boolean;
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 
@@ -561,8 +610,23 @@ export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {
   level?: 'info' | 'warning' | 'error';
 }
 
+/**
+ * Dismisses Factory change requests an approval has superseded on a GitHub
+ * pull request. Only reviews carrying Factory's `Verdict: request changes`
+ * marker from an identity other than the approving one are dismissed.
+ */
+export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisionBase {
+  type: 'dismissStaleReviews';
+  installationId: number;
+  repository: string;
+  pullRequestNumber: number;
+  approvingReviewId: string;
+  approvingAuthor: string;
+}
+
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
+  | FactoryDismissStaleReviewsDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision
   | FactorySendMessageDecision

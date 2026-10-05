@@ -5,14 +5,14 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
 import { DatasetItemDetails } from './dataset-item-details';
-import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -311,10 +311,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                     <Pencil />
                     Edit
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() => setShowDeleteConfirm(true)}
-                    className="text-red-500 focus:text-red-400"
-                  >
+                  <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
                     <Trash2 />
                     Delete Item
                   </DropdownMenu.Item>

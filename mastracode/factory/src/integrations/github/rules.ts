@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
@@ -285,6 +287,20 @@ function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
   return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
+/**
+ * Whether a login is Factory itself. Prefers the resolved identity, which is
+ * observed from Factory's own writes, and falls back to the configured slug.
+ */
+export function isFactoryGithubLogin(
+  github: Pick<GithubRulesIntegration, 'identity' | 'slug'>,
+  login: string | null | undefined,
+): boolean {
+  if (github.identity?.known) return github.identity.matches(login);
+  const slug = github.slug?.trim();
+  if (!slug || !login) return false;
+  return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
 
@@ -295,11 +311,7 @@ export class GithubRules {
    * disabled every self-loop guard.
    */
   #isFactoryLogin(login: string | undefined): boolean {
-    const identity = this.options.github.identity;
-    if (identity?.known) return identity.matches(login);
-    const slug = this.options.github.slug?.trim();
-    if (!slug || !login) return false;
-    return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+    return isFactoryGithubLogin(this.options.github, login);
   }
 
   #factoryMentionTarget(): string | undefined {
@@ -519,6 +531,8 @@ export class GithubRules {
     const evaluate = async (
       item: WorkItemRow | undefined,
       ingressIdentity: string,
+      /** Set on the evaluation that files the pull request's own Review card. */
+      pullRequestIntake = false,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -545,10 +559,11 @@ export class GithubRules {
             }
           : {}),
         ...(intake ? { intake } : {}),
+        ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
-        repository: { id: repositoryId, fullName: repositoryName },
+        repository: { id: repositoryId, fullName: repositoryName, installationId },
         ...(issueNumber && string(issue?.title) && string(issue?.html_url)
           ? {
               issue: {
@@ -621,6 +636,12 @@ export class GithubRules {
                 id: number(object(parsed.payload.review)?.id) ?? 0,
                 state: string(object(parsed.payload.review)?.state) ?? 'unknown',
                 url: string(object(parsed.payload.review)?.html_url) ?? '',
+                ...(string(object(object(parsed.payload.review)?.user)?.login)
+                  ? { author: string(object(object(parsed.payload.review)?.user)?.login) }
+                  : {}),
+                ...(string(object(parsed.payload.review)?.body)
+                  ? { body: string(object(parsed.payload.review)?.body) }
+                  : {}),
               },
             }
           : {}),
@@ -670,15 +691,21 @@ export class GithubRules {
     };
 
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
-    const primary = await evaluate(relatedItem, deliveryIdentity);
-    // A merged pull request is the one event both linked cards need: the
-    // Review card has to close, and the Work item that wrote the code has to
-    // assess whether it is finished. Resolution binds the delivery to whichever
-    // card it matched first, so evaluate the other one too — under an identity
-    // suffixed with its id, because ingress identities are the replay key and
-    // reusing the delivery's own would drop this evaluation as a duplicate.
+    // A pull request opening concerns two cards: its own Review card, which the
+    // arrival rule files — committed against the Work item that authored the
+    // pull request when one exists, because that binding is what links the two
+    // — and that authoring item, which is now out for review. The arrival is
+    // the delivery's own evaluation; the item's is a second one, under an
+    // identity suffixed with its id, because ingress identities are the replay
+    // key and reusing the delivery's own would drop it as a duplicate.
+    const pullRequestOpened = event === 'pullRequestOpened';
+    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    // A closed pull request is the one *other* event both linked cards need:
+    // the Review card has to close, and the Work item that wrote the code has
+    // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
+    // whichever card it matched first, so evaluate the other one too.
     const linked =
-      event === 'pullRequestMerged' && relatedItem && pullRequestNumber
+      (event === 'pullRequestMerged' || event === 'pullRequestClosed') && relatedItem && pullRequestNumber
         ? await this.#linkedClosureItem(
             project.orgId,
             project.factoryProjectId,
@@ -688,8 +715,92 @@ export class GithubRules {
             relatedItem,
           )
         : undefined;
-    if (!linked) return primary;
-    const secondary = await evaluate(linked, `${deliveryIdentity}:${linked.id}`);
+    // Moving the card to Done does not touch its pull request fields, so without
+    // this the card reads "open" until the next sweep and still offers Re-review.
+    // Stamped after the evaluations, which commit at the revision they read.
+    const stampClosed = async (companionStatus?: string) => {
+      if (!pullRequestNumber) return;
+      // The authoring Work item records which pull request it has out, so an
+      // agent cannot close the work while that pull request is still open.
+      if (pullRequestOpened) {
+        // Mirrors the out-for-review rule's trust gate. A replayed opened
+        // delivery only restores the mark (after a failed write) while the
+        // pull request's Review card still records it open, so a redelivery
+        // after the close cannot block the Work item again.
+        const trusted = (actor.type === 'github' && actor.trusted) || pullRequestFactoryAuthored;
+        const reviewCard =
+          authoringItem && trusted
+            ? await this.#linkedClosureItem(
+                project.orgId,
+                project.factoryProjectId,
+                repositoryId,
+                repositoryName,
+                pullRequestNumber,
+                authoringItem,
+              )
+            : undefined;
+        const stillOpen =
+          companionStatus === 'replayed'
+            ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
+            : reviewCard?.metadata?.state !== 'closed';
+        if (authoringItem && trusted && stillOpen) {
+          await this.options.storage.update({
+            orgId: authoringItem.orgId,
+            id: authoringItem.id,
+            userId: 'factory-rule-dispatcher',
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+          });
+        }
+        return;
+      }
+      if (event !== 'pullRequestMerged' && event !== 'pullRequestClosed') return;
+      for (const card of [relatedItem, linked]) {
+        if (!card) continue;
+        if (card.externalSource?.type !== 'pull-request') {
+          // A merge settles the review, so the authoring Work item's mirrored
+          // "request changes" no longer stops it from being closed.
+          // Only the pull request the card has out settles it; an older one
+          // merging must not clear a verdict that belongs to its successor.
+          const recorded = card.metadata?.openPullRequestNumber;
+          const ownsCard = typeof recorded !== 'number' || recorded === pullRequestNumber;
+          const settled = {
+            ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
+              ? { reviewVerdict: null }
+              : {}),
+            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+          };
+          if (Object.keys(settled).length > 0) {
+            await this.options.storage.update({
+              orgId: card.orgId,
+              id: card.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: settled },
+            });
+          }
+          continue;
+        }
+        await this.options.storage.update({
+          orgId: card.orgId,
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { state: 'closed', merged: event === 'pullRequestMerged' } },
+        });
+      }
+    };
+    const authoringItem =
+      linked === undefined &&
+      pullRequestOpened &&
+      relatedItem !== undefined &&
+      relatedItem.externalSource?.type !== 'pull-request'
+        ? relatedItem
+        : undefined;
+    if (linked === undefined && authoringItem === undefined) {
+      await stampClosed();
+      return primary;
+    }
+    const companion = linked ?? authoringItem;
+    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
+    await stampClosed(secondary.status);
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }
@@ -827,6 +938,10 @@ export interface ReconcilePullRequestState {
   mergedBy?: string;
 }
 
+export interface PolledPullRequestState extends ReconcilePullRequestState {
+  createdAt: string;
+}
+
 export type GithubPullRequestFetcher = (input: {
   installationId: number;
   repository: string;
@@ -851,6 +966,12 @@ export type GithubIssueFetcher = (input: {
   repository: string;
   number: number;
 }) => Promise<ReconcileIssueState | undefined>;
+
+/** Lists a repository's open issues (pull requests excluded) for missed-open discovery. */
+export type GithubOpenIssueLister = (input: {
+  installationId: number;
+  repository: string;
+}) => Promise<Array<ReconcileIssueState & { number: number }>>;
 
 export interface ReconcileRepository {
   id: number;
@@ -960,8 +1081,89 @@ export function reconciledIssueClosedEvent(
         ...(state.stateReason ? { state_reason: state.stateReason } : {}),
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
+        assignees: githubUsers(state.assignees),
       },
+    },
+  };
+}
+
+/**
+ * The label-drift replay: an open issue whose labels changed without a
+ * `labeled`/`unlabeled` webhook ever arriving (Factory was down, the delivery
+ * was lost, or the label was applied by something other than a delivery the
+ * webhook saw). Synthesized as an `opened` delivery so the deployment's
+ * `issueOpened` rule decides placement, exactly as it does at arrival — one
+ * source of placement policy for both.
+ */
+export function reconciledIssueRelabeledEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  const labels = state.labels ?? [];
+  // GitHub updates `updated_at` for a label change. Including it makes retries
+  // of one observed issue version idempotent while allowing A → B → A to replay
+  // its final A placement as a new version. Synthetic callers without it retain
+  // the legacy label-only identity.
+  const digest = createHash('sha256')
+    .update([...labels].sort().join('\n'))
+    .digest('hex')
+    .slice(0, 16);
+  const version = state.updatedAt ? `:${createHash('sha256').update(state.updatedAt).digest('hex').slice(0, 16)}` : '';
+  return {
+    event: 'issues',
+    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:relabeled:${digest}${version}`,
+    payload: {
+      // `opened` is the event that carries an issue's labels through the rules;
+      // an already-filed card is re-placed by the decision, not re-materialized.
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? 'github' },
+      issue: {
+        number: issueNumber,
+        title: state.title,
+        html_url: state.url,
+        state: 'open',
+        ...(state.createdAt ? { created_at: state.createdAt } : {}),
+        ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
+        assignees: githubUsers(state.assignees),
+        labels: githubLabels(labels),
+      },
+    },
+  };
+}
+
+/**
+ * The missed-open replay: an open issue with no Work card, because its
+ * `opened` delivery never reached the rules ingress. Synthesized as the same
+ * `opened` delivery so the deployment's `issueOpened` rule decides whether and
+ * where it lands, exactly as it would have at arrival. The delivery id is
+ * stable per issue so repeat sweeps dedupe at the ingress.
+ */
+export function reconciledIssueOpenedEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  const event = reconciledIssueRelabeledEvent(repository, issueNumber, state);
+  return { ...event, deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:opened` };
+}
+
+export function polledPullRequestEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: PolledPullRequestState,
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repository.id}:pull-request:${pullRequestNumber}:${state.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? '__unknown__' },
+      pull_request: pullRequestPayload(pullRequestNumber, state),
     },
   };
 }
@@ -971,32 +1173,47 @@ export function reconciledClosedEvent(
   pullRequestNumber: number,
   state: ReconcilePullRequestState,
 ): ParsedGithubWebhook {
+  const outcome = state.merged ? 'merged' : 'closed';
   return {
     event: 'pull_request',
     // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
-    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${outcome}`,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
       repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: state.mergedBy ?? 'github' },
-      pull_request: {
-        number: pullRequestNumber,
-        title: state.title,
-        html_url: state.url,
-        ...(state.createdAt ? { created_at: state.createdAt } : {}),
-        state: 'closed',
-        draft: state.draft,
-        merged: state.merged,
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
-        labels: (state.labels ?? []).map(name => ({ name })),
-        head: { ref: state.headBranch },
-        base: { ref: state.baseBranch },
-      },
+      pull_request: pullRequestPayload(pullRequestNumber, { ...state, state: 'closed' }),
     },
   };
+}
+
+function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    number: pullRequestNumber,
+    title: state.title,
+    html_url: state.url,
+    state: state.state,
+    draft: state.draft,
+    merged: state.merged,
+    assignees: githubUsers(state.assignees),
+    requested_reviewers: githubUsers(state.requestedReviewers),
+    labels: githubLabels(state.labels),
+    head: { ref: state.headBranch },
+    base: { ref: state.baseBranch },
+  };
+  if (state.createdAt) payload.created_at = state.createdAt;
+  if (state.author) payload.user = { login: state.author };
+  return payload;
+}
+
+function githubUsers(logins: readonly string[] = []): Array<{ login: string }> {
+  return logins.map(login => ({ login }));
+}
+
+function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
+  return names.map(name => ({ name }));
 }
 
 function reconciledPullRequestMetadata(

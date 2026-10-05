@@ -1,18 +1,17 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
+import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
+import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useSpanFeedback, useTraceFeedback, useTraceSpanScores, useExperimentTrace } from '@mastra/react/hooks';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
-import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
-import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import { traceScoreLink } from '@/lib/app-routing';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
@@ -21,6 +20,10 @@ export type ExperimentResultDetailProps = Omit<
   scores?: ClientScoreRowData[];
   /** Optional controlled state, for callers that need to read it. Create it with `useExperimentResultDetailState`. */
   state?: ExperimentResultDetailState;
+  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Shows the Feedback tabs and fetches their feedback. */
+  withFeedback: boolean;
 };
 
 /**
@@ -28,8 +31,16 @@ export type ExperimentResultDetailProps = Omit<
  * and the review queues, so the Trace / score interactions behave identically.
  * Score and trace are sibling drawers rendered after the result so they stack on top.
  */
-export function ExperimentResultDetail({ result, scores, state, ...panelProps }: ExperimentResultDetailProps) {
+export function ExperimentResultDetail({
+  result,
+  scores,
+  state,
+  withQueryTrace,
+  withFeedback,
+  ...panelProps
+}: ExperimentResultDetailProps) {
   const internalState = useExperimentResultDetailState(scores, result?.id);
+  const { navigate } = useLinkComponent();
   const {
     featuredTraceId,
     setFeaturedTraceId,
@@ -71,18 +82,26 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
     return undefined;
   };
 
-  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
+  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace({
+    traceId: featuredTraceId,
+    queryOptions: { enabled: !!featuredTraceId },
+  });
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: featuredTraceId ?? undefined,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId },
+  });
   const { data: spanFeedback } = useSpanFeedback({
     traceId: featuredTraceId ?? undefined,
     spanId: featuredSpanId,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId && !!featuredSpanId },
   });
   const { data: anchorSpanScores } = useTraceSpanScores({
     traceId: featuredTraceId ?? undefined,
     spanId: anchorSpan?.spanId,
     page: 0,
+    queryOptions: { enabled: !!featuredTraceId && !!anchorSpan?.spanId },
   });
 
   return (
@@ -94,7 +113,9 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
         onScoreClick={handleScoreClick}
         featuredScoreId={featuredScoreId}
         onShowTrace={result?.traceId ? () => showTrace(result.traceId) : undefined}
-        feedbackTabSlot={({ traceId }) => <TraceFeedbackTab key={traceId} traceId={traceId} />}
+        feedbackTabSlot={
+          withFeedback ? ({ traceId }) => <TraceFeedbackTab key={traceId} traceId={traceId} /> : undefined
+        }
       />
 
       <ExperimentScorePanel
@@ -120,8 +141,11 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
         showUnavailableFeaturesMsg={false}
         traceHref={featuredTraceId ? `/traces?traceId=${encodeURIComponent(featuredTraceId)}` : undefined}
         anchorSpanId={anchorSpan?.spanId}
-        feedbackTabBadge={traceFeedback?.pagination?.total ?? undefined}
-        feedbackTabSlot={({ traceId }) => <TraceFeedbackTab traceId={traceId} />}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
+        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
+        feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
+        feedbackTabSlot={withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} /> : undefined}
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId, rootSpanId }) =>
           rootSpanId ? (
@@ -138,9 +162,14 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
             />
           ) : null
         }
-        spanFeedbackTabBadge={spanFeedback?.pagination?.total ?? undefined}
-        spanFeedbackTabSlot={({ traceId, spanId }) =>
-          traceId && spanId ? <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} /> : null
+        spanFeedbackTabBadge={withFeedback ? (spanFeedback?.pagination?.total ?? undefined) : undefined}
+        spanFeedbackTabSlot={
+          withFeedback
+            ? ({ traceId, spanId }) =>
+                traceId && spanId ? (
+                  <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} />
+                ) : null
+            : undefined
         }
       />
     </>

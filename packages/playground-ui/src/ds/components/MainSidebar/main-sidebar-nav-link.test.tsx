@@ -2,7 +2,7 @@
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useMobileDrawer } from './main-sidebar-context';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
@@ -15,25 +15,6 @@ const DrawerToggle = () => {
   const { openMobile, setOpenMobile } = useMobileDrawer();
   return <button onClick={() => setOpenMobile(!openMobile)}>Toggle drawer</button>;
 };
-
-beforeAll(() => {
-  if (!window.matchMedia) {
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      configurable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-  }
-});
 
 afterEach(() => cleanup());
 
@@ -216,6 +197,29 @@ describe('MainSidebarNavLink — what it renders a row as', () => {
     const anchor = screen.getByRole<HTMLAnchorElement>('link', { name: 'Docs' });
     expect(anchor.target).toBe(target);
     expect(anchor.rel).toBe(target === '_blank' ? 'noreferrer' : '');
+  });
+
+  it.each([
+    ['default', 1],
+    ['collapsed', 0],
+  ] as const)('shows a caret on a row that opens a view when %s', (state, carets) => {
+    const { container } = renderLink(
+      <MainSidebarNavLink state={state} link={{ name: 'Gateway', url: '/gateway', opensView: true }} />,
+    );
+
+    expect(container.querySelectorAll('a svg.lucide-chevron-right')).toHaveLength(carets);
+  });
+
+  it.each([
+    ['render', { render: <button type="button">Gateway</button> }],
+    ['asChild', { asChild: true, children: <button type="button">Gateway</button> }],
+  ] as const)('keeps a %s row and adds its caret when it opens a view', (_, slot) => {
+    renderLink(
+      <MainSidebarNavLink state="default" link={{ name: 'Gateway', url: '/gateway', opensView: true }} {...slot} />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Gateway' });
+    expect(button.querySelector('svg.lucide-chevron-right')).toBeTruthy();
   });
 
   it('marks a featured row so it reads apart from the rest', () => {

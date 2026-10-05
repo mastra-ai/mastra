@@ -1,4 +1,4 @@
-import { useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgentDependents } from '@mastra/react/hooks';
 
 const MAX_DEPENDENTS_SHOWN = 5;
 
@@ -34,7 +34,10 @@ interface AgentImpactWarningsProps {
 }
 
 export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentImpactWarningsProps) => {
-  const { data, isLoading, isError } = useStoredAgentDependents(agentId, { enabled });
+  const { data, isLoading, isError } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) && enabled },
+  });
 
   if (!enabled || isLoading || isError) return null;
 

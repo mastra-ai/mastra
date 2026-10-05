@@ -1,13 +1,13 @@
 import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderList, AgentBuilderListSkeleton } from '../agent-builder-list';
 import type { AgentBuilderListProps } from '../agent-builder-list';
-import type { AuthCapabilities } from '@/domains/auth/types';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 // Tooltip primitives render their content lazily on hover; flatten them for

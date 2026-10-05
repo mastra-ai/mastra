@@ -1,11 +1,11 @@
-import { useMastraClient } from '@mastra/react';
+import { useTraceColumnPreferencesStorageKey } from '@mastra/react/hooks';
 import { useEffect, useState } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   parseTraceColumnPreferences,
   serializeTraceColumnPreferences,
 } from '../trace-list-columns';
-import type { TraceColumnPreferences, TraceOptionalColumn } from '../trace-list-columns';
+import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 
 function readPreferences(storageKey: string): TraceColumnPreferences {
   if (typeof window === 'undefined') return DEFAULT_TRACE_COLUMN_PREFERENCES;
@@ -29,11 +29,7 @@ function writePreferences(storageKey: string, preferences: TraceColumnPreference
 }
 
 export function useTraceColumnPreferences() {
-  const client = useMastraClient();
-  const projectUrl =
-    client.options.baseUrl || (typeof window === 'undefined' ? 'local' : window.location.origin || 'local');
-  const apiPrefix = client.options.apiPrefix ?? '/api';
-  const storageKey = `mastra:traces:columns:${projectUrl}:${apiPrefix}`;
+  const storageKey = useTraceColumnPreferencesStorageKey();
   const [state, setState] = useState(() => ({
     storageKey,
     preferences: readPreferences(storageKey),
@@ -84,11 +80,28 @@ export function useTraceColumnPreferences() {
     }));
   };
 
+  const addCustomColumn = (field: TraceCustomColumn) => {
+    commit(current =>
+      current.customColumns.includes(field)
+        ? current
+        : { ...current, customColumns: [...current.customColumns, field] },
+    );
+  };
+
+  const removeCustomColumn = (field: TraceCustomColumn) => {
+    commit(current => ({
+      ...current,
+      customColumns: current.customColumns.filter(customColumn => customColumn !== field),
+    }));
+  };
+
   const resetColumns = () => commit(() => DEFAULT_TRACE_COLUMN_PREFERENCES);
 
   return {
     preferences,
     toggleColumn,
+    addCustomColumn,
+    removeCustomColumn,
     addMetadataColumn,
     removeMetadataColumn,
     resetColumns,

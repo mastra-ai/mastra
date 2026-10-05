@@ -114,6 +114,37 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
 }
 
 /**
+ * Create middleware that forwards a resolved reasoning effort to an
+ * OpenAI-compatible provider as `providerOptions[providerKey].reasoningEffort`.
+ *
+ * Returns `undefined` when `reasoningEffort` is unset so callers wrap nothing
+ * (e.g. thinking level `off`), leaving the wire request without a
+ * `reasoning_effort` field. Unlike {@link createCodexMiddleware}, it does not
+ * inject Codex-only options (instructions/store); it only sets reasoning
+ * effort, keyed by the caller-supplied provider id.
+ */
+export function createReasoningEffortMiddleware(
+  providerKey: string,
+  reasoningEffort?: string,
+): LanguageModelMiddleware | undefined {
+  if (!reasoningEffort) return undefined;
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      params.providerOptions = {
+        ...params.providerOptions,
+        [providerKey]: {
+          ...(params.providerOptions?.[providerKey] ?? {}),
+          reasoningEffort,
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
+
+/**
  * Get a live OAuth bearer token for the Codex OAuth credential.
  *
  * Refreshes the token if it's expired, and returns the credential's

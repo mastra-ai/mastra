@@ -1,5 +1,4 @@
-// A lane can hold hundreds of cards, and each one mounts a run spec, an activity read and a status pass on every poll.
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -14,7 +13,6 @@ const REPO_ID = 'repo-1';
 const REVEAL_STEP = 30;
 const ITEM_COUNT = 45;
 
-/** One card filed per minute, so a board of any size still sorts by its index. */
 const filedAt = (index: number) => new Date(Date.UTC(2026, 6, 18, 0, index)).toISOString();
 
 const buildWorkItems = (count: number) =>
@@ -37,10 +35,8 @@ const buildWorkItems = (count: number) =>
 
 const workItems = buildWorkItems(ITEM_COUNT);
 
-/** The board lists newest first, so the oldest card is the one past the page. */
 const OLDEST_TITLE = 'Task 0';
 
-/** A pinned card far enough down that the reveal takes several steps to pass it. */
 const PINNED_INDEX = REVEAL_STEP * 3 + 11;
 const PINNED_BOARD_COUNT = REVEAL_STEP * 5;
 
@@ -48,10 +44,28 @@ function stubSentinelAlwaysInView() {
   const original = globalThis.IntersectionObserver;
   vi.stubGlobal(
     'IntersectionObserver',
-    class AlwaysInView {
+    class AlwaysInView implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = '0px';
+      readonly scrollMargin = '0px';
+      readonly thresholds = [0];
       constructor(private readonly callback: IntersectionObserverCallback) {}
-      observe() {
-        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as never);
+      observe(target: Element) {
+        const bounds = target.getBoundingClientRect();
+        this.callback(
+          [
+            {
+              target,
+              isIntersecting: true,
+              intersectionRatio: 1,
+              time: 0,
+              boundingClientRect: bounds,
+              intersectionRect: bounds,
+              rootBounds: null,
+            },
+          ],
+          this,
+        );
       }
       disconnect() {}
       unobserve() {}
@@ -128,7 +142,6 @@ describe('Board column reveal', () => {
     expect(screen.queryByLabelText(OLDEST_TITLE)).not.toBeInTheDocument();
   });
 
-  // A sentinel that never leaves view reported once and the column stalled.
   it('keeps revealing while the sentinel stays in view', async () => {
     stubSentinelAlwaysInView();
     stubBoardEndpoints(buildWorkItems(REVEAL_STEP * 2 + 10));
@@ -138,7 +151,6 @@ describe('Board column reveal', () => {
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP * 2 + 10));
   });
 
-  // A pinned card holds the rendered count still while the reveal climbs under it.
   it('keeps revealing past a pinned card deeper than one step', async () => {
     stubSentinelAlwaysInView();
     const items = buildWorkItems(PINNED_BOARD_COUNT);
@@ -149,14 +161,14 @@ describe('Board column reveal', () => {
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(PINNED_BOARD_COUNT));
   });
 
-  // Filtering runs before the paging, so a match renders however deep it sat.
   it('finds a card past the first page through the board search', async () => {
     stubBoardEndpoints();
     renderBoard();
     await screen.findByLabelText(`Task ${ITEM_COUNT - 1}`);
 
-    const filters = within(screen.getByLabelText('Board filters'));
-    await userEvent.setup().type(filters.getByRole('textbox', { name: 'Search cards' }), OLDEST_TITLE);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), `${OLDEST_TITLE}{Enter}`);
 
     expect(await screen.findByLabelText(OLDEST_TITLE)).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));

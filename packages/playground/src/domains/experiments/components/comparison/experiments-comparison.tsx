@@ -1,19 +1,20 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import {
+  useCompareExperiments,
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useScoresByExperimentId,
+} from '@mastra/react/hooks';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
-import { useCompareExperiments } from '@/domains/datasets/hooks/use-compare-experiments';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useLinkComponent } from '@/lib/framework';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
@@ -29,10 +30,27 @@ const cell = 'min-w-0 px-4 py-3';
  */
 export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB }: ExperimentsComparisonProps) {
   const { Link, paths } = useLinkComponent();
-  const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
+  const {
+    data: comparison,
+    isLoading,
+    error,
+  } = useCompareExperiments({
+    datasetId: datasetId,
+    experimentIdA: experimentIdA,
+    experimentIdB: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB) },
+  });
 
-  const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
-  const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
+  const { data: expA } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const { data: expB } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
 
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
@@ -46,16 +64,26 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     datasetId,
     experimentId: baselineId,
     experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(baselineId) },
   });
   const { data: contenderResults, isLoading: isContenderLoading } = useDatasetExperimentResults({
     datasetId,
     experimentId: contenderId,
     experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(contenderId) },
   });
 
   // Scorer reasons live in the scores store, not on the result rows.
-  const { data: baselineScores } = useScoresByExperimentId(baselineId, baselineExperiment?.status);
-  const { data: contenderScores } = useScoresByExperimentId(contenderId, contenderExperiment?.status);
+  const { data: baselineScores } = useScoresByExperimentId({
+    experimentId: baselineId,
+    experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(baselineId) },
+  });
+  const { data: contenderScores } = useScoresByExperimentId({
+    experimentId: contenderId,
+    experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(contenderId) },
+  });
 
   const rows = useMemo(
     () =>
@@ -114,7 +142,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="text-muted-foreground text-body py-5 text-center">No comparison data</div>;
+    return <div className="py-5 text-center text-body text-muted-foreground">No comparison data</div>;
   }
 
   return (
@@ -123,12 +151,12 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         {/* Header row: Items / Baseline / Contender */}
         <div
           role="row"
-          className="border-border grid border-y xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
         >
           <div
             role="columnheader"
             aria-label="Items"
-            className={`${cell} text-muted-foreground text-caption uppercase`}
+            className={`${cell} text-caption text-muted-foreground uppercase`}
           >
             Items
           </div>
@@ -152,30 +180,34 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         </div>
 
         {rows.map(row => {
-          const deltas = Object.entries(row.deltas).filter(([, delta]) => delta != null && delta !== 0);
+          const deltas = Object.entries(row.deltas).flatMap(([scorerId, delta]) =>
+            delta == null || delta === 0 ? [] : [{ scorerId, delta }],
+          );
 
           return (
             <div
               key={row.itemId}
               role="row"
               aria-label={row.itemId}
-              className="border-border grid border-b xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <Link
                   href={paths.datasetItemLink(datasetId, row.itemId)}
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'text-caption flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
+                    'flex items-start gap-1.5 text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
                   )}
                 >
-                  <span className="min-w-0">{row.itemId}</span>
+                  <Txt as="span" variant="caption" font="mono" className="min-w-0">
+                    {row.itemId}
+                  </Txt>
                 </Link>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">
-                    {deltas.map(([scorerId, delta]) => (
-                      <ScoreDelta key={scorerId} delta={delta as number} />
+                    {deltas.map(({ scorerId, delta }) => (
+                      <ScoreDelta key={scorerId} delta={delta} />
                     ))}
                   </span>
                 )}

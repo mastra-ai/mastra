@@ -453,6 +453,7 @@ export async function handleTypedOperation(
         last_fire_at: request.lastFireAt,
         last_run_id: request.lastRunId,
         updated_at: Date.now(),
+        ...(request.newStatus ? { status: request.newStatus } : {}),
       });
 
       return { ok: true, result: true };
@@ -621,8 +622,11 @@ export async function handleTypedOperation(
 
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
+      // Treat a missing field as `null` before comparing: rows written before a
+      // nullable field existed have no key at all, and an expectation of `null`
+      // (e.g. `expectedOwnerId: null` for an unowned task) must still match them.
       const matchesExpected = (record: Record<string, any>) =>
-        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
+        !request.expected || Object.entries(request.expected).every(([key, value]) => (record[key] ?? null) === value);
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))

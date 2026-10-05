@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTIVE_ATTR, useFluidHover, useRegisterFluidHoverItem, type UseFluidHoverOptions } from './use-fluid-hover';
+import {
+  ACTIVE_ATTR,
+  useFluidHover,
+  useRegisterFluidHoverItem,
+  type UseFluidHoverOptions,
+  type UseFluidHoverReturn,
+} from './use-fluid-hover';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 
 const ROW_HEIGHT = 40;
@@ -17,6 +25,7 @@ function layoutRow(element: HTMLElement, index: number) {
     offsetWidth: { value: 200, configurable: true },
     offsetHeight: { value: ROW_HEIGHT, configurable: true },
   });
+  element.getBoundingClientRect = () => new DOMRect(0, index * ROW_HEIGHT, 200, ROW_HEIGHT);
 }
 
 function Row({
@@ -47,12 +56,16 @@ function Row({
 
 function List({
   options,
+  rows = 3,
   onRowClick,
   onHover,
+  children,
 }: {
   options?: UseFluidHoverOptions;
+  rows?: number;
   onRowClick?: (index: number) => void;
-  onHover?: (hover: ReturnType<typeof useFluidHover>) => void;
+  onHover?: (hover: UseFluidHoverReturn) => void;
+  children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const hover = useFluidHover(ref, options);
@@ -74,9 +87,10 @@ function List({
       {...hover.handlers}
     >
       <FluidHoverHighlight hover={hover} />
-      {[0, 1, 2].map(index => (
+      {Array.from({ length: rows }, (_, index) => (
         <Row key={index} index={index} registerItem={hover.registerItem} onClick={() => onRowClick?.(index)} />
       ))}
+      {children}
     </div>
   );
 }
@@ -139,6 +153,17 @@ describe('useFluidHover', () => {
       expect(screen.getByTestId('row-1').hasAttribute(ACTIVE_ATTR)).toBe(false);
       expect(screen.getByTestId('list').hasAttribute('data-fluid-hover-active-index')).toBe(true);
     });
+
+    it('ignores a click on that row instead of routing it to the lit neighbour', async () => {
+      const onRowClick = vi.fn();
+      render(<List options={options} onRowClick={onRowClick} />);
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('list'), { clientX: 10, clientY: ROW_HEIGHT + ROW_HEIGHT / 2 });
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
   });
 
   describe('when the mouse leaves the container', () => {
@@ -156,13 +181,26 @@ describe('useFluidHover', () => {
 
   describe('when setActiveIndex is called', () => {
     it('lights the requested row without pointer input', async () => {
-      let hover: ReturnType<typeof useFluidHover> | undefined;
+      let hover: UseFluidHoverReturn | undefined;
       render(<List onHover={h => (hover = h)} />);
       await flushFrames();
 
       act(() => hover?.setActiveIndex(2));
 
       expect(screen.getByTestId('row-2').hasAttribute(ACTIVE_ATTR)).toBe(true);
+    });
+
+    it('glides that highlight to the pointer instead of remounting it', async () => {
+      let hover: UseFluidHoverReturn | undefined;
+      render(<List onHover={h => (hover = h)} />);
+      await flushFrames();
+      act(() => hover?.setActiveIndex(0));
+      const highlight = screen.getByTestId('list').querySelector('[data-slot="fluid-hover-highlight"]');
+
+      await moveTo(2);
+
+      expect(highlight).not.toBeNull();
+      expect(screen.getByTestId('list').querySelector('[data-slot="fluid-hover-highlight"]')).toBe(highlight);
     });
   });
 
@@ -176,6 +214,79 @@ describe('useFluidHover', () => {
       fireEvent.click(screen.getByTestId('list'), { clientX: 10, clientY: ROW_HEIGHT * 3 + 5 });
 
       expect(onRowClick).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('when a click lands on a widget that sits between the rows (a theme toggle)', () => {
+    it.each(['radio', 'checkbox', 'switch', 'tab'])('leaves a `%s` click to the widget', async role => {
+      const onRowClick = vi.fn();
+      render(
+        <List onRowClick={onRowClick}>
+          <span role={role} aria-checked="false" data-testid="widget" />
+        </List>,
+      );
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('widget'));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+
+    it('leaves a click in the padding of a radio group to the group', async () => {
+      const onRowClick = vi.fn();
+      render(
+        <List onRowClick={onRowClick}>
+          <div role="radiogroup" aria-label="Theme" data-testid="group">
+            <span role="radio" aria-checked="true" />
+          </div>
+        </List>,
+      );
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('group'));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a portaled child (a submenu) bubbles events through React', () => {
+    const submenu = () => createPortal(<div data-testid="submenu">Sub item</div>, document.body);
+
+    it('keeps the highlight where the pointer left it', async () => {
+      render(<List>{submenu()}</List>);
+      await flushFrames();
+      await moveTo(0);
+
+      fireEvent.mouseMove(screen.getByTestId('submenu'), { clientX: 10, clientY: 2 * ROW_HEIGHT + ROW_HEIGHT / 2 });
+      await flushFrames();
+
+      expect(screen.getByTestId('row-0').hasAttribute(ACTIVE_ATTR)).toBe(true);
+    });
+
+    it('never routes its click to the highlighted row', async () => {
+      const onRowClick = vi.fn();
+      render(<List onRowClick={onRowClick}>{submenu()}</List>);
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('submenu'));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a row mounts while another is lit (a virtualized list scrolling)', () => {
+    it('keeps the highlight up instead of hiding it until the next measurement', async () => {
+      let hover: UseFluidHoverReturn | undefined;
+      const view = render(<List onHover={h => (hover = h)} />);
+      await flushFrames();
+      await moveTo(1);
+
+      view.rerender(<List rows={4} onHover={h => (hover = h)} />);
+
+      expect(hover?.isMeasured).toBe(true);
     });
   });
 });

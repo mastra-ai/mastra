@@ -1,11 +1,13 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, FastForward, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, ShieldCheck, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
+import { canMoveTo, canStartRun } from '../boardCardState';
+import type { BoardCardOwner } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { workItemPrompt } from '../../supervisor/services/supervisor';
@@ -21,9 +23,10 @@ export interface WorkItemMenuProps {
   proposal?: FactoryDecisionSummary;
   proposedRunLabel?: string;
   approvingDecisionId?: string;
+  owner: BoardCardOwner;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
-  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
+  onMove: (toStage: string) => void;
   onRemove: () => void;
 }
 
@@ -37,25 +40,14 @@ export function askSupervisorPath(
   return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
-/** A lane's menu entries: the plain move and, unless a person must decide its outcome, a hands-off twin. */
-function moveItemPair(move: CardMove, onMove: WorkItemMenuProps['onMove']): ReactElement[] {
-  return [
-    <DropdownMenu.Item key={move.label} onClick={() => onMove(move.stage)}>
+/** A lane's available move. Plan approval remains a separate human decision. */
+function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove'], disabled: boolean): ReactElement {
+  return (
+    <DropdownMenu.Item key={move.label} disabled={disabled} onClick={() => onMove(move.stage)}>
       {actionIcon(move.label)}
       <span>{move.label}</span>
-    </DropdownMenu.Item>,
-    ...(move.awaitsHumanDecision
-      ? []
-      : [
-          <DropdownMenu.Item
-            key={`${move.label} hands-off`}
-            onClick={() => onMove(move.stage, { preapprovePlans: true })}
-          >
-            <FastForward aria-hidden />
-            <span>{`${move.label} hands-off`}</span>
-          </DropdownMenu.Item>,
-        ]),
-  ];
+    </DropdownMenu.Item>
+  );
 }
 
 export function WorkItemMenuItems({
@@ -65,6 +57,7 @@ export function WorkItemMenuItems({
   proposal,
   proposedRunLabel,
   approvingDecisionId,
+  owner,
   onApproveProposal,
   onDismissProposal,
   onMove,
@@ -81,36 +74,34 @@ export function WorkItemMenuItems({
         .filter(phase => targets.some(target => target.to === phase.id))
         .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item).map(stage => ({ ...stage, kind: undefined }));
-  // On a custom board a proposal the card could not label belongs to another board; hide it entirely.
-  const suggestion = custom && proposedRunLabel === undefined ? undefined : proposal;
-  // A held card leads with the maintainer's decision. Nothing that starts,
-  // restarts, or releases a run is offered until the card is accepted: every
-  // one of those would advance it as a side effect. Dismissing a stale
-  // suggestion stays, since that starts nothing.
-  const decision = !custom && awaitsTriageDecision(item, columnStage);
+  const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
+  // Every run-starting action would accept a held card as a side effect, so triage choices replace them.
+  const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
+  const runsBlocked = !canStartRun(owner.kind);
+  const yourRequestInFlight = owner.kind === 'you';
+  const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
   return (
     <>
-      {decision &&
+      {awaitsTriage &&
         TRIAGE_DECISIONS.map(choice => (
-          <DropdownMenu.Item key={choice.stage} onClick={() => onMove(choice.stage)}>
+          <DropdownMenu.Item
+            key={choice.stage}
+            disabled={!canMoveTo(owner.kind, phaseKind(choice.stage))}
+            onClick={() => onMove(choice.stage)}
+          >
             <BoardStageIcon stage={choice.stage} />
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {!decision && moves.flatMap(move => moveItemPair(move, onMove))}
-      {/* Once the card has a live session its surface opens details, so the
-          menus stay the only place left to release a proposed run. */}
-      {suggestion !== undefined && !decision && (
-        <DropdownMenu.Item
-          disabled={approvingDecisionId === suggestion.id}
-          onClick={() => onApproveProposal(suggestion.id)}
-        >
+      {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
+      {suggestionForThisBoard !== undefined && !awaitsTriage && (
+        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
-          <span>{approvingDecisionId === suggestion.id ? 'Starting…' : 'Start suggested run'}</span>
+          <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
       )}
-      {suggestion !== undefined && (
-        <DropdownMenu.Item onClick={() => onDismissProposal(suggestion.id)}>
+      {suggestionForThisBoard !== undefined && (
+        <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestionForThisBoard.id)}>
           <CircleSlash aria-hidden />
           <span>Dismiss suggested run</span>
         </DropdownMenu.Item>
@@ -127,14 +118,18 @@ export function WorkItemMenuItems({
       </DropdownMenu.Item>
       {stages
         .filter(stage => stage.id !== columnStage)
-        .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
+        .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
-          <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+          <DropdownMenu.Item
+            key={stage.id}
+            disabled={!canMoveTo(owner.kind, phaseKind(stage.id))}
+            onClick={() => onMove(stage.id)}
+          >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
             <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
           </DropdownMenu.Item>
         ))}
-      <DropdownMenu.Item onClick={onRemove}>
+      <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
         <Trash2 aria-hidden />
         <span>Remove</span>
       </DropdownMenu.Item>

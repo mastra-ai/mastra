@@ -1,13 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import {
-  ToolCall,
-  ToolCallArguments,
-  ToolCallContent,
-  ToolCallPresentedHeader,
-  ToolCallTrigger,
-  presentTool,
-} from '../tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
+import { ToolCallArguments, presentTool } from '../tool-call';
 import { ToolApproval, ToolApprovalActions } from './tool-approval';
 
 const toolArguments = { path: 'src/agent.ts' };
@@ -19,7 +13,7 @@ const meta = {
     toolName: 'write_file',
     onApprove: fn(),
     onDecline: fn(),
-    children: <pre className="bg-sidebar text-caption overflow-auto rounded p-2">{JSON.stringify(toolArguments)}</pre>,
+    children: <pre className="overflow-auto rounded bg-sidebar p-2 text-caption">{JSON.stringify(toolArguments)}</pre>,
   },
   argTypes: {
     toolName: { description: 'Tool name shown in the heading and accessible action names.' },
@@ -70,8 +64,22 @@ export const Submitting: Story = {
   },
 };
 
-export const Approved: Story = { args: { status: 'approved' }, play: Submitting.play };
-export const Declined: Story = { args: { status: 'declined' }, play: Submitting.play };
+export const Approved: Story = {
+  args: { status: 'approved' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: `Approved ${args.toolName}` })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Decline ${args.toolName}` })).toBeDisabled();
+  },
+};
+export const Declined: Story = {
+  args: { status: 'declined' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: `Approve ${args.toolName}` })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Declined ${args.toolName}` })).toBeDisabled();
+  },
+};
 
 export const Keyboard: Story = {
   args: { autoFocus: true },
@@ -94,17 +102,20 @@ export const WithoutDetails: Story = { args: { children: undefined } };
 
 export const Inline: Story = {
   name: 'Embedded in tool details',
-  render: ({ children: _children, ...args }) => (
-    <ToolCall defaultOpen aria-label={`Tool: ${args.toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentTool(args.toolName, toolArguments)} />
-      </ToolCallTrigger>
-      <ToolCallContent>
-        <ToolCallArguments toolName={args.toolName} args={toolArguments} />
-        <ToolApprovalActions {...args} />
-      </ToolCallContent>
-    </ToolCall>
-  ),
+  render: ({ children: _children, ...args }) => {
+    const { icon: ToolIcon, label, detail } = presentTool(args.toolName, toolArguments);
+    return (
+      <Activity defaultOpen aria-label={`Tool: ${args.toolName}`}>
+        <ActivityTrigger>
+          <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+        </ActivityTrigger>
+        <ActivityContent>
+          <ToolCallArguments toolName={args.toolName} args={toolArguments} />
+          <ToolApprovalActions {...args} />
+        </ActivityContent>
+      </Activity>
+    );
+  },
   parameters: {
     docs: {
       description: {

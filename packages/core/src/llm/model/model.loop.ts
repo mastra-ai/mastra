@@ -1,5 +1,4 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import type { ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -7,6 +6,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
+import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
@@ -16,6 +16,12 @@ import { delay } from '../../utils';
 import type { ModelLoopStreamArgs } from './model.loop.types';
 import { resolveResponseModelId } from './server-side-fallback';
 import type { MastraModelOptions } from './shared.types';
+
+// Like `stepCountIs`, but processor retry steps re-run the same step, so they
+// do not count against `maxSteps`. Retries stay bounded by maxProcessorRetries.
+function llmStepCountIs(maxSteps: number): StopCondition<any> {
+  return ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps;
+}
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
@@ -120,11 +126,13 @@ export class MastraLLMVNext extends MastraBase {
     llmRequestInputProcessors,
     outputProcessors,
     errorProcessors,
+    hasConfiguredErrorProcessors,
     returnScorerData,
     providerOptions,
     messageList,
     requireToolApproval,
     toolCallConcurrency,
+    eagerToolExecution,
     _internal,
     agentId,
     agentVersionId,
@@ -155,9 +163,9 @@ export class MastraLLMVNext extends MastraBase {
     let stopWhenToUse;
     if (maxSteps && typeof maxSteps === 'number') {
       const userConditions = stopWhen ? (Array.isArray(stopWhen) ? stopWhen : [stopWhen]) : [];
-      stopWhenToUse = [stepCountIs(maxSteps), ...userConditions];
+      stopWhenToUse = [llmStepCountIs(maxSteps), ...userConditions];
     } else {
-      stopWhenToUse = stopWhen ?? stepCountIs(5);
+      stopWhenToUse = stopWhen ?? llmStepCountIs(5);
     }
 
     const messages = messageList.get.all.aiV5.model();
@@ -232,10 +240,12 @@ export class MastraLLMVNext extends MastraBase {
         llmRequestInputProcessors,
         outputProcessors,
         errorProcessors,
+        hasConfiguredErrorProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
         toolCallConcurrency,
+        eagerToolExecution,
         agentId,
         agentVersionId,
         agentName,
@@ -302,12 +312,15 @@ export class MastraLLMVNext extends MastraBase {
                 type: SpanType.GENERIC,
                 metadata: { remainingTokens, delayMs: 10_000 },
               });
-              await delay(10 * 1000);
+              await delay(10 * 1000, options?.abortSignal);
               rateLimitSpan?.end();
             }
           },
 
           onFinish: async (props, context) => {
+            const usageIncomplete = isUsageIncomplete(props?.totalUsage);
+            const observedUsage = usageIncomplete ? calculateObservedUsage(props?.steps ?? []) : props?.totalUsage;
+
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
@@ -332,13 +345,14 @@ export class MastraLLMVNext extends MastraBase {
               },
               attributes: {
                 finishReason: props?.finishReason,
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 responseId: props?.response.id,
                 // Account for Anthropic server-side fallbacks: when the primary
                 // model declines a turn and a fallback serves it, attribute the
                 // response to the model that actually generated it.
                 responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
-              usage: props?.totalUsage,
+              usage: observedUsage,
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });

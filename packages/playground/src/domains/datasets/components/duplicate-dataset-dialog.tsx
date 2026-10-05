@@ -1,13 +1,22 @@
 'use client';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { Copy, X } from 'lucide-react';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { useState, useEffect } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 export interface DuplicateDatasetDialogProps {
   open: boolean;
@@ -40,7 +49,6 @@ export function DuplicateDatasetDialog({
   const client = useMastraClient();
   const { createDataset, addItem } = useDatasetMutations();
 
-  // Pre-populate name when dialog opens
   useEffect(() => {
     if (open) {
       setName(`${sourceDatasetName} (Copy)`);
@@ -60,7 +68,6 @@ export function DuplicateDatasetDialog({
     setProgress({ phase: 'fetching', current: 0, total: 0 });
 
     try {
-      // Fetch all items from source dataset
       const allItems: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }> = [];
       let page = 0;
       const perPage = 100;
@@ -88,7 +95,6 @@ export function DuplicateDatasetDialog({
         page++;
       }
 
-      // Create the new dataset
       setProgress({ phase: 'creating', current: 0, total: allItems.length });
       const dataset = await createDataset.mutateAsync({
         name: name.trim(),
@@ -96,7 +102,6 @@ export function DuplicateDatasetDialog({
         targetType: sourceDatasetTargetType ?? undefined,
       });
 
-      // Copy items to new dataset
       setProgress({ phase: 'copying', current: 0, total: allItems.length });
       for (let i = 0; i < allItems.length; i++) {
         const item = allItems[i];
@@ -111,27 +116,18 @@ export function DuplicateDatasetDialog({
 
       toast.success(`Dataset duplicated with ${allItems.length} items`);
 
-      // Reset form
       setName('');
       setDescription('');
       setIsDuplicating(false);
       setProgress({ phase: 'idle', current: 0, total: 0 });
       onOpenChange(false);
 
-      // Navigate to new dataset
       onSuccess?.(dataset.id);
     } catch (error) {
       toast.error(`Failed to duplicate dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsDuplicating(false);
       setProgress({ phase: 'idle', current: 0, total: 0 });
     }
-  };
-
-  const handleCancel = () => {
-    if (isDuplicating) return; // Prevent cancel during duplication
-    setName('');
-    setDescription('');
-    onOpenChange(false);
   };
 
   const getProgressText = () => {
@@ -150,62 +146,56 @@ export function DuplicateDatasetDialog({
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={isDuplicating ? undefined : onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isDuplicating}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Duplicate Dataset</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">Name *</Label>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="dataset-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter dataset name"
                 autoFocus
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="dataset-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="dataset-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter dataset description (optional)"
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
-            <p className="text-muted-foreground text-body">
-              All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset
-            </p>
+            <Txt tone="muted">All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset</Txt>
 
             {isDuplicating && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-accent1 h-full transition-all duration-200"
+                    className="bg-success-indicator h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-body">{getProgressText()}</p>
+                <Txt tone="muted">{getProgressText()}</Txt>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isDuplicating}>
-                Cancel
-              </Button>
-              <Button icon={<Copy />} type="submit" variant="primary" disabled={isDuplicating || !name.trim()}>
-                {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
+              {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
       </DialogContent>
     </Dialog>
   );

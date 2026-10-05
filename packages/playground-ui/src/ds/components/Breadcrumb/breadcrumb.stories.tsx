@@ -12,6 +12,7 @@ import { CopyButton } from '../CopyButton';
 import { Header } from '../Header';
 import { Txt } from '../Txt';
 import { Breadcrumb, Crumb } from './Breadcrumb';
+import { crumbSwitcherTriggerProps } from './crumb-switcher';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -81,18 +82,24 @@ const agents = [
   { label: 'Research agent', value: 'research' },
 ];
 
-/** Icon-only switcher, as used in the `action` slot of every entity crumb. */
-const AgentSwitcher = () => (
-  <Combobox options={agents} value="weather" variant="ghost" size="icon-sm" aria-label="Switch agent" />
+/** Icon-only switcher, as used in the `switcher` slot of every entity crumb. */
+const AgentSwitcher = ({ disabled }: { disabled?: boolean }) => (
+  <Combobox
+    options={agents}
+    value="weather"
+    {...crumbSwitcherTriggerProps}
+    disabled={disabled}
+    aria-label="Switch agent"
+  />
 );
 
-export const WithAction: Story = {
+export const WithSwitcher: Story = {
   render: () => (
     <Breadcrumb label="Navigation">
       <Crumb as="a" to="/agents" icon={<AgentIcon />}>
         Agents
       </Crumb>
-      <Crumb as="span" isCurrent action={<AgentSwitcher />}>
+      <Crumb as="span" isCurrent switcher={<AgentSwitcher />}>
         Weather agent
       </Crumb>
     </Breadcrumb>
@@ -138,8 +145,8 @@ const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
 
 /**
  * Every real breadcrumb shape used in Studio, rendered inside the same `Header`
- * chrome as `RouteHeader`. A crumb is one of three forms: a current `span`, a
- * link, or a label (span/link) with an icon-only control in `action`.
+ * chrome as `RouteHeader`. A crumb is a current `span` or a link, optionally with
+ * an icon-only `switcher` (the whole crumb opens it when current) or an `action`.
  */
 export const AllAppUsages: Story = {
   parameters: { layout: 'padded' },
@@ -160,11 +167,11 @@ export const AllAppUsages: Story = {
         </Crumb>
       </Usage>
 
-      <Usage title="3. Entity page — current label + switcher (Agent, Tool, Workflow, Scorer, Processor, MCP, Dataset)">
+      <Usage title="3. Entity page — the whole current crumb opens the switcher (Agent, Tool, Workflow, Scorer, Processor, MCP, Dataset)">
         <Crumb as="a" to="/agents" icon={<AgentIcon />}>
           Agents
         </Crumb>
-        <Crumb as="span" isCurrent action={<AgentSwitcher />}>
+        <Crumb as="span" isCurrent switcher={<AgentSwitcher />}>
           Weather agent
         </Crumb>
       </Usage>
@@ -173,7 +180,7 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/agents" icon={<AgentIcon />}>
           Agents
         </Crumb>
-        <Crumb as="a" to="/agents/weather" action={<AgentSwitcher />}>
+        <Crumb as="a" to="/agents/weather" switcher={<AgentSwitcher />}>
           Weather agent
         </Crumb>
         <Crumb as="span" isCurrent>
@@ -185,7 +192,7 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/experiments" icon={<DatasetsIcon />}>
           Experiments
         </Crumb>
-        <Crumb as="a" to="/experiments/nightly" icon={<CircleCheckIcon className="text-accent1" />}>
+        <Crumb as="a" to="/experiments/nightly" icon={<CircleCheckIcon className="text-success-indicator" />}>
           Nightly regression
         </Crumb>
         <Crumb as="span" isCurrent icon={<LoaderIcon className="animate-spin" />}>
@@ -197,7 +204,7 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/workflows" icon={<WorkflowIcon />}>
           Workflows
         </Crumb>
-        <Crumb as="a" to="/workflows/weather" action={<AgentSwitcher />}>
+        <Crumb as="a" to="/workflows/weather" switcher={<AgentSwitcher />}>
           Weather workflow
         </Crumb>
         <Crumb
@@ -224,11 +231,18 @@ export const AllAppUsages: Story = {
         <Crumb as="span" isCurrent isLoading />
       </Usage>
 
+      <Usage title="7b. Entity loading — the switcher is disabled, so the crumb stays a plain label">
+        <Crumb as="a" to="/agents" icon={<AgentIcon />}>
+          Agents
+        </Crumb>
+        <Crumb as="span" isCurrent isLoading switcher={<AgentSwitcher disabled />} />
+      </Usage>
+
       <Usage title="8. Long labels — built-in truncation (12rem nav / 20rem current), with and without action">
         <Crumb as="a" to="/agents" icon={<AgentIcon />}>
           A very long navigation label that should truncate at twelve rem
         </Crumb>
-        <Crumb as="a" to="/agents/x" action={<AgentSwitcher />}>
+        <Crumb as="a" to="/agents/x" switcher={<AgentSwitcher />}>
           A very long entity name that should truncate at twelve rem while keeping the chevron
         </Crumb>
         <Crumb as="span" isCurrent>
@@ -245,7 +259,7 @@ export const AllAppUsages: Story = {
  */
 export const ControlAlignment: Story = {
   render: () => (
-    <div className="bg-background flex items-center gap-1 rounded-lg p-2">
+    <div className="flex items-center gap-1 rounded-lg bg-background p-2">
       <Breadcrumb label="Breadcrumb">
         <Crumb as="span" isCurrent>
           Span
@@ -257,7 +271,7 @@ export const ControlAlignment: Story = {
         </Crumb>
       </Breadcrumb>
       <Breadcrumb label="Breadcrumb">
-        <Crumb as="a" to="/agents/weather" action={<AgentSwitcher />}>
+        <Crumb as="a" to="/agents/weather" switcher={<AgentSwitcher />}>
           Link + switcher
         </Crumb>
       </Breadcrumb>

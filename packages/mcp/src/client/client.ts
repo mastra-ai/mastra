@@ -31,6 +31,7 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { traceContextToMeta } from '../shared/trace-context';
@@ -46,6 +47,7 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   MCPClientProtocolVersion,
+  MCPServerImplementation,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -74,9 +76,6 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
-const MAX_JSON_SCHEMA_DEPTH = 128;
-const MAX_JSON_SCHEMA_NODES = 10_000;
 
 /**
  * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
@@ -145,9 +144,22 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   return undefined;
 }
 
-/** MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect. */
+const SUPPORTED_DIALECTS = new Set([
+  JSON_SCHEMA_2020_12,
+  `${JSON_SCHEMA_2020_12}#`,
+  'http://json-schema.org/draft-07/schema',
+  'http://json-schema.org/draft-07/schema#',
+]);
+
+/**
+ * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
+ * 2019-09 schemas (e.g. from zod v3 servers) are converted to 2020-12 when that can be done
+ * faithfully, so tool calls are not rejected before they run.
+ */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
-  return schema.$schema ? schema : { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
+  return toJsonSchema2020(schema) ?? schema;
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
@@ -412,6 +424,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
+  private serverImplementation?: MCPServerImplementation;
   /** The verdict of the last successful probe, reused so reconnects skip it. */
   private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
@@ -779,6 +792,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         this.serverInstructions = this.client.getInstructions();
+        this.serverImplementation = this.client.getServerVersion();
         this.rememberNegotiation();
 
         if (this.hasSubscriptionInterest()) {
@@ -810,6 +824,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.serverImplementation = undefined;
             this.subscriptionStream = undefined;
             if (staleTransport) {
               this.severClientTransportLink(staleTransport);
@@ -904,6 +919,11 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverInstructions;
   }
 
+  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected or if the server announced none. */
+  get serverInfo(): MCPServerImplementation | undefined {
+    return this.serverImplementation;
+  }
+
   /** The protocol revision negotiated with the server; `undefined` until connected. */
   get negotiatedProtocolVersion(): string | undefined {
     return this.client.getNegotiatedProtocolVersion();
@@ -970,6 +990,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
+      this.serverImplementation = undefined;
 
       this.unregisterProcessHooks();
     }
@@ -1012,6 +1033,7 @@ export class InternalMastraMCPClient extends MastraBase {
         this.transport = undefined;
         this.isConnected = null;
         this.serverInstructions = undefined;
+        this.serverImplementation = undefined;
       }
 
       await this.connect();
@@ -1300,6 +1322,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
     return {
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.inputSchema,
       ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
@@ -1320,6 +1343,7 @@ export class InternalMastraMCPClient extends MastraBase {
   toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
+      title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema,
       outputSchema: definition.outputSchema,
@@ -1379,6 +1403,7 @@ export class InternalMastraMCPClient extends MastraBase {
       // Server-advertised annotations are exposed on `mcp.annotations` and forwarded to
       // the requireToolApproval callback so consumers can write annotation-driven policies.
       const annotations = tool.annotations;
+      const title = tool.title || annotations?.title;
 
       if (typeof this.requireToolApproval === 'function') {
         const serverApprovalFn = this.requireToolApproval;
@@ -1443,6 +1468,7 @@ export class InternalMastraMCPClient extends MastraBase {
       };
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
+        title,
         description: tool.description || '',
         inputSchema: this.convertInputSchema(tool.inputSchema),
         outputSchema: this.convertOutputSchema(tool.outputSchema),

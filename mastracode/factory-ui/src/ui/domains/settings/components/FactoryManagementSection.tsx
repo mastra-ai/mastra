@@ -24,18 +24,19 @@ export function FactoryManagementSection() {
       <SettingsContainer>
         <SettingsRow label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
           <AlertDialog>
-            <AlertDialog.Trigger asChild>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-notice-destructive border-notice-destructive/25 hover:bg-notice-destructive/10 hover:text-notice-destructive"
-                disabled={deleteMutation.isPending}
-                aria-label={`Delete ${factory.name}`}
-              >
-                <Trash2 size={14} />
-                Delete
-              </Button>
-            </AlertDialog.Trigger>
+            <AlertDialog.Trigger
+              render={
+                <Button
+                  size="sm"
+                  variant="destructive-ghost"
+                  disabled={deleteMutation.isPending}
+                  aria-label={`Delete ${factory.name}`}
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </Button>
+              }
+            />
             <AlertDialog.Content>
               <AlertDialog.Header>
                 <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>

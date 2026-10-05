@@ -1,5 +1,6 @@
 import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -46,7 +47,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-4">
-        <div className="text-muted-foreground text-body">Drag columns to assign them to dataset fields</div>
+        <div className="text-body text-muted-foreground">Drag columns to assign them to dataset fields</div>
 
         {ZONES.map(zone => {
           const columnsInZone = getColumnsForZone(zone.id);
@@ -57,9 +58,17 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
             <div key={zone.id} className="flex flex-col gap-2">
               {/* Zone header */}
               <div className="flex items-center gap-2">
-                <span className="text-placeholder text-subheading">{zone.label}</span>
-                {zone.required && <span className="text-accent1 text-caption">*</span>}
-                <span className="text-muted-foreground text-caption">{zone.description}</span>
+                <Txt as="span" variant="subheading" tone="faint">
+                  {zone.label}
+                </Txt>
+                {zone.required && (
+                  <Txt as="span" variant="caption" tone="muted">
+                    *
+                  </Txt>
+                )}
+                <Txt as="span" variant="caption" tone="muted">
+                  {zone.description}
+                </Txt>
               </div>
 
               {/* Drop zone */}
@@ -68,12 +77,12 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-border'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
+                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-border-strong bg-fill-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
-                      <span className="text-muted-foreground text-caption italic">
+                      <Txt as="span" variant="caption" tone="muted" className="italic">
                         {needsAttention ? 'Drag at least one column here' : 'No columns assigned'}
-                      </span>
+                      </Txt>
                     )}
 
                     {columnsInZone.map((column, index) => (
@@ -84,11 +93,11 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`bg-background text-placeholder text-subheading inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-accent1/30 shadow-overlay ring-2' : 'hover:bg-fill-subtle'}`}
+                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
                             >
                               <span
                                 {...provided.dragHandleProps}
-                                className="text-muted-foreground cursor-grab active:cursor-grabbing"
+                                className="cursor-grab text-muted-foreground active:cursor-grabbing"
                               >
                                 <Icon>
                                   <GripVertical className="h-3.5 w-3.5" />
@@ -118,7 +127,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
         })}
 
         {/* Validation message */}
-        {!inputHasColumns && <div className="text-error text-body">At least one column must be mapped to Input</div>}
+        {!inputHasColumns && (
+          <div className="text-body text-warning-foreground">At least one column must be mapped to Input</div>
+        )}
       </div>
     </DragDropContext>
   );

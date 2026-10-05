@@ -1,13 +1,16 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
@@ -69,24 +72,26 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <TextFieldBlock
-        name="dataset-name"
-        label="Name"
-        required
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Enter dataset name"
-        autoFocus
-      />
+    <Form onSubmit={handleSubmit}>
+      <Field>
+        <FieldLabel required>Name</FieldLabel>
+        <Input
+          required
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Enter dataset name"
+          autoFocus
+        />
+      </Field>
 
-      <TextFieldBlock
-        name="dataset-description"
-        label="Description"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        placeholder="Enter dataset description (optional)"
-      />
+      <Field>
+        <FieldLabel>Description</FieldLabel>
+        <Input
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Enter dataset description (optional)"
+        />
+      </Field>
 
       <ScorerSelector
         selectedScorers={scorerIds}
@@ -99,7 +104,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn('text-muted-foreground hover:text-accent1 text-caption', controlStateColorTransition)}
+          className={cn('self-start text-caption', quietTextHover, controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema
@@ -127,6 +132,6 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
           {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

@@ -1,17 +1,22 @@
-import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
@@ -24,10 +29,11 @@ import {
   usePromptBlockEditForm,
   DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
+import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 
-type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
+const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
+
+type StoredPromptBlockData = StoredPromptBlockResponse;
 
 function buildUpdateParams(values: PromptBlockFormValues): UpdateStoredPromptBlockParams {
   return {
@@ -61,13 +67,14 @@ function CmsPromptBlocksEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const { data: versionData } = usePromptBlockVersion({
     blockId,
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!blockId && !!selectedVersionId },
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -206,9 +213,9 @@ function CmsPromptBlocksEditForm({
           </div>
         </Notice>
       )}
-      <form className="h-full">
+      <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }
@@ -219,10 +226,15 @@ function CmsPromptBlocksEditPage() {
   const selectedVersionId = searchParams.get('versionId');
 
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
+  const { data: block, isLoading } = useStoredPromptBlock({
+    blockId: blockId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(blockId) },
+  });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!blockId },
   });
 
   const activeVersionId = block?.activeVersionId;
@@ -246,51 +258,42 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
-        <AgentEditLayout
-          leftSlot={
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="size-8" />
-            </div>
-          }
-        >
-          <div className="flex h-full items-center justify-center">
-            <Spinner className="size-8" />
-          </div>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{blockId}</h1>
+        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+          <Spinner fill size="lg" />
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
   if (!block || !blockId) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
-        <AgentEditLayout
-          leftSlot={
-            <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
-          }
-        >
-          <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{blockId}</h1>
+        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
+          <EmptyState variant="fill" titleSlot="Prompt block not found" />
         </AgentEditLayout>
-      </MainContentLayout>
+      </PageLayout>
     );
   }
 
+  const actions = (
+    <CmsEditHeaderActions hasDraft={hasDraft}>
+      <PromptBlockVersionCombobox
+        blockId={blockId}
+        value={selectedVersionId ?? ''}
+        onValueChange={handleVersionSelect}
+        variant="ghost"
+        activeVersionId={activeVersionId}
+      />
+      {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
+    </CmsEditHeaderActions>
+  );
+
   return (
-    <MainContentLayout className="grid-rows-[1fr]">
-      <RouteHeaderActions owner="cms-prompt-block-edit">
-        <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
-          <PromptBlockVersionCombobox
-            blockId={blockId}
-            value={selectedVersionId ?? ''}
-            onValueChange={handleVersionSelect}
-            variant="ghost"
-            activeVersionId={activeVersionId}
-          />
-          {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
-        </div>
-      </RouteHeaderActions>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{blockId}</h1>
       <CmsPromptBlocksEditForm
         block={block}
         blockId={blockId}
@@ -300,7 +303,7 @@ function CmsPromptBlocksEditPage() {
         activeVersionId={activeVersionId}
         onClearVersion={handleClearVersion}
       />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

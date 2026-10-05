@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { ProcessInputArgs } from '../processors';
+import { MemoryInputFilter } from '../processors/memory/memory-input-filter';
 import { MessageHistory } from '../processors/memory/message-history';
 import { TokenLimiterProcessor } from '../processors/processors/token-limiter';
 import { RequestContext } from '../request-context';
@@ -391,5 +392,42 @@ describe('token-based memory history', () => {
     const list = new MessageList();
     await history.processInput(args(list, context));
     expect(list.get.all.db().map(m => m.id)).toEqual(['retained', 'newer']);
+  });
+
+  it('resolves retainFullInput from agent-wide options', async () => {
+    const memory = new MockMemory({ options: { retainFullInput: true } });
+    const [filter] = await memory.getInputProcessors();
+    expect(filter?.id).toBe('memory-input-filter');
+    expect((filter as MemoryInputFilter).retainFullInput).toBe(true);
+  });
+
+  it('resolves retainFullInput per call', async () => {
+    const context = new RequestContext();
+    context.set('MastraMemory', {
+      thread: { id: 'thread' },
+      resourceId: 'resource',
+      memoryConfig: { retainFullInput: true },
+    });
+    const memory = new MockMemory({});
+    const [filter] = await memory.getInputProcessors([], context);
+    expect((filter as MemoryInputFilter).retainFullInput).toBe(true);
+  });
+
+  it('lets a per-call retainFullInput override the agent-wide value', async () => {
+    const context = new RequestContext();
+    context.set('MastraMemory', {
+      thread: { id: 'thread' },
+      resourceId: 'resource',
+      memoryConfig: { retainFullInput: false },
+    });
+    const memory = new MockMemory({ options: { retainFullInput: true } });
+    const [filter] = await memory.getInputProcessors([], context);
+    expect((filter as MemoryInputFilter).retainFullInput).toBe(false);
+  });
+
+  it('defaults retainFullInput to false', async () => {
+    const memory = new MockMemory({});
+    const [filter] = await memory.getInputProcessors();
+    expect((filter as MemoryInputFilter).retainFullInput).toBe(false);
   });
 });

@@ -500,7 +500,7 @@ mastra env restart <env>
 
 ### `mastra env vars pull`
 
-Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set used by a deploy. It combines vars stored on the environment (for example, added in the dashboard's environment editor) with project-level vars. Project values win on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the set a deploy of that environment runs with: the vars stored on the environment itself (for example, added in the dashboard's environment editor). Each environment is pulled on its own, and values stored on another environment are never merged in. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) run from project-level vars instead, so pulling any of their environments returns those shared project-level values. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
 
 ```bash
 mastra env vars pull
@@ -551,15 +551,16 @@ mastra env db create --kind turso                                    # picks or 
 mastra env db create staging --kind turso                            # scoped to the "staging" environment
 mastra env db create --kind turso --shared                           # shared by all environments
 mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
+mastra env db create production --kind postgres                      # VPC-isolated Postgres, private to the environment
 ```
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon` (public serverless Postgres), or `postgres` (VPC-isolated Postgres that runs on the same private network as the deployed environment).
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-pg`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso`, `my-app-pg` for Neon, or `my-app-postgres` for VPC Postgres).
 
 #### `--region`
 
