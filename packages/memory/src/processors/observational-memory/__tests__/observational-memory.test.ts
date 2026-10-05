@@ -1743,6 +1743,31 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain(base64);
     });
 
+    it('should fall back to the raw tool result when stored modelOutput is null', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-bg',
+              toolName: 'bg',
+              args: {},
+              result: { ok: true, answer: 'background task finished' },
+            },
+            providerMetadata: { mastra: { modelOutput: null, backgroundTask: { taskId: 't1', status: 'completed' } } },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result bg');
+      expect(formatted).toContain('background task finished');
+      expect(formatted).not.toContain('Tool Result bg: null');
+    });
+
     it('should hoist file-data tool-result blocks under the file counter', () => {
       const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
