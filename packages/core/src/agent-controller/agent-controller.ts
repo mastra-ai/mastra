@@ -739,7 +739,7 @@ export class AgentController<TState = {}> {
         }
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
-        await session.thread.loadMetadata();
+        await session.thread.loadMetadata({ preserveTokenUsageOnFailure: false });
         await session.thread.ensureCurrentSubscription(requestContext);
       } else {
         await session.thread.create({ id: overrides.threadId, requestContext });
@@ -762,7 +762,7 @@ export class AgentController<TState = {}> {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
-        await session.thread.loadMetadata();
+        await session.thread.loadMetadata({ preserveTokenUsageOnFailure: false });
         await session.thread.ensureCurrentSubscription(requestContext);
       }
     }
@@ -815,7 +815,6 @@ export class AgentController<TState = {}> {
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
       session.abort({ localOnly: true });
-      session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
       } finally {
@@ -1786,9 +1785,7 @@ export class AgentController<TState = {}> {
       if (this.#sessionsBeingDeleted.has(session)) return;
     }
 
-    session.thread.cleanupSubscription();
-    session.identity.setResourceId({ resourceId });
-    const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
+    await session.thread.setResourceId({ resourceId });
 
     // Re-key the resource registry so this session is the one resolved for its
     // new resourceId (and is no longer resolved for the old one). This session
@@ -1796,18 +1793,15 @@ export class AgentController<TState = {}> {
     // prior session registered there. The session keeps its creation scope, so
     // a scoped session re-keys under the same scope on the new resource.
     const dropPreviousResource = this.#dropSessionFromRegistry(oldKey, session);
-    // Re-check that a deletion didn't start during the awaits above. If it
-    // did, the session is being torn down — don't register it under the new
-    // key; the deletion's #dropSessionFromRegistry cleans up all keys.
+    // Re-check that a deletion didn't start while the serialized thread/resource
+    // transition was waiting. The deletion will drop the new identity key too.
     if (this.#sessionsBeingDeleted.has(session)) {
-      await releasePreviousThreadLock;
       await dropPreviousResource;
       const postDeletion = this.#deletionsInProgress.get(newKey) ?? this.#deletionsInProgress.get(oldKey);
       if (postDeletion) await postDeletion;
       return;
     }
     this.#sessionsByResource.set(newKey, Promise.resolve(session));
-    await releasePreviousThreadLock;
     await dropPreviousResource;
 
     // A deletion may have started during the awaits. If so, the deletion's

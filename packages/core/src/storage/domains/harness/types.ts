@@ -34,11 +34,15 @@ export interface SessionRecord {
   };
   origin: HarnessSessionOrigin;
   runtimeCompatibilityGeneration?: string | null;
+  /** @deprecated Conversation mode is stored in thread metadata. */
   modeId: string;
+  /** @deprecated Conversation model selection is stored in thread metadata. */
   modelId: string;
   title?: string;
   metadata?: Record<string, unknown>;
+  /** @deprecated Conversation state is stored in thread metadata. */
   state?: Record<string, unknown>;
+  /** @deprecated Pending suspensions are recovered from thread run snapshots. */
   pending?: HarnessPendingItemRecord[];
   createdAt: Date;
   lastActivityAt: Date;

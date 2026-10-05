@@ -307,7 +307,7 @@ const usage = session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the stable identifiers for the conversation: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+`session.identity` identifies the process-local session host: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the host and don't change when the resource ID is switched. AgentController doesn't persist the live session or mirror these values to a `SessionRecord`.
 
 ### `session.identity.getId()`
 
@@ -319,7 +319,7 @@ const sessionId = session.identity.getId()
 
 ### `session.identity.getOwnerId()`
 
-Return the stable owner identifier for the session.
+Return the stable owner identifier for the process-local session host. This value isn't a durable thread owner.
 
 ```typescript
 const ownerId = session.identity.getOwnerId()
@@ -345,7 +345,7 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 ## Thread
 
-`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. The live session and its event bus don't.
+`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, and pending runs are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
 
 ### `session.thread.create({ title?, id?, requestContext? })`
 

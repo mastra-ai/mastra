@@ -319,7 +319,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
   });
 
-  it('Given a suspension persisted under an earlier thread, When the rebound session aborts, Then settlement writes the original thread and not the current one', async () => {
+  it('Given a suspension persisted under an earlier thread, When each thread aborts, Then only the active thread is settled', async () => {
     const { controller, session, events } = await createHarness('abort-cross-thread-suspension', durable);
 
     // Persist a suspended invocation under the original thread/resource (A).
@@ -357,22 +357,34 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
       resourceId,
     });
 
-    // Rebind the session to a new thread (B). Suspensions survive rebinding.
+    // Rebind the session to a new thread (B). A's suspension remains stored but
+    // is not actionable while B is active.
     await session.thread.create();
     const threadB = session.thread.requireId();
     expect(threadB).not.toBe(threadA);
-    expect(session.suspensions.hasPending()).toBe(true);
+    expect(session.suspensions.hasPending()).toBe(false);
 
-    // Drive the approval-gate abort path on thread B.
+    // Aborting B must settle only B's approval gate, not A's parked tool call.
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'tool_approval_required') session.abort();
     });
     void session.sendMessage({ content: 'find dero' }).catch(() => {});
     await ended;
+    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2')).toBe(false);
+
+    // Once A is active again, its suspension is actionable and abort settles it
+    // against the original thread/resource binding.
+    await session.thread.switch({ threadId: threadA });
+    expect(session.suspensions.hasPending()).toBe(true);
+    session.abort();
+    await vi.waitFor(() => {
+      expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(
+        true,
+      );
+    });
 
     expect(events.filter(event => event.type === 'error')).toEqual([]);
-    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(true);
 
     expect(events.find(event => event.type === 'tool_end' && event.toolCallId === 'call-2')).toMatchObject({
       threadId: threadA,
