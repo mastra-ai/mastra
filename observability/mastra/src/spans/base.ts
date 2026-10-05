@@ -153,7 +153,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Parent span within this Mastra trace: a span Mastra created (the span-tree parent, or a prior Mastra span such as the suspended run a resume links back to) */
   protected parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
-  protected externalParentSpanId?: string;
+  public externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**

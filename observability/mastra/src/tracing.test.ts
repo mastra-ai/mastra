@@ -2067,6 +2067,46 @@ describe('Tracing', () => {
       expect(exported?.tags).toEqual(['root-tag']);
     });
 
+    it.each([
+      ['a bridge that starts a new trace', true, {}],
+      ['a different traceId passed to startSpan', false, { traceId: 'fedcba9876543210fedcba9876543210' }],
+      ['an invalid externalParentSpanId passed to startSpan', false, { externalParentSpanId: 'not-a-span-id' }],
+    ])('should ignore nestUnderParent with %s', (_case, withBridge, overrides) => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        ...(withBridge ? { bridge: createMockBridge() } : {}),
+      });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'judge',
+        attributes: { agentId: 'judge' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          nestUnderParent: true,
+          tags: ['judge-tag'],
+        },
+        ...overrides,
+      });
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'child-llm',
+        attributes: { model: 'gpt-4' },
+      });
+      childSpan.end();
+      rootSpan.end();
+      consoleError.mockRestore();
+
+      // The run is not under the requested parent, so it keeps its tags and no span is marked
+      expect(rootSpan.exportSpan()?.tags).toEqual(['judge-tag']);
+      expect(rootSpan.exportSpan()?.nestedUnderParent).toBeUndefined();
+      expect(childSpan.exportSpan()?.nestedUnderParent).toBeUndefined();
+    });
+
     it('should not mark runs with a parentSpanId as nested by default', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

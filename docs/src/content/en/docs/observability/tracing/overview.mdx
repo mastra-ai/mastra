@@ -877,7 +877,7 @@ await judge.generate(`Grade this answer: ${turn.text}`, {
 })
 ```
 
-Both runs can be in different processes. Mastra ignores `nestUnderParent` when `traceId` or `parentSpanId` is missing or not valid. The [Langfuse](/integrations/observability/langfuse) and [Braintrust](/integrations/observability/braintrust) exporters use this option. In other exporters, only the tags rule applies.
+Both runs can be in different processes. Mastra ignores `nestUnderParent` when `traceId` or `parentSpanId` is missing or not valid. It also ignores the option when a tracing bridge starts the run in a different trace. The [Langfuse](/integrations/observability/langfuse) and [Braintrust](/integrations/observability/braintrust) exporters use this option. In other exporters, only the tags rule applies.
 
 ### ID format requirements
 
