@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ChannelDialog } from '../publish-channel-dialogs';
+import { discordPlatform, slackPlatform, unconfiguredDiscordPlatform } from './fixtures/channel-platforms';
 import { server } from '@/test/msw-server';
 
 const toastSuccessMock = vi.fn();
@@ -87,12 +88,7 @@ describe('ChannelDialog (default platform)', () => {
 
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={onOpenChange}
-        />
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
       </Wrapper>,
     );
 
@@ -141,12 +137,7 @@ describe('ChannelDialog (default platform)', () => {
     try {
       render(
         <Wrapper>
-          <ChannelDialog
-            platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-            agentId="agent-1"
-            open
-            onOpenChange={() => {}}
-          />
+          <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={() => {}} />
         </Wrapper>,
       );
 
@@ -180,12 +171,7 @@ describe('ChannelDialog (default platform)', () => {
 
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={onOpenChange}
-        />
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
       </Wrapper>,
     );
 
@@ -210,12 +196,7 @@ describe('ChannelDialog (default platform)', () => {
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={onOpenChange}
-        />
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
       </Wrapper>,
     );
 
@@ -231,7 +212,7 @@ describe('ChannelDialog (default platform)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',
@@ -259,12 +240,7 @@ describe('ChannelDialog (default platform)', () => {
   it('shows a "Not configured" notice and no Connect button when the platform is not configured', () => {
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: false }}
-          agentId="agent-1"
-          open
-          onOpenChange={() => {}}
-        />
+        <ChannelDialog platform={unconfiguredDiscordPlatform} agentId="agent-1" open onOpenChange={() => {}} />
       </Wrapper>,
     );
 
@@ -289,7 +265,7 @@ describe('ChannelDialog (slack platform)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          platform={slackPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-pending',
@@ -336,7 +312,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',
@@ -368,7 +344,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          platform={slackPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-1',
@@ -410,7 +386,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',

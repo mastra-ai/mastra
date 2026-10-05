@@ -17,8 +17,8 @@ import {
   isEncrypted,
   normalizeCommands,
   resolveDiscordAdapterConfig,
-  SNAPSHOT_TTL_MS,
 } from './index';
+import { SNAPSHOT_TTL_MS } from './reconcile';
 
 const API_ORIGIN = 'https://discord.com';
 const APP = {

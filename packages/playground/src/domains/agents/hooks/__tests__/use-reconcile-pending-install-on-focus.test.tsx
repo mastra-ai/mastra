@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useReconcilePendingInstallOnFocus } from '../use-reconcile-pending-install-on-focus';
+import { activeDiscordInstallation } from './fixtures/channel-installations';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -23,7 +24,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
 const reconcileHandler = (onReconcile: () => void) =>
   http.post(`${BASE_URL}/api/channels/discord/agent-1/reconcile`, () => {
     onReconcile();
-    return HttpResponse.json({ id: 'inst-1', platform: 'discord', agentId: 'agent-1', status: 'active' });
+    return HttpResponse.json(activeDiscordInstallation);
   });
 
 afterEach(() => cleanup());
