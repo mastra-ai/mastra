@@ -113,7 +113,7 @@ describe('ClickHouse trace aggregate compiler', () => {
     expect(compiled.query).toContain('GROUP BY GROUPING SETS ((d0, bucket), (d0))');
     expect(compiled.query).toContain('grouping(bucket) = 1 AS __isGroup');
     expect(compiled.query).toMatch(
-      /\(count\(\) > 0 AND \(toFloat64\(count\(\)\) >= \{trace_query_\d+:Float64\}\)\) AS __keep/,
+      /ifNull\(count\(\) > 0 AND \(toFloat64\(count\(\)\) >= \{trace_query_\d+:Float64\}\), 0\) AS __keep/,
     );
     expect(compiled.query).toContain('toFloat64(count()) AS __order');
     expect(compiled.query).toContain(
@@ -139,8 +139,52 @@ describe('ClickHouse trace aggregate compiler', () => {
       'Unsupported trusted trace-aggregate field',
     );
     expect(() =>
-      compileClickHouseTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total.sum' }] }),
+      compileClickHouseTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total' as never }] }),
     ).toThrow('Unsupported trusted trace-aggregate measure');
+  });
+
+  it('omits the usage join for plans without token or cost measures', () => {
+    const compiled = compileClickHouseTraceAggregate(plan({ measures: ['count', 'duration.p95'] }));
+
+    expect(compiled.query).not.toContain('mastra_metric_events');
+    expect(compiled.query).not.toContain('usage');
+  });
+
+  it('joins usage per trace, deduplicating metricId and pruning by the lower time bound only', () => {
+    const compiled = compileClickHouseTraceAggregate(
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['tokens.total.sum', 'cost.avg'] }),
+        { scope: { organizationId: 'org-a', resourceId: 'res-1' } },
+      ),
+    );
+
+    const usage = compiled.query.slice(compiled.query.indexOf('usage AS'), compiled.query.indexOf('facts AS'));
+    expect(usage).toContain('FROM mastra_metric_events');
+    expect(usage).toContain('argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest');
+    expect(usage).toContain('GROUP BY traceId, metricId');
+    expect(usage).not.toContain('LIMIT 1 BY');
+    expect(usage).not.toContain('FINAL');
+    expect(usage).toContain('traceId IN (SELECT traceId FROM candidates)');
+    expect(usage).toMatch(/timestamp >= \{trace_query_\d+:DateTime64\(3, 'UTC'\)\}/);
+    expect(usage).not.toMatch(/timestamp </);
+    expect(usage).toMatch(/organizationId = \{trace_query_\d+:String\}/);
+    expect(usage).toMatch(/resourceId = \{trace_query_\d+:String\}/);
+    expect(usage).not.toContain('org-a');
+    expect(usage).not.toContain('mastra_model');
+    expect(compiled.query).toContain('LEFT JOIN usage u ON u.traceId = r.traceId');
+    expect(Object.values(compiled.query_params)).toEqual(
+      expect.arrayContaining([
+        'mastra_model_total_input_tokens',
+        'mastra_model_total_output_tokens',
+        'mastra_model_output_reasoning_tokens',
+        'mastra_model_input_cache_read_tokens',
+        'org-a',
+        'res-1',
+        'mixed',
+      ]),
+    );
+    expect(compiled.query).toContain('toFloat64(sumOrNull(t0 + t1))');
+    expect(compiled.query).toContain('countIf(covered) / nullIf(countIf(usageBearing), 0) AS costCoverage');
   });
 });
 
@@ -181,6 +225,32 @@ describe('ClickHouse trace aggregate execution', () => {
       ],
       truncated: true,
     });
+  });
+
+  it('keeps null token and cost measures null and attaches row cost fields', async () => {
+    const { client } = mockClient([
+      { d0: 'research', m0: 2, m1: null, m2: 1500, costCoverage: 1, costUnit: 'mixed' },
+      { d0: 'scheduler', m0: 2, m1: null, m2: null, costCoverage: null, costUnit: null },
+    ]);
+
+    const response = await aggregateTraces(
+      client,
+      plan({ groupBy: ['entityName'], measures: ['count', 'cost.sum', 'tokens.input.avg'] }),
+      15_000,
+    );
+
+    expect(response.rows).toEqual([
+      {
+        dimensions: { entityName: 'research' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': 1500 },
+        cost: { coverage: 1, unit: 'mixed' },
+      },
+      {
+        dimensions: { entityName: 'scheduler' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': null },
+        cost: { coverage: null, unit: null },
+      },
+    ]);
   });
 
   it('returns no rows for an empty population', async () => {
