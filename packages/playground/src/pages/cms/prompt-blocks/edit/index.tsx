@@ -1,4 +1,4 @@
-import type { StoredPromptBlockResponse,UpdateStoredPromptBlockParams } from '@mastra/client-js';
+import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Form } from '@mastra/playground-ui/components/Form';

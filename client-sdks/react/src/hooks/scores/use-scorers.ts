@@ -1,4 +1,4 @@
-import type { MastraClient,GetScorerResponse,ListScoresResponse } from '@mastra/client-js';
+import type { MastraClient, GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
 import type { UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';

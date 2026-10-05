@@ -1,4 +1,4 @@
-import type { MastraClient,PermissionPattern } from '@mastra/client-js';
+import type { MastraClient, PermissionPattern } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';

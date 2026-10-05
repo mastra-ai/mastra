@@ -1,4 +1,4 @@
-import type { ScheduleTriggerResponse,MastraClient } from '@mastra/client-js';
+import type { ScheduleTriggerResponse, MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery, type InfiniteData, type QueryKey, type UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';

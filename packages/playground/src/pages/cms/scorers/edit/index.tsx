@@ -1,4 +1,4 @@
-import type { StoredScorerResponse,UpdateStoredScorerParams } from '@mastra/client-js';
+import type { StoredScorerResponse, UpdateStoredScorerParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Form } from '@mastra/playground-ui/components/Form';

@@ -1,4 +1,4 @@
-import type { MastraClient,StoredSkillResponse } from '@mastra/client-js';
+import type { MastraClient, StoredSkillResponse } from '@mastra/client-js';
 import type { StoredAgent } from '@mastra/react/hooks';
 import {
   useWorkflows,
