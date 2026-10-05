@@ -148,6 +148,88 @@ describe('resolveInstructionBlocks', () => {
     expect(result).toBe('');
   });
 
+  describe('per-usage rules on prompt_block_ref', () => {
+    // Runtime slot with a shared stored default as fallback. The stored block has no rules of its own.
+    const slotWithFallback: AgentInstructionBlock[] = [
+      { type: 'text', content: 'Follow the platform safety policy.' },
+      {
+        type: 'prompt_block',
+        content: '{{userPrompt}}',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'exists' }] },
+      },
+      {
+        type: 'prompt_block_ref',
+        id: 'shared-default-user-prompt',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+      },
+    ];
+
+    beforeEach(async () => {
+      await storage.create({
+        promptBlock: {
+          id: 'shared-default-user-prompt',
+          name: 'Default user prompt',
+          content: 'Answer in a friendly, balanced style.',
+        },
+      });
+      await storage.update({ id: 'shared-default-user-prompt', status: 'published' });
+    });
+
+    it('uses the runtime slot and skips the fallback ref when userPrompt is present', async () => {
+      const result = await resolveInstructionBlocks(
+        slotWithFallback,
+        { userPrompt: 'Please answer in a concise engineering-review style.' },
+        { promptBlocksStorage: storage },
+      );
+      expect(result).toBe('Follow the platform safety policy.\n\nPlease answer in a concise engineering-review style.');
+    });
+
+    it('uses the fallback ref when userPrompt is absent', async () => {
+      const result = await resolveInstructionBlocks(slotWithFallback, {}, { promptBlocksStorage: storage });
+      expect(result).toBe('Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.');
+    });
+
+    it('requires both the ref rules and the stored block rules to pass', async () => {
+      await storage.create({
+        promptBlock: {
+          id: 'admin-only',
+          name: 'Admin only',
+          content: 'Admin tools are enabled.',
+          rules: { operator: 'AND', conditions: [{ field: 'role', operator: 'equals', value: 'admin' }] },
+        },
+      });
+      await storage.update({ id: 'admin-only', status: 'published' });
+
+      const blocks: AgentInstructionBlock[] = [
+        {
+          type: 'prompt_block_ref',
+          id: 'admin-only',
+          rules: { operator: 'AND', conditions: [{ field: 'beta', operator: 'equals', value: true }] },
+        },
+      ];
+      const deps = { promptBlocksStorage: storage };
+
+      expect(await resolveInstructionBlocks(blocks, { role: 'admin', beta: true }, deps)).toBe(
+        'Admin tools are enabled.',
+      );
+      expect(await resolveInstructionBlocks(blocks, { role: 'admin', beta: false }, deps)).toBe('');
+      expect(await resolveInstructionBlocks(blocks, { role: 'viewer', beta: true }, deps)).toBe('');
+    });
+
+    it('applies rules per usage when the same block is referenced twice', async () => {
+      const blocks: AgentInstructionBlock[] = [
+        {
+          type: 'prompt_block_ref',
+          id: 'shared-default-user-prompt',
+          rules: { operator: 'AND', conditions: [{ field: 'tier', operator: 'equals', value: 'free' }] },
+        },
+        { type: 'prompt_block_ref', id: 'shared-default-user-prompt' },
+      ];
+      const result = await resolveInstructionBlocks(blocks, { tier: 'pro' }, { promptBlocksStorage: storage });
+      expect(result).toBe('Answer in a friendly, balanced style.');
+    });
+  });
+
   it('should mix text and prompt_block_ref references', async () => {
     await storage.create({
       promptBlock: {
@@ -245,7 +327,7 @@ describe('resolveInstructionBlocks', () => {
         content: 'User language: {{language}}.',
         rules: {
           operator: 'AND',
-          conditions: [{ field: 'language', operator: 'exists', value: null }],
+          conditions: [{ field: 'language', operator: 'exists' }],
         },
       },
     ];
