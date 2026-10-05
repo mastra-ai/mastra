@@ -283,7 +283,7 @@ describe('DataPanel', () => {
       expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
-    it('renders a vertical separator between the heading and the metadata', () => {
+    it('keeps the divider between the heading and the metadata out of the accessibility tree', () => {
       render(
         <TooltipProvider>
           <DataPanel open title="Trace">
@@ -299,9 +299,10 @@ describe('DataPanel', () => {
         </TooltipProvider>,
       );
       const heading = screen.getByRole('heading', { name: 'Trace' });
-      const separator = screen.getByRole('separator');
       const list = screen.getByRole('list');
-      expect(separator.getAttribute('aria-orientation')).toBe('vertical');
+      expect(screen.queryByRole('separator')).toBeNull();
+      const separator = heading.parentElement?.querySelector('[aria-hidden="true"]');
+      if (!separator) throw new Error('decorative divider not rendered');
       expect(heading.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(separator.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });

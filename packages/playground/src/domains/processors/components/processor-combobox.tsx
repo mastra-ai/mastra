@@ -2,8 +2,8 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useProcessors } from '@mastra/react/hooks';
 import { useEffect } from 'react';
-import { useProcessors } from '../hooks/use-processors';
 
 export interface ProcessorComboboxProps {
   value?: string;

@@ -3,10 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
-
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token'),
-});
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteMessageInputSchema = z.object({
   channelId: z.string().describe('Channel ID where the message exists. Example: "1234567890123456789"'),
@@ -27,16 +24,7 @@ export function deleteMessageTool(proxy: PlatformProxy) {
     outputSchema: deleteMessageOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteMessageOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = MetadataSchema.safeParse(await platformProxy.getMetadata());
-
-      if (!metadata.success) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'Invalid metadata: botToken is required.',
-        });
-      }
-
-      const botToken = metadata.data.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/message#delete-message
       await platformProxy.delete({

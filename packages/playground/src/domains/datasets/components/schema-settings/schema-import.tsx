@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { useWorkflows, useWorkflowSchema } from '@mastra/react/hooks';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 
 interface SchemaImportProps {
   schemaType: 'input' | 'output';

@@ -1,6 +1,7 @@
 import type { WorkspaceInfoResponse } from '@mastra/client-js';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
@@ -16,7 +17,6 @@ import {
   workspaceInfoWithoutSkills,
   workspacesList,
 } from './fixtures/workspace-page';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';

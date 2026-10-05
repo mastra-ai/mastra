@@ -4,7 +4,7 @@ import type {
   DatasetRecord,
   UpdateExperimentResultParams,
 } from '@mastra/client-js';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import { describe, expect, it, vi } from 'vitest';

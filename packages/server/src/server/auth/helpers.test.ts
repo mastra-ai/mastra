@@ -3,6 +3,7 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { HTTPException } from '../http-exception';
 
 import {
   canAccessPublicly,
@@ -700,6 +701,45 @@ describe('auth helpers', () => {
     });
   });
 
+  describe('coreAuthMiddleware - errors thrown by authenticateToken', () => {
+    const run = (thrown: unknown) =>
+      coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        rawRequest: {},
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => {
+            throw thrown;
+          },
+        },
+        requestContext: { get: () => undefined, set: () => {} } as any,
+      });
+
+    it.each([
+      [503, 'Authentication service unavailable'],
+      [403, 'Account disabled'],
+      [401, 'Session revoked'],
+    ] as const)('preserves HTTPException %s status and message', async (status, message) => {
+      const result = await run(new HTTPException(status, { message }));
+      expect(result).toMatchObject({ action: 'error', status, body: { error: message } });
+    });
+
+    it.each([
+      ['plain Error', new Error('db connection string leaked')],
+      ['object with status/message', { status: 503, message: 'secret' }],
+      ['HTTPException with 200', new HTTPException(200, { message: 'ok' })],
+      ['HTTPException with 302', new HTTPException(302, { message: 'redirect' })],
+    ])('redacts %s to a generic 401', async (_label, thrown) => {
+      const result = await run(thrown);
+      expect(result).toMatchObject({ action: 'error', status: 401, body: { error: 'Invalid or expired token' } });
+    });
+  });
+
   describe('coreAuthMiddleware - transparent session refresh', () => {
     const user = { id: 'user-123', email: 'test@example.com' };
 
@@ -820,6 +860,41 @@ describe('auth helpers', () => {
       expect(headers['Set-Cookie']).toContain('wos-session=new-session');
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+    });
+
+    it('should preserve an HTTPException thrown by the re-authentication after refresh', async () => {
+      let callCount = 0;
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => {
+          callCount++;
+          if (callCount === 1) return null;
+          throw new HTTPException(503, { message: 'Authentication service unavailable' });
+        },
+        getSessionIdFromRequest: () => 'old-session',
+        refreshSession: async () => ({
+          id: 'new-session',
+          userId: 'user-1',
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({ 'Set-Cookie': `wos-session=${session.id}` }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext: createRequestContext(),
+        rawRequest: createRawRequest(),
+      });
+
+      expect(callCount).toBe(2);
+      expect(result).toMatchObject({
+        action: 'error',
+        status: 503,
+        body: { error: 'Authentication service unavailable' },
+      });
     });
 
     it('should return 401 when refresh token is also expired', async () => {

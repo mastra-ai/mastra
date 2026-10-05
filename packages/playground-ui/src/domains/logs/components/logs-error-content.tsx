@@ -1,12 +1,12 @@
-import { PermissionDenied } from '@/domains/auth/components/permission-denied';
-import { SessionExpired } from '@/domains/auth/components/session-expired';
-import { EmptyState } from '@/ds/components/EmptyState';
 import {
   is401UnauthorizedError,
   is403ForbiddenError,
   isObservabilityUnavailableError,
   isUnsupportedObservabilityOperationError,
-} from '@/lib/query-utils';
+} from '@mastra/react/hooks';
+import { PermissionDenied } from '@/domains/auth/components/permission-denied';
+import { SessionExpired } from '@/domains/auth/components/session-expired';
+import { EmptyState } from '@/ds/components/EmptyState';
 
 export interface LogsErrorContentProps {
   /** The error from a useLogs query. */

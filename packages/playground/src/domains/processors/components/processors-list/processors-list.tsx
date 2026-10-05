@@ -4,9 +4,9 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
+import type { ProcessorInfo, ProcessorPhase } from '@mastra/react/hooks';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
-import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
 

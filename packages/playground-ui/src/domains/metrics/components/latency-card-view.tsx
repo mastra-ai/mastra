@@ -1,3 +1,4 @@
+import type { LatencyPoint, MetricsInterval } from '@mastra/react/hooks';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
@@ -7,8 +8,6 @@ import { TabContent } from '../../../ds/components/Tabs/tabs-content';
 import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
-import type { LatencyPoint } from '../hooks/use-latency-metrics';
-import type { MetricsInterval } from '../metrics-interval';
 import { averageLatency, isDrillablePoint, isLatencyTab } from './latency-card-view.utils';
 import type { LatencyTab } from './latency-card-view.utils';
 import { CHART_COLORS } from './metrics-utils';

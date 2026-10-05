@@ -1,4 +1,4 @@
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useAgents } from '@mastra/react/hooks';
 
 export interface ToolAgent {
   id: string;

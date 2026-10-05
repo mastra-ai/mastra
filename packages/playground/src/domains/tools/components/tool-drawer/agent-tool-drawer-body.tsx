@@ -1,9 +1,8 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useAgent, useExecuteAgentTool } from '@mastra/react/hooks';
 import type { ExecuteTool } from '../../hooks/use-tool-run';
 import { ToolDrawerBody } from './tool-drawer-body';
-import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useExecuteAgentTool } from '@/domains/agents/hooks/use-execute-agent-tool';
 
 export interface AgentToolDrawerBodyProps {
   agentId: string;

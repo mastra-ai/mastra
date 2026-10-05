@@ -1,4 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { EXPERIMENTS_PER_PAGE } from '@mastra/react/hooks';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
@@ -16,7 +17,6 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { EXPERIMENTS_PER_PAGE } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';

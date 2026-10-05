@@ -61,7 +61,7 @@ const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
         withQueryTrace
         withFeedback
         onOpenScore={() => {}}
-        onBack={() => {}}
+        open
         onClose={() => {}}
         {...props}
       />
@@ -97,13 +97,22 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(dialog().className).toContain('w-full'));
     });
 
-    it('when "Back to trace" is clicked, then onBack is called', async () => {
+    it('when rendered, then it is stacked at depth 2 by default', async () => {
       installHandlers();
-      const onBack = vi.fn();
-      const { queryClient } = renderPanel({ onBack });
+      const { queryClient } = renderPanel();
+
+      const dialog = await screen.findByRole('dialog', { name: `Thread ${THREAD_ID}` });
+      expect(dialog.getAttribute('data-depth')).toBe('2');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when "Back to trace" is clicked, then onClose is called', async () => {
+      installHandlers();
+      const onClose = vi.fn();
+      const { queryClient } = renderPanel({ onClose });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Back to trace' }));
-      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 

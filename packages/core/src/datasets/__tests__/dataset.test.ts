@@ -1103,4 +1103,24 @@ describe('Dataset', () => {
       id: 'EXPERIMENT_RESULT_MISSING_EXPERIMENT_ID',
     });
   });
+
+  it('validates each schema update against the newly proposed schema', async () => {
+    await ds.addItem({ input: { a: 1 } });
+    const numberSchema = { type: 'object', properties: { a: { type: 'number' } }, required: ['a'] };
+    await ds.update({ inputSchema: numberSchema });
+
+    const stringSchema = { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] };
+    await expect(ds.update({ inputSchema: stringSchema })).rejects.toBeInstanceOf(SchemaUpdateValidationError);
+  });
+
+  it('drops the cached validator when the schema of an empty dataset changes', async () => {
+    const stringSchema = { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] };
+    await ds.update({ inputSchema: stringSchema });
+    await ds.addItem({ input: { a: 'x' } });
+    await ds.deleteItem({ itemId: (await ds.listItems()).items[0]!.id });
+
+    const numberSchema = { type: 'object', properties: { a: { type: 'number' } }, required: ['a'] };
+    await ds.update({ inputSchema: numberSchema });
+    await expect(ds.addItem({ input: { a: 1 } })).resolves.toBeDefined();
+  });
 });

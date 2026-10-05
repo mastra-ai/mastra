@@ -9,16 +9,11 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import type { ProcessorDetail, ProcessorPhase, MastraDBMessage, ExecuteProcessorResponse } from '@mastra/react/hooks';
+import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks';
 import CodeMirror from '@uiw/react-codemirror';
 import { Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import type {
-  ProcessorDetail,
-  ProcessorPhase,
-  MastraDBMessage,
-  ExecuteProcessorResponse,
-} from '../hooks/use-processors';
-import { useProcessor, useExecuteProcessor } from '../hooks/use-processors';
 
 export interface ProcessorPanelProps {
   processorId: string;
