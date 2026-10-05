@@ -609,8 +609,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    * membership edges, so the sidebar tree is built from scopes that EXIST —
    * never from the declared structure plan or the rung config. Materialization
    * is create-only and deduped by address (existing nodes keep their declared
-   * names/parents), so the steady state is a no-op skip. Uncurated companions
-   * are created by capture, not here. A vouch failure never fails the read —
+   * names/parents), so the steady state is a no-op skip. No companion scope is
+   * created here or anywhere automatically. A vouch failure never fails the read —
    * the tree simply serves the scopes that already exist.
    */
   async #vouchIdentityScopes(view: ResolvedView): Promise<void> {
