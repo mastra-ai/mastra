@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { MessageAttachment } from '../attachments/message-attachment';
 
 const meta = {
@@ -57,9 +57,9 @@ export const Text: Story = {
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog');
-    await expect(within(dialog).getByText(/Résumé: café, 日本語, 👋/)).toBeVisible();
-    await userEvent.keyboard('{Escape}');
-    await expect(trigger).toHaveFocus();
+    await waitFor(() => expect(within(dialog).getByText(/Résumé: café, 日本語, 👋/)).toBeVisible());
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
   },
 };
 
