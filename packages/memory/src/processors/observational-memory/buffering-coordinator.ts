@@ -43,6 +43,24 @@ export class BufferingCoordinator {
   static lastBufferedBoundary = new Map<string, number>();
 
   /**
+   * The buffer op that set the observation boundary, if one did. Any other write (an activation
+   * reset, another op) replaces or clears it, so an op that outlived it never writes its boundary
+   * back. Key format: "obs:{lockKey}"
+   */
+  static observationBoundaryOwners = new Map<string, symbol>();
+
+  /** Set the observation boundary; `owner` is the buffer op setting it, if any. */
+  static setObservationBoundary(bufferKey: string, tokens: number, owner?: symbol): void {
+    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
+    if (owner) BufferingCoordinator.observationBoundaryOwners.set(bufferKey, owner);
+    else BufferingCoordinator.observationBoundaryOwners.delete(bufferKey);
+  }
+
+  static ownsObservationBoundary(bufferKey: string, owner: symbol): boolean {
+    return BufferingCoordinator.observationBoundaryOwners.get(bufferKey) === owner;
+  }
+
+  /**
    * Track the timestamp cursor for buffered messages.
    * Key format: "obs:{lockKey}"
    */
@@ -116,11 +134,13 @@ export class BufferingCoordinator {
       // Partial cleanup after activation: clear stale boundary/time state for
       // the observation buffer key so the next buffer cycle isn't suppressed.
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
     } else {
       // Full cleanup: remove all static state for this thread
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(reflBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(obsBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(reflBufKey);
