@@ -171,6 +171,14 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      'Whether to emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Set to `false` to drop them from the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'onError',
     type: '(error: unknown) => string',
     description:
