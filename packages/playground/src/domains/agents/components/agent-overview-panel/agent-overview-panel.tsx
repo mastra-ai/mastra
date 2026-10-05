@@ -7,10 +7,8 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useAgent, useReorderModelList, useUpdateModelInModelList, useChannelPlatforms } from '@mastra/react/hooks';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
-import { useAgent } from '../../hooks/use-agent';
-import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
-import { useChannelPlatforms } from '../../hooks/use-channels';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {

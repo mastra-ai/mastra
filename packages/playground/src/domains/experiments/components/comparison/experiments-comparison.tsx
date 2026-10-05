@@ -3,18 +3,18 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import {
+  useCompareExperiments,
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useScoresByExperimentId,
+} from '@mastra/react/hooks';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
-import { useCompareExperiments } from '@/domains/datasets/hooks/use-compare-experiments';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '@/domains/datasets/hooks/use-dataset-experiments';
 
 interface ExperimentsComparisonProps {
   datasetId: string;

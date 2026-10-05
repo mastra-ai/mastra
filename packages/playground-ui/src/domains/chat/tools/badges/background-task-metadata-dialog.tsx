@@ -1,6 +1,6 @@
+import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@/domains/agents/hooks/use-background-tasks';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {

@@ -10,6 +10,7 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useCurrentUser, useStoredAgents } from '@mastra/react/hooks';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -19,8 +20,6 @@ import {
 } from '@/domains/agent-builder/components/agent-list/agent-builder-list';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();

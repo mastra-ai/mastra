@@ -5,7 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import type { CardAction } from '../cardPrimaryAction';
 import { metadataLabelColors, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';

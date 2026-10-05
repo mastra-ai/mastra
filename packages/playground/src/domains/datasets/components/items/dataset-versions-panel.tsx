@@ -11,10 +11,10 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useDatasetVersions } from '@mastra/react/hooks';
+import type { DatasetVersion } from '@mastra/react/hooks';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetVersions } from '../../hooks/use-dataset-versions';
-import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;

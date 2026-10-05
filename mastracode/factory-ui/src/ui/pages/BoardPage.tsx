@@ -1,6 +1,7 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
@@ -49,6 +50,7 @@ import {
 import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '../domains/factory/boardFilters';
 import type { BoardFilterState } from '../domains/factory/boardFilters';
 import { restoreBoardView, saveBoardView } from '../domains/factory/services/boardViews';
+import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../domains/factory/boardCardState';
 import { candidatePayload } from '../domains/factory/boardDrag';
 import type { DragPayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
@@ -214,7 +216,14 @@ function BoardContent({
     stage: Parameters<typeof items.handleDrop>[1],
     cause = 'board_drag',
   ) => {
-    if (payload.kind === 'work-item' && payload.fromStage === stage) return;
+    if (payload.kind === 'work-item') {
+      if (payload.fromStage === stage) return;
+      const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
+      if (!canMoveTo(payload.ownerKind, toPhaseKind)) {
+        toast.error(BUSY_CARD_MOVE_REFUSAL);
+        return;
+      }
+    }
     const item = payload.kind === 'work-item' ? items.all.find(candidate => candidate.id === payload.id) : undefined;
     const source = payload.kind === 'candidate' ? payload.candidate.source : item?.source;
     const metadata = payload.kind === 'candidate' ? payload.candidate.metadata : item?.metadata;

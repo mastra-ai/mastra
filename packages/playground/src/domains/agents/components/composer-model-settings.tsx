@@ -10,15 +10,14 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useMemory, useAgent } from '@mastra/react/hooks';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAgentSettings } from '../context/agent-context';
-import { useAgent } from '../hooks/use-agent';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 export interface ComposerModelSettingsProps {
   agentId: string;

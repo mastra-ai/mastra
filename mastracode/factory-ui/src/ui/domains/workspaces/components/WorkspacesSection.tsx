@@ -24,7 +24,7 @@ import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePul
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { itemAwaitsPerson } from '../../factory/boardCardStatus';
+import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';

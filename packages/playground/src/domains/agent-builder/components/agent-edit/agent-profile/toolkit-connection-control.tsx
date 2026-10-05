@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -7,9 +8,6 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import type { UseFormSetValue } from 'react-hook-form';
 
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
-import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
-import { useExistingConnections } from '../../../../tool-providers/hooks/use-existing-connections';
-import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import type { ToolProviderConnectionFormValue, ToolProvidersFormValue } from '../../../../tool-providers/schemas';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 

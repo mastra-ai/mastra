@@ -181,10 +181,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           result: toolCall.result,
           existingProviderMetadata: toolCall.providerMetadata,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
-          // No `onMappingError`: on the default engine a toModelOutput failure
-          // rethrows and fails the run — the released contract. The durable
-          // engine supplies a warn-and-continue handler instead (redelivery
-          // would re-run the mapper on every attempt).
         });
       }
 

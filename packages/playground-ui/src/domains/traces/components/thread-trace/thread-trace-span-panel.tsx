@@ -1,9 +1,8 @@
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks';
 import type { ComponentProps } from 'react';
 import { Panel } from 'react-resizable-panels';
 
-import { useSpanDetail } from '../../hooks/use-span-detail';
 import { useTraceSpanNavigation } from '../../hooks/use-trace-span-navigation';
-import { useTraceSpans } from '../../hooks/use-trace-spans';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import { useThreadTrace } from './thread-trace-context';
 import { PanelSeparator } from '@/lib/resize/separator';

@@ -28,9 +28,10 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
  * width), `--chat-surface` (the colour the composer veil ramps to — the shell
  * paints no fill of its own and inherits whatever surface hosts it, so this has
  * to name that same surface), `--chat-fade` (the band the veil ramps in
- * across, above the composer), `--chat-veil` (strongest it ever gets — the
- * transcript keeps showing through), `--chat-gutter` (room below the composer),
- * `--chat-inset-end` (room an overlay panel claims on the end edge).
+ * across, above the composer), `--chat-veil` (strongest it gets, opaque by
+ * default so nothing reads under the composer), `--chat-gutter` (room below the
+ * composer), `--chat-edge` (room on both sides, so the scrollbar never overlaps
+ * the composer), `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
 export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps) {
   return (
@@ -39,8 +40,8 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
         data-slot="chat-shell"
         className={cn(
           '@container relative isolate flex min-h-0 min-w-0 flex-col',
-          '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-background)] [--chat-veil:70%]',
+          '[--chat-column:48rem] [--chat-edge:0.5rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+          '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
           className,
         )}
         {...props}
@@ -64,13 +65,19 @@ export function ChatShellStage({ className, ...props }: ComponentPropsWithoutRef
 
 /**
  * The one scroll container. It takes the end inset itself — on an ancestor the
- * same room would drag the scrollbar inward, off the true edge.
+ * same room would drag the scrollbar inward, off the true edge. No overscroll
+ * bounce on either axis: the dock is sticky inside this box, so the rubber band
+ * would carry the composer off its edge along with the transcript.
+ *
+ * The same edge room on both sides keeps the scrollbar clear of the composer and
+ * the column centred, with a matching gutter for classic scrollbars.
  */
 export function ChatShellViewport({ className, children, ...props }: MessageScrollerViewportProps) {
   return (
     <MessageScrollerViewport
       className={cn(
-        'h-auto min-h-0 flex-1 pe-(--chat-inset-end)',
+        'h-auto min-h-0 flex-1 overscroll-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
+        '[scrollbar-gutter:stable_both-edges]',
         'transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none',
         className,
       )}
@@ -142,10 +149,9 @@ export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...pr
  * transcript scrolls behind, so nothing measures it and a composer growing under
  * the cursor resizes no box the scroller watches.
  *
- * Behind it, one sheet of the page masked in over `--chat-fade` of air and never
- * past `--chat-veil`, so the transcript dims as it slides under but stays
- * readable through the card's surroundings. The ramp runs three times the air, so
- * it tops out behind the card and its end never shows.
+ * Behind it, one sheet of the page masked in over `--chat-fade` of air, reaching
+ * `--chat-veil` at the dock's top edge. The transcript fades out above the
+ * composer and nothing shows through around or under the card.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (
@@ -154,7 +160,7 @@ export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<
       className={cn(
         'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
         'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
-        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
+        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
         className,
       )}
       {...props}

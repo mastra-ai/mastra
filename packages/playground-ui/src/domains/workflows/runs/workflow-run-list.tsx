@@ -1,10 +1,10 @@
 import type { MastraClient } from '@mastra/client-js';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
-import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@/domains/workflows/hooks/use-workflow-runs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -15,6 +15,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from '@/utils/date-format';
+import { toast } from '@/utils/toast';
 
 export interface WorkflowRecentRunsProps {
   workflowId: string;
@@ -92,9 +93,11 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
   const handleDelete = async (runId: string) => {
     try {
       await deleteRun({ runId });
+      toast.success('Workflow run deleted successfully');
       setDeleteRunId(null);
       navigate(paths.workflowLink(workflowId));
     } catch {
+      toast.error('Failed to delete workflow run');
       setDeleteRunId(null);
     }
   };

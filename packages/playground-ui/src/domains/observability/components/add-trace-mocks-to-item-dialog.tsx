@@ -3,11 +3,11 @@ import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 
 import { useMastraClient } from '@mastra/react';
+import { useDatasetItem, useDatasetItems } from '@mastra/react/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
-import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';

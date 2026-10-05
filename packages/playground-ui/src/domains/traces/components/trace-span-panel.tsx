@@ -1,3 +1,4 @@
+import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
@@ -6,8 +7,6 @@ import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
-import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';

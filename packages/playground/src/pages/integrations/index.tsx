@@ -1,17 +1,19 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  useAuthorize,
+  useDisconnectConnection,
+  useExistingConnections,
+  useToolProviders,
+  useToolkits,
+} from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
 import { getGroupedConnectionsByAuthor } from './group-connections';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
-import { useAuthorize } from '@/domains/tool-providers/hooks/use-authorize';
-import { useDisconnectConnection } from '@/domains/tool-providers/hooks/use-disconnect-connection';
-import { useExistingConnections } from '@/domains/tool-providers/hooks/use-existing-connections';
 import { useIsToolProviderAdmin } from '@/domains/tool-providers/hooks/use-is-tool-provider-admin';
-import { useToolProviders } from '@/domains/tool-providers/hooks/use-tool-providers';
-import { useToolkits } from '@/domains/tool-providers/hooks/use-toolkits';
 
 const crumbs: CrumbDef[] = [{ id: 'integrations', label: 'Integrations' }];
 

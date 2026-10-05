@@ -73,5 +73,14 @@
     "oxlint": "1.81.0",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
+  },
+  "overrides": {
+    "nanoid": "5.1.16",
+    "shadcn": {
+      "undici": "8.11.2"
+    },
+    "@dotenvx/dotenvx": {
+      "undici": "8.11.2"
+    }
   }
 }

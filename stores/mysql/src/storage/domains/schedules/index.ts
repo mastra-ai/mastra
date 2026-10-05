@@ -321,10 +321,11 @@ export class SchedulesMySQL extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
-      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ?, ${quoteIdentifier('status', 'column name')} = COALESCE(?, ${quoteIdentifier('status', 'column name')}) WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
+      [newNextFireAt, lastFireAt, lastRunId, Date.now(), newStatus ?? null, id, expectedNextFireAt, 'active'],
     );
     return result.affectedRows > 0;
   }

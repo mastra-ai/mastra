@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -106,15 +107,14 @@ export function WorkspaceFileViewer({
             ) : null}
             {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
             {file?.contentType === 'text' && !isMarkdown ? (
-              <Txt
-                as="pre"
+              <Code
+                code={content}
+                lang={file.language}
                 variant="caption"
                 font="mono"
                 tone="ink"
                 className="border-border bg-background m-0 rounded-md border p-3"
-              >
-                <code dangerouslySetInnerHTML={{ __html: file.highlightedContent ?? '' }} />
-              </Txt>
+              />
             ) : null}
           </div>
         </ScrollArea>

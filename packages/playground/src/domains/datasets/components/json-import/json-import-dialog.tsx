@@ -12,9 +12,9 @@ import {
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';

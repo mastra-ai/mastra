@@ -1,0 +1,82 @@
+import type { DatasetItemVersionResponse } from '@mastra/client-js';
+import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
+
+export type DatasetItemVersion = DatasetItemVersionResponse & {
+  validTo: number | null;
+  isDeleted: boolean;
+  isLatest: boolean;
+};
+
+/**
+ * Hook to fetch full item history (SCD-2 rows).
+ */
+export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['dataset-item-versions', datasetId, itemId],
+    queryFn: async () => {
+      const res = await client.getItemHistory(datasetId, itemId);
+
+      return (res?.history ?? []).map(
+        (version, index): DatasetItemVersion => ({
+          id: version.id,
+          datasetId: version.datasetId,
+          datasetVersion: version.datasetVersion,
+          input: version.input,
+          groundTruth: version.groundTruth,
+          expectedTrajectory: version.expectedTrajectory,
+          toolMocks: version.toolMocks ?? undefined,
+          scorerIds: version.scorerIds ?? undefined,
+          requestContext: version.requestContext ?? undefined,
+          metadata: version.metadata ?? undefined,
+          validTo: version.validTo,
+          isDeleted: version.isDeleted,
+          createdAt: version.createdAt,
+          updatedAt: version.updatedAt,
+          isLatest: index === 0,
+        }),
+      );
+    },
+    enabled: Boolean(datasetId) && Boolean(itemId),
+  });
+};
+
+/**
+ * Hook to fetch a specific version of a dataset item.
+ */
+export const useDatasetItemVersion = (
+  datasetId: string,
+  itemId: string,
+  datasetVersion: number,
+  latestVersion?: number,
+) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['dataset-item-version', datasetId, itemId, datasetVersion],
+    queryFn: async (): Promise<DatasetItemVersion> => {
+      const v = await client.getDatasetItemVersion(datasetId, itemId, datasetVersion);
+
+      return {
+        id: v.id,
+        datasetId: v.datasetId,
+        datasetVersion: v.datasetVersion,
+        input: v.input,
+        groundTruth: v.groundTruth,
+        expectedTrajectory: v.expectedTrajectory,
+        toolMocks: v.toolMocks ?? undefined,
+        scorerIds: v.scorerIds ?? undefined,
+        requestContext: v.requestContext ?? undefined,
+        metadata: v.metadata ?? undefined,
+        validTo: null,
+        isDeleted: false,
+        createdAt: v.createdAt,
+        updatedAt: v.updatedAt,
+        isLatest: latestVersion != null ? datasetVersion === latestVersion : false,
+      };
+    },
+    enabled: Boolean(datasetId) && Boolean(itemId) && datasetVersion > 0,
+  });
+};

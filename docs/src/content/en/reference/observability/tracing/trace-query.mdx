@@ -18,6 +18,56 @@ The `group` option remains supported until the next major release. Use [`queryTr
 
 :::
 
+## Query individual spans through storage
+
+The observability domain in DuckDB and the PostgreSQL and ClickHouse v-next stores supports `querySpans(plan)`. It returns individual completed spans across traces, including matching child spans. Check `storage.getFeatures()?.includes('span-query')` before using this optional storage method. Server routes and client SDK support are separate from this storage API.
+
+Build the plan in trusted backend code:
+
+```typescript
+import { planSpanQuery } from '@mastra/core/storage'
+
+const storage = await mastra.getStorage()?.getStore('observability')
+if (!storage?.getFeatures()?.includes('span-query')) {
+  throw new Error('This store does not support span queries')
+}
+
+const plan = planSpanQuery({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'eq',
+    left: { path: 'spanType' },
+    right: { literal: 'tool_call' },
+  },
+  page: { limit: 50 },
+})
+
+const { spans, page } = await storage.querySpans(plan)
+```
+
+This example uses local, unscoped storage. For a shared database, pass `{ scope: { organizationId, resourceId } }` as the second argument to `planSpanQuery()`, using identifiers resolved by your backend's authorization. The request body can't supply trusted scope. Apply the same authorization when loading full span details with `getSpan({ traceId, spanId })`.
+
+Span queries use the scalar fields and operators available inside `queryTraces()`'s `spans.some` predicate. They don't accept related-record clauses. Nested attributes require support in the shared predicate contract and each store.
+
+The `timeRange` applies to each span's `startedAt`, includes `from`, excludes `to`, and can cover at most 31 days. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
+
+Each row contains span and trace identifiers, display fields, duration, status, and input/output previews of at most 256 Unicode characters. Truncation flags indicate when a preview is incomplete. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
+
+The `cost` field describes only that span's model-token cost:
+
+- `available` includes `amount` and `currency`. Zero is a valid amount.
+- `missing` means no matching model metrics were found.
+- `unavailable` means metrics exist but a complete, unambiguous cost can't be established.
+
+Directional token totals supply the cost. Overlapping detail metrics aren't added again. A provider-supplied `query_total` cost is counted once. Partial pricing, conflicting currencies, and ambiguous totals produce `unavailable`.
+
+Current-record selection runs before mutable filters. PostgreSQL and ClickHouse select the greatest completed `endedAt`. PostgreSQL breaks ties with its ingestion cursor. DuckDB reconstructs the earliest start event and selects the latest ingested completed event, matching its existing span-predicate behavior. Time bounds are checked again after reconstruction. ClickHouse uses its existing completion-only, insert-only model, where equal-version retries must contain identical records. Querying spans doesn't add a table or materialized view.
+
+Queries have a 15-second default execution deadline. PostgreSQL and ClickHouse use their existing `traceQuery.timeoutMs` setting. ClickHouse also caps each query at 512 MiB. A page with more than 50,000 matching model metrics fails with a resource-limit error instead of returning partial cost. A small page size limits returned rows, but doesn't limit the number of records the database must examine.
+
 ## Query traces with the client SDK
 
 Pass the query to `queryTraces()`:

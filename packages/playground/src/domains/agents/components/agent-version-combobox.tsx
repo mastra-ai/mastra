@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useAgentVersions } from '@mastra/react/hooks';
 
 export interface AgentVersionComboboxProps {
   agentId: string;

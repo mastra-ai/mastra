@@ -9,15 +9,15 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks';
+import { useStoredAgentMutations } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { ChannelDialog } from '../components/agent-edit/publish-channel-dialogs';
 import { useEditPage } from '../contexts/edit-page-context';
 import type { AgentBuilderEditFormValues } from '../schemas';
-import { useConnectChannelAction } from '@/domains/agents/hooks/use-channels';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 interface PendingRequest {
   platform: ChannelPlatformInfo;

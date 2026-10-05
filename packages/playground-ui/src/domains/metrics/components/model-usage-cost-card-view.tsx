@@ -1,8 +1,8 @@
+import type { ModelUsageRow } from '@mastra/react/hooks';
 import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import type { LinkComponent } from '../../../ds/types/link-component';
-import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
 import { METRICS_DATA_LIST_PROPS } from './metrics-utils';
 import { formatCost } from '@/lib/cost';
 

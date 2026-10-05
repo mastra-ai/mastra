@@ -4,12 +4,13 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useLLMProviders } from '@mastra/react/hooks';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, useLLMProviders, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, findProviderById } from '@/domains/llm';
 
 export const ComposerModelSwitcher = () => {
   const selection = usePlaygroundModelOptional();

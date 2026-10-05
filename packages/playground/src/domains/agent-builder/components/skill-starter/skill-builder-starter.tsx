@@ -7,6 +7,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredWorkspaces } from '@mastra/react/hooks';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
@@ -14,7 +15,6 @@ import { useNavigate } from 'react-router';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [
   {

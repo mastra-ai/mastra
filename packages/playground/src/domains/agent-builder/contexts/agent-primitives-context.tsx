@@ -1,18 +1,20 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import type { StoredAgent } from '@mastra/react/hooks';
+import {
+  useWorkflows,
+  useStoredWorkspaces,
+  useTools,
+  useCurrentUser,
+  useAgents,
+  useStoredAgent,
+  useStoredSkills,
+} from '@mastra/react/hooks';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { AvailableWorkspace } from '../hooks/use-agent-builder-tool';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
 import { useStarterUserMessage } from '../hooks/use-starter-user-message';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;

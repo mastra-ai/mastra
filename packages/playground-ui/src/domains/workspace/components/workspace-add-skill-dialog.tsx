@@ -1,8 +1,8 @@
+import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '@mastra/react/hooks';
+import type { SkillsShSkill } from '@mastra/react/hooks';
 import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../hooks/use-skills-sh';
 import {
   Dialog,
   DialogAction,

@@ -11,7 +11,8 @@
     "grok-imagine-image",
     "grok-imagine-image-quality",
     "grok-imagine-video",
-    "grok-imagine-video-1.5"
+    "grok-imagine-video-1.5",
+    "grok-imagine-video-1.5-lite"
   ],
   "temperature": [
     "grok-4.20-0309-non-reasoning",
