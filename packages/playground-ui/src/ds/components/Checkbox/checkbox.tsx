@@ -76,7 +76,7 @@ function CheckboxIndicatorIcon() {
     <>
       <Check
         className={cn(
-          'stroke-[3.25] size-3 scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
+          'size-3 scale-95 stroke-[3.25] transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
           // Lucide's check path is ~22.6 units long. Use a longer dash so the
           // final checked mark is never clipped.
           '[stroke-dasharray:28] [stroke-dashoffset:28]',
@@ -87,7 +87,7 @@ function CheckboxIndicatorIcon() {
       />
       <Minus
         className={cn(
-          'stroke-[3.25] hidden size-3 scale-95 transition-transform duration-200 ease-out-custom',
+          'hidden size-3 scale-95 stroke-[3.25] transition-transform duration-200 ease-out-custom',
           'group-data-[indeterminate]/checkbox-indicator:block',
           'group-data-[indeterminate]/checkbox-indicator:scale-100',
         )}

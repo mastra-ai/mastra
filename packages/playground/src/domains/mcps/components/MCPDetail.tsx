@@ -88,7 +88,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
     <div className="flex flex-col gap-6 pt-4">
       <Card>
         <Tabs defaultTab="http">
-          <CardHeader className="border-border flex-row items-center justify-between gap-3 space-y-0 border-b">
+          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border">
             <CardTitle className="shrink-0">Connect</CardTitle>
             <div className="min-w-0">
               <TabList variant="pill-ghost" size="sm">
