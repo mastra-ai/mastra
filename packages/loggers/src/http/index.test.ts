@@ -349,6 +349,93 @@ describe('HttpTransport', () => {
         expect(callback).toHaveBeenCalled();
       }, 100);
     });
+
+    describe('final drain', () => {
+      let drainTransport: HttpTransport;
+
+      const bufferLogs = (count: number) => {
+        for (let i = 0; i < count; i++) {
+          drainTransport['logBuffer'].push({ msg: `log ${i}`, level: 'info', time: i } as any);
+        }
+      };
+
+      const destroy = () =>
+        new Promise<Error | null | undefined>(resolve => {
+          drainTransport._destroy(null as any, (error?: Error | null) => resolve(error));
+        });
+
+      const sentBatchSizes = () => fetchMock.mock.calls.map((call: any[]) => JSON.parse(call[1].body).logs.length);
+
+      beforeEach(() => {
+        drainTransport = new HttpTransport({
+          ...defaultOptions,
+          batchSize: 2,
+          retryOptions: { maxRetries: 0 },
+        });
+      });
+
+      it('sends every remaining batch before completing destroy', async () => {
+        bufferLogs(5);
+
+        const error = await destroy();
+
+        expect(error).toBeNull();
+        expect(sentBatchSizes()).toEqual([2, 2, 1]);
+        expect(drainTransport.getBufferedLogs()).toEqual([]);
+      });
+
+      it('stops at the first failed batch and surfaces the error', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        fetchMock
+          .mockResolvedValueOnce({ ok: true })
+          .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
+        bufferLogs(5);
+
+        const error = await destroy();
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.message).toMatch(/HTTP 500/);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(drainTransport.getBufferedLogs()).toHaveLength(3);
+      });
+
+      it('stops draining when a flush makes no progress', async () => {
+        const flushSpy = vi.spyOn(drainTransport, '_flush').mockResolvedValue(undefined);
+        bufferLogs(3);
+
+        await destroy();
+
+        expect(flushSpy).toHaveBeenCalledTimes(1);
+      });
+
+      it('waits for an in-flight flush before draining', async () => {
+        let resolveFirstRequest!: (value: unknown) => void;
+        fetchMock.mockImplementationOnce(
+          () =>
+            new Promise(resolve => {
+              resolveFirstRequest = resolve;
+            }),
+        );
+
+        drainTransport.write({ msg: 'a', level: 'info' });
+        drainTransport.write({ msg: 'b', level: 'info' });
+        bufferLogs(1);
+
+        const callback = vi.fn();
+        drainTransport._destroy(null as any, callback);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(callback).not.toHaveBeenCalled();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        resolveFirstRequest({ ok: true });
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+
+        expect(sentBatchSizes()).toEqual([2, 1]);
+        expect(drainTransport.getBufferedLogs()).toEqual([]);
+      });
+    });
   });
 
   describe('utility methods', () => {

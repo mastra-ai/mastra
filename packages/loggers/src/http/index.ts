@@ -28,6 +28,7 @@ export class HttpTransport extends LoggerTransport {
   private logBuffer: BaseLogMessage[];
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
+  private inFlightFlushes = new Set<Promise<void>>();
 
   constructor(options: HttpTransportOptions) {
     super({ objectMode: true });
@@ -55,11 +56,19 @@ export class HttpTransport extends LoggerTransport {
     this.lastFlush = Date.now();
 
     // Start flush interval
-    this.flushIntervalId = setInterval(() => {
-      this._flush().catch(err => {
+    this.flushIntervalId = setInterval(() => this.backgroundFlush(), this.flushInterval);
+  }
+
+  // Tracked so _destroy can wait for flushes that may re-buffer logs on failure
+  private backgroundFlush(): void {
+    const flush = this._flush()
+      .catch(err => {
         console.error('Error flushing logs to HTTP endpoint:', err);
+      })
+      .finally(() => {
+        this.inFlightFlushes.delete(flush);
       });
-    }, this.flushInterval);
+    this.inFlightFlushes.add(flush);
   }
 
   private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
@@ -144,9 +153,7 @@ export class HttpTransport extends LoggerTransport {
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
-        this._flush().catch(err => {
-          console.error('Error flushing logs to HTTP endpoint:', err);
-        });
+        this.backgroundFlush();
       }
 
       // Pass through the log
@@ -159,16 +166,22 @@ export class HttpTransport extends LoggerTransport {
   _destroy(err: Error, cb: Function): void {
     clearInterval(this.flushIntervalId);
 
-    // Final flush
-    if (this.logBuffer.length > 0) {
-      this._flush()
-        .then(() => cb(err))
-        .catch(flushErr => {
-          console.error('Error in final flush:', flushErr);
-          cb(err || flushErr);
-        });
-    } else {
-      cb(err);
+    this.drainBuffer()
+      .then(() => cb(err))
+      .catch(flushErr => {
+        console.error('Error in final flush:', flushErr);
+        cb(err || flushErr);
+      });
+  }
+
+  private async drainBuffer(): Promise<void> {
+    await Promise.allSettled([...this.inFlightFlushes]);
+
+    while (this.logBuffer.length > 0) {
+      const remaining = this.logBuffer.length;
+      await this._flush();
+      // Stop if a flush made no progress so shutdown cannot spin
+      if (this.logBuffer.length >= remaining) break;
     }
   }
 
