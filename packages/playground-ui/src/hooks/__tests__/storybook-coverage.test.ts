@@ -3,6 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
+export const scannedRoots = ['packages/playground-ui/src/hooks', 'packages/playground-ui/src/lib/keyboard'];
+
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 function sourceFiles(directory: string): string[] {
