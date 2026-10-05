@@ -44,6 +44,10 @@ export const failureCodes = [
   "budget-exceeded",
   "provider-unavailable",
   "busy",
+  "invalid-composition",
+  "stale-revision",
+  "persistence-failure",
+  "recovery-required",
 ] as const;
 export type FailureCode = (typeof failureCodes)[number];
 export class SourceError extends Error {
@@ -74,6 +78,8 @@ export const analysisRequestSchema = z.strictObject({
   horizon: dateRangeSchema.optional(),
   asOf: dateSchema.optional(),
   filters: z.record(z.string().max(80), scalarSchema).optional(),
+  groupBy: z.string().trim().min(1).max(80).optional(),
+  records: z.boolean().optional(),
 });
 export const sourceCapabilitySchema = z
   .strictObject({
@@ -81,12 +87,28 @@ export const sourceCapabilitySchema = z
     description: z.string().min(1),
     unit: z.string().min(1),
     calculation: z.enum(["total", "percentage"]),
-    fields: z.array(z.enum(["period", "baseline", "horizon", "asOf", "filters"])),
+    fields: z.array(
+      z.enum(["period", "baseline", "horizon", "asOf", "filters", "groupBy", "records"]),
+    ),
     filters: z.array(z.string()),
+    groupings: z
+      .array(
+        z.strictObject({ field: z.string().min(1).max(80), kind: z.enum(["series", "ranked"]) }),
+      )
+      .max(30)
+      .optional(),
   })
   .refine(
     (capability) => (capability.calculation === "percentage") === (capability.unit === "percent"),
     "Percentage calculations require percent units; totals use non-percent units.",
+  )
+  .refine(
+    (capability) =>
+      !capability.fields.includes("groupBy") ||
+      (Boolean(capability.groupings?.length) &&
+        new Set(capability.groupings?.map((group) => group.field)).size ===
+          capability.groupings?.length),
+    "Grouped capabilities require unique declared grouping fields and roles.",
   );
 export type SourceCapability = z.infer<typeof sourceCapabilitySchema>;
 export const sourceDescriptorSchema = z
@@ -107,6 +129,64 @@ export const sourceDescriptorSchema = z
       new Set(value.capabilities.map((item) => item.metric)).size === value.capabilities.length,
     "Capability metrics must be unique.",
   );
+export const tableColumnSchema = z.strictObject({
+  key: z.string().min(1).max(80),
+  label: z.string().min(1).max(100),
+  type: z.enum(["date", "category", "number", "id"]),
+  unit: z.string().min(1).max(80).optional(),
+});
+export const resultTableSchema = z
+  .strictObject({
+    kind: z.enum(["series", "ranked", "records"]),
+    columns: z.array(tableColumnSchema).min(1).max(50),
+    grouping: z.string().min(1).max(80).optional(),
+    rows: z.array(z.record(z.string(), scalarSchema)).max(1000),
+    omitted: z.number().int().nonnegative(),
+  })
+  .superRefine((table, ctx) => {
+    if (table.kind === "records" ? table.grouping !== undefined : !groupingColumn(table))
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Grouped tables need an explicit grouping key or one unambiguous date/category column; records have no grouping.",
+      });
+    const keys = table.columns.map((column) => column.key);
+    if (new Set(keys).size !== keys.length)
+      ctx.addIssue({ code: "custom", message: "Table column keys must be unique." });
+    for (const row of table.rows) {
+      if (Object.keys(row).length !== keys.length || keys.some((key) => !(key in row)))
+        ctx.addIssue({ code: "custom", message: "Table rows must match declared columns." });
+      for (const column of table.columns) {
+        const value = row[column.key];
+        if (
+          (column.type === "number" || column.type === "id") &&
+          (typeof value !== "number" || !Number.isFinite(value))
+        )
+          ctx.addIssue({ code: "custom", message: "Numeric columns need numeric values." });
+        if ((column.type === "date" || column.type === "category") && typeof value !== "string")
+          ctx.addIssue({ code: "custom", message: "Category/date columns need strings." });
+        if (
+          column.type === "date" &&
+          typeof value === "string" &&
+          !dateSchema.safeParse(value).success
+        )
+          ctx.addIssue({ code: "custom", message: "Dates must be valid UTC dates." });
+      }
+    }
+  });
+export type ResultTable = z.infer<typeof resultTableSchema>;
+/** One source-owned grouping binding drives chart axes and drill membership. */
+export function groupingColumn(table: ResultTable) {
+  if (table.kind === "records") return undefined;
+  const columns = table.columns.filter(
+    (column) => column.type === (table.kind === "series" ? "date" : "category"),
+  );
+  return table.grouping
+    ? columns.find((column) => column.key === table.grouping)
+    : columns.length === 1
+      ? columns[0]
+      : undefined;
+}
 const sourceOperationSchema = z.strictObject({
   kind: z.enum(["sql", "read"]),
   statement: z.string().min(1),
@@ -123,6 +203,7 @@ export const analysisResultSchema = z
     denominator: z.number().finite().nullable(),
     reason: z.string().nullable(),
     period: dateRangeSchema.optional(),
+    table: resultTableSchema.optional(),
     details: z
       .record(
         z.string(),
@@ -212,6 +293,6 @@ export function resultSchemaFor(capability: SourceCapability) {
 export function resultRecordCount(result: AnalysisResult): number {
   return Object.values(result.details ?? {}).reduce<number>(
     (total, value) => total + (Array.isArray(value) ? value.length : 0),
-    0,
+    result.table?.rows.length ?? 0,
   );
 }

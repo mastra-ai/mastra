@@ -1,0 +1,46 @@
+import { z } from "zod";
+import { sourceDescriptorSchema } from "../../data-sources/source.ts";
+import { verifiedResultSchema } from "../analysis/contracts.ts";
+import { componentSchema } from "../ui/catalog.ts";
+
+export const workspaceSchema = z.strictObject({
+  id: z.string().min(1).max(128),
+  threadId: z.string().min(1).max(128),
+  revision: z.number().int().nonnegative(),
+  source: sourceDescriptorSchema,
+  results: z.array(verifiedResultSchema),
+  components: z.array(componentSchema),
+  filters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  drill: z.string().optional(),
+  messages: z.array(
+    z.strictObject({ id: z.string(), role: z.enum(["user", "assistant"]), content: z.string() }),
+  ),
+});
+export type Workspace = z.infer<typeof workspaceSchema>;
+export const workspaceId = "local-workspace";
+export const threadId = "local-thread";
+export const actionSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("filter"),
+    componentId: z.string(),
+    field: z.enum(["segment", "region", "ownerId", "stage"]),
+    value: z.union([z.string(), z.number()]).optional(),
+  }),
+  z.strictObject({ type: z.literal("drill"), componentId: z.string(), label: z.string() }),
+  z.strictObject({
+    type: z.literal("compare"),
+    componentId: z.string(),
+    segment: z.enum(["SMB", "Mid-market", "Enterprise"]),
+  }),
+]);
+export type WorkspaceAction = z.infer<typeof actionSchema>;
+export const requestProperties = z.strictObject({
+  baseRevision: z.number().int().nonnegative(),
+  action: actionSchema.optional(),
+});
+export interface WorkspaceSnapshot {
+  catalog?: { id: string; version: string; defaults: { pageSize: number } }[] | undefined;
+  workspace: Workspace;
+  status: "saved" | "working" | "incomplete" | "recovery-required";
+  message: string;
+}

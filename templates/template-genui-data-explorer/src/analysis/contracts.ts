@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { analysisResultSchema, failureCodes } from "../../data-sources/source.ts";
+import {
+  analysisResultSchema,
+  failureCodes,
+  tableColumnSchema,
+  groupingColumn,
+} from "../../data-sources/source.ts";
 import type { AnalysisResult, SourceCapability } from "../../data-sources/source.ts";
 
 export const LIMITS = Object.freeze({
@@ -37,6 +42,29 @@ export const verifiedResultSchema = z.strictObject({
   explanation: z.string(),
 });
 export type VerifiedResult = z.infer<typeof verifiedResultSchema>;
+/** Structural metadata comes only from an already verified result; rows remain on the server. */
+export const representationSchema = z.strictObject({
+  resultId: z.string().min(1).max(128),
+  metric: z.string().min(1).max(80),
+  unit: z.string().min(1).max(80),
+  status: z.enum(["available", "unavailable"]),
+  role: z.enum(["scalar", "series", "ranked", "records"]),
+  columns: z.array(tableColumnSchema).max(50),
+  grouping: z.string().min(1).max(80).optional(),
+});
+export function representation(result: VerifiedResult) {
+  const table = result.data.table;
+  const grouping = table && groupingColumn(table);
+  return representationSchema.parse({
+    resultId: result.resultId,
+    metric: result.data.metric,
+    unit: result.data.unit,
+    status: result.data.status,
+    role: table?.kind ?? "scalar",
+    columns: table?.columns ?? [],
+    ...(grouping ? { grouping: grouping.key } : {}),
+  });
+}
 export type TerminalStatus =
   | "complete"
   | "clarification-required"

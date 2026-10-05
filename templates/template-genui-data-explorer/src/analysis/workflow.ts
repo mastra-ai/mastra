@@ -28,6 +28,9 @@ export interface Session {
   cleanups: Promise<void>[];
   emit: (event: Omit<AnalysisEvent, "requestId" | "workspaceId" | "traceId">) => void;
   steps: number;
+  filters?: AnalysisRequest["filters"];
+  composition?: import("../ui/catalog.ts").Composition;
+  accepted?: import("../ui/catalog.ts").AcceptedWorkspace;
   failure?: SourceError;
   workflowRunId?: string;
 }
@@ -67,6 +70,10 @@ function validatePlan(request: AnalysisRequest, descriptor: SourceDescriptor): v
     )
   )
     throw new SourceError("invalid-input", "This metric does not support the requested fields.");
+  if (request.groupBy && !capability.groupings?.some((group) => group.field === request.groupBy))
+    throw new SourceError("invalid-input", "This source does not support the requested grouping.");
+  if (request.groupBy && request.records)
+    throw new SourceError("invalid-input", "Choose grouped data or records for one request.");
   if (Object.keys(request.filters ?? {}).some((key) => !capability.filters.includes(key)))
     throw new SourceError("invalid-input", "This source does not support the requested filters.");
 }
@@ -84,13 +91,19 @@ export function analyticalWorkflow() {
         workflowId: "grounded-analysis",
         workflowRunId: session.workflowRunId!,
       });
+      const plan = {
+        ...inputData,
+        ...(session.filters && Object.keys(session.filters).length
+          ? { filters: { ...inputData.filters, ...session.filters } }
+          : {}),
+      };
       try {
-        validatePlan(inputData, session.descriptor);
+        validatePlan(plan, session.descriptor);
       } catch (error) {
         session.failure = error as SourceError;
         throw error;
       }
-      return inputData;
+      return plan;
     },
   });
   const read = createStep({
@@ -215,6 +228,98 @@ export function analyticalWorkflow() {
             "incomplete-result",
             "The source returned incomplete or oversized data. Partial totals are unavailable.",
           );
+        if (data.value !== null && (inputData.groupBy || inputData.records) && !data.table)
+          throw new SourceError(
+            "invalid-result",
+            "The requested grouped data or records are missing.",
+          );
+        if (data.table) {
+          const table = data.table;
+          if (table.omitted !== 0)
+            throw new SourceError(
+              "incomplete-result",
+              "Partial tables cannot represent complete results.",
+            );
+          if (
+            table.columns.find((column) => column.key === "value")?.unit !== capability.unit &&
+            table.kind !== "records"
+          )
+            throw new SourceError("invalid-result", "Table units do not match the metric.");
+          if (
+            table.rows.some((row) =>
+              table.columns.some(
+                (column) => column.unit === "USD cents" && !Number.isSafeInteger(row[column.key]),
+              ),
+            )
+          )
+            throw new SourceError("invalid-result", "Currency rows must be safe integer cents.");
+          if (
+            (inputData.records && table.kind !== "records") ||
+            (inputData.groupBy &&
+              table.kind !==
+                capability.groupings?.find((group) => group.field === inputData.groupBy)?.kind) ||
+            (!inputData.groupBy && !inputData.records)
+          )
+            throw new SourceError(
+              "invalid-result",
+              "Table does not match the requested representation.",
+            );
+          if (
+            table.kind === "records" &&
+            data.metric === "conversion" &&
+            (table.rows.filter((row) => row.stage === "won").length !== data.numerator ||
+              table.rows.length !== data.denominator)
+          )
+            throw new SourceError(
+              "invalid-result",
+              "Closed records do not reconcile to the verified counts.",
+            );
+          const values = table.rows.map((row) => row.value);
+          if (values.some((value) => typeof value !== "number" || !Number.isFinite(value)))
+            throw new SourceError("invalid-result", "Table values must be finite numbers.");
+          if (table.kind !== "records") {
+            for (const row of table.rows) {
+              if (
+                typeof row.numerator !== "number" ||
+                typeof row.denominator !== "number" ||
+                !Number.isSafeInteger(row.numerator) ||
+                !Number.isSafeInteger(row.denominator) ||
+                (capability.calculation === "percentage"
+                  ? row.denominator < 1
+                  : row.denominator < 0) ||
+                row.value !==
+                  (capability.calculation === "total"
+                    ? row.numerator
+                    : (row.numerator / row.denominator) * 100)
+              )
+                throw new SourceError("invalid-result", "Grouped calculation failed.");
+            }
+          }
+          if (
+            capability.calculation === "total" &&
+            table.rows.reduce(
+              (sum, row) => sum + (typeof row.value === "number" ? row.value : 0),
+              0,
+            ) !== data.value
+          )
+            throw new SourceError(
+              "invalid-result",
+              "Table values do not reconcile to the verified total.",
+            );
+          if (
+            capability.calculation === "percentage" &&
+            table.kind !== "records" &&
+            (table.rows.reduce(
+              (sum, row) => sum + (typeof row.numerator === "number" ? row.numerator : 0),
+              0,
+            ) !== data.numerator ||
+              table.rows.reduce(
+                (sum, row) => sum + (typeof row.denominator === "number" ? row.denominator : 0),
+                0,
+              ) !== data.denominator)
+          )
+            throw new SourceError("invalid-result", "Grouped closed-deal counts do not reconcile.");
+        }
         const result = verifiedResultSchema.parse({
           resultId: randomUUID(),
           queryId,

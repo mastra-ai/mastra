@@ -1,4 +1,11 @@
 {
-  "ignorePatterns": ["node_modules/**", "dist/**", ".data/**", "package-lock.json"],
+  "ignorePatterns": [
+    "node_modules/**",
+    "dist/**",
+    ".data/**",
+    ".next/**",
+    "next-env.d.ts",
+    "package-lock.json"
+  ],
   "printWidth": 100
 }

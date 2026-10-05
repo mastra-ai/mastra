@@ -7,3 +7,5 @@ coverage/
 !package-lock.json
 !.npmrc
 !.env.example
+.next/
+next-env.d.ts

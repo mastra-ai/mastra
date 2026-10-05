@@ -11,7 +11,7 @@ import {
 } from "./contracts.ts";
 import type { DatasetMetadata, Filters, MetricResult, OpenStage, Period } from "./contracts.ts";
 
-function filterClause(filters: Filters): { sql: string; params: SQLInputValue[] } {
+export function filterClause(filters: Filters): { sql: string; params: SQLInputValue[] } {
   validateFilters(filters);
   const parts: string[] = [];
   const params: SQLInputValue[] = [];

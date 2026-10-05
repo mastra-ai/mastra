@@ -1,0 +1,149 @@
+:root {
+  color-scheme: light;
+  --chart-color: #256b61;
+  font-family: system-ui, sans-serif;
+  background: #f4f6f5;
+  color: #172e2b;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 2rem 3rem 1rem;
+}
+header p {
+  max-width: 65rem;
+  line-height: 1.5;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem);
+  gap: 1.5rem;
+  padding: 0 3rem 3rem;
+}
+.workspace {
+  min-width: 0;
+}
+.card {
+  background: white;
+  border: 1px solid #c5d5d1;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+.card h2 {
+  margin-top: 0;
+}
+.provenance {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.metric-value {
+  font-size: 2rem;
+  margin: 0.75rem 0;
+}
+.notice {
+  padding: 1rem;
+  border: 1px solid #a7c7bf;
+  background: #e9f4ef;
+  border-radius: 0.5rem;
+}
+.notice[data-status="incomplete"],
+.notice[data-status="recovery-required"] {
+  background: #fff0db;
+  border-color: #bd8942;
+}
+button,
+select,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid #a8c4bc;
+  padding: 0.4rem 0.7rem;
+  background: #eff6f3;
+  color: inherit;
+  border-radius: 0.35rem;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid #126cdb;
+  outline-offset: 2px;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.controls label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+caption {
+  text-align: left;
+  padding: 0.75rem 0;
+}
+th,
+td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #dce5e2;
+  text-align: left;
+}
+nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+svg {
+  width: 100%;
+  min-width: 35rem;
+}
+.chat {
+  background: white;
+  border: 1px solid #c5d5d1;
+  border-radius: 0.75rem;
+  min-height: 35rem;
+  height: calc(100vh - 14rem);
+  position: sticky;
+  top: 1rem;
+  overflow: hidden;
+}
+.empty {
+  padding: 2rem;
+  text-align: center;
+}
+@media (max-width: 1000px) {
+  main {
+    grid-template-columns: 1fr;
+    padding: 0 1rem 1rem;
+  }
+  header {
+    padding: 1rem;
+  }
+  .chat {
+    position: static;
+    height: 35rem;
+  }
+}
