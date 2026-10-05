@@ -102,9 +102,11 @@ export function ActivityEvent({
 export function WorkItemActivity({
   activity,
   actors,
+  showName = true,
 }: {
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
+  showName?: boolean;
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
@@ -124,7 +126,7 @@ export function WorkItemActivity({
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
-            <span className="max-w-32 truncate">{worker.name}</span>
+            {showName && <span className="max-w-32 truncate">{worker.name}</span>}
             <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }
