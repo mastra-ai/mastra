@@ -47,7 +47,7 @@ export class HttpTransport extends LoggerTransport {
       'Content-Type': 'application/json',
       ...options.headers,
     };
-    this.batchSize = options.batchSize || 100;
+    this.batchSize = options.batchSize ?? 100;
     this.flushInterval = options.flushInterval || 10000;
     this.timeout = options.timeout || 30000;
     this.retryOptions = {
@@ -216,11 +216,17 @@ export class HttpTransport extends LoggerTransport {
   _destroy(err: Error, cb: Function): void {
     clearInterval(this.flushIntervalId);
 
-    // Final flush. Wait out any in-flight request first so logs queued behind it still get sent.
+    // Final drain. Wait out any in-flight request (ignoring its failure, since its logs are back in the buffer),
+    // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
     if (this.logBuffer.length > 0 || this.flushPromise) {
-      (this.flushPromise ?? Promise.resolve())
-        .catch(() => {})
-        .then(() => this._flush())
+      const drain = async () => {
+        await this.flushPromise?.catch(() => {});
+        while (this.flushPromise || this.logBuffer.length > 0) {
+          await (this.flushPromise ?? this._flush());
+        }
+      };
+
+      drain()
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);

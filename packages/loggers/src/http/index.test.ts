@@ -485,7 +485,7 @@ describe('HttpTransport', () => {
       capped.destroy();
     });
 
-    it.each([Number.POSITIVE_INFINITY, 2.5, -1])('rejects batchSize %s', batchSize => {
+    it.each([Number.POSITIVE_INFINITY, 2.5, 0, -1])('rejects batchSize %s', batchSize => {
       expect(() => new HttpTransport({ ...outageOptions, batchSize })).toThrow(
         'HttpTransport batchSize must be a positive integer',
       );
@@ -537,6 +537,56 @@ describe('HttpTransport', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(callback).toHaveBeenCalledWith(null);
       expect(guarded.getBufferedLogs()).toHaveLength(0);
+    });
+
+    it('does not finish destroy until every queued batch has been sent', async () => {
+      const resolvers: Array<(value: unknown) => void> = [];
+      fetchMock.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)));
+      const guarded = new HttpTransport({ ...outageOptions });
+
+      for (let i = 0; i < 8; i++) {
+        guarded._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const callback = vi.fn();
+      guarded._destroy(null as any, callback);
+
+      for (let request = 0; request < 3; request++) {
+        resolvers[request]!({ ok: true });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(request + 2);
+        expect(callback).not.toHaveBeenCalled();
+      }
+
+      resolvers[3]!({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(fetchMock.mock.calls.map(call => JSON.parse(call[1].body).logs.map((log: any) => log.msg))).toEqual([
+        ['m0', 'm1'],
+        ['m2', 'm3'],
+        ['m4', 'm5'],
+        ['m6', 'm7'],
+      ]);
+      expect(callback).toHaveBeenCalledWith(null);
+      expect(guarded.getBufferedLogs()).toHaveLength(0);
+    });
+
+    it('stops draining on destroy when a request fails', async () => {
+      const capped = new HttpTransport({ ...outageOptions });
+      for (let i = 0; i < 4; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const callback = vi.fn();
+      capped._destroy(null as any, callback);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ message: 'endpoint down' }));
+      capped.clearBuffer();
     });
   });
 
