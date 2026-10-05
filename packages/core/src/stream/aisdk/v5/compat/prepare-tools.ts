@@ -237,7 +237,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
 
 /**
  * Serialize a tool set into `ModelToolDefinition[]` for the `tools` attribute
- * on MODEL_GENERATION spans, reusing the same conversion the provider request
+ * on MODEL_GENERATION and MODEL_INFERENCE spans, reusing the same conversion the provider request
  * goes through so exporters see the schemas the model actually received.
  *
  * Never throws — tracing must not break model execution. Returns undefined
