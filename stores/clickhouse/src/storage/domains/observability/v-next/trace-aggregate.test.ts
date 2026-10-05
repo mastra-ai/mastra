@@ -160,7 +160,9 @@ describe('ClickHouse trace aggregate compiler', () => {
 
     const usage = compiled.query.slice(compiled.query.indexOf('usage AS'), compiled.query.indexOf('facts AS'));
     expect(usage).toContain('FROM mastra_metric_events');
-    expect(usage).toContain('LIMIT 1 BY metricId');
+    expect(usage).toContain('argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest');
+    expect(usage).toContain('GROUP BY traceId, metricId');
+    expect(usage).not.toContain('LIMIT 1 BY');
     expect(usage).not.toContain('FINAL');
     expect(usage).toContain('traceId IN (SELECT traceId FROM candidates)');
     expect(usage).toMatch(/timestamp >= \{trace_query_\d+:DateTime64\(3, 'UTC'\)\}/);
