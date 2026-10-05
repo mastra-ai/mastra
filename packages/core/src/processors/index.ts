@@ -951,6 +951,11 @@ export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
 export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any> & {
   /** @internal Processors in a combined workflow that compute state signals after input-step execution. */
   __stateSignalProcessors?: Processor[];
+  /**
+   * @internal Processors in a combined workflow that implement `processAPIError`. The workflow
+   * itself has no error hook, so the runner calls these directly when an LLM API call fails.
+   */
+  __apiErrorProcessors?: Processor[];
   /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
   __processOutputStream?: boolean;
   /**

@@ -2042,6 +2042,7 @@ export class Agent<
     workflow.__setLogger(this.logger);
 
     const stateSignalProcessors: Processor[] = [];
+    const apiErrorProcessors: Processor[] = [];
     const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
@@ -2050,6 +2051,7 @@ export class Agent<
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
         stateSignalProcessors.push(...(processorOrWorkflow.__stateSignalProcessors ?? []));
+        apiErrorProcessors.push(...(processorOrWorkflow.__apiErrorProcessors ?? []));
       } else {
         // Set processorIndex on the processor for span attributes
         const processor = processorOrWorkflow as Processor;
@@ -2066,6 +2068,9 @@ export class Agent<
         }
         if (processor.computeStateSignal) {
           stateSignalProcessors.push(processor);
+        }
+        if (processor.processAPIError) {
+          apiErrorProcessors.push(processor);
         }
       }
       workflow = workflow.then(step);
@@ -2103,6 +2108,9 @@ export class Agent<
     }
     if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
+    }
+    if (apiErrorProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__apiErrorProcessors = apiErrorProcessors;
     }
 
     // The resulting workflow is compatible with both Input and Output processor types

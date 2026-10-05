@@ -11,7 +11,7 @@ The `CyberRefusalHandler` retries a step once when a provider's cybersecurity sa
 
 The handler covers two providers, which report refusals differently:
 
-- **OpenAI** fails the model call with a `cyber_policy` error ("This content was flagged for possible cybersecurity risk"). The handler matches the error code or the message, whether the refusal arrives as an HTTP error or as a failed stream. It's handled in `processAPIError`, which only runs for processors in `errorProcessors`.
+- **OpenAI** fails the model call with a `cyber_policy` error ("This content was flagged for possible cybersecurity risk"). The handler matches the error code or the message, whether the refusal arrives as an HTTP error or as a failed stream. It's handled in `processAPIError`.
 - **Anthropic** finishes the step with a `content-filter` finish reason and `stopDetails.category: 'cyber'` in the provider metadata. It's handled in `processOutputStep`, which runs for processors in `outputProcessors`. The refused step is rolled back, including any partial text, before the retry.
 
 ## How it works

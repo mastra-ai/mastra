@@ -2514,19 +2514,20 @@ export class ProcessorRunner {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
-    const allProcessors: ProcessorOrWorkflow[] = [
-      ...this.inputProcessors,
-      ...this.outputProcessors,
-      ...this.errorProcessors,
+    // Agents combine their input and output processors into one workflow each, which has no
+    // error hook of its own; reach the wrapped processors through the workflow instead. A
+    // processor registered in more than one lane runs once.
+    const allProcessors = [
+      ...new Set(
+        [...this.inputProcessors, ...this.outputProcessors, ...this.errorProcessors].flatMap(processorOrWorkflow =>
+          isProcessorWorkflow(processorOrWorkflow)
+            ? (processorOrWorkflow.__apiErrorProcessors ?? [])
+            : [processorOrWorkflow],
+        ),
+      ),
     ];
 
-    for (const [index, processorOrWorkflow] of allProcessors.entries()) {
-      // Skip workflows — processAPIError is only available on Processor instances
-      if (isProcessorWorkflow(processorOrWorkflow)) {
-        continue;
-      }
-
-      const processor = processorOrWorkflow;
+    for (const [index, processor] of allProcessors.entries()) {
       const processMethod = processor.processAPIError?.bind(processor);
 
       if (!processMethod) {

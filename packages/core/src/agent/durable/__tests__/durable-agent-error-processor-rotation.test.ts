@@ -88,6 +88,40 @@ describe('durable agent API-error retry', () => {
     expect(await run(true)).toEqual(expected);
   });
 
+  it('runs processAPIError on an input processor like Agent does', async () => {
+    const run = async (durable: boolean) => {
+      const processAPIError = vi.fn(async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount === 0 }));
+      const recovery: Processor = {
+        id: 'input-lane-recovery',
+        processInput: async ({ messages }) => messages,
+        processAPIError,
+      };
+      const agent = new Agent({
+        id: 'input-lane-api-error',
+        name: 'input-lane-api-error',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        inputProcessors: [recovery],
+      });
+      let text = '';
+      if (durable) {
+        const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+        const { fullStream, cleanup } = await durableAgent.stream('hello');
+        for await (const chunk of fullStream as AsyncIterable<any>) {
+          if (chunk.type === 'text-delta') text += chunk.payload?.text ?? '';
+        }
+        await cleanup?.();
+      } else {
+        text = await (await agent.stream('hello')).text;
+      }
+      return { calls: processAPIError.mock.calls.length, text };
+    };
+
+    const expected = await run(false);
+    expect(expected).toEqual({ calls: 1, text: 'the retried answer' });
+    expect(await run(true)).toEqual(expected);
+  });
+
   it('lets an error processor rotate the response id before the retry', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const memory = new MockMemory();
