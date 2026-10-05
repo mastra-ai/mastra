@@ -1,4 +1,3 @@
-import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';

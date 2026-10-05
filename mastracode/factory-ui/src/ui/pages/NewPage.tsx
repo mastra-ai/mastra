@@ -170,9 +170,9 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
       as="h2"
       iconSlot={<Bot />}
       titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
+      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Your models settings${orgHint}.`}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }

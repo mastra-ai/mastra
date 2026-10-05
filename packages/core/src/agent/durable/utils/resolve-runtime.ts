@@ -17,6 +17,7 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import type { ToolsInput } from '../../types';
 import { globalRunRegistry } from '../run-registry';
 import type {
   RunRegistryEntry,
@@ -232,6 +233,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         requestContext: resolveRequestContext,
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
+        clientTools: input.options?.clientTools as ToolsInput | undefined,
       });
 
       model =
@@ -433,6 +435,7 @@ export async function rebuildRunToolsFromMastra(options: {
       requestContext: resolveRequestContext,
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+      clientTools: execOptions?.clientTools as ToolsInput | undefined,
     });
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });

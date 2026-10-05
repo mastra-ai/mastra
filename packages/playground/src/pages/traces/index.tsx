@@ -542,7 +542,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             : undefined
         }
       />
-      <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />
+      <ScoreDataPanel
+        depth={isFullThreadOpen ? 3 : 2}
+        score={featuredScore}
+        onClose={() => url.handleScoreChange(null)}
+      />
 
       <TraceAsItemDialog
         rootSpanId={datasetDialogTarget?.rootSpanId}

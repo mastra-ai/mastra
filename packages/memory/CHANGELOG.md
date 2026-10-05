@@ -1,5 +1,45 @@
 # @mastra/memory
 
+## 1.36.0-alpha.2
+
+### Patch Changes
+
+- Fixed CPU usage that kept growing when observational memory was created per request. Apps that build a new `Memory` instance for each request no longer slow down over time on Node.js versions before 24. ([#25872](https://github.com/mastra-ai/mastra/pull/25872))
+
+- Fixed Observational Memory sending an oversized prompt when a large tool result pushed a step over the `messageTokens` threshold. Activating buffered observations could leave the newest messages unobserved and still above the threshold, and the next model call could exceed the model's context window (for example, failing with "prompt is too long"). Observational Memory now activates every buffered observation it needs, then observes any remaining messages synchronously when the context is still above the threshold. Fixes [#19767](https://github.com/mastra-ai/mastra/issues/19767). ([#25060](https://github.com/mastra-ai/mastra/pull/25060))
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+
+## 1.36.0-alpha.1
+
+### Minor Changes
+
+- `recall({ vectorSearchString })` and the message writes behind it now work against a vector store that generates embeddings itself, matching the agent-turn path. With such a store and no `embedder` configured, saved messages are sent as text and the search string is embedded server-side. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+  ```ts
+  const memory = new Memory({
+    storage,
+    vector: selfEmbeddingVector,
+    options: { semanticRecall: true },
+  });
+
+  await memory.saveMessages({ messages });
+
+  const { messages: recalled } = await memory.recall({
+    threadId,
+    resourceId,
+    vectorSearchString: 'project deadline',
+  });
+  ```
+
+  `cloneThread` and `updateThreadResourceId` reach the same path. A cloned thread's messages are embedded for semantic recall, and transferring a thread to another resource moves its message vectors to the new owner so resource-scoped recall keeps finding them.
+
+### Patch Changes
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e)]:
+  - @mastra/core@1.75.0-alpha.1
+
 ## 1.36.0-alpha.0
 
 ### Minor Changes

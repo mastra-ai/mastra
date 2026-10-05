@@ -94,7 +94,7 @@ export function ThreadViewByTrace({
     );
   }
 
-  if (!isReady) return <ThreadViewSkeleton />;
+  if (!isReady) return <ThreadViewSkeleton withFeedback={withFeedback} />;
 
   if (traceIds.length === 0) {
     return (

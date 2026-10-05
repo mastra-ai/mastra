@@ -615,7 +615,10 @@ export async function dev({
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    const forceExit = setTimeout(() => process.exit(0), 3000);
+    const forceExit = setTimeout(() => {
+      releaseDevLock(dotMastraPath);
+      process.exit(0);
+    }, 3000);
     forceExit.unref();
 
     devLogger.shutdown();

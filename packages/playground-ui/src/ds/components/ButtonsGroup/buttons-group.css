@@ -122,7 +122,7 @@
      hover and open together, and a grouped trigger reads like the same trigger standing
      alone. The inset also clips to the padding box, so the wash cannot composite through
      the translucent border and lighten it — which is the whole point. */
-  [data-slot='buttons-group'] > .shadow-raised {
+  [data-slot='buttons-group'] > :is(.shadow-raised, .shadow-input) {
     box-shadow: inset 0 0 0 9999px var(--surface-tint);
     border-width: 1px;
   }

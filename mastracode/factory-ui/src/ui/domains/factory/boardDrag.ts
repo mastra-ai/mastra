@@ -1,5 +1,6 @@
 import type { DragEvent } from 'react';
 
+import type { BoardCardOwner } from './boardCardState';
 import type { BoardCandidate } from './boardCandidates';
 import { SOURCE_LABELS } from './boardItems';
 import type { WorkItemSource } from './services/workItems';
@@ -8,7 +9,7 @@ import type { WorkItemSource } from './services/workItems';
 export const CARD_MIME = 'application/x-factory-card';
 
 export type DragPayload =
-  | { kind: 'work-item'; id: string; fromStage: string }
+  | { kind: 'work-item'; id: string; fromStage: string; ownerKind: BoardCardOwner['kind'] }
   | {
       kind: 'candidate';
       candidate: Pick<BoardCandidate, 'source' | 'sourceKey' | 'title' | 'url' | 'metadata'> & {
@@ -49,7 +50,8 @@ export function readDragPayload(event: DragEvent): DragPayload | undefined {
   if (!isRecord(parsed)) return;
   if (parsed.kind === 'work-item') {
     if (typeof parsed.id !== 'string' || typeof parsed.fromStage !== 'string') return;
-    return { kind: 'work-item', id: parsed.id, fromStage: parsed.fromStage };
+    if (!isOwnerKind(parsed.ownerKind)) return;
+    return { kind: 'work-item', id: parsed.id, fromStage: parsed.fromStage, ownerKind: parsed.ownerKind };
   }
   if (parsed.kind !== 'candidate' || !isRecord(parsed.candidate)) return;
   const candidate = parsed.candidate;
@@ -74,4 +76,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isWorkItemSource(value: unknown): value is WorkItemSource {
   return typeof value === 'string' && value in SOURCE_LABELS;
+}
+
+const OWNER_KINDS: Record<BoardCardOwner['kind'], true> = { free: true, you: true, automation: true, session: true };
+
+function isOwnerKind(value: unknown): value is BoardCardOwner['kind'] {
+  return typeof value === 'string' && Object.hasOwn(OWNER_KINDS, value);
 }

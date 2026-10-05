@@ -224,11 +224,15 @@ const asyncCleanup = (): Promise<void> => {
     threadScheduler?.stop();
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
-    const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
+    // The signals pubsub is Mastra's event bus: in-flight runs and background
+    // tasks drain through it during shutdown, so close it only afterwards. Call
+    // close() on the object; a detached method loses `this` and rejects silently.
+    const pubsubToClose = signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+    await Promise.allSettled([pubsubToClose?.close?.()]);
     // Checkpoint WAL and close the local storage connection after all producers
     // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
     // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
@@ -400,6 +404,16 @@ async function main() {
   if (process.argv[2] === 'prune') {
     const { runPruneCommand } = await import('@mastra/code-sdk/utils/prune-cli');
     return process.exit(await runPruneCommand(process.argv.slice(3)));
+  }
+
+  const loginIndex = process.argv.findIndex(
+    (arg, index) => index >= 2 && arg !== '--acp' && arg !== '--dangerous-auto-approve',
+  );
+  if (process.argv[loginIndex] === 'login') {
+    const { runLoginCommand } = await import('./login-command.js');
+    const code = await runLoginCommand({ args: process.argv.slice(loginIndex + 1) });
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(code);
   }
 
   const initialPrompt = takeInitialPrompt(process.argv, process.env);
