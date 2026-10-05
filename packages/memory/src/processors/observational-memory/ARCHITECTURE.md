@@ -333,7 +333,7 @@ Per adapter, the shared lifecycle tests and two-store races fail on the `main` a
 It also classifies every duplicate.
 
 - CI: 50 seeds on InMemory (`lifecycle-fuzz.test.ts`), 10 on a LibSQL file database (`integration-tests/src/om-lifecycle-fuzz-libsql.test.ts`, published build). `OM_FUZZ_SEEDS=<n>` / `OM_FUZZ_FIRST_SEED=<n>` run more seeds; `OM_FUZZ_REPORT_ONLY=1` reports without failing.
-- Results (`.mastracode/plans/om-lossless-lifecycle.proof/fuzz/`, summarized in `proof.md`), 500 InMemory seeds each: `main` fails 416 seeds, with 212 messages missing from the actor's view, 2056 coverage, 6909 stranded-chunk, 986 cursor-backward, 229 discarded-work, 690 covered-append-stored, and 187 unexplained-duplicate violations. D1 alone (no queue) and the full stack each fail 0 seeds. LibSQL file database, 100 seeds: 0 on D1 alone and 0 on the stack.
+- Results (`.mastracode/plans/om-lossless-lifecycle.proof/fuzz/`, summarized in `proof.md`), 500 InMemory seeds each: `main` fails 416 seeds, with 212 messages missing from the actor's view, 2056 coverage, 6909 stranded-chunk, 986 cursor-backward, 229 discarded-work, 690 covered-append-stored, and 187 unexplained-duplicate violations. D1 alone (no queue) and D1 + D2 each fail 0 seeds. LibSQL file database, 100 seeds: 0 on D1 alone and 0 on D1 + D2. PR 3 (#22078) is not fuzzed yet.
 - The fuzz found H4, H5, H6, and H8, which are fixed in PR 1.
 
 **Accepted duplication.** The fuzz requires every message at least once. It allows these duplicates and reports them separately:
