@@ -12,7 +12,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
@@ -21,7 +20,6 @@ import type { AvailableModelOption } from '../../../../../hooks/useAvailableMode
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
-import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 
 function titleCase(value: string): string {
@@ -71,7 +69,6 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
 export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
-  const { activeModeId } = useChatModes();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const modelsQuery = useAvailableModelsQuery();
   const [open, setOpen] = useState(false);
@@ -192,11 +189,6 @@ export function ModelPicker() {
               </CommandGroup>
             ) : null}
           </CommandList>
-          {activeModeId === 'build' || activeModeId === 'plan' || activeModeId === 'fast' ? (
-            <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
-              Model choices apply to {titleCase(activeModeId)} mode only.
-            </Txt>
-          ) : null}
         </Command>
       </PopoverContent>
     </Popover>

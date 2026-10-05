@@ -50,7 +50,6 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
     thread: {
       getId: () => 'session-1',
       getSetting: vi.fn().mockResolvedValue(undefined),
-      setSetting: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -64,14 +63,11 @@ function createDependencies(record: ModelDefaultRecord | null = modelDefault()):
 }
 
 describe('applyDefaultModel', () => {
-  it('sets every chat mode, the current model, and every subagent model', async () => {
+  it('sets the current model and every subagent model', async () => {
     const session = createSession();
 
     await applyDefaultModel(session, modelId);
 
-    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_build', value: modelId });
-    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_plan', value: modelId });
-    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_fast', value: modelId });
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
@@ -90,9 +86,22 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId });
   });
 
-  it('preserves manual thread model choices when the session is recreated', async () => {
+  it('preserves the current thread model when the session is recreated', async () => {
     const session = createSession();
-    vi.mocked(session.thread.getSetting!).mockImplementation(async ({ key }) =>
+    vi.mocked(session.thread.getSetting).mockImplementation(async ({ key }) =>
+      key === 'currentModelId' ? 'anthropic/claude-haiku-4-5' : undefined,
+    );
+    const dependencies = createDependencies();
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('preserves a legacy per-mode model when the session is recreated', async () => {
+    const session = createSession();
+    vi.mocked(session.thread.getSetting).mockImplementation(async ({ key }) =>
       key === 'modeModelId_build' ? 'anthropic/claude-haiku-4-5' : undefined,
     );
     const dependencies = createDependencies();
@@ -101,7 +110,6 @@ describe('hydrateSessionDefaultModel', () => {
 
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('does not apply a default when thread settings cannot be read', async () => {
@@ -148,7 +156,6 @@ describe('hydrateSessionDefaultModel', () => {
     await hydrateSessionDefaultModel(session, dependencies);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('swallows storage errors so session creation can continue', async () => {

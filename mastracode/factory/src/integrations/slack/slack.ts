@@ -526,8 +526,8 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  *
  * The model this session starts on is picked here, once, in the order of who
  * chose it: the linked sender's default model, else the factory project's
- * default, else the SDK's built-in mode default. The choice is persisted on the
- * thread as `modeModelId_<mode>`, so it outlives the process that made it.
+ * default, else the SDK's built-in model. The choice is persisted on the thread
+ * as `currentModelId`, so it outlives the process that made it.
  *
  * Observational memory is configured here too, in the same order of who chose
  * it: the project's shared settings first, then the linked sender's own row,
@@ -536,7 +536,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * made on this thread, and a restarted process re-resolves the project's row
  * before this hook runs.
  *
- * The model resolution is skipped on a session whose mode already has a model
+ * The model resolution is skipped on a session that already has a model
  * persisted on the thread. That is the durable record of a deliberate choice —
  * either an earlier start or a user's own switch — and re-applying a preference
  * over it would undo the user's selection every time the process restarts.
@@ -572,8 +572,12 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // recovery is the resolution that has to clear that marker with it.
     await seedSessionOrg(session, owner.orgId);
 
-    const modeModelKey = `modeModelId_${session.mode.get()}`;
-    const persistedModelId = await session.thread.getSetting({ key: modeModelKey });
+    const currentModelId = await session.thread.getSetting({ key: 'currentModelId' });
+    const legacyModeModelId =
+      typeof currentModelId === 'string'
+        ? undefined
+        : await session.thread.getSetting({ key: `modeModelId_${session.mode.get()}` });
+    const persistedModelId = typeof currentModelId === 'string' ? currentModelId : legacyModeModelId;
     if (typeof persistedModelId === 'string') {
       // A restarted session restores its generation model from the thread, but
       // still needs the project memory row and a provider-compatible fallback.
@@ -607,8 +611,8 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 
       if (selectedModelId && selectedModelId !== factoryModelId) {
         // The sender's own choice beats the factory's. `switch` applies the model
-        // and persists it as this mode's model on the thread in one step — which
-        // is what makes the choice outlive this process.
+        // and persists it as the thread's current model in one step — which is
+        // what makes the choice outlive this process.
         try {
           await session.model.switch({ modelId: selectedModelId });
         } catch (error) {
@@ -627,7 +631,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
           });
           if (currentModelId && !factoryModelId) {
             try {
-              await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+              await session.model.switch({ modelId: currentModelId });
             } catch (saveError) {
               console.warn("[slack] Failed to persist the sender's default model", {
                 modelId: currentModelId,
@@ -642,7 +646,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // that default must not silently retarget a thread that already started.
         const currentModelId = session.model.get();
         if (currentModelId) {
-          await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+          await session.model.switch({ modelId: currentModelId });
         }
       }
 

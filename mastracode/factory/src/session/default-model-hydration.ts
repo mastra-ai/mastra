@@ -5,26 +5,18 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 export interface DefaultModelApplicableSession {
   model: { switch(args: { modelId: string }): Promise<unknown> };
   subagents: { model: { set(args: { modelId: string; agentType: string }): Promise<unknown> } };
-  thread: {
-    getSetting?(args: { key: string }): Promise<unknown>;
-    setSetting(args: { key: string; value: unknown }): Promise<unknown>;
-  };
 }
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
   readonly identity: { getResourceId(): string };
   state: { get(): Record<string, unknown> | undefined };
-  thread: DefaultModelApplicableSession['thread'] & {
+  thread: {
     getId(): string | null | undefined;
     getSetting(args: { key: string }): Promise<unknown>;
   };
 }
 
 export async function applyDefaultModel(session: DefaultModelApplicableSession, modelId: string): Promise<void> {
-  for (const modeId of ['build', 'plan', 'fast']) {
-    await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
-  }
-
   await session.model.switch({ modelId });
 
   for (const agentType of ['explore', 'plan', 'execute']) {
@@ -63,6 +55,7 @@ export async function hydrateSessionDefaultModel(
       return;
     }
     const existingThreadSettings = await Promise.all([
+      session.thread.getSetting({ key: 'currentModelId' }),
       session.thread.getSetting({ key: 'modeModelId_build' }),
       session.thread.getSetting({ key: 'modeModelId_plan' }),
       session.thread.getSetting({ key: 'modeModelId_fast' }),

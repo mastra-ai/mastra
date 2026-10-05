@@ -407,7 +407,7 @@ describe('handler dispatch gating', () => {
     expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
-  it("rejects an existing Factory session when the responder is linked to another organization", async () => {
+  it('rejects an existing Factory session when the responder is linked to another organization', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-2', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
     const projects = makeProjects([{ id: 'fp-1' }]);
@@ -491,7 +491,9 @@ describe('handler dispatch gating', () => {
     const mastra = {
       getStorage: () => ({
         getStore: vi.fn().mockResolvedValue({
-          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+          listThreads: vi
+            .fn()
+            .mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
         }),
       }),
     };
@@ -1434,6 +1436,7 @@ describe('Slack thread work-item creation', () => {
  */
 describe('session start (onSessionStart)', () => {
   function makeSession({
+    persistedModel = null as string | null,
     persistedModeModel = null as string | null,
     mode = 'build',
     currentModel = 'openai/gpt-5.5',
@@ -1441,6 +1444,7 @@ describe('session start (onSessionStart)', () => {
     // map to a second session to stand in for a restarted process.
     settings = new Map<string, unknown>(),
   } = {}) {
+    if (persistedModel) settings.set('currentModelId', persistedModel);
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
       mode: { get: () => mode },
@@ -1453,12 +1457,9 @@ describe('session start (onSessionStart)', () => {
       model: {
         get: vi.fn(() => currentModel),
         // Real `switch` is what makes a model choice durable: it applies the
-        // model and writes it to the thread's per-mode setting.
+        // model and writes it to the thread's current model setting.
         switch: vi.fn(async ({ modelId }: { modelId: string }) => {
-          settings.set(`modeModelId_${mode}`, modelId);
-        }),
-        saveForMode: vi.fn(async ({ modeId, modelId }: { modeId: string; modelId: string }) => {
-          settings.set(`modeModelId_${modeId}`, modelId);
+          settings.set('currentModelId', modelId);
         }),
       },
       om: {
@@ -1468,7 +1469,7 @@ describe('session start (onSessionStart)', () => {
       state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
       subagents: { model: { set: vi.fn(async (_: { modelId: string; agentType?: string }) => {}) } },
       /** The model a restarted process would restore from the thread. */
-      restoredModel: () => settings.get(`modeModelId_${mode}`) ?? null,
+      restoredModel: () => settings.get('currentModelId') ?? settings.get(`modeModelId_${mode}`) ?? null,
     };
   }
 
@@ -1757,14 +1758,13 @@ describe('session start (onSessionStart)', () => {
   // The durable record of a deliberate choice: either an earlier start or the
   // user's own switch. Re-applying a preference over it would undo the user's
   // selection every time the process restarts or another message arrives.
-  it('leaves the model alone when its mode already has a model persisted on the thread', async () => {
+  it('leaves the model alone when the thread already has a current model persisted', async () => {
     const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
-    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+    const session = makeSession({ persistedModel: 'anthropic/claude-fable-5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.model.saveForMode).not.toHaveBeenCalled();
     // Nothing is re-resolved: the thread's model was decided when it started,
     // and a pack the user has since changed must not retarget it.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
@@ -1881,8 +1881,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.model.saveForMode).toHaveBeenCalledWith({ modeId: 'build', modelId: 'openai/gpt-5.5' });
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.5' });
     expect(session.restoredModel()).toBe('openai/gpt-5.5');
   });
 
@@ -1892,7 +1891,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.model.saveForMode).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe(null);
   });
 });

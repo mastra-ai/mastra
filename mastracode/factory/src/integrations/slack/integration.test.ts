@@ -151,7 +151,6 @@ describe('SlackIntegration.channels', () => {
       model: {
         get: vi.fn(() => 'openai/gpt-5.5'),
         switch: vi.fn(async () => {}),
-        saveForMode: vi.fn(async () => {}),
       },
       om: {
         observer: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
