@@ -1,5 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 interface TriggerScoreArgs {
   scorerName: string;
@@ -7,7 +9,11 @@ interface TriggerScoreArgs {
   spanId?: string;
 }
 
-export const useTriggerScorer = () => {
+type TriggerScorerResponse = Awaited<ReturnType<MastraClient['score']>>;
+
+export const useTriggerScorer = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<TriggerScorerResponse, TriggerScoreArgs> } = {}) => {
   const client = useMastraClient();
 
   return useMutation({
@@ -19,5 +25,6 @@ export const useTriggerScorer = () => {
 
       return response;
     },
+    ...queryOptions,
   });
 };

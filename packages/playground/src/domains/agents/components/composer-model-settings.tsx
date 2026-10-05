@@ -92,8 +92,16 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
 };
 
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { settings, setSettings, resetAll } = useAgentSettings();
   const { canEdit } = usePermissions();
   const [advancedOpen, setAdvancedOpen] = useState(false);

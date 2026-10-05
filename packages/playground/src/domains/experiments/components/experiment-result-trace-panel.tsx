@@ -24,7 +24,7 @@ export function ExperimentResultTracePanel({
   onSpanSelect,
   onClose,
 }: ExperimentResultTracePanelProps) {
-  const { data: traceData, isLoading } = useExperimentTrace(traceId);
+  const { data: traceData, isLoading } = useExperimentTrace({ traceId: traceId, queryOptions: { enabled: !!traceId } });
   const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
 
   const [searchPhrase, setSearchPhrase] = useState('');

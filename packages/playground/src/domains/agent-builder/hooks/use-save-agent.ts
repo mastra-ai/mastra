@@ -23,7 +23,7 @@ export function useSaveAgent({
   onSuccess,
   silent = false,
 }: UseSaveAgentArgs) {
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
   const defaultVisibility = useDefaultVisibility();
 
   const save = useCallback(

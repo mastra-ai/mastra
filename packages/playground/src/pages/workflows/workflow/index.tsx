@@ -86,7 +86,11 @@ export const Workflow = () => {
     data: workflow,
     isLoading,
     error,
-  } = useWorkflow(workflowId!, useEntityRequestContext('workflow', workflowId!)[0]);
+  } = useWorkflow({
+    workflowId: workflowId!,
+    requestContext: useEntityRequestContext('workflow', workflowId!)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;

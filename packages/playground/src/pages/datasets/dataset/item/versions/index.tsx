@@ -84,8 +84,15 @@ function DatasetItemVersionsComparePage() {
   const compareVersion = parseVersionParam(searchParams.get('compare'));
   const isDiffView = searchParams.get('view') === 'diff';
 
-  const { data: dataset, error } = useDataset(datasetId ?? '');
-  const { data: allVersions, isLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: dataset, error } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+  const { data: allVersions, isLoading } = useDatasetItemVersions({
+    datasetId: datasetId ?? '',
+    itemId: itemId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) },
+  });
 
   // URL is the source of truth; fall back to latest when absent or unknown.
   const leftVersion =
@@ -94,12 +101,13 @@ function DatasetItemVersionsComparePage() {
   const leftNumber = leftVersion?.datasetVersion ?? null;
   const rightNumber = compareVersion != null && compareVersion !== leftNumber ? compareVersion : null;
 
-  const { data: rightVersion, isLoading: isRightLoading } = useDatasetItemVersion(
-    datasetId ?? '',
-    itemId ?? '',
-    rightNumber ?? 0,
-    dataset?.version,
-  );
+  const { data: rightVersion, isLoading: isRightLoading } = useDatasetItemVersion({
+    datasetId: datasetId ?? '',
+    itemId: itemId ?? '',
+    datasetVersion: rightNumber ?? 0,
+    latestVersion: dataset?.version,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) && (rightNumber ?? 0) > 0 },
+  });
 
   const setParam = (key: 'version' | 'compare' | 'view', value: string | number | null) =>
     setSearchParams(

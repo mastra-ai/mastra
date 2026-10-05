@@ -32,7 +32,7 @@ export default function AgentBuilderSkillsPage() {
   const goToCreate = () => navigate('/agent-builder/skills/create', { viewTransition: true });
   const goToEdit = (skillId: string) => navigate(`/agent-builder/skills/${skillId}/edit`, { viewTransition: true });
 
-  const { data, isLoading, error } = useStoredSkills({ enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredSkills({ queryOptions: { enabled: !isCurrentUserLoading } });
   const [search, setSearch] = useState('');
 
   const skills = useMemo(() => data?.skills ?? [], [data?.skills]);

@@ -29,7 +29,12 @@ export type TraceScoresTabProps = {
  */
 export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTabProps) {
   const [page, setPage] = useState(0);
-  const { data: scoresData, isLoading } = useTraceSpanScores({ traceId, spanId, page });
+  const { data: scoresData, isLoading } = useTraceSpanScores({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
 
   if (isLoading) {
     return (

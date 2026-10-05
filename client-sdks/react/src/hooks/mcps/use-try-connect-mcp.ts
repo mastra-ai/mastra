@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 interface McpTool {
   name: string;
@@ -105,12 +106,15 @@ async function connectAndListTools(url: string, clientHeaders?: Record<string, s
   };
 }
 
-export const useTryConnectMcp = () => {
+export const useTryConnectMcp = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<TryConnectResult, string> } = {}) => {
   const client = useMastraClient();
   const clientHeaders = (client.options?.headers as Record<string, string>) ?? {};
 
   return useMutation({
     mutationFn: (url: string) => connectAndListTools(url, clientHeaders),
+    ...queryOptions,
   });
 };
 

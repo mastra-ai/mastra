@@ -80,7 +80,11 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   // `setQueriesData` when a browser_* tool transitions, so there's no
   // polling — the cache update flips `serverHasSession` to true the
   // instant the first browser tool call's status is known.
-  const { data: probe } = useBrowserSessionProbe({ agentId, threadId, enabled });
+  const { data: probe } = useBrowserSessionProbe({
+    agentId: agentId,
+    threadId: threadId,
+    queryOptions: { enabled: enabled && Boolean(agentId) },
+  });
   const screencastAvailable = probe?.screencastAvailable ?? false;
   const serverHasSession = probe?.hasSession ?? false;
 

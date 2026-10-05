@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 export type CredentialsSignUpRequest = {
   email: string;
@@ -92,7 +93,9 @@ export async function makeCredentialsSignUpRequest(
   return data;
 }
 
-export function useCredentialsSignUp() {
+export function useCredentialsSignUp({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<CredentialsSignUpResponse, CredentialsSignUpRequest> } = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -102,5 +105,6 @@ export function useCredentialsSignUp() {
       // Invalidate auth queries to refetch user state
       void queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
+    ...queryOptions,
   });
 }

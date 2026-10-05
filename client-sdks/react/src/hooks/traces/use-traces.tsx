@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useEffect, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { is403ForbiddenError } from '../query-utils';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 import type { TraceListMode } from './types';
 
@@ -322,6 +323,17 @@ export interface UseTracesArgs extends TracesFilters {
   /** Optional overrides for the live-tail polling tunables. Any omitted fields fall back to the
    *  built-in defaults; pass only what you want to change. */
   polling?: TracesPollingConfig;
+  /** TanStack overrides for each underlying query, spread last. The hook consumes each query's data internally, so `select` must keep the default shape. */
+  queryOptions?: {
+    traces?: MastraInfiniteQueryOptions<
+      TracesPageResponse,
+      ReturnType<typeof selectUniqueTraces>,
+      readonly ['traces', TraceListMode, TracesFilters['filters']],
+      number
+    >;
+    delta?: MastraQueryOptions<Awaited<ReturnType<typeof fetchTracesFn>> | null>;
+    statusRefresh?: MastraQueryOptions<Awaited<ReturnType<typeof fetchTracesFn>>>;
+  };
 }
 
 interface UseTracesReturn {
@@ -350,6 +362,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   listMode = 'traces',
   polling = {},
   enabled = true,
+  queryOptions,
 }: UseTracesArgs) => {
   const {
     deltaPollIntervalMs = DEFAULT_POLLING_CONFIG.deltaPollIntervalMs,
@@ -406,6 +419,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       if (!autoRefetch) return false;
       return deltaUnsupported ? pageModeRefetchIntervalMs : false;
     },
+    ...queryOptions?.traces,
   });
 
   const cursor = query.data?.deltaCursor;
@@ -442,6 +456,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       if (data?.delta?.hasMore) return deltaChaseIntervalMs;
       return deltaPollIntervalMs;
     },
+    ...queryOptions?.delta,
   });
 
   // Merge new delta rows into the infinite-query cache. Also captures the
@@ -506,6 +521,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
     refetchInterval: page0StatusRefreshIntervalMs,
     refetchOnMount: false,
     retry: false,
+    ...queryOptions?.statusRefresh,
   });
 
   useEffect(() => {

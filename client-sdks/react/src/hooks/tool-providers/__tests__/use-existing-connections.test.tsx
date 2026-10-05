@@ -39,9 +39,12 @@ describe('useExistingConnections — scopeToSelf', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
-        wrapper,
-      });
+      const { result } = renderHook(
+        () => useExistingConnections({ providerId: 'composio', toolkit: 'gmail', scopeToSelf: true }),
+        {
+          wrapper,
+        },
+      );
 
       await waitFor(() => expect(result.current.isPending).toBe(false));
       expect(result.current.data?.items).toHaveLength(1);
@@ -59,9 +62,12 @@ describe('useExistingConnections — scopeToSelf', () => {
       );
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
-        wrapper,
-      });
+      const { result } = renderHook(
+        () => useExistingConnections({ providerId: 'composio', toolkit: 'gmail', scopeToSelf: true }),
+        {
+          wrapper,
+        },
+      );
 
       await waitFor(() => expect(result.current.isPending).toBe(false));
       expect(result.current.data?.items).toHaveLength(1);
@@ -80,9 +86,12 @@ describe('useExistingConnections — scopeToSelf', () => {
       );
 
       const { wrapper, queryClient } = makeWrapper();
-      const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
-        wrapper,
-      });
+      const { result } = renderHook(
+        () => useExistingConnections({ providerId: 'composio', toolkit: 'gmail', scopeToSelf: true }),
+        {
+          wrapper,
+        },
+      );
 
       await waitForAuthError(queryClient);
 

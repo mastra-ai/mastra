@@ -16,7 +16,7 @@ export interface McpToolPlaygroundProps {
 
 /** The Playground for an MCP tool, with its app UI (when it ships one) and a note for suspended results. */
 export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
-  const { mutateAsync, data: result } = useExecuteMCPTool(serverId, tool.name);
+  const { mutateAsync, data: result } = useExecuteMCPTool({ serverId, toolId: tool.name });
   const { data: appHtml } = useMcpAppHtml(serverId, getAppResourceUri(tool._meta));
   const zodInputSchema = toZodInputSchema(tool.inputSchema);
   const execute: ExecuteTool = (data, requestContext) => mutateAsync({ data, requestContext });

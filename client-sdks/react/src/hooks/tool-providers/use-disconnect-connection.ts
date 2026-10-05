@@ -1,5 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 export interface DisconnectConnectionArgs {
   providerId: string;
@@ -15,7 +17,13 @@ export interface DisconnectConnectionArgs {
  * Calls the provider-side revoke (best-effort) and drops the local
  * `tool_integration_connections` row. Server enforces the soft-vs-force rule.
  */
-export const useDisconnectConnection = () => {
+type DisconnectConnectionResponse = Awaited<
+  ReturnType<ReturnType<MastraClient['getToolProvider']>['disconnectConnection']>
+>;
+
+export const useDisconnectConnection = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<DisconnectConnectionResponse, DisconnectConnectionArgs> } = {}) => {
   const client = useMastraClient();
   const qc = useQueryClient();
 
@@ -27,5 +35,6 @@ export const useDisconnectConnection = () => {
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({ queryKey: ['tool-integration-connections', vars.providerId] });
     },
+    ...queryOptions,
   });
 };

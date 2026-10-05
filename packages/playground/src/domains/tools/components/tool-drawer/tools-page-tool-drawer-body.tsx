@@ -8,7 +8,7 @@ export interface ToolsPageDrawerBodyProps {
 }
 
 export function ToolsPageDrawerBody({ toolId }: ToolsPageDrawerBodyProps) {
-  const { data: tool, isLoading } = useTool(toolId);
+  const { data: tool, isLoading } = useTool({ toolId });
   const { mutateAsync } = useExecuteTool();
   const execute: ExecuteTool = (data, requestContext) => mutateAsync({ toolId, input: data, requestContext });
 

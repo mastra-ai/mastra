@@ -10,7 +10,10 @@ export interface AgentToolDrawerBodyProps {
 }
 
 export function AgentToolDrawerBody({ agentId, toolId }: AgentToolDrawerBodyProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+  });
   const { mutateAsync } = useExecuteAgentTool();
   const tool = Object.values(agent?.tools ?? {}).find(candidate => candidate.id === toolId);
   // Run through the agent: agent-only tools aren't registered in the global tools API.

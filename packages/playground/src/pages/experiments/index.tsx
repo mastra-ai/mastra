@@ -72,7 +72,11 @@ export default function Experiments() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter, { targetType, targetId }, orderBy);
+  } = useInfiniteExperiments({
+    datasetId: datasetFilter === 'all' ? undefined : datasetFilter,
+    target: { targetType, targetId },
+    orderBy: orderBy,
+  });
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);

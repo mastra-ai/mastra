@@ -27,8 +27,8 @@ export default function IntegrationsPage() {
   const [label, setLabel] = useState<string>('');
 
   const providersQuery = useToolProviders();
-  const toolkitsQuery = useToolkits(providerId || null);
-  const connectionsQuery = useExistingConnections(providerId || null, toolkit || null);
+  const toolkitsQuery = useToolkits({ providerId: providerId || null, queryOptions: { enabled: !!providerId } });
+  const connectionsQuery = useExistingConnections({ providerId: providerId || null, toolkit: toolkit || null });
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
   const isAdmin = useIsToolProviderAdmin();

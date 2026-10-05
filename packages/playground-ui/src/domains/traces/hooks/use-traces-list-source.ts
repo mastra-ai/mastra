@@ -28,9 +28,11 @@ export function useTracesListSource({
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
+    queryOptions: {
+      traceQuery: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+      legacy: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+    },
     query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
-    refetchInterval: autoRefetch && !rolling ? 10_000 : false,
-    refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
     limit,

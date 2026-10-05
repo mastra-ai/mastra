@@ -12,7 +12,7 @@ export interface McpToolDrawerBodyProps {
 
 export function McpToolDrawerBody({ serverId, toolId }: McpToolDrawerBodyProps) {
   const { canExecute } = usePermissions();
-  const { data: tool, isLoading } = useMCPServerTool(serverId, toolId);
+  const { data: tool, isLoading } = useMCPServerTool({ serverId, toolId });
 
   if (isLoading) return <DataPanel.LoadingData />;
   if (!tool) return <DataPanel.NoData>This server has no tool "{toolId}".</DataPanel.NoData>;

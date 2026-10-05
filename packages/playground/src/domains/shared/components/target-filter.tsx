@@ -30,12 +30,14 @@ export interface TargetFilterProps {
  * Empty strings mean "no filter" so callers can map them directly to absent URL params.
  */
 export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTargetIdChange }: TargetFilterProps) {
-  const { data: agents, isLoading: agentsLoading } = useAgents({ enabled: targetType === 'agent' });
+  const { data: agents, isLoading: agentsLoading } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
-    enabled: targetType === 'workflow',
+    queryOptions: { enabled: targetType === 'workflow' },
   });
   const { data: scorers, isLoading: scorersLoading } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors, isLoading: processorsLoading } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors, isLoading: processorsLoading } = useProcessors({
+    queryOptions: { enabled: targetType === 'processor' },
+  });
 
   const entityOptions =
     targetType === 'agent'
