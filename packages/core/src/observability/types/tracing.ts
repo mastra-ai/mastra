@@ -1027,10 +1027,11 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 /**
  * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
  * when the run stops before the span's own result exists: a durable run
- * suspended, or the caller aborted.
+ * suspended, the caller aborted, or the process running a durable run stopped
+ * and the run was recovered elsewhere.
  */
 export interface InterruptedSpanOutput {
-  status: 'suspended' | 'aborted';
+  status: 'suspended' | 'aborted' | 'interrupted';
   /** Why the run stopped */
   reason?: string;
   /** Tool that suspended the run */
