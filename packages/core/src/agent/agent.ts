@@ -1869,11 +1869,33 @@ export class Agent<
     overrides?: ErrorProcessorOrWorkflow[];
     includeDefaults?: boolean;
   }): Promise<ErrorProcessorOrWorkflow[]> {
-    if (overrides) return overrides;
+    if (overrides) return this.#withMemoryErrorProcessors(overrides, requestContext);
 
     const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
     if (!includeDefaults) return configured ?? [];
-    return this.#withErrorProcessorDefaults(configured);
+    return this.#withMemoryErrorProcessors(this.#withErrorProcessorDefaults(configured), requestContext);
+  }
+
+  /**
+   * Appends the memory's error processors, like memory input and output processors are added
+   * ahead of configured ones. They go last so configured and default error processors get the
+   * first chance to handle an error, and they are kept when a call overrides `errorProcessors`.
+   */
+  async #withMemoryErrorProcessors(
+    resolved: ErrorProcessorOrWorkflow[],
+    requestContext: RequestContext,
+  ): Promise<ErrorProcessorOrWorkflow[]> {
+    const memory = await this.getMemory({ requestContext });
+    if (!memory) return resolved;
+
+    const resolvedIds = new Set(resolved.map(processor => processor.id));
+    // Optional so memory objects that predate this hook (or don't extend MastraMemory) still work.
+    const memoryProcessors = ((await memory.getErrorProcessors?.(resolved, requestContext)) ?? []).filter(
+      processor =>
+        !resolvedIds.has(processor.id) &&
+        !(this.#inheritedMemory(requestContext) && processor.id === 'observational-memory'),
+    );
+    return memoryProcessors.length > 0 ? [...resolved, ...memoryProcessors] : resolved;
   }
 
   async #resolveConfiguredErrorProcessors(
@@ -1919,8 +1941,9 @@ export class Agent<
   }
 
   /**
-   * Resolves a run's error processors once: the list the error lane runs (call-time `overrides`
-   * verbatim, otherwise the configured list merged with the defaults) and whether the caller
+   * Resolves a run's error processors once: the list the error lane runs (call-time `overrides`,
+   * otherwise the configured list merged with the defaults, plus the memory's error processors
+   * either way) and whether the caller
    * configured any themselves. A dynamic `errorProcessors` function is invoked at most once, so
    * the request lane, the error lane and the retry-cap warning all see the same instances.
    * @internal
@@ -1929,11 +1952,19 @@ export class Agent<
     requestContext: RequestContext,
     overrides?: ErrorProcessorOrWorkflow[],
   ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }> {
-    if (overrides) return { errorProcessors: overrides, hasConfiguredErrorProcessors: overrides.length > 0 };
+    if (overrides) {
+      return {
+        errorProcessors: await this.#withMemoryErrorProcessors(overrides, requestContext),
+        hasConfiguredErrorProcessors: overrides.length > 0,
+      };
+    }
 
     const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
     return {
-      errorProcessors: this.#withErrorProcessorDefaults(configured),
+      errorProcessors: await this.#withMemoryErrorProcessors(
+        this.#withErrorProcessorDefaults(configured),
+        requestContext,
+      ),
       hasConfiguredErrorProcessors: Boolean(configured?.some(processor => processor.id)),
     };
   }

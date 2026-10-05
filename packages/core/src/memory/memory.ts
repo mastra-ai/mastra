@@ -10,6 +10,8 @@ import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   OutputProcessor,
   InputProcessorOrWorkflow,
@@ -992,6 +994,21 @@ https://mastra.ai/en/docs/memory/overview`,
     // Return only the auto-generated processors (not the configured ones)
     // The agent will merge them with configuredProcessors
     return processors;
+  }
+
+  /**
+   * Get error processors for this memory instance.
+   * An agent appends these to its resolved `errorProcessors`, so memory can recover from failed
+   * model calls (for example, a request rejected for exceeding the context window) without the
+   * user registering a processor. They are kept when a call overrides `errorProcessors`.
+   * @param configuredProcessors - Error processors already resolved for the agent (for deduplication)
+   * @returns Error processors for this memory instance. The base implementation contributes none.
+   */
+  async getErrorProcessors(
+    _configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    _context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    return [];
   }
 
   /**

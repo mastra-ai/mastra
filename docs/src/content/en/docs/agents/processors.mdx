@@ -167,6 +167,8 @@ new Agent({
 
 An `errorProcessors` list passed to a single `generate()` or `stream()` call works differently: it replaces the agent's resolved list for that call, defaults included.
 
+An agent's memory can contribute error processors of its own, for example to recover when a request exceeds the model's context window. They run after the processors above and stay in place when a call passes its own `errorProcessors` list.
+
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 
 ```typescript
