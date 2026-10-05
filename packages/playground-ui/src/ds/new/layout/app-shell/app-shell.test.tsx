@@ -61,6 +61,10 @@ describe('AppShell', () => {
       expect(classes).not.toContain('lg:p-2');
     });
 
+    it('insets the sidebar from the top like the body, so its header lines up with the page header', () => {
+      expect(markup).toContain('lg:pt-[calc(--spacing(2)+1px)]');
+    });
+
     it('keeps the mobile header outside the inset body', () => {
       expect(markup.indexOf('Mobile header')).toBeLessThan(markup.indexOf('data-slot="app-shell-body"'));
     });
@@ -71,6 +75,7 @@ describe('AppShell', () => {
 
     it('does not reserve a sidebar column', () => {
       expect(markup).not.toContain('lg:grid-cols-');
+      expect(markup).not.toContain('data-slot="app-shell-sidebar"');
     });
 
     it('insets the body on all sides', () => {

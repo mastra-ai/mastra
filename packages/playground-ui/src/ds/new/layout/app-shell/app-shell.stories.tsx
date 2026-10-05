@@ -1,67 +1,37 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Boxes, Search, Settings, Workflow } from 'lucide-react';
+import { Bot, Search, Settings, Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
-import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
+import { LogoWithoutText } from '@/ds/components/Logo';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { SidebarNew } from '@/ds/new/sidebar';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
-function SidebarBrand() {
-  const { state, isMobile } = useMainSidebar();
-
-  if (state === 'collapsed') {
-    return (
-      <div className="flex justify-center pt-2">
-        <div className="relative grid size-9 place-items-center">
-          <Boxes
-            className={cn(
-              'size-5 shrink-0 transition-opacity duration-150',
-              !isMobile && 'group-hover/sidebar:opacity-0',
-            )}
-          />
-          {!isMobile && (
-            <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-              <MainSidebar.Trigger />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 px-3 py-2">
-      <Boxes className="size-5 shrink-0" />
-      <span className="text-subheading text-foreground">Workspace</span>
-      {!isMobile && <MainSidebar.Trigger />}
-    </div>
-  );
-}
-
 function Sidebar() {
   return (
-    <MainSidebar>
-      <SidebarBrand />
-      <MainSidebar.Nav>
-        <MainSidebar.NavSection>
-          <MainSidebar.NavList>
-            <MainSidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <Bot /> }} isActive />
-            <MainSidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
-          </MainSidebar.NavList>
-        </MainSidebar.NavSection>
-      </MainSidebar.Nav>
-      <MainSidebar.Bottom>
-        <MainSidebar.NavList>
-          <MainSidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <Settings /> }} />
-        </MainSidebar.NavList>
-      </MainSidebar.Bottom>
-    </MainSidebar>
+    <SidebarNew aria-label="Sidebar">
+      <SidebarNew.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+        <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Workspace" />
+        <SidebarNew.Trigger />
+      </SidebarNew.Header>
+      <SidebarNew.Nav>
+        <SidebarNew.NavList>
+          <SidebarNew.NavLink link={{ name: 'Agents', url: '#agents', icon: <Bot /> }} isActive />
+          <SidebarNew.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
+        </SidebarNew.NavList>
+      </SidebarNew.Nav>
+      <SidebarNew.Footer>
+        <SidebarNew.NavList>
+          <SidebarNew.NavLink link={{ name: 'Settings', url: '#settings', icon: <Settings /> }} />
+        </SidebarNew.NavList>
+      </SidebarNew.Footer>
+    </SidebarNew>
   );
 }
 
@@ -69,7 +39,7 @@ function MobileHeader() {
   return (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 lg:hidden">
       <span className="flex items-center gap-3">
-        <MainSidebar.MobileTrigger />
+        <SidebarNew.MobileTrigger />
         <span className="text-subheading text-foreground">Workspace</span>
       </span>
       <button type="button" aria-label="Search">
@@ -138,7 +108,7 @@ type Story = StoryObj<typeof meta>;
 export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
+      <SidebarNew.Provider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <MainCard>
@@ -146,7 +116,7 @@ export const StandardDesktop: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -154,7 +124,7 @@ export const StandardDesktop: Story = {
 export const CollapsedSidebar: Story = {
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider
+      <SidebarNew.Provider
         defaultState="collapsed"
         defaultWidth={240}
         minWidth={200}
@@ -169,7 +139,7 @@ export const CollapsedSidebar: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -178,7 +148,7 @@ export const Mobile: Story = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider>
+      <SidebarNew.Provider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <MainCard>
@@ -186,7 +156,7 @@ export const Mobile: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -194,7 +164,7 @@ export const Mobile: Story = {
 export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider>
+      <SidebarNew.Provider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <MainCard>
@@ -202,7 +172,7 @@ export const WithoutRouteHeader: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -218,7 +188,7 @@ export const WithFrameWrapper: Story = {
   },
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider>
+      <SidebarNew.Provider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <FrameWithPanel>
@@ -226,7 +196,7 @@ export const WithFrameWrapper: Story = {
             </FrameWithPanel>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -235,7 +205,7 @@ export const LightTheme: Story = {
   globals: { backgrounds: { value: 'light' } },
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider>
+      <SidebarNew.Provider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <MainCard>
@@ -243,7 +213,7 @@ export const LightTheme: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };
@@ -252,7 +222,7 @@ export const DarkTheme: Story = {
   globals: { backgrounds: { value: 'dark' } },
   render: () => (
     <TooltipProvider>
-      <MainSidebarProvider>
+      <SidebarNew.Provider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <MainCard>
@@ -260,7 +230,7 @@ export const DarkTheme: Story = {
             </MainCard>
           </AppShell>
         </div>
-      </MainSidebarProvider>
+      </SidebarNew.Provider>
     </TooltipProvider>
   ),
 };

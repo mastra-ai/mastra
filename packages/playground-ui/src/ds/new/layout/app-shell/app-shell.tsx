@@ -20,7 +20,12 @@ export function AppShell({ children, className, mobileHeader, ref, sidebar, ...p
       )}
       {...props}
     >
-      {sidebar}
+      {sidebar && (
+        // The body's top inset plus `MainCard`'s 1px rim, so the sidebar header lines up with the page header.
+        <div data-slot="app-shell-sidebar" className="contents lg:flex lg:min-h-0 lg:pt-[calc(--spacing(2)+1px)]">
+          {sidebar}
+        </div>
+      )}
       <div data-slot="app-shell-content" className="flex h-full min-h-0 min-w-0 flex-col">
         {mobileHeader}
         <div
