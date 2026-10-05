@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks/workflows';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod';

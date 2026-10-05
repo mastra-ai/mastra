@@ -5,7 +5,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useMCPServers } from '@mastra/react/hooks';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';

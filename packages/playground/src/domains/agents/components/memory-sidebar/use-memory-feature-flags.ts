@@ -1,5 +1,5 @@
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useMemoryConfig } from '@mastra/react/hooks';
+import { useMemoryConfig } from '@mastra/react/hooks/memory';
 import { getRecentMessagesSettings } from './lib/recent-messages';
 
 export interface MemoryFeatureFlags {

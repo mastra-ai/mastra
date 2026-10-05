@@ -6,5 +6,5 @@ export {
   useMemoryStatus,
   useMemoryThreadMessages,
   useObservationalMemory,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/memory';
 export type { MemoryThread, MemoryMessage, OMRecord, OMHistoryRecord } from './types';

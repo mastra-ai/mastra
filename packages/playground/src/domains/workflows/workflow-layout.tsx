@@ -10,7 +10,7 @@ import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/work
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';

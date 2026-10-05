@@ -6,5 +6,5 @@ export {
   useDatasets,
   useInfiniteDatasets,
   useDataset,
-} from '@mastra/react/hooks';
-export type { DatasetItemsOrderBy, DatasetTargetFilter, DatasetsOrderBy } from '@mastra/react/hooks';
+} from '@mastra/react/hooks/datasets';
+export type { DatasetItemsOrderBy, DatasetTargetFilter, DatasetsOrderBy } from '@mastra/react/hooks/datasets';

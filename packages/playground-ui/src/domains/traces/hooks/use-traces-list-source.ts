@@ -1,5 +1,5 @@
-import { useTraceQuery } from '@mastra/react/hooks';
-import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks';
+import { useTraceQuery } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useEffect, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
 

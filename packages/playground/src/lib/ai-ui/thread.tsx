@@ -27,7 +27,7 @@ import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
-import { useReadAloud } from '@mastra/react/hooks';
+import { useReadAloud } from '@mastra/react/hooks/voice';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
@@ -327,10 +327,7 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
         tone="muted"
         className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
       >
-        <span className="starter-shimmer">
-          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
-          do for you today?
-        </span>
+        What can <span className="font-medium text-foreground">{agentName || 'this agent'}</span> do for you today?
       </Txt>
     </div>
   );
@@ -427,7 +424,7 @@ const AgentComposer = ({
         </p>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-caption">
+        <p role="status" className="sr-only">
           Restoring draft…
         </p>
       )}
@@ -468,7 +465,7 @@ const AgentComposer = ({
               {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
                 <ComposerActionRow
-                  canExecute={canExecuteAgent && !draftStatus?.restoring}
+                  canExecute={canExecuteAgent}
                   agentId={agentId}
                   runOptionsSlot={runOptionsSlot}
                   showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}

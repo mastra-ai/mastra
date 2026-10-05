@@ -1,4 +1,4 @@
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query/query-utils';
 
 const FEEDBACK_REFETCH_INTERVAL_MS = 30_000;
 

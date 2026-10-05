@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useMCPServers } from '@mastra/react/hooks';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { MCPDetail } from '@/domains/mcps/components/MCPDetail';

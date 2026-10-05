@@ -3,7 +3,7 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { useScoresByExperimentId } from '@mastra/react/hooks';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';

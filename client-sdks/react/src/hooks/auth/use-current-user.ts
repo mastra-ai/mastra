@@ -31,7 +31,7 @@ export function isUnauthenticatedError(error: unknown): boolean {
  *
  * @example
  * ```tsx
- * import { useCurrentUser } from '@mastra/react/hooks';
+ * import { useCurrentUser } from '@mastra/react/hooks/auth';
  *
  * function UserMenu() {
  *   const { data: user, isLoading } = useCurrentUser();

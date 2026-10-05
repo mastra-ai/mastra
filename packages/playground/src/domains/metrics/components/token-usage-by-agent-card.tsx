@@ -4,7 +4,7 @@ import { TokenUsageByAgentCardView } from '@mastra/playground-ui/domains/metrics
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useTokenUsageByAgentMetrics } from '@mastra/react/hooks';
+import { useTokenUsageByAgentMetrics } from '@mastra/react/hooks/metrics';
 
 export function TokenUsageByAgentCard() {
   const { data, isLoading, isError } = useTokenUsageByAgentMetrics(useMetricsFilters());

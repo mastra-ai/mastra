@@ -1,4 +1,4 @@
-import { useMastraPackages } from '@mastra/react/hooks';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 
 export type EditorSource = 'code' | 'db';
 

@@ -8,7 +8,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks';
+import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks/scores';
 import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

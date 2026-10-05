@@ -22,7 +22,7 @@
  * ```
  */
 
-import { isAuthenticated, useAuthCapabilities } from '@mastra/react/hooks';
+import { isAuthenticated, useAuthCapabilities } from '@mastra/react/hooks/auth';
 import { useRoleImpersonation } from './use-role-impersonation';
 
 /**
