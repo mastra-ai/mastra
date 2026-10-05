@@ -1596,7 +1596,7 @@ describe('session start (onSessionStart)', () => {
     ]);
   });
 
-  it("derives observational memory from the sender's provider credentials", async () => {
+  it("keeps observational memory invocation-scoped when applying the sender's model", async () => {
     const deps = makeStartDeps({
       defaultModelId: 'openai/gpt-5.6',
       userDefaultModel: 'deepseek/deepseek-chat',
@@ -1605,14 +1605,12 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(session.model.switch).toHaveBeenLastCalledWith('deepseek/deepseek-chat');
   });
 
-  it('realigns observational memory when the sender model cannot be applied', async () => {
+  it('does not materialize observational memory when the sender model cannot be applied', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const deps = makeStartDeps({
       defaultModelId: 'anthropic/claude-opus-5',
@@ -1623,9 +1621,8 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's default model", {
       modelId: 'deepseek/deepseek-chat',
       error: 'missing credentials',

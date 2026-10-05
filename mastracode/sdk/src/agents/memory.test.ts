@@ -213,6 +213,7 @@ describe('getDynamicMemory', () => {
     expect(resolveModelMock).toHaveBeenLastCalledWith('openai/gpt-5.4-mini', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
   });
 
