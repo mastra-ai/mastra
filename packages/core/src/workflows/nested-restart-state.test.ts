@@ -151,4 +151,28 @@ describe('nested workflow restart state', () => {
       expect(result.result).toEqual({ log: ['parent', 'first', 'second'] });
     }
   });
+
+  it('gives each concurrent nested run its own parent state in the pending snapshot', async () => {
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const pending: WorkflowRunState[] = [];
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      if (args.workflowName === 'nested' && args.snapshot.status === 'pending') {
+        pending.push(JSON.parse(JSON.stringify(args.snapshot)));
+      }
+      return persist(args);
+    });
+    const { parent, nested } = build(async () => {});
+    new Mastra({ logger: false, storage, workflows: { parent, nested } });
+
+    const owners = ['a', 'b', 'c', 'd'];
+    const runs = await Promise.all(owners.map(() => parent.createRun()));
+    await Promise.all(runs.map((run, i) => run.start({ inputData: {}, initialState: { log: [owners[i]!] } })));
+
+    expect(pending.map(snapshot => ({ runId: snapshot.runId, log: snapshot.value.log }))).toEqual(
+      expect.arrayContaining(runs.map((run, i) => ({ runId: run.runId, log: [owners[i]] }))),
+    );
+    expect(pending).toHaveLength(owners.length);
+  });
 });
