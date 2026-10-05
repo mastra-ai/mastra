@@ -248,7 +248,7 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsCardGroup variant="plain">
+        <MetricsCardGroup>
           <AgentRunsKpiCard />
           <ModelCostKpiCard />
           <TotalTokensKpiCard />

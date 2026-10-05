@@ -9,12 +9,6 @@ const meta: Meta<typeof MetricsCardGroup> = {
   parameters: {
     layout: 'padded',
   },
-  args: {
-    variant: 'default',
-  },
-  argTypes: {
-    variant: { control: 'inline-radio', options: ['default', 'inset'] },
-  },
 };
 
 export default meta;
@@ -64,7 +58,6 @@ export const MixedStates: Story = {
         <MetricsKpiCard.Label icon={<HashIcon />}>Total Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2M</MetricsKpiCard.Value>
-          <MetricsKpiCard.NoChange />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
