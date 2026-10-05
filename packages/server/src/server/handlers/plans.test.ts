@@ -5,7 +5,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { submitPlanTool } from '@mastra/core/tools';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { READ_AGENT_PLAN_ROUTE } from './plans';
 import { createTestServerContext } from './test-utils';
@@ -28,7 +28,7 @@ async function createPlanAgent({ withSubmitPlan = true }: { withSubmitPlan?: boo
   });
   const mastra = new Mastra({ logger: false, agents: { planAgent: agent } });
 
-  return { filesystem, mastra };
+  return { agent, filesystem, mastra };
 }
 
 afterEach(async () => {
@@ -49,6 +49,24 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
       });
 
       expect(result).toEqual({ path, content: '# Add dark mode\n\nUse semantic tokens.' });
+    });
+
+    it('resolves the selected label instead of silently ignoring it', async () => {
+      const { agent, filesystem, mastra } = await createPlanAgent();
+      const path = '.mastracode/plans/labeled.md';
+      await filesystem.writeFile(path, '# Labeled plan', { recursive: true });
+      const applyStoredOverrides = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+      const result = await READ_AGENT_PLAN_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'plan-agent',
+        path,
+        label: 'candidate',
+      });
+
+      expect(result).toEqual({ path, content: '# Labeled plan' });
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, { label: 'candidate' }, expect.anything());
     });
   });
 

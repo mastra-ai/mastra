@@ -27,6 +27,14 @@ export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
 export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
 
 /**
+ * Trusted run-owned version state. These values are produced by the agent
+ * runtime and must never be accepted from a public RequestContext payload.
+ */
+export const MASTRA_AGENT_VERSION_PINS_KEY = 'mastra__agentVersionPins';
+
+export const MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY = 'mastra__agentVersionPinsDelegated';
+
+/**
  * Tracks which auth mode was used for the current request.
  * Set to 'studio' when studio auth was used, 'server' when server auth was used.
  * Used to determine which RBAC/FGA provider to use for permission checks.
@@ -67,6 +75,8 @@ const RESERVED_CONTEXT_KEYS = new Set([
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.
   'organizationId',
+  MASTRA_AGENT_VERSION_PINS_KEY,
+  MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
 ]);
 
 export function isReservedRequestContextKey(key: string): boolean {
