@@ -101,7 +101,15 @@ async function curateCommittedObservations(
     scopeIds = await resolveCuratorScope(memory, context);
     store = await memory.getKnowledgeStore();
 
-    const agent = await createCuratorAgent(memory, getCuratorMemory(), context, scopeIds, config, subconscious, omModel);
+    const agent = await createCuratorAgent(
+      memory,
+      getCuratorMemory(),
+      context,
+      scopeIds,
+      config,
+      subconscious,
+      omModel,
+    );
     const accepted = await dispatchCuratorObservation(agent, context, config, observations).accepted;
     if (accepted.action === 'wake') await accepted.output.consumeStream();
   } catch (error) {
@@ -161,17 +169,17 @@ async function reportCuratorError(
   }
 }
 
+function curatorScopeAddresses(context: CuratorContext): string[] {
+  const organizationId = context.requestContext?.get('organizationId');
+  if (typeof organizationId !== 'string' || !organizationId.trim()) return [];
+  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
+  return [`org:${organizationId}`, `resource:${resourceId}`, `resource:${resourceId}:thread:${context.threadId}`];
+}
+
 function createKnowledgeDescriptionInstructions(memory: Memory, context: CuratorContext): string | undefined {
   const knowledge = memory.getKnowledgeInstance?.();
-  if (!knowledge) return undefined;
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) return undefined;
-  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
-  const visibleScopeAddresses = [
-    `org:${organizationId}`,
-    `resource:${resourceId}`,
-    `resource:${resourceId}:thread:${context.threadId}`,
-  ];
+  const visibleScopeAddresses = curatorScopeAddresses(context);
+  if (!knowledge || visibleScopeAddresses.length === 0) return undefined;
 
   const descriptionContext = knowledge.__getDescriptionContext(visibleScopeAddresses);
   if (!descriptionContext || (!descriptionContext.description && descriptionContext.scopes.length === 0)) {
@@ -224,6 +232,7 @@ export async function createCuratorAgent(
       ...createKnowledgeTools(memory, scopeIds),
       ...createKnowledgeWriteTools(memory, {
         scopeIds,
+        scopeAddresses: curatorScopeAddresses(context),
         sourceThreadId: context.threadId,
       }),
       ...(subconscious.pins
