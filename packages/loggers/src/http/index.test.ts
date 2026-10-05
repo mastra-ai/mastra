@@ -285,6 +285,7 @@ describe('HttpTransport', () => {
       await expect(timeoutTransport._flush()).rejects.toThrow();
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
+      timeoutTransport.clearBuffer();
       timeoutTransport.destroy();
       vi.useFakeTimers();
     });
@@ -326,6 +327,25 @@ describe('HttpTransport', () => {
   });
 
   describe('cleanup and resource management', () => {
+    it('should flush every remaining batch before destroy completes', async () => {
+      const batchTransport = new HttpTransport({
+        ...defaultOptions,
+        batchSize: 2,
+      });
+      batchTransport['logBuffer'] = Array.from({ length: 5 }, (_, index) => ({ msg: `message${index + 1}` })) as any;
+
+      await new Promise<void>((resolve, reject) => {
+        batchTransport._destroy(null as any, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body).logs.length)).toEqual([2, 2, 1]);
+      expect(batchTransport.getBufferedLogs()).toEqual([]);
+    });
+
     it('should properly clean up resources on destroy', () => {
       const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
       const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
