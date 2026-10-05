@@ -6,7 +6,7 @@ import { Mastra } from '@mastra/core/mastra';
 
 import { channels } from '../../../src/channels.js';
 import type { ConnectionCredential, ProjectConnection, ResolvedClient } from '../../../src/client.js';
-import { getCredential, listProjectConnections, resolveClient } from '../../../src/client.js';
+import { getConnectionContext, getCredential, listProjectConnections, resolveClient } from '../../../src/client.js';
 import { MastraConnectError } from '../../../src/errors.js';
 import type { ScenarioStep } from '../scenario.js';
 import { makeStep } from '../scenario.js';
@@ -41,6 +41,8 @@ const PLATFORM_IDS: Record<ChannelId, string> = {
 function disableAllExcept(keep: ChannelId): Record<string, { disabled: true }> {
   return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, { disabled: true as const }]));
 }
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 export interface ChannelRunnerOptions {
   /** Only run checks for these channel ids. Omit to run every channel. */
@@ -287,6 +289,80 @@ async function resolverContractOutcome(
       steps.push(makeStep('resolver cache behavior', undefined, 'fail', errorMessage(error)));
     }
 
+    // --- concurrent resolution shares one inflight build --------------------
+    try {
+      resolver.invalidate();
+      const [a, b] = await Promise.all([resolver(), resolver()]);
+      steps.push(
+        a === b
+          ? makeStep('concurrent resolves share one inflight build', undefined, 'pass')
+          : makeStep(
+              'concurrent resolves share one inflight build',
+              undefined,
+              'fail',
+              'two concurrent resolutions produced different snapshots — the inflight gate did not dedupe',
+            ),
+      );
+      resolved = a;
+    } catch (error) {
+      steps.push(makeStep('concurrent resolves share one inflight build', undefined, 'fail', errorMessage(error)));
+    }
+
+    // --- stale TTL: serve cached snapshot, revalidate in background ---------
+    try {
+      const shortTtl = await channels({ projectId, client: clientOptions, ttlMs: 50 });
+      const first = await shortTtl();
+      await sleep(120);
+      // Past the TTL the resolver must answer immediately from the stale
+      // snapshot while a background refresh runs — not block the caller.
+      const staleServe = await shortTtl();
+      let revalidated = false;
+      for (let attempt = 0; attempt < 50 && !revalidated; attempt++) {
+        await sleep(100);
+        revalidated = (await shortTtl()) !== first;
+      }
+      steps.push(
+        staleServe === first && revalidated
+          ? makeStep('stale TTL serves cached snapshot + background revalidation lands', undefined, 'pass')
+          : makeStep(
+              'stale TTL serves cached snapshot + background revalidation lands',
+              undefined,
+              'fail',
+              staleServe !== first
+                ? 'stale resolution did not serve the cached snapshot (blocked on refetch instead)'
+                : 'background revalidation never replaced the stale snapshot',
+            ),
+      );
+    } catch (error) {
+      steps.push(
+        makeStep(
+          'stale TTL serves cached snapshot + background revalidation lands',
+          undefined,
+          'fail',
+          errorMessage(error),
+        ),
+      );
+    }
+
+    // --- disconnect() clears the cache without breaking the resolver --------
+    try {
+      await resolver.disconnect();
+      const after = await resolver();
+      steps.push(
+        after !== resolved && sameKeys(after, resolved)
+          ? makeStep('disconnect() clears cache; resolver stays usable', undefined, 'pass')
+          : makeStep(
+              'disconnect() clears cache; resolver stays usable',
+              undefined,
+              'fail',
+              after === resolved ? 'resolution still served the disconnected snapshot' : 'map keys changed',
+            ),
+      );
+      resolved = after;
+    } catch (error) {
+      steps.push(makeStep('disconnect() clears cache; resolver stays usable', undefined, 'fail', errorMessage(error)));
+    }
+
     // --- bogus connection pin ----------------------------------------------
     const pinnableId = [...activeByChannel.keys()][0];
     if (pinnableId) {
@@ -503,6 +579,26 @@ async function channelOutcome(
     steps.push(...(await verifyCredentialLive(id, credential)));
   }
 
+  // Connection context backs ChannelRuntime.getConnectionContext() — the
+  // metadata channel providers read (e.g. Discord's botToken). Prove the
+  // platform endpoint answers for this connection.
+  try {
+    const context = await getConnectionContext(client, connection.id);
+    const metadataKeys = Object.keys(context?.metadata ?? {});
+    steps.push(
+      context && typeof context === 'object'
+        ? makeStep(
+            'connection context fetch',
+            undefined,
+            'pass',
+            metadataKeys.length > 0 ? `metadata keys: ${metadataKeys.join(', ')}` : 'no metadata (empty context)',
+          )
+        : makeStep('connection context fetch', undefined, 'fail', 'context endpoint returned a non-object'),
+    );
+  } catch (error) {
+    steps.push(makeStep('connection context fetch', undefined, 'fail', errorMessage(error)));
+  }
+
   // Discord supports the complete flow without external listeners: register
   // the webhook (connect), deliver a signed interaction to the mounted route,
   // reject a forged one, and tear the installation down again.
@@ -568,6 +664,12 @@ async function discordWebhookFlow(
 
   let provider: InstallableProvider | undefined;
   let connected = false;
+  // Hoisted so the teardown block can replay the signed PING against the
+  // removed installation after disconnect.
+  let app: Awaited<ReturnType<typeof mountChannelRoutes>> | undefined;
+  let webhookId: string | undefined;
+  let pingHeaders: Record<string, string> | undefined;
+  let pingBody: string | undefined;
   try {
     const resolver = await channels({
       projectId,
@@ -578,7 +680,7 @@ async function discordWebhookFlow(
       },
     });
     const mastra = new Mastra({ channels: resolver, logger: false });
-    const app = await mountChannelRoutes(mastra);
+    app = await mountChannelRoutes(mastra);
     const resolved = await resolver();
     provider = resolved.discord as InstallableProvider | undefined;
     if (!provider) {
@@ -617,7 +719,7 @@ async function discordWebhookFlow(
     );
 
     const installation = await provider.getInstallation?.(SMOKE_AGENT_ID);
-    const webhookId = installation?.webhookId;
+    webhookId = installation?.webhookId;
     if (!webhookId) {
       steps.push(makeStep('webhook flow: installation webhookId', undefined, 'fail', 'no webhookId on installation'));
       return steps;
@@ -633,6 +735,8 @@ async function discordWebhookFlow(
       'x-signature-ed25519': signature,
       'x-signature-timestamp': timestamp,
     };
+    pingHeaders = headers;
+    pingBody = body;
 
     const pong = await app.request(`/discord/events/${webhookId}`, { method: 'POST', headers, body });
     const pongBody = (await pong.json().catch(() => undefined)) as { type?: number } | undefined;
@@ -659,6 +763,18 @@ async function discordWebhookFlow(
         ? makeStep('webhook flow: forged signature → 401', undefined, 'pass')
         : makeStep('webhook flow: forged signature → 401', undefined, 'fail', `status ${forged.status}`),
     );
+
+    // No signature headers at all → rejected on the same gate.
+    const unsigned = await app.request(`/discord/events/${webhookId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    steps.push(
+      unsigned.status === 401
+        ? makeStep('webhook flow: missing signature headers → 401', undefined, 'pass')
+        : makeStep('webhook flow: missing signature headers → 401', undefined, 'fail', `status ${unsigned.status}`),
+    );
   } catch (error) {
     steps.push(makeStep('webhook flow', undefined, 'fail', errorMessage(error)));
   } finally {
@@ -676,6 +792,48 @@ async function discordWebhookFlow(
                 'installation still present',
               ),
         );
+
+        // The old webhookId must be dead: a replay of the previously valid
+        // signed PING has to 404 now that the installation is gone.
+        if (app && webhookId && pingHeaders && pingBody) {
+          const replay = await app.request(`/discord/events/${webhookId}`, {
+            method: 'POST',
+            headers: pingHeaders,
+            body: pingBody,
+          });
+          steps.push(
+            replay.status === 404
+              ? makeStep('webhook flow: webhook dead after disconnect (replay → 404)', undefined, 'pass')
+              : makeStep(
+                  'webhook flow: webhook dead after disconnect (replay → 404)',
+                  undefined,
+                  'fail',
+                  `status ${replay.status}`,
+                ),
+          );
+        }
+
+        // The provider contract for disconnecting an already-disconnected
+        // agent is a clear "no installation" rejection — pin that so an
+        // accidental crash or silent partial delete would show up here.
+        try {
+          await provider.disconnect?.(SMOKE_AGENT_ID);
+          steps.push(
+            makeStep(
+              'webhook flow: second disconnect rejects cleanly',
+              undefined,
+              'fail',
+              'second disconnect resolved — expected a "no installation" rejection per the provider contract',
+            ),
+          );
+        } catch (error) {
+          const message = errorMessage(error);
+          steps.push(
+            /no .*installation/i.test(message)
+              ? makeStep('webhook flow: second disconnect rejects cleanly', undefined, 'pass')
+              : makeStep('webhook flow: second disconnect rejects cleanly', undefined, 'fail', message),
+          );
+        }
       } catch (error) {
         steps.push(makeStep('webhook flow: disconnect removes installation', undefined, 'fail', errorMessage(error)));
       }
@@ -744,6 +902,32 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
     // registration already did this.
     provider.__attach?.(mastra);
     provider.setBaseUrl?.('http://127.0.0.1:4111');
+
+    // Garbage on the public routes must degrade gracefully (controlled 4xx,
+    // never a 2xx or an unhandled 500). These are the endpoints Slack itself
+    // calls, so they are reachable by anyone who knows the server's address.
+    const app = await mountChannelRoutes(mastra);
+    const bareCallback = await app.request('/slack/oauth/callback');
+    steps.push(
+      bareCallback.status === 400
+        ? makeStep('oauth callback without state → 400', undefined, 'pass')
+        : makeStep('oauth callback without state → 400', undefined, 'fail', `status ${bareCallback.status}`),
+    );
+    const bogusCommand = await app.request('/slack/commands/mastra-smoke-unknown-webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'command=%2Fmastra&text=smoke',
+    });
+    steps.push(
+      bogusCommand.status >= 400 && bogusCommand.status < 500
+        ? makeStep('commands route rejects unknown webhook', undefined, 'pass', `status ${bogusCommand.status}`)
+        : makeStep(
+            'commands route rejects unknown webhook',
+            undefined,
+            'fail',
+            `expected a controlled 4xx, got ${bogusCommand.status}`,
+          ),
+    );
 
     if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
       steps.push(
@@ -816,6 +1000,27 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
               )
             : makeStep('manifest flow: disconnect deletes minted app', undefined, 'fail', 'installation still present'),
         );
+
+        // Same contract as Discord: a second disconnect rejects with a clear
+        // "no installation" error rather than crashing or re-deleting.
+        try {
+          await provider.disconnect?.(SMOKE_AGENT_ID);
+          steps.push(
+            makeStep(
+              'manifest flow: second disconnect rejects cleanly',
+              undefined,
+              'fail',
+              'second disconnect resolved — expected a "no installation" rejection per the provider contract',
+            ),
+          );
+        } catch (error) {
+          const message = errorMessage(error);
+          steps.push(
+            /no .*installation/i.test(message)
+              ? makeStep('manifest flow: second disconnect rejects cleanly', undefined, 'pass')
+              : makeStep('manifest flow: second disconnect rejects cleanly', undefined, 'fail', message),
+          );
+        }
       } catch (error) {
         steps.push(
           makeStep(
