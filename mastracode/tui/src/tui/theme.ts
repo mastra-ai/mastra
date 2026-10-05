@@ -249,7 +249,9 @@ export function surfaceShade(step: number): string {
   if (currentThemeMode === 'light') {
     out = [r!, g!, b!].map(c => c * (1 - f));
   } else if (lum < 10) {
-    out = [f * 255, f * 255, f * 255];
+    // A fixed lift per step: proportional lifts (#080808, #111111) barely separate from pure black.
+    const lift = Math.min(255, step * 18);
+    out = [lift, lift, lift];
   } else {
     const ratio = (lum + (255 - lum) * f) / lum;
     out = [r!, g!, b!].map(c => Math.min(255, c * ratio));
