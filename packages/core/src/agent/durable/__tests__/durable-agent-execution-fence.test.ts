@@ -1073,11 +1073,20 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         await foreignOwnership(backend, storage, durableAgent.pubsub).vanish(fence);
         await expect(fence.verify()).rejects.toBeInstanceOf(DurableExecutionFenceError);
 
+        const publish = vi.spyOn(pubsub, 'publish');
         const endLostExecution = async () => {
           originalCall.open();
           await fence.whenSettled;
-          // Let the lost execution's run finish on the thread, then its caller cleans up.
-          await new Promise(resolve => setTimeout(resolve, 50));
+          // Before any recovery, the lost execution reports the lost lease, which
+          // ends its run on the thread. After the recovery claimed the run, it is
+          // superseded and ends without a word. Then its caller cleans up.
+          if (recoveryStarts === 'after') {
+            await vi.waitFor(() =>
+              expect(
+                publish.mock.calls.some(([, event]) => event.type === 'run-completed' && event.runId === runId),
+              ).toBe(true),
+            );
+          }
           await stream.stop();
           result.cleanup();
         };

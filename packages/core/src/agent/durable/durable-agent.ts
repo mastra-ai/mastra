@@ -3068,6 +3068,13 @@ export class DurableAgent<
    * process is already driving or recovering, or one that is suspended, is
    * refused with its own error id (use `resume()` for suspended runs).
    *
+   * When the store doesn't fence runs, an execution whose lease lapsed with
+   * nobody taking the run over keeps the thread's lease until that expires,
+   * up to 15 seconds later. Until then this throws `DURABLE_AGENT_RUN_ACTIVE`
+   * with `retryAt` no earlier than the expiry. The lease can't be released
+   * sooner: an execution that recovers the run in the same process holds it
+   * under the same run id.
+   *
    * @example
    * ```typescript
    * const { fullStream, output, cleanup } = await durableAgent.recover(runId, {
