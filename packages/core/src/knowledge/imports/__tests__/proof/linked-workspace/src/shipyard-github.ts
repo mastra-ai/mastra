@@ -9,6 +9,8 @@ import { Memory } from '@mastra/memory';
 
 const repository = 'mastra-ai/mastra';
 const githubSource = `github:${repository}`;
+// Importer addresses carry the repository so same-numbered items in other repositories never collide (C06).
+const itemAddress = (kind: 'issue' | 'pr' | 'source', id: string | number) => `${repository}:${kind}:${id}`;
 const agentSource = `github:${repository}:merged-pr`;
 const repoBinding = { source: githubSource, scope: 'repo:mastra' } as const;
 const featureBinding = { source: agentSource, scope: 'feature:knowledge' } as const;
@@ -163,18 +165,18 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
       {
         id: 'github-static',
         access: { 'repo:$repo': 'owner' },
-        handler: async (context: KnowledgeImporterHandlerContext<StaticPayload>) => {
+        handler: async (context: KnowledgeImporterHandlerContext<unknown>) => {
           const payload = context.payload as StaticPayload;
           const importer = await context.importer();
           const entries = [
             {
-              address: `issue:${payload.issue.number}`,
+              address: itemAddress('issue', payload.issue.number),
               name: payload.issue.title,
               text: `Issue #${payload.issue.number}: ${compact(payload.issue.body, 1_500) || payload.issue.title}`,
               metadata: { type: 'issue', url: payload.issue.html_url, updatedAt: payload.issue.updated_at },
             },
             {
-              address: `pr:${payload.pull.number}`,
+              address: itemAddress('pr', payload.pull.number),
               name: payload.pull.title,
               text: `Merged PR #${payload.pull.number}: ${compact(payload.pull.body, 1_500) || payload.pull.title}`,
               metadata: {
@@ -185,7 +187,7 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
               },
             },
             ...payload.files.map((file, index) => ({
-              address: `source:${file.filename}`,
+              address: itemAddress('source', file.filename),
               name: file.filename,
               text:
                 index === 0
@@ -295,7 +297,7 @@ try {
     await knowledge.getStorage()
   ).getNodeAddress({
     source: githubSource,
-    address: `pr:${sourceWindow.pull.number}`,
+    address: itemAddress('pr', sourceWindow.pull.number),
   });
   invariant(preRestartAddress, 'Interrupted static GitHub run did not commit source evidence');
   await knowledge.shutdownImporters();
@@ -316,7 +318,7 @@ try {
     await knowledge.getStorage()
   ).getNodeAddress({
     source: githubSource,
-    address: `pr:${sourceWindow.pull.number}`,
+    address: itemAddress('pr', sourceWindow.pull.number),
   });
   invariant(replayAddress?.nodeId === preRestartAddress.nodeId, 'Static GitHub replay changed the PR node identity');
   const repoScopeId = reconciled.scopes[repoBinding.scope]!;
@@ -324,14 +326,16 @@ try {
     await knowledge.getStorage()
   ).getNodeAddress({
     source: githubSource,
-    address: `issue:${sourceWindow.issue.number}`,
+    address: itemAddress('issue', sourceWindow.issue.number),
   });
   invariant(issueAddress, 'Static GitHub replay did not retain the issue-view node');
   const sourceAddresses = await Promise.all(
     sourceWindow.files.map(file =>
       knowledge!
         .getStorage()
-        .then(storage => storage.getNodeAddress({ source: githubSource, address: `source:${file.filename}` })),
+        .then(storage =>
+          storage.getNodeAddress({ source: githubSource, address: itemAddress('source', file.filename) }),
+        ),
     ),
   );
   invariant(sourceAddresses.every(Boolean), 'Static GitHub replay did not retain every bounded source-file node');
