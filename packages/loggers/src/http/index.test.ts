@@ -427,18 +427,39 @@ describe('HttpTransport', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
+      // A successful request immediately sends the next full batch that queued up behind it.
       resolveRequest({ ok: true });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(guarded.getBufferedLogs()).toHaveLength(4);
-
-      const next = guarded._flush();
       await vi.advanceTimersByTimeAsync(0);
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      resolveRequest({ ok: true });
-      await next;
       expect(guarded.getBufferedLogs()).toHaveLength(2);
-      guarded.clearBuffer();
+
+      resolveRequest({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      resolveRequest({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(guarded.getBufferedLogs()).toHaveLength(0);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
       guarded.destroy();
+    });
+
+    it('waits for the next interval instead of retrying straight away after a failed flush', async () => {
+      const capped = new HttpTransport({ ...outageOptions });
+      for (let i = 0; i < 4; i++) {
+        capped._transform({ msg: `m${i}` } as any, 'utf8', () => {});
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(capped.getBufferedLogs()).toHaveLength(4);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
+    it.each([Number.POSITIVE_INFINITY, 2.5, -1])('rejects batchSize %s', batchSize => {
+      expect(() => new HttpTransport({ ...outageOptions, batchSize })).toThrow(
+        'HttpTransport batchSize must be a positive integer',
+      );
     });
 
     it.each([Number.NaN, Number.POSITIVE_INFINITY, 2.5, 0, -1])('rejects maxBufferSize %s', maxBufferSize => {

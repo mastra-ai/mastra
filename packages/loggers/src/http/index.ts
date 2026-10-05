@@ -55,6 +55,10 @@ export class HttpTransport extends LoggerTransport {
       exponentialBackoff: options.retryOptions?.exponentialBackoff ?? true,
     };
 
+    if (!Number.isInteger(this.batchSize) || this.batchSize < 1) {
+      throw new Error('HttpTransport batchSize must be a positive integer');
+    }
+
     const maxBufferSize = options.maxBufferSize ?? 10_000;
     if (!Number.isInteger(maxBufferSize) || maxBufferSize < 1) {
       throw new Error('HttpTransport maxBufferSize must be a positive integer');
@@ -132,10 +136,23 @@ export class HttpTransport extends LoggerTransport {
       return Promise.resolve();
     }
 
-    this.flushPromise = this.flushBatch().finally(() => {
+    const flush = this.flushBatch().finally(() => {
       this.flushPromise = null;
     });
-    return this.flushPromise;
+    this.flushPromise = flush;
+    // Writes that filled a batch while this request was in flight only got this promise back, so send them now.
+    // On failure, wait for the next interval instead of retrying straight away.
+    flush.then(
+      () => {
+        if (this.logBuffer.length >= this.batchSize) {
+          this._flush().catch(err => {
+            console.error('Error flushing logs to HTTP endpoint:', err);
+          });
+        }
+      },
+      () => {},
+    );
+    return flush;
   }
 
   private async flushBatch(): Promise<void> {
