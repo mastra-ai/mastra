@@ -80,8 +80,8 @@ import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
-import { getSchemaSnapshot } from '../../db/schema-snapshot';
 import { toPgJson } from '../../db/sanitize-json';
+import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
 const loadKnowledgeV2Core = createKnowledgeV2CoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
