@@ -21,7 +21,7 @@ export function ImpersonationBanner() {
       <button
         type="button"
         onClick={stopImpersonation}
-        className="ml-auto shrink-0 rounded p-0.5 text-info-subtle-foreground hover:bg-info-indicator/20"
+        className="ml-auto shrink-0 rounded p-0.5 text-info-subtle-foreground hover:bg-info-edge"
         title="Exit role preview"
       >
         <X className="h-3 w-3" />
