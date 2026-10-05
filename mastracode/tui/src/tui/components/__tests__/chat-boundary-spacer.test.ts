@@ -204,8 +204,9 @@ describe('ChatBoundarySpacer', () => {
     plan.updateArgs({ path: '.mastracode/plans/test-plan.md' });
     const lines = renderSequence([quietTool('view'), plan]);
 
-    expect(lines.join('\n')).toContain('Plan: Untitled plan');
-    expect(lines.join('\n')).toContain('.mastracode/plans/test-plan.md');
+    const visible = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(visible.join('\n')).toContain('Plan: Untitled plan');
+    expect(visible.join('\n')).toContain('.mastracode/plans/test-plan.md');
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
   it('leaves Thinking out of the chat and groups described shell calls into one box in quiet mode', () => {
