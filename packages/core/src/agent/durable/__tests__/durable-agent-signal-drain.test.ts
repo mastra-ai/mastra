@@ -19,10 +19,13 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import type { CreatedAgentSignal } from '../../signals';
 import { createSignal } from '../../signals';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 
 // ----------------------------------------------------------------------------
@@ -399,5 +402,66 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
         expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('forced continuation signal');
       },
     );
+  });
+});
+
+// The evented engine hands the loop predicate the iteration body's result state;
+// a transcript the predicate rewrites there must reach the next iteration.
+describe('EventedAgent inter-iteration signal drain', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('carries a signal drained by the loop predicate into the next model call', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const model = makeToolThenStopModel();
+    const agent = new Agent({
+      id: 'evented-inter-iter-drain-agent',
+      name: 'evented-inter-iter-drain-agent',
+      instructions: 'You are helpful.',
+      model,
+      tools: {
+        myTool: {
+          description: 'A tool',
+          parameters: z.object({ x: z.number() }),
+          execute: async ({ x }: { x: number }) => `result-${x}`,
+        },
+      },
+    });
+    const eventedAgent = createEventedAgent({ agent, pubsub });
+    new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+      agents: { 'evented-inter-iter-drain-agent': eventedAgent as any },
+    });
+
+    const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+    let drainCallCount = 0;
+    let installedDrain = false;
+    vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+      const entry = originalGet(runId);
+      if (entry && !installedDrain) {
+        installedDrain = true;
+        const originalDrain = entry.drainPendingSignals;
+        entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+          // The second pending drain is the loop predicate's, after the first iteration.
+          if ((scope ?? 'pending') === 'pending' && ++drainCallCount === 2) {
+            return [createTestSignal('inter-iter signal')];
+          }
+          return originalDrain?.(scope) ?? [];
+        };
+      }
+      return entry;
+    });
+
+    const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+    for await (const _chunk of fullStream) {
+      // drain
+    }
+    cleanup?.();
+
+    expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+    await pubsub.close();
   });
 });
