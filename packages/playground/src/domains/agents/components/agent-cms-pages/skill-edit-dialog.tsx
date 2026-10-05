@@ -9,6 +9,8 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useAuthCapabilities } from '@mastra/react/hooks/auth';
+import { useWorkspaceInfo, useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import {
   AlertTriangle,
   ChevronDown,
@@ -37,10 +39,7 @@ import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useWorkspaceInfo } from '@/domains/workspace/hooks';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 type DialogMode = 'simple' | 'advanced';
 
@@ -99,7 +98,10 @@ export function SkillEditDialog({
         .map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
-  const { data: workspaceInfo } = useWorkspaceInfo(workspaceId || undefined);
+  const { data: workspaceInfo } = useWorkspaceInfo({
+    workspaceId: workspaceId || undefined,
+    queryOptions: { enabled: !!workspaceId },
+  });
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
 
   const builderDefaultWorkspaceId = useMemo(() => {

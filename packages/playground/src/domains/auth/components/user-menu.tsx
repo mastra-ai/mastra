@@ -1,14 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { Loader2, Settings, X, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { useAuthCapabilities, useLogout } from '../hooks';
+import { useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
-import { isAuthenticated } from '../types';
-import type { AuthenticatedUser, CurrentUser } from '../types';
 import { UserAvatar } from './user-avatar';
 
 export type UserMenuProps = {
@@ -109,7 +109,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           {logoutError && (
-            <p role="alert" className="text-ui-sm">
+            <p role="alert" className="text-caption">
               {logoutError.message}
             </p>
           )}

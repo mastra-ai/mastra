@@ -14,9 +14,11 @@ import {
   parseQueryThreadsInput,
   parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planSpanQuery,
   planThreadQuery,
   planTraceAggregate,
   planTraceQuery,
+  TraceStatus,
 } from '@mastra/core/storage';
 import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -136,6 +138,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'delta-polling',
         'trace-query',
         'trace-aggregate',
+        'span-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -157,6 +160,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        'span-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -193,6 +197,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'delta-polling',
         'trace-query',
         'trace-aggregate',
+        'span-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -213,6 +218,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        'span-query',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -974,7 +980,10 @@ describe('ObservabilityStorageDuckDB', () => {
       // end row and the SPAN_STARTED start row carry the payload; the SPAN_ENDED start row does not.
       expect(payloadCols(spanRows[0]!).every(v => v != null)).toBe(true);
       expect(payloadCols(spanRows[1]!).every(v => v != null)).toBe(true);
-      expect(payloadCols(spanRows[2]!).every(v => v == null)).toBe(true);
+      // Missing large payloads are stored as the JSON `null` placeholder, not SQL NULL.
+      const unset = spanRows[2]!;
+      expect([unset.input, unset.attributes, unset.requestContext]).toEqual(['null', 'null', 'null']);
+      expect(unset.metadata).toBeNull();
       const eventRows = rows.filter(r => r.spanId === 'span-event');
       expect(eventRows).toHaveLength(1);
       expect(payloadCols(eventRows[0]!).every(v => v != null)).toBe(true);
@@ -3314,6 +3323,265 @@ describe('ObservabilityStorageDuckDB', () => {
   // post-agg set has its columns wired up in POSTAGG_FILTER_COLUMNS and that
   // page rows still carry full span payloads.
   // ==========================================================================
+
+  describe('page reconstruction bounds', () => {
+    // Pages are reconstructed only within the time range of their own events.
+    // These spans end long after newer traces start, so a range taken from
+    // the page's start times alone would drop their end events.
+    const at = (time: string) => new Date(`2026-03-01T${time}Z`);
+    const span = (
+      traceId: string,
+      spanId: string,
+      parentSpanId: string | null,
+      startedAt: string,
+      endedAt: string,
+    ) => ({
+      traceId,
+      spanId,
+      parentSpanId,
+      name: spanId,
+      spanType: parentSpanId ? SpanType.TOOL_CALL : SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: parentSpanId ? EntityType.TOOL : EntityType.AGENT,
+      entityId: spanId,
+      entityName: spanId,
+      userId: null,
+      organizationId: null,
+      resourceId: null,
+      runId: null,
+      sessionId: null,
+      threadId: null,
+      requestId: null,
+      environment: null,
+      source: null,
+      serviceName: null,
+      scope: null,
+      attributes: null,
+      metadata: null,
+      tags: null,
+      links: null,
+      input: { from: spanId },
+      output: { done: spanId },
+      error: null,
+      startedAt: at(startedAt),
+      endedAt: at(endedAt),
+    });
+
+    beforeEach(async () => {
+      await storage.batchCreateSpans({
+        records: [
+          // Oldest trace: root and a tool call that both end after the newer traces.
+          span('trace-long', 'root-long', null, '10:00:00', '15:00:00'),
+          span('trace-long', 'tool-long', 'root-long', '10:05:00', '14:00:00'),
+          span('trace-mid', 'root-mid', null, '11:00:00', '11:01:00'),
+          span('trace-new', 'root-new', null, '12:00:00', '12:01:00'),
+        ],
+      });
+    });
+
+    it('listTraces returns complete spans on the oldest page (fast path)', async () => {
+      const result = await storage.listTraces({
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 2 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long', 'trace-mid']);
+      const long = result.spans[0]!;
+      expect(long.endedAt).toEqual(at('15:00:00'));
+      expect(long.output).toEqual({ done: 'root-long' });
+    });
+
+    it('listTraces returns complete spans on the oldest page (post-aggregation path)', async () => {
+      const result = await storage.listTraces({
+        filters: { status: TraceStatus.SUCCESS },
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 1 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long']);
+      expect(result.spans[0]!.endedAt).toEqual(at('15:00:00'));
+      expect(result.spans[0]!.output).toEqual({ done: 'root-long' });
+    });
+
+    it('listTracesLight returns complete spans on a startedAt-bounded page', async () => {
+      const result = await storage.listTracesLight({
+        filters: { startedAt: { end: at('10:30:00') } },
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long']);
+      expect(result.spans[0]!.endedAt).toEqual(at('15:00:00'));
+    });
+
+    it('listBranches returns complete spans on the oldest page', async () => {
+      const result = await storage.listBranches({
+        filters: { spanType: SpanType.TOOL_CALL },
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 1 },
+      });
+      expect(result.branches.map(b => b.spanId)).toEqual(['tool-long']);
+      expect(result.branches[0]!.endedAt).toEqual(at('14:00:00'));
+      expect(result.branches[0]!.output).toEqual({ done: 'tool-long' });
+    });
+
+    it('queryTraces keeps root events that fall after the time range', async () => {
+      const plan = planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: { from: at('09:00:00').toISOString(), to: at('10:30:00').toISOString() },
+          where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'tool-long' } } } },
+          page: { limit: 10 },
+        }),
+      );
+      const result = await storage.queryTraces(plan);
+      expect(result.traces.map(t => t.traceId)).toEqual(['trace-long']);
+      expect(new Date(result.traces[0]!.endedAt as string)).toEqual(at('15:00:00'));
+    });
+  });
+
+  describe('span payload placeholders', () => {
+    // Missing large payloads are stored as the JSON `null` placeholder so the
+    // columns stay NULL-free (see SPAN_PAYLOAD_COLUMNS); reads must still
+    // report them as missing.
+    const startedAt = new Date('2026-04-01T12:00:00Z');
+    const endedAt = new Date('2026-04-01T12:00:01Z');
+    const bare = (traceId: string, spanId: string, parentSpanId: string | null = null) => ({
+      traceId,
+      spanId,
+      parentSpanId,
+      name: spanId,
+      spanType: parentSpanId ? SpanType.TOOL_CALL : SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityId: 'agent-bare',
+      entityName: 'Bare Agent',
+      userId: null,
+      organizationId: null,
+      resourceId: null,
+      runId: null,
+      sessionId: null,
+      threadId: null,
+      requestId: null,
+      environment: null,
+      source: null,
+      serviceName: null,
+      scope: null,
+      attributes: null,
+      metadata: null,
+      tags: null,
+      links: null,
+      input: null,
+      output: null,
+      error: null,
+      requestContext: null,
+      startedAt,
+      endedAt,
+    });
+    const missingPayload = { attributes: null, input: null, output: null, requestContext: null };
+
+    it('reads the placeholder as a missing payload on every read path', async () => {
+      const root = bare('trace-bare', 'root-bare');
+      const child = bare('trace-bare', 'child-bare', 'root-bare');
+      // Start and end written separately, as a live span would be.
+      await storage.batchCreateSpans({
+        records: [
+          { ...root, endedAt: null },
+          { ...child, endedAt: null },
+        ],
+      });
+      await storage.batchCreateSpans({ records: [root, child] });
+
+      const stored = await store.db.query<{ n: number }>(
+        `SELECT count(*)::INTEGER AS n FROM span_events WHERE input IS NULL OR output IS NULL OR attributes IS NULL OR requestContext IS NULL`,
+      );
+      expect(stored[0]!.n).toBe(0);
+
+      expect((await storage.getSpan({ traceId: 'trace-bare', spanId: 'root-bare' }))!.span).toMatchObject(
+        missingPayload,
+      );
+      const trace = (await storage.getTrace({ traceId: 'trace-bare' }))!;
+      expect(trace.spans).toHaveLength(2);
+      for (const span of trace.spans) expect(span).toMatchObject(missingPayload);
+
+      const listed = await storage.listTraces({ filters: { entityId: 'agent-bare' } });
+      expect(listed.spans).toHaveLength(1);
+      expect(listed.spans[0]).toMatchObject(missingPayload);
+      const light = await storage.listTracesLight({ filters: { entityId: 'agent-bare' } });
+      expect(light.spans[0]!.inputPreview).toBeUndefined();
+
+      const queried = await storage.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-02T00:00:00Z' },
+            page: { limit: 10 },
+          }),
+        ),
+      );
+      expect(queried.traces.map(t => t.traceId)).toEqual(['trace-bare']);
+      expect(queried.traces[0]!.inputPreview).toBeNull();
+
+      const spans = await storage.querySpans(
+        planSpanQuery({ timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-02T00:00:00Z' } }),
+      );
+      expect(spans.spans.map(s => s.spanId).sort()).toEqual(['child-bare', 'root-bare']);
+      for (const span of spans.spans) {
+        expect(span.inputPreview ?? null).toBeNull();
+        expect(span.outputPreview ?? null).toBeNull();
+      }
+    });
+
+    it('keeps real JSON values that look like the placeholder', async () => {
+      await storage.batchCreateSpans({
+        records: [{ ...bare('trace-literal', 'root-literal'), input: 'null' as never, output: { value: null } }],
+      });
+      const span = (await storage.getSpan({ traceId: 'trace-literal', spanId: 'root-literal' }))!.span;
+      expect(span.input).toBe('null');
+      expect(span.output).toEqual({ value: null });
+    });
+
+    it('still reads payloads written as SQL NULL by earlier versions', async () => {
+      // Rows as older versions wrote them: SQL NULL for missing payloads, with
+      // the full payload only on the end row.
+      await store.db.execute(`
+        INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt, input, output, attributes, requestContext)
+        VALUES
+          ('start', '2026-04-01T12:00:00'::TIMESTAMP, nextval('span_events_cursor_id_seq'), 'trace-legacy', 'root-legacy', 'root', 'agent_run', false, NULL, NULL, NULL, NULL, NULL),
+          ('end', '2026-04-01T12:00:01'::TIMESTAMP, nextval('span_events_cursor_id_seq'), 'trace-legacy', 'root-legacy', 'root', 'agent_run', false, '2026-04-01T12:00:01'::TIMESTAMP, '{"q":1}', NULL, NULL, NULL)
+      `);
+      const span = (await storage.getSpan({ traceId: 'trace-legacy', spanId: 'root-legacy' }))!.span;
+      expect(span).toMatchObject({ input: { q: 1 }, output: null, attributes: null, requestContext: null });
+    });
+
+    it('stores payload columns with a constant validity mask on disk', async () => {
+      // Guards the point of the placeholder: with no NULLs, DuckDB stores the
+      // validity mask as a constant, which keeps selective reads of large
+      // strings selective. In-memory databases are not compressed, so this
+      // needs a file.
+      const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-payload-validity-'));
+      const db = new DuckDBConnection({ path: join(dir, 'observability.duckdb') });
+      try {
+        const fileStorage = new ConcreteObservabilityStorageDuckDB({ db });
+        await fileStorage.init();
+        await fileStorage.batchCreateSpans({
+          records: Array.from({ length: 50 }, (_, i) => ({
+            ...bare(`trace-${i}`, `span-${i}`),
+            input: i % 2 === 0 ? { big: 'x'.repeat(20_000) } : null,
+          })),
+        });
+        await db.execute('CHECKPOINT');
+        const validity = await db.query<{ column_name: string; compression: string }>(
+          `SELECT DISTINCT column_name, compression FROM pragma_storage_info('span_events')
+           WHERE segment_type = 'VALIDITY' AND column_name IN ('attributes', 'input', 'output', 'requestContext')
+           ORDER BY column_name`,
+        );
+        expect(validity).toEqual([
+          { column_name: 'attributes', compression: 'Constant' },
+          { column_name: 'input', compression: 'Constant' },
+          { column_name: 'output', compression: 'Constant' },
+          { column_name: 'requestContext', compression: 'Constant' },
+        ]);
+      } finally {
+        await db.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
 
   describe('slow-path trace listing', () => {
     const slowBase = {

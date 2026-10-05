@@ -157,7 +157,7 @@ type InputShared_Auxiliary_254 =
           };
     };
 
-type InputShared_Auxiliary_675 =
+type InputShared_Auxiliary_679 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,27 +202,27 @@ type InputShared_Auxiliary_675 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_675[];
+      args: InputShared_Auxiliary_679[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_675;
+      arg: InputShared_Auxiliary_679;
     };
 
-type InputShared_Auxiliary_749 = {
+type InputShared_Auxiliary_753 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_749[] | undefined;
+  children?: InputShared_Auxiliary_753[] | undefined;
 };
 
-type Shared_Auxiliary_758 = {
+type Shared_Auxiliary_764 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_758[] | undefined;
+  children?: Shared_Auxiliary_764[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1774,7 +1774,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_675[];
+  predicates: InputShared_Auxiliary_679[];
 };
 
 type InputShared_Type_89 = {
@@ -1788,7 +1788,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_675;
+  predicate: InputShared_Auxiliary_679;
 };
 
 type InputShared_Type_90 =
@@ -3670,6 +3670,8 @@ type Shared_Type_67 = {
   traceQueryTenantScope: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Span queries (POST /observability/spans/query) */
+  spanQuery: boolean;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4179,7 +4181,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_758[] | undefined;
+  files?: Shared_Auxiliary_764[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4475,7 +4477,7 @@ type Shared_Type_97 = {
   prompt: string;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -4527,7 +4529,7 @@ type Shared_Type_99 = {
   agentId?: undefined | undefined;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -10469,6 +10471,84 @@ export interface PostObservabilityThreadsQuery_RouteContract {
   body: PostObservabilityThreadsQuery_Body;
   request: PostObservabilityThreadsQuery_Request;
   response: PostObservabilityThreadsQuery_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/spans/query
+// ============================================================================
+export type PostObservabilitySpansQuery_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  where?: InputShared_Auxiliary_223 | undefined;
+  orderBy?: {
+    field: 'startedAt' | 'endedAt';
+    direction: 'asc' | 'desc';
+  }[];
+  page?: {
+    limit?: number;
+    after?: string | undefined;
+  };
+};
+
+export type PostObservabilitySpansQuery_Response = {
+  spans: {
+    organizationId: string | null;
+    resourceId: string | null;
+    traceId: string;
+    spanId: string;
+    parentSpanId: string | null;
+    name: string;
+    spanType: string;
+    status: 'success' | 'error';
+    startedAt: string;
+    endedAt: string;
+    durationMs: number;
+    entityType: string | null;
+    entityId: string | null;
+    entityName: string | null;
+    model: string | null;
+    provider: string | null;
+    inputPreview: string | null;
+    inputTruncated: boolean;
+    outputPreview: string | null;
+    outputTruncated: boolean;
+    cost:
+      | {
+          state: 'available';
+          amount: number;
+          currency: string;
+        }
+      | {
+          state: 'missing';
+        }
+      | {
+          state: 'unavailable';
+        };
+  }[];
+  page: {
+    next: string | null;
+  };
+};
+
+export type PostObservabilitySpansQuery_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilitySpansQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilitySpansQuery_Body
+        ? { body?: PostObservabilitySpansQuery_Body }
+        : { body: PostObservabilitySpansQuery_Body })
+>;
+
+export interface PostObservabilitySpansQuery_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilitySpansQuery_Body;
+  request: PostObservabilitySpansQuery_Request;
+  response: PostObservabilitySpansQuery_Response;
   responseType: 'json';
 }
 
@@ -18297,7 +18377,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_749[] | undefined;
+  files?: InputShared_Auxiliary_753[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18355,7 +18435,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_749[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_753[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21768,7 +21848,7 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
 export type GetSchedules_QueryParams = {
   agentId?: string | undefined;
   workflowId?: string | undefined;
-  status?: ('active' | 'paused') | undefined;
+  status?: ('active' | 'paused' | 'completed') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   name?: string | undefined;
@@ -23918,6 +23998,7 @@ export interface RouteTypes {
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
   'POST /observability/traces/aggregate': PostObservabilityTracesAggregate_RouteContract;
   'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
+  'POST /observability/spans/query': PostObservabilitySpansQuery_RouteContract;
   'POST /observability/traces/query/fields': PostObservabilityTracesQueryFields_RouteContract;
   'POST /observability/traces/query/values': PostObservabilityTracesQueryValues_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
@@ -24854,6 +24935,9 @@ export interface Client {
   };
   '/observability/scores/timeseries': {
     POST: PostObservabilityScoresTimeseries_RouteContract;
+  };
+  '/observability/spans/query': {
+    POST: PostObservabilitySpansQuery_RouteContract;
   };
   '/observability/threads/query': {
     POST: PostObservabilityThreadsQuery_RouteContract;

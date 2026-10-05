@@ -1,9 +1,9 @@
+import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '@mastra/react/hooks/metrics';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
-import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '../hooks/use-token-usage-timeseries';
 import { CHART_COLORS } from './metrics-utils';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 

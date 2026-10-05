@@ -2,9 +2,9 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useEffect } from 'react';
 
 export interface DatasetComboboxProps {

@@ -9,11 +9,11 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
+import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 
 const formatTokens = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -313,12 +313,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: configData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
     resourceId,
     threadId,
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Crashed operations can leave stale server flags.
@@ -337,12 +342,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
 
-  const { data: omData, isLoading: isOMLoading } = useObservationalMemory({
-    agentId,
-    resourceId,
-    threadId,
-    enabled: Boolean(statusData?.observationalMemory?.enabled),
+  const { data: omData, isLoading: isOMLoading } = useObservationalMemoryWithHistory({
+    agentId: agentId,
+    resourceId: resourceId,
+    threadId: threadId,
     isActive: isOMActive,
+    queryOptions: {
+      enabled:
+        Boolean(statusData?.observationalMemory?.enabled) &&
+        Boolean(agentId) &&
+        (Boolean(resourceId) || Boolean(threadId)),
+    },
   });
 
   const isLoading = isStatusLoading || isOMLoading;

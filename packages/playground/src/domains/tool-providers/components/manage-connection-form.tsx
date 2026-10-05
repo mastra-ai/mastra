@@ -8,10 +8,10 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDisconnectConnection } from '@mastra/react/hooks/tool-providers';
 import { ChevronLeft, Link2, Unplug } from 'lucide-react';
 import { useState } from 'react';
 
-import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
 import { titleize } from './titleize';
 import { useDebouncedConnectionRename } from './use-debounced-connection-rename';
 

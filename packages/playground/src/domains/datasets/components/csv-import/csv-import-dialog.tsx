@@ -14,8 +14,8 @@ import {
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset } from '@mastra/react/hooks/datasets';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -63,7 +63,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   const { parseFile, isParsing, error: parseError } = useCSVParser();
   const { batchInsertItems } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const columnMapping = useColumnMapping(parsedCSV?.headers ?? []);
 

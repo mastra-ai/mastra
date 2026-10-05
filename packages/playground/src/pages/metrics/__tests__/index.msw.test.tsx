@@ -158,7 +158,7 @@ describe('Metrics storage support', () => {
       await act(() => queryClient.invalidateQueries({ queryKey: ['mastra-packages'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByText('Agent runs')).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -195,7 +195,28 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByText('Agent runs')).toBeTruthy();
+    });
+  });
+
+  describe('when a KPI changed from the previous window', () => {
+    it.each([
+      ['/metrics', 'vs previous 24h'],
+      ['/metrics?period=7d', 'vs previous 7d'],
+      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-06T00:00:00Z', 'vs previous 5d'],
+      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-01T06:00:00Z', 'vs previous 6h'],
+    ])('names the previous window on %s', async (path, comparison) => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(supportedStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () =>
+          HttpResponse.json({ value: 120, previousValue: 100, changePercent: 20 }),
+        ),
+      );
+
+      renderPage(path);
+
+      expect((await screen.findAllByText(`+20% ${comparison} (100)`)).length).toBeGreaterThan(0);
     });
   });
 });

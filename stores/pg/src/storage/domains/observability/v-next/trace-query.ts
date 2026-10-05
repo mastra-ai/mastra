@@ -1093,3 +1093,8 @@ export async function queryThreads(
     },
   });
 }
+
+/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  return compileScalarPredicate(predicate, SPAN_FIELDS, offset);
+}

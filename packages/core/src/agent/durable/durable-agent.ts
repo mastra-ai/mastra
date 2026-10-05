@@ -2364,6 +2364,7 @@ export class DurableAgent<
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      processorStates: registryEntry.processorStates,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -2821,6 +2822,7 @@ export class DurableAgent<
       closeOnSuspend: false,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
+      processorStates: entry.processorStates,
       requestContext: resolvedOptions.requestContext,
       // Caller option wins, then the flag persisted at prepare time. Only fall
       // back to resolvedOptions (which merges agent defaultOptions) last, so a
@@ -3456,6 +3458,7 @@ export class DurableAgent<
       closeOnSuspend: true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      processorStates: registryEntry.processorStates,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -3850,6 +3853,14 @@ export class DurableAgent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       idleTimeoutMs?: number;
       isAlive?: () => boolean | Promise<boolean>;
@@ -3943,6 +3954,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      processorStates: this.#runRegistry.get(runId)?.processorStates,
       returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import type { LatencyPoint } from '@mastra/react/hooks/metrics';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { LatencyPoint } from '../hooks/use-latency-metrics';
 import { LatencyCardView } from './latency-card-view';
 
 const agentPoint: LatencyPoint = {

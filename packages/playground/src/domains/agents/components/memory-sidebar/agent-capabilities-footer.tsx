@@ -6,14 +6,13 @@ import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
+import { useMemory } from '@mastra/react/hooks/memory';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 
@@ -138,7 +137,11 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
 // Each capability component owns its data and loading state; React Query
 // dedupes the underlying requests across instances — see client-request-dedupe.
 function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: memory, isLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory, isLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const enabled = hasConfiguredMemory(memory);
 
   const settledStatus = enabled ? (memory?.memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off';
@@ -163,14 +166,18 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function EditorCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading: isAgentLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const enabled = isEditorAvailable(agent, isCmsAvailable);
   const locked = agent?.editor === false;
   const versionsQuery = useAgentVersions({
-    agentId,
+    agentId: agentId,
     params: { orderBy: { field: 'createdAt', direction: 'DESC' } },
-    enabled,
+    queryOptions: { enabled: Boolean(agentId) && enabled },
   });
   const versionCount = versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
   const isLoading = isAgentLoading || isCmsAvailabilityLoading || (enabled && versionsQuery.isLoading);
@@ -199,7 +206,11 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.tools);
 
   return (
@@ -217,7 +228,11 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.workflows);
 
   return (
@@ -237,7 +252,11 @@ function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.agents);
 
   return (
@@ -259,7 +278,11 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getProcessorCount(agent);
 
   return (
@@ -281,8 +304,16 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function CapabilitiesSummary({ agentId }: { agentId: string }) {
-  const { data: memory } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable } = useIsCmsAvailable();
 
   const enabledFlags = [
@@ -307,7 +338,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="shrink-0 border-t border-border/50">
+      <div className="shrink-0 border-t border-border">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"

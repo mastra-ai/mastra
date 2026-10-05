@@ -6,8 +6,6 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../pro
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalProviderTarget = {
   threadId: string;
@@ -20,8 +18,6 @@ export type SignalProviderTarget = {
 /**
  * A subscription that links an agent thread to an external resource
  * monitored by a signal provider.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalSubscription = {
   /** Unique identifier for the subscription */
@@ -42,8 +38,6 @@ export type SignalSubscription = {
 
 /**
  * Options for the handleWebhook method.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalProviderWebhookRequest = {
   body: unknown;
@@ -99,8 +93,6 @@ export type SignalProviderWebhookRequest = {
  *   }
  * }
  * ```
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export abstract class SignalProvider<TId extends string = string> {
   abstract readonly id: TId;
@@ -479,8 +471,6 @@ export abstract class SignalProvider<TId extends string = string> {
 
 /**
  * Type guard to check if an object is a SignalProvider.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isSignalProvider(obj: unknown): obj is SignalProvider {
   return obj instanceof SignalProvider;

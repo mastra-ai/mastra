@@ -1,15 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
 import { Plug, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import {
-  useChannelInstallations,
-  useChannelPlatforms,
-  useConnectChannelAction,
-} from '@/domains/agents/hooks/use-channels';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 export interface ConnectChannelMessageProps {
   platformId: string;
@@ -19,7 +16,11 @@ export interface ConnectChannelMessageProps {
 export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMessageProps) {
   const { data: platforms = [], isLoading: arePlatformsLoading } = useChannelPlatforms();
   const platform = platforms.find(p => p.id === platformId);
-  const { data: installations = [] } = useChannelInstallations(platformId, agentId ?? '');
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platformId,
+    agentId: agentId ?? '',
+    queryOptions: { enabled: Boolean(platformId && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
   const { connect, isConnecting } = useConnectChannelAction(platformId);
   const [dialogOpen, setDialogOpen] = useState(false);

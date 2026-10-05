@@ -4,11 +4,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useChannelInstallations, useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
 export interface IntegrationsProps {
   agentId: string;
@@ -108,7 +108,11 @@ interface IntegrationCardProps {
 }
 
 const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelect }: IntegrationCardProps) => {
-  const { data: installations = [] } = useChannelInstallations(platform.id, agentId);
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
 
   const description = PLATFORM_DESCRIPTION[platform.id];

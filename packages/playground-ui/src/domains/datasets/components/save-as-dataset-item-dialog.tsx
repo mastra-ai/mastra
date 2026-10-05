@@ -1,11 +1,10 @@
 'use client';
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldLabel } from '@/ds/components/Field';

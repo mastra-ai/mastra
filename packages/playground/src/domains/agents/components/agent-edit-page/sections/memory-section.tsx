@@ -4,6 +4,8 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { useEmbedders } from '@mastra/react/hooks/embedders';
+import { useVectors } from '@mastra/react/hooks/vectors';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
@@ -12,9 +14,7 @@ import type { UseFormSetValue, Control } from 'react-hook-form';
 import { RegisteredMemoryNotice } from '../../registered-memory-notice';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;

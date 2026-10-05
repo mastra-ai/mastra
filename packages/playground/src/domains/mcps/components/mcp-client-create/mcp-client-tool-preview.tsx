@@ -13,7 +13,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
+import type { TryConnectMcpMutation } from '@mastra/react/hooks/mcps';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';

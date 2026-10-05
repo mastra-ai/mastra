@@ -1,5 +1,6 @@
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -19,7 +20,6 @@ import {
 } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
-import { useAgentVersions } from '../use-agent-versions';
 import {
   createdCodeAgent,
   noAgentVersions,
@@ -548,7 +548,11 @@ describe('useAgentCmsForm', () => {
             hasStoredOverride: false,
             onSuccess: () => {},
           }),
-          versions: useAgentVersions({ agentId: AGENT_ID, params: { orderBy: { direction: 'DESC' } } }),
+          versions: useAgentVersions({
+            agentId: AGENT_ID,
+            params: { orderBy: { direction: 'DESC' } },
+            queryOptions: { enabled: Boolean(AGENT_ID) },
+          }),
         }),
         { wrapper: makeWrapper() },
       );

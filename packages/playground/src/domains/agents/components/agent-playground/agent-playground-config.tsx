@@ -10,11 +10,11 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
+import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
 import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
 import { getEditorOwnership } from '../../utils/editor-ownership';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
@@ -131,7 +131,10 @@ function getRawBlockContent(block: Record<string, unknown>): string | null {
 }
 
 function RefBlockCopyContent({ promptBlockId }: { promptBlockId: string }) {
-  const { data: promptBlock } = useStoredPromptBlock(promptBlockId);
+  const { data: promptBlock } = useStoredPromptBlock({
+    blockId: promptBlockId,
+    queryOptions: { enabled: Boolean(promptBlockId) },
+  });
   const content = promptBlock?.content ?? '';
   if (!content) return null;
   return <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />;
@@ -294,7 +297,10 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 }
 
 function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(promptBlockId);
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: promptBlockId,
+    queryOptions: { enabled: Boolean(promptBlockId) },
+  });
 
   if (isLoading) {
     return (
@@ -571,6 +577,7 @@ function ReadOnlyConfigWithDiff({
     agentId,
     fromVersionId: selectedVersionId,
     toVersionId: latestVersionId,
+    queryOptions: { enabled: !!agentId && !!selectedVersionId && !!latestVersionId },
   });
 
   const diffMap = useMemo(() => {

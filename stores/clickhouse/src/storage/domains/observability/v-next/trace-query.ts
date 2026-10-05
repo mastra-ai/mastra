@@ -317,7 +317,7 @@ function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: P
 
 export interface CompiledClickHouseTraceQuery {
   query: string;
-  query_params: QueryParams;
+  query_params: Record<string, unknown>;
   sharedSnapshot?: boolean;
 }
 
@@ -998,4 +998,11 @@ export async function queryThreads(
           : null,
     },
   });
+}
+
+/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  const parameters = new ParameterBuilder();
+  const sql = compileScalarPredicate(predicate, SPAN_FIELDS, parameters);
+  return { sql, params: parameters.params };
 }

@@ -37,12 +37,8 @@ export type TraceColumnPreferences = {
   readonly metadataKeys: readonly string[];
 };
 
-export type TraceUsageSummary = {
-  inputTokens?: number;
-  outputTokens?: number;
-  estimatedCost?: number;
-  costUnit?: string;
-};
+import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
+export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],

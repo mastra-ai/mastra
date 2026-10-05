@@ -60,6 +60,15 @@ const rawColor =
   /(?<![\w&-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![\w-])|\b(?:rgba?|hsla?)\(\s*\d|\boklch\(\s*[\d.]/;
 
 describe('color usage', () => {
+  it('uses neutral boundary tokens at their authored opacity', () => {
+    expect(
+      findings(
+        /\b(?:border(?:-[lrtbxyse])?|divide|ring|outline)-(?:border(?:-strong|-hover|-focus)?|surface-rim)\//,
+        () => false,
+      ),
+    ).toEqual([]);
+  });
+
   it('keeps chromatic colors opaque: no opacity modifiers on status, badge, product, chart, span, or ramp colors', () => {
     expect(files.length).toBeGreaterThan(500);
     expect(findings(translucentChromatic, () => false)).toEqual([]);

@@ -1,8 +1,13 @@
+import {
+  useSearchSkillsSh,
+  usePopularSkillsSh,
+  useSkillPreview,
+  parseSkillSource,
+} from '@mastra/react/hooks/workspace';
+import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
 import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../hooks/use-skills-sh';
 import {
   Dialog,
   DialogAction,
@@ -99,9 +104,12 @@ export function WorkspaceAddSkillDialog({
     ? selectedMount
     : writableMounts?.[0]?.path;
 
-  const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
+  const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh({
+    workspaceId: workspaceId,
+    queryOptions: { enabled: !!workspaceId },
+  });
 
-  const searchMutation = useSearchSkillsSh(workspaceId);
+  const searchMutation = useSearchSkillsSh({ workspaceId: workspaceId });
 
   const parsedSource = useMemo(() => {
     if (!selectedSkill?.topSource) return null;
@@ -113,13 +121,13 @@ export function WorkspaceAddSkillDialog({
     return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
   }, [parsedSource, selectedSkill]);
 
-  const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview(
+  const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview({
     workspaceId,
-    parsedSource?.owner,
-    parsedSource?.repo,
-    selectedSkill?.name,
-    { enabled: !!parsedSource && !!selectedSkill },
-  );
+    owner: parsedSource?.owner,
+    repo: parsedSource?.repo,
+    skillPath: selectedSkill?.name,
+    queryOptions: { enabled: !!workspaceId && !!parsedSource && !!selectedSkill },
+  });
 
   const debouncedSearch = useDebouncedCallback((query: string) => {
     if (query.trim().length >= 2) {

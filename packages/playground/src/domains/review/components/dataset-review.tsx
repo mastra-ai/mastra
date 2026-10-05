@@ -21,17 +21,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
+import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import { useReviewItems, useCompletedItems } from '@mastra/react/hooks/review';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels } from '@/domains/llm';
@@ -121,7 +120,7 @@ export function DatasetReview({
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset } = useDataset({ datasetId: datasetId ?? '', queryOptions: { enabled: Boolean(datasetId) } });
   const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
     experimentId,
     targetType,
@@ -405,7 +404,10 @@ export function DatasetReview({
     if (!featuredItemId) return null;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
-  const { data: featuredScoresByItemId } = useScoresByExperimentId(featuredItem?.experimentId ?? '');
+  const { data: featuredScoresByItemId } = useScoresByExperimentId({
+    experimentId: featuredItem?.experimentId ?? '',
+    queryOptions: { enabled: Boolean(featuredItem?.experimentId) },
+  });
 
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
   const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;

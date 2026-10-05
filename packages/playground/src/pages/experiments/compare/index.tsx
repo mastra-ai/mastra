@@ -7,10 +7,10 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentsComparison } from '@/domains/experiments';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
@@ -38,8 +38,16 @@ function CompareExperimentsPage() {
 
   // Fetch each experiment by id: the global list is paginated and may not contain them.
   // The server 404s when an experiment does not belong to `datasetId`, which enforces same-dataset comparison.
-  const experimentA = useDatasetExperiment(datasetId, experimentIdA);
-  const experimentB = useDatasetExperiment(datasetId, experimentIdB);
+  const experimentA = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const experimentB = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
   const isLoading = experimentA.isLoading || experimentB.isLoading;
   const error = experimentA.error ?? experimentB.error;
 

@@ -599,6 +599,7 @@ export class ModelSpanTracker {
         ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
         ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
         ...(ctx?.availableTools !== undefined ? { availableTools: ctx.availableTools } : {}),
+        ...(ctx?.tools !== undefined ? { tools: ctx.tools } : {}),
         ...(ctx?.toolChoice !== undefined ? { toolChoice: ctx.toolChoice } : {}),
         ...(ctx?.responseFormat !== undefined ? { responseFormat: ctx.responseFormat } : {}),
       },

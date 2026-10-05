@@ -1,6 +1,5 @@
 /**
- * OBS-526 contract prototype. Deliberately not exported from the storage barrel or
- * wired into a store/capability/route. Promoting this contract is subsequent work.
+ * Storage contract for querying individual completed spans across traces.
  *
  * Initial visibility: completed records only, consistent with insert-only ClickHouse.
  * Current-record selection precedes mutable predicates and pagination. A store must
@@ -266,4 +265,117 @@ export function createSpanQueryPreview(value: string | null): { value: string | 
     preview += character;
   }
   return { value: preview, truncated: false };
+}
+
+/** @internal Identity shared by page hydration and metric attribution. */
+export function spanQueryIdentityKey(identity: SpanQueryIdentity): string {
+  return JSON.stringify([identity.organizationId, identity.resourceId, identity.traceId, identity.spanId]);
+}
+
+/** @internal Bounded, deduplicated token metrics used to resolve per-span model cost. */
+export interface SpanQueryCostMetric extends SpanQueryIdentity {
+  name: string;
+  estimatedCost: number | null;
+  costUnit: string | null;
+  allocation: string | null;
+  costError: boolean;
+}
+
+/** @internal Fail rather than return a partial, misleading cost for an oversized page. */
+export const SPAN_QUERY_MAX_COST_METRICS = 50_000;
+
+/**
+ * @internal Total token metrics are authoritative; detail metrics overlap them.
+ * A provider-supplied query_total carrier replaces both directional totals.
+ * Missing means no token metrics have arrived; partial/unpriced/ambiguous cost is unavailable.
+ */
+export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryRow['cost'] {
+  if (!metrics.length) return { state: 'missing' };
+  const names = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
+  const totals = metrics.filter(metric => names.includes(metric.name));
+  if (!totals.length || totals.some(metric => metric.costError)) return { state: 'unavailable' };
+  const carriers = totals.filter(metric => metric.allocation === 'query_total');
+  let selected = totals;
+  if (carriers.length) {
+    if (carriers.length !== 1 || totals.some(metric => metric !== carriers[0] && metric.estimatedCost !== null)) {
+      return { state: 'unavailable' };
+    }
+    selected = carriers;
+  } else if (totals.length !== 2 || new Set(totals.map(metric => metric.name)).size !== 2) {
+    return { state: 'unavailable' };
+  }
+  const currency = selected[0]!.costUnit;
+  if (
+    !currency ||
+    currency.length > 16 ||
+    selected.some(
+      metric =>
+        metric.costUnit !== currency ||
+        metric.estimatedCost === null ||
+        !Number.isFinite(metric.estimatedCost) ||
+        metric.estimatedCost < 0,
+    )
+  )
+    return { state: 'unavailable' };
+  const amount = selected.reduce((sum, metric) => sum + metric.estimatedCost!, 0);
+  return Number.isFinite(amount) ? { state: 'available', amount, currency } : { state: 'unavailable' };
+}
+
+/** @internal Selected page metadata; adapters normalize dates to ISO strings. */
+export type SpanQuerySelectedRow = Omit<
+  SpanQueryRow,
+  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'cost'
+>;
+
+/** @internal Payloads are already bounded to 257 code points by the database. */
+export interface SpanQueryPayload extends SpanQueryIdentity {
+  inputPreview: string | null;
+  outputPreview: string | null;
+}
+
+/** @internal Hydration never changes the selected page's order or cursor boundary. */
+export function buildSpanQueryResponse(
+  plan: TrustedSpanQueryPlan,
+  selected: SpanQuerySelectedRow[],
+  payloads: SpanQueryPayload[],
+  metrics: SpanQueryCostMetric[],
+): SpanQueryResponse {
+  const byIdentity = new Map(payloads.map(payload => [spanQueryIdentityKey(payload), payload]));
+  const costs = new Map<string, SpanQueryCostMetric[]>();
+  for (const metric of metrics) {
+    const key = spanQueryIdentityKey(metric);
+    const group = costs.get(key) ?? [];
+    group.push(metric);
+    costs.set(key, group);
+  }
+  const visible = selected.slice(0, plan.limit);
+  const last = visible.at(-1);
+  return spanQueryResponseSchema.parse({
+    spans: visible.map(row => {
+      const key = spanQueryIdentityKey(row);
+      const payload = byIdentity.get(key);
+      const input = createSpanQueryPreview(payload?.inputPreview ?? null);
+      const output = createSpanQueryPreview(payload?.outputPreview ?? null);
+      return {
+        ...row,
+        inputPreview: input.value,
+        inputTruncated: input.truncated,
+        outputPreview: output.value,
+        outputTruncated: output.truncated,
+        cost: resolveSpanQueryCost(costs.get(key) ?? []),
+      };
+    }),
+    page: {
+      next:
+        selected.length > plan.limit && last
+          ? encodeSpanQueryCursor(plan, {
+              organizationId: last.organizationId,
+              resourceId: last.resourceId,
+              traceId: last.traceId,
+              spanId: last.spanId,
+              sortValue: last[plan.orderBy.field],
+            })
+          : null,
+    },
+  });
 }

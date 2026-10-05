@@ -220,6 +220,34 @@ The API limits predicate depth, nodes, related clauses, set members, literal byt
 
 See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, thread qualification semantics, cursor pagination, response shapes, and errors.
 
+## Querying spans
+
+`querySpans()` returns one row per matching completed span across traces. Use it to list the spans themselves. `queryTraces()` with a `spans.some` predicate returns the traces that contain a matching span instead. Every query requires an ISO timestamp range of at most 31 days.
+
+```typescript
+const result = await mastraClient.querySpans({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'eq',
+    left: { path: 'spanType' },
+    right: { literal: 'tool_call' },
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 50 },
+})
+
+// { spans: [{ traceId, spanId, name, spanType, status, durationMs, cost, ... }], page: { next } }
+```
+
+Pass `result.page.next` back as `page.after` with the same time range, filter, and ordering to load the next page. Each row contains identifiers, display fields, input and output previews, and the span's model cost. Use `getSpan()` to load the full span.
+
+Span queries are optional for observability stores. Check `capabilities.spanQuery` from `getObservabilityCapabilities()` before calling `querySpans()`, and treat a missing value as unsupported. Unsupported servers reject with `501 SPAN_QUERY_UNSUPPORTED`.
+
+See [Query individual spans](/reference/observability/tracing/trace-query#query-individual-spans) for filters, ordering, cursors, cost states, limits, and errors.
+
 ## Deleting traces
 
 Delete traces and their associated spans, metrics, logs, scores, and feedback:

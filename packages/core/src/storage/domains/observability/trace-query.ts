@@ -793,9 +793,7 @@ export class TraceQueryValidationError extends Error {
 export class TraceQueryCursorError extends Error {
   constructor(readonly code: 'TRACE_QUERY_CURSOR_MALFORMED' | 'TRACE_QUERY_CURSOR_CONFLICT') {
     super(
-      code === 'TRACE_QUERY_CURSOR_MALFORMED'
-        ? 'The trace query cursor is malformed'
-        : 'The cursor does not match the query',
+      code === 'TRACE_QUERY_CURSOR_MALFORMED' ? 'The query cursor is malformed' : 'The cursor does not match the query',
     );
     this.name = 'TraceQueryCursorError';
   }
@@ -805,7 +803,7 @@ export class TraceQueryExecutionError extends Error {
   readonly code = 'TRACE_QUERY_EXECUTION_TIMEOUT';
 
   constructor() {
-    super('The trace query exceeded its execution timeout');
+    super('The query exceeded its execution timeout');
     this.name = 'TraceQueryExecutionError';
   }
 }
@@ -814,7 +812,7 @@ export class TraceQueryResourceLimitError extends Error {
   readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
 
   constructor() {
-    super('The trace query exceeded its resource limit');
+    super('The query exceeded its resource limit');
     this.name = 'TraceQueryResourceLimitError';
   }
 }

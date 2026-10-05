@@ -4,13 +4,10 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useSSOLogin, useAuthCapabilities, useCredentialsLogin, useCredentialsSignUp } from '@mastra/react/hooks/auth';
+import type { SSOConfig } from '@mastra/react/hooks/auth';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
-import { useSSOLogin } from '../hooks/use-auth-actions';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { useCredentialsLogin } from '../hooks/use-credentials-login';
-import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
-import type { SSOConfig } from '../types';
 import { LoginLayout } from './login-layout';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
