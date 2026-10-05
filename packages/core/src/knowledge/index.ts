@@ -38,6 +38,11 @@ import {
   type MaterializeKnowledgeScopeInput,
 } from './reconcile';
 
+function configuredScopeDescription(scope: KnowledgeStructurePlan['scopes'][number]): string | undefined {
+  const description = scope.metadata?.description;
+  return typeof description === 'string' ? description.trim() || undefined : undefined;
+}
+
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -118,23 +123,53 @@ export class Knowledge extends MastraBase {
     this.#storagePromise = undefined;
   }
 
-  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
-  __getDescriptionContext(scope: KnowledgeScopeIds): {
+  /**
+   * Returns trusted placement context for the held scope addresses and the configured
+   * structural scopes reachable from them. @internal
+   */
+  __getDescriptionContext(heldAddresses: string[]): {
     description?: string;
     scopes: Array<{ address: string; name: string; description: string }>;
   } {
-    const visibleAddresses = new Set(scope);
+    const visibleAddresses = new Set(heldAddresses);
+    const structural = new Set(this.__getVisibleStructureScopes(heldAddresses).map(scope => scope.address));
     return {
       description: this.description?.trim() || undefined,
       scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
-        const description =
-          typeof configuredScope.metadata?.description === 'string'
-            ? (configuredScope.metadata.description as string).trim()
-            : undefined;
-        if (!description || !visibleAddresses.has(configuredScope.address)) return [];
+        const description = configuredScopeDescription(configuredScope);
+        if (!description) return [];
+        if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
         return [{ address: configuredScope.address, name: configuredScope.name, description }];
       }),
     };
+  }
+
+  /**
+   * Structural scopes a writer holding `heldAddresses` may place content into: every configured
+   * scope whose declared parent chain reaches a held address. Held addresses themselves are
+   * excluded. The structure plan is host configuration, so this frontier is host-vouched. @internal
+   */
+  __getVisibleStructureScopes(heldAddresses: string[]): Array<{ address: string; name: string; description?: string }> {
+    const held = new Set(heldAddresses);
+    const configured = this.#structure?.scopes ?? [];
+    const byAddress = new Map(configured.map(scope => [scope.address, scope]));
+    const reachesHeld = (address: string): boolean => {
+      const seen = new Set<string>();
+      const stack = [address];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (seen.has(current)) continue;
+        seen.add(current);
+        if (held.has(current)) return true;
+        stack.push(...(byAddress.get(current)?.parentAddresses ?? []));
+      }
+      return false;
+    };
+    return configured.flatMap(scope => {
+      if (held.has(scope.address) || !reachesHeld(scope.address)) return [];
+      const description = configuredScopeDescription(scope);
+      return [{ address: scope.address, name: scope.name, ...(description ? { description } : {}) }];
+    });
   }
 
   async getStorage(): Promise<KnowledgeStorage> {
