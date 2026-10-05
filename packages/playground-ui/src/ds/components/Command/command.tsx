@@ -30,7 +30,8 @@ type CommandDialogVariant = 'default' | 'inset';
 
 const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
   default: 'overflow-hidden py-0',
-  inset: 'top-1/4 translate-y-0 overflow-hidden rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+  inset:
+    'top-1/4 translate-y-0 overflow-hidden bg-muted concentric-frame-[calc(var(--radius-xl)+--spacing(1))] concentric-inset-1',
 };
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
@@ -70,7 +71,7 @@ const CommandDialogBody = ({
     <>
       <div
         data-slot="command-dialog-panel"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-concentric bg-background"
       >
         {children}
       </div>

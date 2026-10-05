@@ -1,4 +1,6 @@
-import { extendTailwindMerge } from 'tailwind-merge';
+import { extendTailwindMerge, validators } from 'tailwind-merge';
+
+const { isArbitraryLength, isNumber } = validators;
 import * as Tokens from '../ds/tokens';
 
 const colorKeys = Object.keys({ ...Tokens.Colors, ...Tokens.BorderColors });
@@ -23,6 +25,8 @@ export const twMerge = extendTailwindMerge({
       // Named durations are `@utility` rules, so tailwind-merge cannot infer them and
       // would otherwise let `duration-fast` and `duration-slow` both survive a merge.
       duration: [{ duration: [...Tokens.Durations] }],
+      rounded: [{ rounded: ['concentric'] }, { 'concentric-frame': [...borderRadiusKeys, isArbitraryLength] }],
+      p: [{ 'concentric-inset': [isNumber] }],
     },
   },
 });
