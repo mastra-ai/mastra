@@ -28,6 +28,12 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   sendStateSignal?: ProcessorContext['sendStateSignal'];
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
+  /**
+   * Settles after the observation cycle that produced `rawObservations` ends: `true` once its
+   * observations are committed to storage, `false` when the cycle fails or skips the commit.
+   * Never rejects. Absent when the hook runs outside an observation cycle.
+   */
+  observationCommitted?: Promise<boolean>;
 }
 
 type MaybePromise<T> = T | Promise<T>;
