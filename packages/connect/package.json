@@ -33,6 +33,7 @@
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
     "smoke-test": "tsx scripts/smoke-test/index.ts",
+    "smoke-test:channels": "tsx scripts/smoke-test/channels/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
     "test": "vitest run && tsc --noEmit"
   },
@@ -64,6 +65,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "hono": "^4.13.7",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",

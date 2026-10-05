@@ -94,3 +94,41 @@ describe('connect config hash', () => {
     );
   });
 });
+
+describe('disconnect', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('deletes the minted Slack app when disconnecting a pending installation', async () => {
+    vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A-PENDING',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+    const deleteApp = vi.spyOn(SlackManifestClient.prototype, 'deleteApp').mockResolvedValue(undefined as never);
+
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      baseUrl: 'https://example.com',
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+    } as unknown as Mastra);
+
+    await provider.connect({ id: 'agent-1', name: 'Helper' });
+    expect(await provider.listInstallations()).toHaveLength(1);
+
+    await provider.disconnect('agent-1');
+
+    // The pending installation already minted a real Slack app; disconnect
+    // must delete it rather than orphaning it in the workspace.
+    expect(deleteApp).toHaveBeenCalledWith('A-PENDING');
+    expect(await provider.listInstallations()).toHaveLength(0);
+  });
+});
