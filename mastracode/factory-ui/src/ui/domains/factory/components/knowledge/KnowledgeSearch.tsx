@@ -1,4 +1,5 @@
 import { Input } from '@mastra/playground-ui/components/Input';
+import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useId, useState } from 'react';
 
@@ -37,8 +38,8 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
 
   return (
     <div className="relative w-full max-w-sm">
-      <div className="border-surface5 bg-surface2 flex items-center gap-2 rounded-md border px-2">
-        <Search className="text-icon3 size-4 shrink-0" />
+      <div className="border-border bg-field flex items-center gap-2 rounded-md border px-2">
+        <Search className="text-muted-foreground size-4 shrink-0" />
         <Input
           variant="unstyled"
           role="combobox"
@@ -48,7 +49,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
           aria-expanded={open}
           aria-activedescendant={activeResult ? `${listboxId}-option-${activeIndex}` : undefined}
           autoComplete="off"
-          className="text-icon6 placeholder:text-icon3 h-9 min-w-0 flex-1 p-0"
+          className="text-foreground placeholder:text-placeholder h-9 min-w-0 flex-1 p-0"
           placeholder="Search"
           value={query}
           onFocus={() => setFocused(true)}
@@ -87,11 +88,11 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
           id={listboxId}
           role="listbox"
           aria-label="Knowledge search results"
-          className="border-surface5 bg-surface2 absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
+          className={`${overlaySurfaceStyle} absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg p-1`}
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
-            <div className="text-icon3 px-3 py-2 text-xs">Searching…</div>
+            <div className="text-muted-foreground px-3 py-2 text-xs">Searching…</div>
           ) : search.isError ? (
             <div className="px-3 py-2 text-xs text-red-400">Unable to search knowledge.</div>
           ) : search.data?.results.length ? (
@@ -105,27 +106,30 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
                   tabIndex={-1}
                   aria-selected={index === activeIndex}
                   className={[
-                    'hover:bg-surface4 flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left',
-                    index === activeIndex ? 'bg-surface4' : '',
+                    'hover:bg-fill-hover flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left',
+                    index === activeIndex ? 'bg-fill' : '',
                   ].join(' ')}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => selectResult(result)}
                 >
                   <span className="min-w-0">
-                    <span className="text-icon6 block truncate text-sm">{result.name}</span>
+                    <span className="text-foreground block truncate text-sm">{result.name}</span>
+                    {result.type === 'scope' && result.address ? ' ' : null}
                     {result.type === 'scope' && result.address ? (
-                      <span className="text-icon3 block truncate text-xs">{result.address}</span>
+                      <span className="text-muted-foreground block truncate text-xs">{result.address}</span>
                     ) : null}
+                  </span>{' '}
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {result.type === 'scope' ? 'scope' : result.kind}
                   </span>
-                  <span className="text-icon3 shrink-0 text-xs">{result.type === 'scope' ? 'scope' : result.kind}</span>
                 </button>
               ))}
               {search.data.truncated ? (
-                <div className="text-icon3 px-3 py-1.5 text-xs">Keep typing to narrow the results.</div>
+                <div className="text-muted-foreground px-3 py-1.5 text-xs">Keep typing to narrow the results.</div>
               ) : null}
             </>
           ) : (
-            <div className="text-icon3 px-3 py-2 text-xs">No matching knowledge.</div>
+            <div className="text-muted-foreground px-3 py-2 text-xs">No matching knowledge.</div>
           )}
         </div>
       ) : null}
