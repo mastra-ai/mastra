@@ -1,5 +1,80 @@
 # mastra
 
+## 1.33.0-alpha.5
+
+### Minor Changes
+
+- Added a `mastra connect` command for wiring Mastra Connect provider integrations into a project straight from the terminal. ([#25865](https://github.com/mastra-ai/mastra/pull/25865))
+
+  `mastra connect list` shows every provider in the integration catalog, highlighting the ones already connected to the linked project:
+
+  ```bash
+  $ mastra connect list
+
+  Providers for My Project:
+
+    ● linear — connected (charlie)
+    ● posthog — connected (Mastra)
+    ○ github
+    ○ notion
+    ○ slack
+  ```
+
+  `mastra connect add <provider>` connects a provider. If the organization already has connections for that provider, the command offers to attach one of them instead of authorizing again. Otherwise OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal:
+
+  ```bash
+  $ mastra connect add linear
+
+  Opening your browser to authorize Linear…
+  ◇ Connection is active
+
+  Your organization's existing Linear connections:
+    • Mastra   connected by Charlie Green  Sep 25, 2026
+    • charlie  connected by Charlie Green  Oct 2, 2026
+
+  ◆ Set a display name so this connection is easy to tell apart (leave blank to skip)
+  │ charlie 2
+
+  ✓ Connected Linear (charlie 2) to My Project.
+  ```
+
+  After a new connection goes active, the command suggests a unique display name so the connection is easy to tell apart later, and warns before saving a name that duplicates another connection's name.
+
+  `mastra connect remove <provider>` unlinks a provider connection from the project (the org-level connection is kept):
+
+  ```bash
+  $ mastra connect remove linear
+
+  ✓ Removed linear (charlie) from My Project.
+  ```
+
+  Connected providers become available to agents through `@mastra/connect`'s toolset resolver:
+
+  ```ts
+  import { tools } from '@mastra/connect';
+
+  const agentTools = tools({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    integrations: ['linear'],
+  });
+  ```
+
+### Patch Changes
+
+- The `--project` flag now takes precedence over the `MASTRA_PROJECT_ID` environment variable in `mastra connect`, `mastra env`, `mastra db`, `mastra server env`, `mastra server pause`/`restart`, and `mastra traces import`. Previously the environment variable silently won, so passing `--project` from a shell that exported `MASTRA_PROJECT_ID` targeted the wrong project. Headless deploys (`mastra deploy` with `MASTRA_API_TOKEN`) are unchanged. ([#25999](https://github.com/mastra-ai/mastra/pull/25999))
+
+- Added display conditions to referenced prompt blocks in the Studio agent instructions editor. Conditions set on a reference apply only to that agent and are kept when the reference is converted to an inline block. ([#25991](https://github.com/mastra-ai/mastra/pull/25991))
+
+- Fixed Studio's channel connect flows opening tabs they shouldn't and missing completions: ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  - Connecting Slack now continues in the current tab (its flow redirects back to Studio), instead of leaving a stale Studio copy behind in a new tab.
+  - Connecting Discord opens the invite in a new tab and no longer dead-ends when the popup blocker intervenes — it falls back to navigating the current tab.
+  - While a Discord invite is in flight, returning to Studio now checks whether it completed and flips the agent to "Connected" without a manual refresh.
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+  - @mastra/deployer@1.75.0-alpha.5
+
 ## 1.32.2-alpha.4
 
 ### Patch Changes

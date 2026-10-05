@@ -1,5 +1,23 @@
 # @mastra/discord
 
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Fixed Discord installs staying "pending" forever after completing the bot invite. Discord's invite flow doesn't notify the server when it finishes, so the provider now exposes `reconcileInstallation(agentId)` — it activates a pending install when the server can attribute the newly joined guild to it, and Studio calls it when you return, so the agent shows "Connected" right away: ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  ```ts
+  const info = await discord.reconcileInstallation('my-agent');
+  // info?.status === 'active' once the invite finished
+  ```
+
+  When the new guild can't be attributed safely (several invites in flight, or the bot joined more than one guild), the install stays pending and activates on its first interaction, as before. Invite attribution expires after 30 minutes and never crosses a bot credential change. `listInstallations()` is now a pure read.
+
+### Patch Changes
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 1.2.1
 
 ### Patch Changes
