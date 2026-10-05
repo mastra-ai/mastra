@@ -80,7 +80,7 @@ function AuditEventRow({
           <Code
             code={JSON.stringify(visibleMetadata, null, 2)}
             lang="json"
-            className="m-0 px-2 py-1 break-all whitespace-pre-wrap text-meta font-body text-muted-foreground"
+            className="text-meta font-body text-muted-foreground m-0 px-2 py-1 break-all whitespace-pre-wrap"
           />
         </div>
       ) : null}

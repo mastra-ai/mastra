@@ -100,7 +100,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none text-body"
+            className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

@@ -44,7 +44,7 @@ function SkillContent({ content }: { content: string }) {
       <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
         <ScrollAreaViewport className="px-4 pb-4">
           {raw ? (
-            <Code className="m-0 whitespace-pre-wrap text-caption font-mono text-muted-foreground" code={content} />
+            <Code className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap" code={content} />
           ) : (
             <MarkdownRenderer className="text-muted-foreground text-caption">{content}</MarkdownRenderer>
           )}

@@ -202,7 +202,7 @@ export function ReviewItemCard({
               Input
             </Txt>
             <Code
-              className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-caption text-foreground"
+              className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
               code={formatUnknown(item.input)}
             />
           </div>
@@ -212,7 +212,7 @@ export function ReviewItemCard({
                 Output
               </Txt>
               <Code
-                className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-caption text-foreground"
+                className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
                 code={formatUnknown(item.output)}
               />
             </div>
@@ -223,7 +223,7 @@ export function ReviewItemCard({
                 Error
               </Txt>
               <Code
-                className="max-h-20 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-destructive-foreground text-caption"
+                className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground"
                 code={formatUnknown(item.error)}
               />
             </div>

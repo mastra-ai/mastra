@@ -44,7 +44,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
                   />
                 }
               >
-                <FieldsetLegend className="text-muted-foreground text-body">{experiment.name}</FieldsetLegend>
+                <FieldsetLegend className="text-body text-muted-foreground">{experiment.name}</FieldsetLegend>
                 {experiment.variants.map(option => (
                   <FieldItem key={option.value}>
                     <RadioGroupItem value={option.value} />

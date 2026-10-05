@@ -83,7 +83,7 @@ export function Wordmark({ className, brand = 'code' }: { className?: string; br
 
   return (
     <pre
-      className={`m-0 overflow-x-auto font-mono text-caption leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
+      className={`text-caption m-0 overflow-x-auto font-mono leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
       aria-label={factory ? 'Mastra Factory' : 'Mastra Code'}
     >
       {factory ? FACTORY_WORDMARK_ART : CODE_WORDMARK_ART}

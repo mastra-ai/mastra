@@ -65,7 +65,8 @@ export const SkillBuilderStarter = () => {
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      { type: string; workspaceId?: string } | undefined;
+      | { type: string; workspaceId?: string }
+      | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -133,7 +134,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none text-body"
+              className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">

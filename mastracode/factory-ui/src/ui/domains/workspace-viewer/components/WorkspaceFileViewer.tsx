@@ -110,7 +110,7 @@ export function WorkspaceFileViewer({
               <Code
                 code={content}
                 lang={file.language}
-                className="border-border bg-background m-0 rounded-md border p-3 text-caption font-mono text-foreground"
+                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono"
               />
             ) : null}
           </div>

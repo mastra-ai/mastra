@@ -88,7 +88,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="text-muted-foreground w-full rounded px-2 py-1 text-left hover:bg-fill-subtle"
+                className="w-full rounded px-2 py-1 text-left text-muted-foreground hover:bg-fill-subtle"
               >
                 <Txt as="span" variant="caption" className="block">
                   {tag}

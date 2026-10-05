@@ -345,7 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <Code
-              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 break-all whitespace-pre-wrap text-caption text-muted-foreground"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
               code={error.details}
             />

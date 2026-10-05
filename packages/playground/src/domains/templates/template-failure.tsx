@@ -69,7 +69,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </Txt>
                 <Code
-                  className="mt-1 wrap-break-word whitespace-pre-wrap text-caption text-muted-foreground"
+                  className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground"
                   code={error.message}
                 />
               </div>
@@ -87,7 +87,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
             </Txt>
           </summary>
           <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
-            <Code className="wrap-break-word whitespace-pre-wrap text-caption" code={errorString} />
+            <Code className="text-caption wrap-break-word whitespace-pre-wrap" code={errorString} />
           </div>
         </details>
       )}

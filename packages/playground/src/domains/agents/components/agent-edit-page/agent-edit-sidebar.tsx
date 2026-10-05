@@ -216,7 +216,7 @@ export function AgentEditSidebar({
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
                     agent's instructions with the{' '}
-                    <InlineCode className="text-warning-foreground text-label">{'{{variableName}}'}</InlineCode> syntax.
+                    <InlineCode className="text-label text-warning-foreground">{'{{variableName}}'}</InlineCode> syntax.
                   </>
                 }
               />

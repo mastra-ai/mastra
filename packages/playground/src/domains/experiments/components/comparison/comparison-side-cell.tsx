@@ -89,7 +89,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <Code className={cn(codeBoxClass, 'text-body text-muted-foreground font-mono')} code={outputStr} />
+          <Code className={cn(codeBoxClass, 'font-mono text-body text-muted-foreground')} code={outputStr} />
         </ComparisonSection>
       )}
 

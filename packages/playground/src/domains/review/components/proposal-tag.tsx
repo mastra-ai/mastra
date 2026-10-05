@@ -52,7 +52,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="h-auto w-20 bg-transparent px-0 py-0.5 outline-hidden text-caption text-muted-foreground"
+          className="h-auto w-20 bg-transparent px-0 py-0.5 text-caption text-muted-foreground outline-hidden"
         />
         <button
           type="button"

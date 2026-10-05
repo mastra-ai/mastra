@@ -116,7 +116,7 @@ export function CardSourceDescription({
   const description = query.data?.description ?? null;
   if (description === null || description.trim() === '') return null;
   return (
-    <MarkdownRenderer className="text-foreground max-w-none [&>*:first-child]:mt-0 text-caption">
+    <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
       {description}
     </MarkdownRenderer>
   );
