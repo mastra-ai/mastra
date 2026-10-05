@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed `PgVector.query()` failing on HNSW indexes with `invalid configuration parameter name "hnsw.iterative_scan"` when running pgvector 0.7.x (or older) on Postgres 15 or later. The `hnsw.iterative_scan` setting is now applied only when the detected pgvector version is 0.8.0 or later; on older versions HNSW queries run without it, as they did before `@mastra/pg@1.22.0`.
+Fixed HNSW vector queries on pgvector versions before 0.8.0. On Postgres 15 or later, these queries failed with `invalid configuration parameter name "hnsw.iterative_scan"`. The query now sets `hnsw.iterative_scan` only on pgvector 0.8.0 or later. On older versions, HNSW queries work as they did before `@mastra/pg@1.22.0`.
