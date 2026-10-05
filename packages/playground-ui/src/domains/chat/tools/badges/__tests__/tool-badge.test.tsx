@@ -6,7 +6,7 @@ import { ToolBadge } from '../tool-badge';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
-const renderWithProviders = (node: ReactNode) =>
+const renderWithProviders = (node: ReactNode, { isContinuationBlocked }: { isContinuationBlocked?: boolean } = {}) =>
   render(
     <TooltipProvider>
       <ToolCallProvider
@@ -17,6 +17,7 @@ const renderWithProviders = (node: ReactNode) =>
         approveNetworkToolcall={vi.fn()}
         declineNetworkToolcall={vi.fn()}
         isRunning={false}
+        isContinuationBlocked={isContinuationBlocked}
         toolCallApprovals={{}}
         networkToolCallApprovals={{}}
       >
@@ -119,6 +120,41 @@ describe('ToolBadge', () => {
     expect(toolResult.textContent).toContain('"temperature": 20');
     expect(toolResult.textContent).toContain('"conditions": "cloudy"');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
+  });
+
+  it('disables approval actions when the run continuation is fatally blocked', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="getWeather"
+        args={{ location: 'Paris' }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'getWeather', args: { location: 'Paris' } }}
+        isNetwork={false}
+      />,
+      { isContinuationBlocked: true },
+    );
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve getWeather' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Decline getWeather' }).disabled).toBe(true);
+  });
+
+  it('keeps approval actions enabled by default', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="getWeather"
+        args={{ location: 'Paris' }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'getWeather', args: { location: 'Paris' } }}
+        isNetwork={false}
+      />,
+    );
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Approve getWeather' }).disabled).toBe(false);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Decline getWeather' }).disabled).toBe(false);
   });
 
   it('renders a result of false, since a falsy value is still an answer', () => {

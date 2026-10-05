@@ -33,6 +33,7 @@ export const ToolApprovalButtons = ({
     approveToolcallGenerate,
     declineToolcallGenerate,
     isRunning,
+    isContinuationBlocked,
     toolCallApprovals,
     approveNetworkToolcall,
     declineNetworkToolcall,
@@ -63,6 +64,7 @@ export const ToolApprovalButtons = ({
     ? networkToolCallApprovals?.[toolApprovalMetadata?.runId ? `${toolApprovalMetadata.runId}-${toolName}` : toolName]
         ?.status
     : toolCallApprovals?.[toolCallId]?.status;
+  const actionsDisabled = isRunning || isContinuationBlocked || !!toolCallApprovalStatus;
 
   if (!awaitsToolApproval({ toolApprovalMetadata, toolCalled })) return null;
 
@@ -72,7 +74,7 @@ export const ToolApprovalButtons = ({
       <ToolApprovalActions
         onApprove={handleApprove}
         onDecline={handleDecline}
-        disabled={isRunning}
+        disabled={actionsDisabled}
         status={toolCallApprovalStatus}
         toolName={toolName}
       />

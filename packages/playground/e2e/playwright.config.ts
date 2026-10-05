@@ -24,6 +24,9 @@ if (PORT) {
 
 export default defineConfig({
   testDir: './tests',
+  // This journey needs the DB-source LibSQL fixture on port 4112. It runs
+  // separately through playwright.version-labels.config.ts, locally and in CI.
+  testIgnore: 'agents/version-label-pinning.spec.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,

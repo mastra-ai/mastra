@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentPlaygroundTestChat } from '../agent-playground/agent-playground-test-chat';
 import { memoryDisabled, v2Agent } from './fixtures/composer-model-settings';
@@ -12,6 +12,20 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';
+
+const createTestStorage = (): Storage => {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: key => values.get(key) ?? null,
+    key: index => [...values.keys()][index] ?? null,
+    removeItem: key => values.delete(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+};
 
 const renderEditorTestChat = () => {
   const queryClient = new QueryClient({
@@ -23,13 +37,33 @@ const renderEditorTestChat = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <TooltipProvider>
-            <AgentPlaygroundTestChat agentId={AGENT_ID} agentName="Test Agent" modelVersion="v2" hasMemory={false} />
+            <AgentPlaygroundTestChat
+              agentId={AGENT_ID}
+              agentName="Test Agent"
+              modelVersion="v2"
+              executionTargetAvailable
+              isVersionsError={false}
+              canExecute
+              isExecutionAccessLoading={false}
+              isExecutionAccessError={false}
+              versionLabels={[]}
+              versions={[]}
+              isVersionLabelsLoading={false}
+              onExecutionTargetChange={vi.fn()}
+              onRunVersionSelectorError={vi.fn()}
+              onRunAuthorizationError={vi.fn()}
+              hasMemory={false}
+            />
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </MastraReactProvider>,
   );
 };
+
+beforeEach(() => {
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: createTestStorage() });
+});
 
 afterEach(() => {
   cleanup();
