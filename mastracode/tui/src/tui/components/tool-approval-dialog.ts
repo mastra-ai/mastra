@@ -7,13 +7,16 @@
  *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
  */
-import { getKeybindings, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 import { card } from './surface.js';
+
+/** Long argument values (e.g. file contents) in the approval card stop after this many lines. */
+const TARGET_MAX_LINES = 40;
 
 export type ApprovalAction =
   | { type: 'approve' }
@@ -86,11 +89,7 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     const label = this.showTarget
       ? theme.bold(theme.fg('text', `Allow ${this.toolName}?`))
       : theme.bold(theme.fg('text', 'Allow?'));
-    const argRows = this.showTarget
-      ? this.describeArgs()
-          .split('\n')
-          .map(arg => theme.fg('muted', `  ${arg}`))
-      : [];
+    const argRows = this.showTarget ? this.targetArgRows(room - 2).map(row => theme.fg('muted', `  ${row}`)) : [];
     // The question on its own row (then the arguments), then the options packed into as few rows as fit.
     const rows = [label, ...argRows];
     let row = '';
@@ -105,6 +104,25 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     }
     rows.push(row);
     return card(warning, rows).map(l => truncateToWidth(l, width));
+  }
+
+  /**
+   * Every argument in full, wrapped to `width`: this is what gets approved, so nothing is cut to one line.
+   * Only very long values (file contents and the like) stop after TARGET_MAX_LINES with a count.
+   */
+  private targetArgRows(width: number): string[] {
+    const args = this.args;
+    if (args === null || args === undefined || typeof args !== 'object') return [String(args ?? '(none)')];
+    const entries = Object.entries(args as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined);
+    if (entries.length === 0) return ['(none)'];
+    const rows: string[] = [];
+    for (const [key, value] of entries) {
+      const text = `${key}: ${typeof value === 'string' ? value : safeStringify(value)}`;
+      const wrapped = text.split('\n').flatMap(line => (line ? wrapTextWithAnsi(line, Math.max(10, width)) : ['']));
+      rows.push(...wrapped.slice(0, TARGET_MAX_LINES));
+      if (wrapped.length > TARGET_MAX_LINES) rows.push(`… ${wrapped.length - TARGET_MAX_LINES} more lines`);
+    }
+    return rows;
   }
 
   /** Arguments as "key: value" lines (used by tests and for tools without a call row). */

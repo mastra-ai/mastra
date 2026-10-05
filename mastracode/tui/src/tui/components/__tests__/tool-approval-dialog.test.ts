@@ -218,6 +218,27 @@ describe('ToolApprovalDialogComponent.render', () => {
     ]);
   });
 
+  it('shows long and multi-line arguments in full, wrapped, when showTarget is set', () => {
+    const command = `node -e "${'x'.repeat(150)}"\necho done`;
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'execute_command',
+      args: { command, cwd: null },
+      categoryLabel: 'Execute',
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const lines = dialog.render(60).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    const shown = lines
+      .slice(1, -2)
+      .map(line => line.replace(/^▎ {3}/, ''))
+      .join('');
+    expect(shown).toContain('x'.repeat(150));
+    expect(lines.some(line => line.includes('echo done'))).toBe(true);
+    expect(lines.join('\n')).not.toContain('cwd');
+    expect(lines.every(line => line.length <= 60)).toBe(true);
+  });
+
   it('never renders wider than the terminal', () => {
     const { dialog } = makeDialog();
     for (const line of dialog.render(20)) {
