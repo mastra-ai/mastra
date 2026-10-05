@@ -3729,16 +3729,15 @@ ${formattedMessages}
       }
     }
 
-    // Wait for an in-process buffer op that may still append a chunk: the swap below reads
-    // then writes the buffered chunks, so a concurrent append could be dropped. Work the op
-    // does after persisting its chunk (indexing, thread title) can't conflict.
-    // If the write is still pending after the wait, skip activation rather than risk it.
+    // Above the threshold→blockAfter band, wait (bounded) for an in-process chunk write so its
+    // chunk activates with the rest instead of the sync pass after activation observing the same
+    // messages again. Only the append is awaited, not the op's indexing or title work. This is
+    // about cost, not safety: storage keeps a concurrently appended chunk and skips one the cursor
+    // already covers, so in the band nothing waits and after the timeout activation proceeds.
     // An op in another process can't be awaited; activate whatever chunks exist.
     const obsBufferKey = this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId));
     const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(obsBufferKey);
     if (pendingChunkWrite) {
-      // A write can start after the step's non-blocking precheck. Re-check here
-      // rather than turn an in-band activation into a wait on the Observer.
       const blockAfter = this.buffering.isAsyncObservationEnabled()
         ? this.getEffectiveObservationBlockAfter(record)
         : undefined;
@@ -3746,19 +3745,18 @@ ${formattedMessages}
         this.getEffectiveMessageTokens(record),
         record.observationTokenCount ?? 0,
       );
-      if (
+      const inBand =
         livePendingTokens !== undefined &&
         blockAfter !== undefined &&
         livePendingTokens >= threshold &&
-        livePendingTokens < blockAfter
-      ) {
-        return { activated: false, record };
-      }
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]);
-      clearTimeout(timeoutId);
-      if (BufferingCoordinator.pendingChunkWrites.has(obsBufferKey)) {
-        return { activated: false, record };
+        livePendingTokens < blockAfter;
+      if (!inBand) {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          pendingChunkWrite,
+          new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000))),
+        ]);
+        clearTimeout(timeoutId);
       }
     }
 

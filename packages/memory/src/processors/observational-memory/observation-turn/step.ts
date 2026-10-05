@@ -77,49 +77,36 @@ export class ObservationStep {
     let didThresholdCleanup = false;
     let observerExchange: StepContext['observerExchange'];
 
-    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
-    // True while a background observation buffer op may still append a chunk — the only
-    // phase activate() waits for (its chunk swap is read-then-write). The op's later
-    // post-persist work (indexing, thread title) doesn't block activation.
-    const isChunkWriteInFlight = () => om.buffering.isChunkWriteInProgress(observationBufferKey);
-
     // ── Step 0: Activate buffered chunks ──────────────────────
-    // activate() waits for an in-flight chunk write. In the threshold→blockAfter band that
-    // wait must not block the turn, so leave activation to a later step.
-    // Reflection below still runs: it never waits on the observation op, and if it starts a
-    // new generation the in-flight chunk is written to that generation, not the retired one.
+    // In the threshold→blockAfter band activate() never waits on an in-flight buffer op: it
+    // activates the stored chunks, and storage keeps a chunk appended meanwhile. Reflection below
+    // may start a new generation while a buffer op is in flight; the op's chunk then lands on the
+    // new head (storage resolves the head and carries chunks across the rollover).
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
-    const deferStep0Activation =
-      this.stepNumber === 0 &&
-      isChunkWriteInFlight() &&
-      (await om.getStatus({ threadId, resourceId, record: this.turn.record, messages: step0Messages }))
-        .inAsyncObservationBand;
     if (this.stepNumber === 0) {
-      if (!deferStep0Activation) {
-        const activation = await om.activate({
+      const activation = await om.activate({
+        threadId,
+        resourceId,
+        checkThreshold: true,
+        messages: step0Messages,
+        record: this.turn.record,
+        currentModel: this.turn.actorModelContext,
+        writer: this.turn.writer,
+        messageList,
+      });
+
+      this.turn.setRecord(activation.record);
+      if (activation.activated) {
+        activated = true;
+        if (activation.activatedMessageIds?.length) {
+          messageList.removeByIds(activation.activatedMessageIds);
+        }
+        await om.resetBufferingState({
           threadId,
           resourceId,
-          checkThreshold: true,
-          messages: step0Messages,
-          record: this.turn.record,
-          currentModel: this.turn.actorModelContext,
-          writer: this.turn.writer,
-          messageList,
+          recordId: activation.record.id,
         });
-
-        this.turn.setRecord(activation.record);
-        if (activation.activated) {
-          activated = true;
-          if (activation.activatedMessageIds?.length) {
-            messageList.removeByIds(activation.activatedMessageIds);
-          }
-          await om.resetBufferingState({
-            threadId,
-            resourceId,
-            recordId: activation.record.id,
-          });
-          await this.turn.refreshRecord();
-        }
+        await this.turn.refreshRecord();
       }
 
       // Check if reflection is needed (whether or not activation happened).
@@ -174,12 +161,7 @@ export class ObservationStep {
       messages: getObservableMessages(messageList),
     });
 
-    if (
-      statusSnapshot.inAsyncObservationBand &&
-      !statusSnapshot.canActivate &&
-      !hasIncompleteToolCalls &&
-      !isChunkWriteInFlight()
-    ) {
+    if (statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate && !hasIncompleteToolCalls) {
       // In the band without a chunk per the turn's cached record. A background buffer op
       // may have persisted its chunk since the record was cached; refresh once so a ready
       // chunk is activated instead of lingering behind a newly started buffer op.
@@ -192,14 +174,10 @@ export class ObservationStep {
       });
     }
 
-    // In the threshold→blockAfter band with a chunk ready and no chunk write in flight,
-    // activate this step instead of starting another buffer op: its chunk write would be
-    // in flight by the activation check below and defer the ready chunk.
+    // In the threshold→blockAfter band with a chunk ready, activate this step instead of
+    // starting another buffer op.
     const activateBeforeBuffering =
-      statusSnapshot.inAsyncObservationBand &&
-      statusSnapshot.canActivate &&
-      !hasIncompleteToolCalls &&
-      !isChunkWriteInFlight();
+      statusSnapshot.inAsyncObservationBand && statusSnapshot.canActivate && !hasIncompleteToolCalls;
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
     // A pending tool call on the newest message doesn't block the whole batch:
@@ -282,13 +260,10 @@ export class ObservationStep {
     // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
-    // In the threshold→blockAfter band nothing may block: run the threshold pipeline
-    // only to activate an already-buffered chunk, and only when no chunk write is in
-    // flight. activate() waits for an in-flight chunk write (that wait is what keeps its
-    // read-then-write chunk swap from dropping a concurrently appended chunk), which
-    // would turn the swap into a wait on the observer model. Otherwise defer to a later step.
-    const bandDefersObservation =
-      statusSnapshot.inAsyncObservationBand && (!statusSnapshot.canActivate || isChunkWriteInFlight());
+    // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
+    // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
+    // the band). Without a ready chunk, defer to a later step.
+    const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
     const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
     /** In-flight message ids the step-0 cleanup must never remove from live context. */
     let step0PreserveIds: string[] | undefined;
@@ -467,8 +442,8 @@ export class ObservationStep {
 
     // Wait for any in-flight buffering to settle, then refresh the turn cache once.
     // In the threshold→blockAfter band this path is only entered to activate a ready
-    // chunk with no chunk write in flight — skip the wait so a buffer op's post-persist
-    // work or an in-flight reflection buffer op doesn't block the activation swap.
+    // chunk — skip the wait so an in-flight buffer op (Observer call, indexing) or
+    // reflection buffer op doesn't block the activation swap.
     if (!inAsyncObservationBand) {
       await om.waitForBuffering(threadId, resourceId);
     }
@@ -535,12 +510,9 @@ export class ObservationStep {
       });
     }
 
-    // A bounded activation wait can leave older chunks (or a late write) pending.
-    // Defer rather than sync-observe newer messages and later roll the cursor back.
-    // Keep prior activation cleanup, and don't reflect onto a new generation while
-    // the stalled write still targets this one.
-    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
-    if ((status.shouldObserve && status.canActivate) || om.buffering.isChunkWriteInProgress(observationBufferKey)) {
+    // Chunks still remain after activation (it stopped short of them): defer rather than
+    // sync-observe newer messages ahead of older buffered ones. Keep prior activation cleanup.
+    if (status.shouldObserve && status.canActivate) {
       return {
         succeeded: activated,
         record: this.turn.record,
@@ -586,11 +558,7 @@ export class ObservationStep {
       }
     }
 
-    if (
-      status.inAsyncObservationBand ||
-      status.canActivate ||
-      om.buffering.isChunkWriteInProgress(observationBufferKey)
-    ) {
+    if (status.inAsyncObservationBand || status.canActivate) {
       return {
         succeeded: activated,
         record: this.turn.record,

@@ -212,6 +212,42 @@ describe('activation commits only to the head generation', () => {
     expect(head.bufferedObservationChunks ?? []).toEqual([]);
   });
 
+  it('keeps a chunk another process appends between the head read and the swap (P5)', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage);
+    const ids = await setupThread(storage);
+    const { source, initial } = await seedReadyChunk(storage, om, ids);
+    const lateAt = new Date(source.createdAt!.getTime() + 10_000);
+
+    const originalSwap = storage.swapBufferedToActive.bind(storage);
+    vi.spyOn(storage, 'swapBufferedToActive').mockImplementationOnce(async input => {
+      // Another process's buffer op lands after activation read the head. The in-process
+      // queue can't order it, so only storage can keep it.
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          cycleId: `late-${ids.threadId}`,
+          observations: '- LATE_FACT',
+          tokenCount: 20,
+          messageIds: ['late-source'],
+          messageTokens: 2_000,
+          lastObservedAt: new Date(lateAt.getTime() + 1),
+        },
+        lastBufferedAtTime: new Date(lateAt.getTime() + 1),
+      });
+      return originalSwap(input);
+    });
+
+    const result = await om.activate({ threadId: ids.threadId, resourceId: ids.resourceId });
+
+    expect(result.activated).toBe(true);
+    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+    expect(head.activeObservations).toContain(SECRET);
+    const lateInActive = (head.activeObservations ?? '').split('LATE_FACT').length - 1;
+    const lateBuffered = (head.bufferedObservationChunks ?? []).filter(c => c.cycleId === `late-${ids.threadId}`);
+    expect(lateInActive + lateBuffered.length).toBe(1);
+  });
+
   it('keeps the source or its observation in the actor context when a reflection overlaps step-0 activation (P4)', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });

@@ -4,7 +4,8 @@
  * A large tool-result batch can leave an uncovered tail after buffered activation.
  * These tests drive real OM + in-memory storage through `turn.step(n).prepare()`:
  * tails in the async band stay non-blocking; tails at/above blockAfter sync-observe
- * only uncovered messages. Timed-out writes defer without losing prior cleanup.
+ * only uncovered messages. A chunk write that outlasts activation's wait is skipped by
+ * storage once the sync pass has covered it.
  */
 
 import type { MastraDBMessage } from '@mastra/core/agent';
@@ -267,7 +268,7 @@ describe('threshold observation after partial buffered activation', () => {
     ]);
   });
 
-  it('defers a real first buffer write with no persisted chunks, then activates before observing the tail', async () => {
+  it('observes past a stalled first buffer write at blockAfter, and storage skips the late chunk it covered', async () => {
     const threadId = 'thread-first-write-timeout';
     const { storage, om, observerCall, swapSpy } = await setup(threadId);
     const t0 = Date.now() - 60_000;
@@ -310,38 +311,39 @@ describe('threshold observation after partial buffered activation', () => {
     );
     vi.useFakeTimers();
     try {
+      // At/above blockAfter the step can't wait out a stalled Observer: it sync-observes
+      // everything unobserved, including the messages the stalled op is buffering.
       const preparing = turn.step(1).prepare();
       await vi.advanceTimersByTimeAsync(30_001);
       const ctx = await preparing;
-      expect(ctx.observed).toBe(false);
-      expect(observerCall).toHaveBeenCalledTimes(1);
+      expect(ctx.observed).toBe(true);
       expect(swapSpy).not.toHaveBeenCalled();
-      expect(messageList.get.all.db().map(m => m.id)).toEqual([
-        'old-user',
-        'old-assistant',
+      expect(observerCall).toHaveBeenCalledTimes(2);
+      expect(observerCall.mock.calls[1]![1].map(m => m.id).sort()).toEqual([
         'new-user',
+        'old-assistant',
+        'old-user',
         'unbuffered-tail',
       ]);
-      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastObservedAt).toBeUndefined();
+      const observed = await storage.getObservationalMemory(threadId, resourceId);
+      expect(observed?.lastObservedAt).toEqual(tail.createdAt);
+      expect(observed?.activeObservations).toContain('* observed tail');
+
+      // The stalled op's chunk then lands wholly behind the cursor: storage skips it,
+      // so nothing is buffered twice and the record stays on the same generation.
       releaseObserver();
       await buffering;
       vi.useRealTimers();
       expect(BufferingCoordinator.pendingChunkWrites.has(key)).toBe(false);
       const afterWrite = await storage.getObservationalMemory(threadId, resourceId);
       expect(afterWrite?.id).toBe(record.id);
-      expect(afterWrite?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds)).toEqual([
-        'old-user',
-        'old-assistant',
-      ]);
+      expect(afterWrite?.bufferedObservationChunks ?? []).toHaveLength(0);
+      expect(afterWrite?.activeObservations).not.toContain('* buffered prefix');
+      expect(afterWrite?.lastObservedAt).toEqual(tail.createdAt);
+
       await turn.step(2).prepare();
-      expect(swapSpy).toHaveBeenCalledTimes(1);
+      expect(swapSpy).not.toHaveBeenCalled();
       expect(observerCall).toHaveBeenCalledTimes(2);
-      expect(observerCall.mock.calls[1]![1].map(m => m.id).sort()).toEqual(['new-user', 'unbuffered-tail']);
-      const finalRecord = await storage.getObservationalMemory(threadId, resourceId);
-      expect(finalRecord?.lastObservedAt).toEqual(tail.createdAt);
-      expect(finalRecord?.activeObservations).toContain('* buffered prefix');
-      expect(finalRecord?.activeObservations).toContain('* observed tail');
-      expect(finalRecord?.bufferedObservationChunks ?? []).toHaveLength(0);
     } finally {
       releaseObserver();
       await buffering;
@@ -386,15 +388,14 @@ describe('threshold observation after partial buffered activation', () => {
         });
       await vi.advanceTimersByTimeAsync(1);
       expect(releaseWrite).toBeDefined();
+      // In the band, activation takes the stored chunk without waiting on the write.
       expect(completed).toBe(true);
       expect(observerCall).not.toHaveBeenCalled();
-      expect(swapSpy).not.toHaveBeenCalled();
-      expect(messageList.get.all.db().map(m => m.id)).toEqual([
-        'old-user',
-        'old-assistant',
-        'new-user',
-        'unbuffered-tail',
-      ]);
+      expect(swapSpy).toHaveBeenCalledTimes(1);
+      expect(messageList.get.all.db().map(m => m.id)).toEqual(['new-user', 'unbuffered-tail']);
+      const activated = await storage.getObservationalMemory(threadId, resourceId);
+      expect(activated?.activeObservations).toContain('cycle-a observation');
+      expect(activated?.lastObservedAt).toEqual(oldAssistant.createdAt);
     } finally {
       releaseWrite?.();
       await vi.advanceTimersByTimeAsync(60_000);
@@ -404,7 +405,7 @@ describe('threshold observation after partial buffered activation', () => {
   });
 
   it.each([false, true])(
-    'defers a stalled chunk write and recovers without duplicate coverage (prior activation: %s)',
+    'proceeds past a stalled chunk write at blockAfter without losing or duplicating coverage (prior activation: %s)',
     async priorActivation => {
       const threadId = `thread-timeout-recovery-${priorActivation}`;
       const { storage, om, observerCall, swapSpy } = await setup(threadId, 'continue');
@@ -468,47 +469,44 @@ describe('threshold observation after partial buffered activation', () => {
 
       vi.useFakeTimers();
       try {
+        // At/above blockAfter, activation waits (bounded) for the in-process write, then
+        // activates the stored chunks and the step sync-observes everything still unobserved,
+        // including the message the stalled write was buffering.
         const prepared = turn.step(1).prepare();
         await vi.advanceTimersByTimeAsync(90_001);
         const ctx = await prepared;
-        expect(observerCall).not.toHaveBeenCalled();
-        expect(swapSpy).toHaveBeenCalledTimes(priorActivation ? 1 : 0);
-        expect(ctx.observed).toBe(priorActivation);
-        expect(ctx.status.shouldObserve).toBe(true);
-        const deferred = await storage.getObservationalMemory(threadId, resourceId);
-        expect(deferred?.lastObservedAt).toEqual(priorActivation ? oldAssistant.createdAt : undefined);
-        expect(deferred?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds)).toEqual(
-          priorActivation ? ['middle-buffered'] : ['old-user', 'old-assistant', 'middle-buffered'],
-        );
-        const retainedIds = messageList.get.all.db().map(m => m.id);
-        expect(retainedIds).toContain('middle-buffered');
-        expect(retainedIds).toContain('late-buffered');
-        expect(retainedIds).toContain('unbuffered-tail');
-        expect(retainedIds.includes('old-user')).toBe(!priorActivation);
-        expect(retainedIds.includes('old-assistant')).toBe(!priorActivation);
-        expect(deferred?.pendingMessageTokens).toBe(
-          priorActivation ? swapSpy.mock.calls[0]![0].currentPendingTokens! - 600 : 1200,
-        );
+        expect(ctx.observed).toBe(true);
+        expect(swapSpy).toHaveBeenCalledTimes(priorActivation ? 2 : 1);
+        expect(observerCall).toHaveBeenCalledTimes(1);
+        expect(observerCall.mock.calls[0]![1].map(m => m.id).sort()).toEqual([
+          'late-buffered',
+          'new-user',
+          'unbuffered-tail',
+        ]);
+        const observed = await storage.getObservationalMemory(threadId, resourceId);
+        expect(observed?.lastObservedAt).toEqual(tail.createdAt);
+        expect(observed?.bufferedObservationChunks ?? []).toHaveLength(0);
+        expect(observed?.activeObservations).toContain('cycle-a observation');
+        expect(observed?.activeObservations).toContain('cycle-middle observation');
+        expect(observed?.activeObservations).toContain('* observed tail');
 
+        // The stalled chunk lands behind the cursor: storage skips it instead of buffering
+        // late-buffered a second time.
         finishWrite();
         await pendingWrite;
         BufferingCoordinator.asyncBufferingOps.delete(key);
         vi.useRealTimers();
         const afterWrite = await storage.getObservationalMemory(threadId, resourceId);
-        expect(afterWrite?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds)).toContain('late-buffered');
-        const recovered = await turn.step(2).prepare();
-        expect(recovered.observed).toBe(true);
+        expect(afterWrite?.bufferedObservationChunks ?? []).toHaveLength(0);
+        expect(afterWrite?.lastObservedAt).toEqual(tail.createdAt);
+
+        const next = await turn.step(2).prepare();
+        expect(next.observed).toBe(false);
         expect(observerCall).toHaveBeenCalledTimes(1);
-        expect(observerCall.mock.calls[0]![1].map(m => m.id).sort()).toEqual(['new-user', 'unbuffered-tail']);
         const finalRecord = await storage.getObservationalMemory(threadId, resourceId);
-        expect(finalRecord?.lastObservedAt).toEqual(tail.createdAt);
-        expect(finalRecord?.bufferedObservationChunks ?? []).toHaveLength(0);
-        expect(finalRecord?.activeObservations).toContain('cycle-a observation');
-        expect(finalRecord?.activeObservations).toContain('cycle-middle observation');
-        expect(finalRecord?.activeObservations).toContain('cycle-late observation');
-        expect(finalRecord?.activeObservations).toContain('* observed tail');
+        expect(finalRecord?.activeObservations).not.toContain('cycle-late observation');
         expect(swapCursors).toEqual([...swapCursors].sort((a, b) => a - b));
-        expect(swapCursors.at(-1)).toBe(late.createdAt.getTime());
+        expect(swapCursors.at(-1)).toBe(middle.createdAt.getTime());
         expect(finalRecord!.lastObservedAt!.getTime()).toBeGreaterThan(swapCursors.at(-1)!);
       } finally {
         finishWrite();
