@@ -88,9 +88,14 @@ pnpm --filter @mastra/connect smoke-test:channels
 pnpm --filter @mastra/connect smoke-test:channels --channel discord
 ```
 
-It checks the resolver contract (construction guards, route mounting before any connection exists, TTL cache + `invalidate()`/`refresh()`, `disabled` and bogus `connectionId` overrides) and, for each connected channel, the end-to-end credential flow: presence in the resolved map (which proves credential late-binding, e.g. Discord's `sync()` → `configure()`), provider `id`/routes/`getInfo()`, a platform credential fetch, and a read-only vendor whoami call (Discord `GET /users/@me` + `/applications/@me`, Slack `auth.test`, Telegram `getMe`). The whoami calls deliberately bypass the proxy — channel providers call vendor APIs directly with the resolved token, so that direct path is what gets smoked.
+It checks four layers:
 
-All checks are read-only: no webhooks registered, no agents installed, no messages sent.
+- **Resolver contract** — construction guards, route mounting before any connection exists, TTL cache + `invalidate()`/`refresh()`, `disabled` and bogus `connectionId` overrides.
+- **Server mount** — the resolver is handed to a real `Mastra` instance; the suite asserts the channel routes land in the merged `server.apiRoutes` with correct `requiresAuth` flags, mounts them the way the production server adapter does (`handler` / `createHandler({ mastra })` onto Hono), and drives every platform's webhook endpoint with real HTTP requests (unknown webhook ids answer 404).
+- **Credential flow** — for each connected channel: presence in the resolved map (which proves credential late-binding, e.g. Discord's `sync()` → `configure()`), provider `id`/routes/`getInfo()`, a platform credential fetch, and a vendor whoami call (Discord `GET /users/@me` + `/applications/@me`, Slack `auth.test`, Telegram `getMe`). The whoami calls deliberately bypass the proxy — channel providers call vendor APIs directly with the resolved token, so that direct path is what gets smoked.
+- **Discord full webhook flow** — the one platform where the whole loop is testable without external listeners. The suite overrides the provider's Ed25519 public key with a locally generated pair (`providerOptions.publicKey`), `connect()`s an agent to a guild the bot is already in (`commands: []`, so nothing on the guild is mutated), POSTs a **signed PING interaction** to the mounted route and expects a PONG, POSTs a forged signature and expects 401, then `disconnect()`s and verifies the installation is gone. The installation lives in in-process channel storage, so nothing persists after the run.
+
+Slack's equivalent flow needs an App Configuration token (the manifest-mint path) and a reachable public URL for Slack to call back, and Telegram's needs `setWebhook` against the live bot — both stay out of scope here; their webhook routes are still exercised via the mounted server (signature rejection and unknown-webhook paths). The suite sends no messages and registers nothing with any vendor.
 
 ## Cross-provider cleanup
 

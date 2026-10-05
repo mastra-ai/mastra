@@ -1,4 +1,7 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
+
 import type { ChannelProvider } from '@mastra/core/channels';
+import { Mastra } from '@mastra/core/mastra';
 
 import { channels } from '../../../src/channels.js';
 import type { ConnectionCredential, ProjectConnection, ResolvedClient } from '../../../src/client.js';
@@ -7,6 +10,7 @@ import { MastraConnectError } from '../../../src/errors.js';
 import type { ScenarioStep } from '../scenario.js';
 import { makeStep } from '../scenario.js';
 import type { ProviderOutcome, RunResult } from '../runner.js';
+import { mountChannelRoutes } from './server.js';
 
 type ApiRoute = ReturnType<ChannelProvider['getRoutes']>[number];
 
@@ -64,9 +68,14 @@ export async function runChannelSmokeTests(options: ChannelRunnerOptions = {}): 
   const contract = await resolverContractOutcome(projectId, client, activeByChannel);
   outcomes.push(contract.outcome);
 
+  // Server-mount checks: hand the resolver to a real Mastra instance, mount
+  // the merged apiRoutes the way the server adapter does, and drive the
+  // webhook endpoints end-to-end with HTTP requests.
+  outcomes.push(await serverMountOutcome(projectId, client));
+
   for (const id of CHANNEL_IDS) {
     if (requested && !requested.has(id)) continue;
-    outcomes.push(await channelOutcome(id, client, activeByChannel.get(id), contract.resolved));
+    outcomes.push(await channelOutcome(id, projectId, client, activeByChannel.get(id), contract.resolved));
   }
 
   return {
@@ -293,8 +302,92 @@ async function resolverContractOutcome(
   };
 }
 
+/**
+ * Builds a real `Mastra` instance from a fresh resolver, mounts the merged
+ * `server.apiRoutes` the way the production server adapter does, and drives
+ * the webhook endpoints with real HTTP requests. Every platform's webhook
+ * route must be live (mounted + handler reachable + storage lookup running)
+ * even before any installation exists — unknown webhook ids answer 404.
+ */
+async function serverMountOutcome(projectId: string, client: ResolvedClient): Promise<ProviderOutcome> {
+  const started = Date.now();
+  const steps: ScenarioStep[] = [];
+  const clientOptions = { accessToken: client.accessToken };
+
+  try {
+    const resolver = await channels({ projectId, client: clientOptions });
+    const routeCount = resolver.getRoutes().length;
+    const mastra = new Mastra({ channels: resolver, logger: false });
+    const mounted = mastra.getServer()?.apiRoutes ?? [];
+    steps.push(
+      mounted.length === routeCount && routeCount > 0
+        ? makeStep('channel routes merged into Mastra server config', undefined, 'pass', `${mounted.length} route(s)`)
+        : makeStep(
+            'channel routes merged into Mastra server config',
+            undefined,
+            'fail',
+            `resolver exposes ${routeCount} route(s), Mastra server config has ${mounted.length}`,
+          ),
+    );
+
+    // Webhook, slash-command, and OAuth routes must be publicly reachable
+    // (vendors authenticate with their own signatures, not bearer tokens);
+    // management routes must demand auth. The production server enforces the
+    // flag — the contract to check here is its value.
+    const misflagged = mounted.filter(route => {
+      const isPublic = /\/events\/|\/commands\/|\/oauth\//.test(route.path);
+      return (route.requiresAuth ?? true) === isPublic;
+    });
+    steps.push(
+      misflagged.length === 0
+        ? makeStep('requiresAuth flags match route roles', undefined, 'pass')
+        : makeStep(
+            'requiresAuth flags match route roles',
+            undefined,
+            'fail',
+            `misflagged: ${misflagged.map(r => `${r.method} ${r.path}`).join(', ')}`,
+          ),
+    );
+
+    const app = await mountChannelRoutes(mastra);
+    for (const id of CHANNEL_IDS) {
+      try {
+        const response = await app.request(`/${id}/events/mastra-smoke-unknown-webhook`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ probe: true }),
+        });
+        steps.push(
+          response.status === 404
+            ? makeStep(`${id} webhook route live (unknown id → 404)`, undefined, 'pass')
+            : makeStep(
+                `${id} webhook route live (unknown id → 404)`,
+                undefined,
+                'fail',
+                `expected 404, got ${response.status}`,
+              ),
+        );
+      } catch (error) {
+        steps.push(makeStep(`${id} webhook route live (unknown id → 404)`, undefined, 'fail', errorMessage(error)));
+      }
+    }
+  } catch (error) {
+    steps.push(makeStep('mount channel routes on Mastra server', undefined, 'fail', errorMessage(error)));
+  }
+
+  const status: ProviderOutcome['status'] = steps.some(s => s.status === 'fail') ? 'fail' : 'pass';
+  return {
+    integrationId: 'server-mount',
+    summary: 'channel routes mounted on a real Mastra server + webhook endpoints live',
+    status,
+    steps,
+    elapsedMs: Date.now() - started,
+  };
+}
+
 async function channelOutcome(
   id: ChannelId,
+  projectId: string,
   client: ResolvedClient,
   connection: ProjectConnection | undefined,
   resolved: Record<string, ChannelProvider>,
@@ -369,8 +462,172 @@ async function channelOutcome(
     steps.push(...(await verifyCredentialLive(id, credential)));
   }
 
+  // Discord supports the complete flow without external listeners: register
+  // the webhook (connect), deliver a signed interaction to the mounted route,
+  // reject a forged one, and tear the installation down again.
+  if (id === 'discord' && credential?.type === 'api_key') {
+    steps.push(...(await discordWebhookFlow(projectId, client, credential.apiKey)));
+  }
+
   const status: ProviderOutcome['status'] = steps.some(s => s.status === 'fail') ? 'fail' : 'pass';
   return { integrationId: id, summary, status, steps, elapsedMs: Date.now() - started };
+}
+
+/** The agent id the Discord full-flow installation is registered under. */
+const SMOKE_AGENT_ID = 'mastra-smoke-channels-agent';
+
+/**
+ * Full Discord webhook flow against a real Mastra server:
+ *
+ * 1. Build a dedicated resolver whose Discord provider is configured with a
+ *    locally generated Ed25519 public key (`providerOptions.publicKey` is an
+ *    allowed override), so this suite holds the matching private key and can
+ *    produce genuinely valid signatures — something Discord itself never
+ *    exposes. `gateway: false` keeps the Gateway loop out of a smoke run.
+ * 2. `connect()` an agent to a guild the bot is already in (immediate bind).
+ *    `commands: []` makes command registration a no-op, so the guild is not
+ *    mutated; connect() itself only performs read-only Discord calls
+ *    (`/applications/@me`, guild health check).
+ * 3. POST a signed PING interaction to the mounted route → 200 PONG.
+ * 4. POST the same payload with a tampered signature → 401.
+ * 5. `disconnect()` and verify the installation is gone.
+ *
+ * Everything the flow creates lives in the provider's channel storage (in
+ * memory for this process) — nothing persists after the run.
+ */
+async function discordWebhookFlow(
+  projectId: string,
+  client: ResolvedClient,
+  botToken: string,
+): Promise<ScenarioStep[]> {
+  const steps: ScenarioStep[] = [];
+  const clientOptions = { accessToken: client.accessToken };
+
+  // Our own Ed25519 pair: raw 32-byte public key hex, the format Discord uses.
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+
+  type InstallableProvider = ChannelProvider & {
+    getInstallation?: (agentId: string) => Promise<{ webhookId: string } | null>;
+  };
+
+  let provider: InstallableProvider | undefined;
+  let connected = false;
+  try {
+    const resolver = await channels({
+      projectId,
+      client: clientOptions,
+      integrations: {
+        slack: { disabled: true },
+        telegram: { disabled: true },
+        discord: { providerOptions: { publicKey: publicKeyHex, gateway: false } },
+      },
+    });
+    const mastra = new Mastra({ channels: resolver, logger: false });
+    const app = await mountChannelRoutes(mastra);
+    const resolved = await resolver();
+    provider = resolved.discord as InstallableProvider | undefined;
+    if (!provider) {
+      steps.push(makeStep('webhook flow: resolve dedicated provider', undefined, 'fail', 'discord did not resolve'));
+      return steps;
+    }
+
+    // A guild the bot is already in → connect() binds immediately.
+    const guilds = await fetchJson('https://discord.com/api/v10/users/@me/guilds', {
+      Authorization: `Bot ${botToken}`,
+    });
+    const guildId = guilds.ok && Array.isArray(guilds.body) ? asString(guilds.body[0], 'id') : undefined;
+    if (!guildId) {
+      steps.push(
+        makeStep('webhook flow: discover guild', undefined, 'skip', 'bot is not a member of any guild — cannot bind'),
+      );
+      return steps;
+    }
+
+    if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
+      steps.push(makeStep('webhook flow: connect agent', undefined, 'fail', 'provider lacks connect/disconnect'));
+      return steps;
+    }
+
+    const result = await provider.connect(SMOKE_AGENT_ID, { guildId, commands: [] });
+    connected = true;
+    steps.push(
+      result.type === 'immediate'
+        ? makeStep('webhook flow: connect agent (immediate bind)', undefined, 'pass', `guild ${guildId}`)
+        : makeStep(
+            'webhook flow: connect agent (immediate bind)',
+            undefined,
+            'fail',
+            `expected immediate bind, got '${result.type}'`,
+          ),
+    );
+
+    const installation = await provider.getInstallation?.(SMOKE_AGENT_ID);
+    const webhookId = installation?.webhookId;
+    if (!webhookId) {
+      steps.push(makeStep('webhook flow: installation webhookId', undefined, 'fail', 'no webhookId on installation'));
+      return steps;
+    }
+
+    // Signed PING → PONG. The adapter verifies Ed25519 over timestamp+body
+    // against the stored public key (ours), then answers { type: 1 }.
+    const body = JSON.stringify({ type: 1, id: '0', application_id: '0', version: 1, token: 'mastra-smoke' });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = sign(null, Buffer.from(timestamp + body), privateKey).toString('hex');
+    const headers = {
+      'content-type': 'application/json',
+      'x-signature-ed25519': signature,
+      'x-signature-timestamp': timestamp,
+    };
+
+    const pong = await app.request(`/discord/events/${webhookId}`, { method: 'POST', headers, body });
+    const pongBody = (await pong.json().catch(() => undefined)) as { type?: number } | undefined;
+    steps.push(
+      pong.status === 200 && pongBody?.type === 1
+        ? makeStep('webhook flow: signed PING → PONG', undefined, 'pass')
+        : makeStep(
+            'webhook flow: signed PING → PONG',
+            undefined,
+            'fail',
+            `status ${pong.status}, body ${JSON.stringify(pongBody)}`,
+          ),
+    );
+
+    // Forged signature → rejected before any work happens.
+    const tampered = `${signature.slice(0, -2)}${signature.endsWith('00') ? '11' : '00'}`;
+    const forged = await app.request(`/discord/events/${webhookId}`, {
+      method: 'POST',
+      headers: { ...headers, 'x-signature-ed25519': tampered },
+      body,
+    });
+    steps.push(
+      forged.status === 401
+        ? makeStep('webhook flow: forged signature → 401', undefined, 'pass')
+        : makeStep('webhook flow: forged signature → 401', undefined, 'fail', `status ${forged.status}`),
+    );
+  } catch (error) {
+    steps.push(makeStep('webhook flow', undefined, 'fail', errorMessage(error)));
+  } finally {
+    if (provider && connected) {
+      try {
+        await provider.disconnect?.(SMOKE_AGENT_ID);
+        const after = await provider.getInstallation?.(SMOKE_AGENT_ID);
+        steps.push(
+          after == null
+            ? makeStep('webhook flow: disconnect removes installation', undefined, 'pass')
+            : makeStep(
+                'webhook flow: disconnect removes installation',
+                undefined,
+                'fail',
+                'installation still present',
+              ),
+        );
+      } catch (error) {
+        steps.push(makeStep('webhook flow: disconnect removes installation', undefined, 'fail', errorMessage(error)));
+      }
+    }
+  }
+  return steps;
 }
 
 const CHANNEL_SUMMARIES: Record<ChannelId, string> = {

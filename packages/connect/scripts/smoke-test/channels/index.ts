@@ -4,10 +4,12 @@
  *
  * Reads auth from the environment (MASTRA_PLATFORM_SECRET_KEY and
  * MASTRA_PROJECT_ID), exercises the public `channels()` resolver contract
- * against the live platform, and for every channel integration with an
- * active connection verifies the end-to-end credential flow with read-only
- * vendor whoami calls. Prints the same step-by-step report as the tools
- * smoke suite.
+ * against the live platform, mounts the channel routes on a real Mastra
+ * server and drives the webhook endpoints with HTTP requests, and for every
+ * channel integration with an active connection verifies the end-to-end
+ * credential flow (vendor whoami calls; for Discord, the complete
+ * connect → signed-webhook → disconnect loop). Prints the same step-by-step
+ * report as the tools smoke suite.
  *
  * Exits non-zero when any check fails or errors. Channels without an active
  * connection are skipped, not failed.
@@ -56,10 +58,12 @@ function printHelp(): void {
       '  --project-id       Override MASTRA_PROJECT_ID for this run.',
       '  --help / -h        Show this help.',
       '',
-      'All checks are read-only: the suite resolves channel providers through',
-      'the public channels() API and verifies each connected credential with a',
-      'vendor whoami call. It never registers webhooks, installs agents, or',
-      'sends messages.',
+      'The suite resolves channel providers through the public channels() API,',
+      'mounts their routes on a real Mastra server, verifies each connected',
+      'credential with a vendor whoami call, and (Discord) runs the full flow:',
+      'connect an agent, deliver a signed webhook interaction, reject a forged',
+      'one, disconnect. It sends no messages and registers nothing with any',
+      'vendor; installations live in in-process storage only.',
       '',
     ].join('\n'),
   );
