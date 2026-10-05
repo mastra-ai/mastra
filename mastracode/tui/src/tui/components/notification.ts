@@ -167,7 +167,8 @@ export class NotificationComponent extends WidthAwareContainer {
     const lines = [
       ...titleLines.map(line => chalk.hex(priorityColor(options.priority)).bold(line)),
       ...detailLines.map(line => theme.fg('dim', line)),
-      ...messageLines,
+      // Message body in a soft grey so notifications read differently from assistant text.
+      ...messageLines.map(line => theme.fg('thinkingText', line)),
       ...backgroundDetailLines.map(line => theme.fg('dim', line)),
     ];
     this.addChild(new Text(card(mastra.blue, lines).join('\n'), BOX_INDENT, 0));
