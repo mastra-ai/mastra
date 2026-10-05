@@ -65,11 +65,18 @@ describe('BorderedBox render caching', () => {
 });
 
 describe('UserMessageComponent', () => {
-  it('renders the message text inside a border', () => {
+  it('renders the message on a half-block panel with the → marker', () => {
     const component = new UserMessageComponent('fix the bug please');
-    const rendered = component.render(80).join('\n');
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('fix the bug please');
-    expect(rendered).toContain('╰');
+    const rendered = component.render(80).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(rendered[0]).toBe('▄'.repeat(80));
+    expect(rendered[1]).toBe(' → fix the bug please'.padEnd(80));
+    expect(rendered[2]).toBe('▀'.repeat(80));
+    expect(rendered.join('\n')).not.toContain('╭');
+  });
+
+  it('shows a label before the text', () => {
+    const component = new UserMessageComponent('also check the docs', undefined, { label: 'steer' });
+    const rendered = component.render(80).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(rendered[1]).toContain(' → steer · also check the docs');
   });
 });
