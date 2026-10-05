@@ -2581,6 +2581,9 @@ importers:
       react-router:
         specifier: ^8.0.0
         version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.2.2
@@ -4640,6 +4643,9 @@ importers:
       '@mastra/slack':
         specifier: workspace:^
         version: link:../../channels/slack
+      '@mastra/teams':
+        specifier: workspace:^
+        version: link:../../channels/teams
       '@mastra/telegram':
         specifier: workspace:^
         version: link:../../channels/telegram

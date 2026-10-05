@@ -1,5 +1,6 @@
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
@@ -14,15 +15,18 @@ function formatChange(changePct: number) {
 
 export function MetricsKpiCardChange({
   changePct,
+  comparison = 'vs prior period',
   prevValue,
   lowerIsBetter,
   caption = false,
   className,
 }: {
   changePct: number;
+  /** Names the window the change compares against, e.g. "vs previous 7d". Shown on hover. */
+  comparison?: string;
   prevValue?: string;
   lowerIsBetter?: boolean;
-  /** Show the inline "vs prior period" text. Off by default: pair the badge with
+  /** Show the comparison as inline text. Off by default: pair the badge with
    *  `MetricsKpiCard.Footer`, which shows the prior value itself. */
   caption?: boolean;
   className?: string;
@@ -30,26 +34,31 @@ export function MetricsKpiCardChange({
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
   const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
   const formattedChange = formatChange(changePct);
+  const description = prevValue ? `${comparison} (${prevValue})` : comparison;
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
-      <Badge
-        variant={isGood ? 'success' : 'destructive'}
-        emphasis="strong"
-        size="xs"
-        icon={<Icon />}
-        className="tabular-nums"
-      >
-        {formattedChange}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger render={<span tabIndex={0} className="inline-flex rounded-full" />}>
+          <Badge
+            variant={isGood ? 'success' : 'destructive'}
+            emphasis="strong"
+            size="xs"
+            icon={<Icon />}
+            className="tabular-nums"
+            aria-hidden="true"
+          >
+            {formattedChange}
+          </Badge>
+          <span className="sr-only">{`${formattedChange} ${description}`}</span>
+        </TooltipTrigger>
+        <TooltipContent>{description}</TooltipContent>
+      </Tooltip>
       {caption ? (
-        <Txt as="span" variant="meta" tone="faint">
-          vs prior period
-          {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
+        <Txt as="span" variant="meta" tone="faint" aria-hidden="true">
+          {comparison}
         </Txt>
-      ) : (
-        <span className="sr-only">vs prior period{prevValue ? `, previous value ${prevValue}` : ''}</span>
-      )}
+      ) : null}
     </div>
   );
 }

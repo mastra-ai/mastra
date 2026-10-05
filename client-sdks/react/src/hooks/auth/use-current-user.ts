@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { fetchWithRefresh } from './fetch-with-refresh';
 import type { CurrentUser } from './types';
@@ -29,7 +31,7 @@ export function isUnauthenticatedError(error: unknown): boolean {
  *
  * @example
  * ```tsx
- * import { useCurrentUser } from '@mastra/react/hooks';
+ * import { useCurrentUser } from '@mastra/react/hooks/auth';
  *
  * function UserMenu() {
  *   const { data: user, isLoading } = useCurrentUser();
@@ -46,11 +48,13 @@ export function isUnauthenticatedError(error: unknown): boolean {
  * }
  * ```
  */
-export function useCurrentUser() {
+export function useCurrentUser<TData = CurrentUser>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<CurrentUser, TData> } = {}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
   const baseUrl = client.options?.baseUrl || '';
 
-  return useQuery<CurrentUser>({
+  return useQuery<CurrentUser, Error, TData>({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       const response = await fetchWithRefresh(baseUrl, `${baseUrl}/api/auth/me`, {
@@ -77,5 +81,6 @@ export function useCurrentUser() {
       return failureCount < AUTH_TRANSIENT_MAX_RETRIES;
     },
     retryDelay: attemptIndex => Math.min(AUTH_TRANSIENT_MAX_BACKOFF_MS, 500 * 2 ** attemptIndex),
+    ...queryOptions,
   });
 }

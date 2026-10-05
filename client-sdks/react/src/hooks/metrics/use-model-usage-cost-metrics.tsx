@@ -1,7 +1,9 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import { formatCompactNumber } from '../shared/cost';
 import { getOrCreate } from '../shared/map';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 export interface ModelUsageRow {
@@ -14,9 +16,11 @@ export interface ModelUsageRow {
   costUnit: string | null;
 }
 
-export function useModelUsageCostMetrics(params: MetricsQueryFilters) {
+export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<ModelUsageRow[], TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { filters, filterKey } = params;
+  const { filters, filterKey, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'model-usage-cost', filterKey],
@@ -107,5 +111,6 @@ export function useModelUsageCostMetrics(params: MetricsQueryFilters) {
         }))
         .sort((a, b) => a.model.localeCompare(b.model));
     },
+    ...queryOptions,
   });
 }

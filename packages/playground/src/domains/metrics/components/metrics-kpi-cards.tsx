@@ -8,14 +8,14 @@ import {
   useAgentRunsKpiMetrics,
   useModelCostKpiMetrics,
   useTotalTokensKpiMetrics,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/metrics';
 import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon, UsersIcon } from 'lucide-react';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Agent Runs"
+      label="Agent runs"
       icon={<BotIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
@@ -31,7 +31,7 @@ export function ModelCostKpiCard() {
   const currency = data?.costUnit ?? undefined;
   return (
     <KpiCardView
-      label="Total Model Cost"
+      label="Model cost"
       icon={<CoinsIcon />}
       value={data?.cost != null ? <CompactNumber value={data.cost} currency={currency} /> : null}
       prevValue={data?.previousCost != null ? formatFullNumber(data.previousCost, { currency }) : undefined}
@@ -47,7 +47,7 @@ export function TotalTokensKpiCard() {
   const { data, isLoading, isError } = useTotalTokensKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Tokens"
+      label="Tokens"
       icon={<HashIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
@@ -62,7 +62,7 @@ export function ActiveThreadsKpiCard() {
   const { data, isLoading, isError } = useActiveThreadsKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Threads"
+      label="Threads"
       icon={<MessagesSquareIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
@@ -77,7 +77,7 @@ export function ActiveResourcesKpiCard() {
   const { data, isLoading, isError } = useActiveResourcesKpiMetrics(useMetricsFilters());
   return (
     <KpiCardView
-      label="Total Resources"
+      label="Resources"
       icon={<UsersIcon />}
       value={data?.value != null ? <CompactNumber value={data.value} /> : null}
       prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}

@@ -10,7 +10,7 @@ import {
   useAgentBuilderWorkflow,
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/templates';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -60,12 +60,12 @@ export default function Template() {
   const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
+  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall({ workflowInfo: workflowInfo });
   const {
     observeInstall,
     streamResult: observeStreamResult,
     isStreaming: isObserving,
-  } = useObserveStreamTemplateInstall(workflowInfo);
+  } = useObserveStreamTemplateInstall({ workflowInfo: workflowInfo });
 
   // Check for completed runs after hot reload recovery
   useEffect(() => {

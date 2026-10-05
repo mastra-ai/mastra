@@ -1,5 +1,5 @@
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
-import { useStoredAgentDependents, useStoredAgentMutations } from '@mastra/react/hooks';
+import { useStoredAgentDependents, useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useFormContext } from 'react-hook-form';
 
 import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';
@@ -28,8 +28,11 @@ export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 
 export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
-  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   return useVisibilityChangeDialog<Visibility>({
     copy: COPY,

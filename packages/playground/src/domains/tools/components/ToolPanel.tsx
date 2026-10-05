@@ -2,7 +2,8 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useTool, useExecuteTool, useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useTool, useExecuteTool } from '@mastra/react/hooks/tools';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -33,7 +34,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   }, [agents, toolId]);
 
   // Only fetch from API if tool not found in agents
-  const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
+  const { data: apiTool, isLoading, error } = useTool({ toolId: toolId!, queryOptions: { enabled: !agentTool } });
 
   const tool: any = agentTool || apiTool;
 

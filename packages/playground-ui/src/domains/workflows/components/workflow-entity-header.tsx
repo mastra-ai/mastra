@@ -1,4 +1,4 @@
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
@@ -14,7 +14,11 @@ export interface WorkflowEntityHeaderProps {
 }
 
 export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEntityHeaderProps) => {
-  const { data: workflow, isLoading } = useWorkflow(workflowId, requestContext);
+  const { data: workflow, isLoading } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const workflowName = workflow?.name || workflowId;

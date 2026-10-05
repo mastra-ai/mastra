@@ -1,7 +1,8 @@
-import type { StoredWorkspaceRef, UpdateStoredAgentParams } from '@mastra/client-js';
+import type { StoredAgentResponse, StoredWorkspaceRef, UpdateStoredAgentParams } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 import { useStoredAgent } from './use-stored-agents';
 
 /**
@@ -12,11 +13,21 @@ import { useStoredAgent } from './use-stored-agents';
  * - `{ type: 'inline', config }` — inline workspace config
  * - `undefined` — no workspace assigned
  */
-export function useAgentWorkspace(agentId?: string, requestContext?: Record<string, any>) {
+export function useAgentWorkspace({
+  agentId,
+  requestContext,
+  queryOptions,
+}: {
+  agentId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: {
+    updateWorkspace?: MastraMutationOptions<StoredAgentResponse, StoredWorkspaceRef | undefined>;
+  };
+} = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  const { data: agent } = useStoredAgent(agentId, { status: 'draft' });
+  const { data: agent } = useStoredAgent({ agentId, status: 'draft', queryOptions: { enabled: Boolean(agentId) } });
 
   const workspace = useMemo((): StoredWorkspaceRef | undefined => {
     if (!agent?.workspace) return undefined;
@@ -40,6 +51,7 @@ export function useAgentWorkspace(agentId?: string, requestContext?: Record<stri
         void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       }
     },
+    ...queryOptions?.updateWorkspace,
   });
 
   return { workspace, updateWorkspace };

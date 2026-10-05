@@ -10,7 +10,8 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useCurrentUser, useStoredAgents, useStoredSkills } from '@mastra/react/hooks';
+import { useStoredAgents, useStoredSkills } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -52,7 +53,7 @@ export default function AgentBuilderFavoritePage() {
     data: skillsData,
     isLoading: skillsLoading,
     error: skillsError,
-  } = useStoredSkills({ enabled: tab === 'skills' && features.skills });
+  } = useStoredSkills({ queryOptions: { enabled: tab === 'skills' && features.skills } });
 
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];

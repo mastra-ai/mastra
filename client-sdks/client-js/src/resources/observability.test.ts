@@ -7,7 +7,12 @@ import type {
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult, QueryTracesGroupedInput, QueryTracesInput } from './observability';
+import type {
+  QuerySpansResult,
+  QueryTraceThreadsResult,
+  QueryTracesGroupedInput,
+  QueryTracesInput,
+} from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -676,6 +681,36 @@ describe('Observability Methods', () => {
       expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/threads/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
+  describe('querySpans()', () => {
+    it('should post the span query body unchanged with a span-row result type', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        where: {
+          op: 'eq' as const,
+          left: { path: 'status' },
+          right: { literal: 'error' },
+        },
+        orderBy: [{ field: 'startedAt' as const, direction: 'desc' as const }],
+        page: { limit: 25 },
+      };
+
+      const result = await client.querySpans(request);
+
+      expectTypeOf(result).toEqualTypeOf<QuerySpansResult>();
+      expectTypeOf<QuerySpansResult['spans'][number]>().toHaveProperty('spanId');
+      expectTypeOf<QuerySpansResult['page']['next']>().toEqualTypeOf<string | null>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/query`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),

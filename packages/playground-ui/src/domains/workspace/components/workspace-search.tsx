@@ -1,4 +1,4 @@
-import { useWorkspaceSearch } from '@mastra/react/hooks';
+import { useWorkspaceSearch } from '@mastra/react/hooks/workspace';
 import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
@@ -87,9 +87,12 @@ function SearchInput() {
 
 export function WorkspaceSearchResults() {
   const { workspaceId, query, activeFilePath, setActiveFilePath, searchFiles, searchSkills } = useWorkspaceContext();
-  const { data, isLoading, isError, error } = useWorkspaceSearch(workspaceId, query, {
+  const { data, isLoading, isError, error } = useWorkspaceSearch({
+    workspaceId: workspaceId,
+    query: query,
     files: searchFiles,
     skills: searchSkills,
+    queryOptions: { enabled: query.trim().length > 0 && (searchFiles || searchSkills) },
   });
 
   if (!query.trim()) {

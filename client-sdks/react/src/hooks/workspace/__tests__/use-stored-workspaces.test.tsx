@@ -61,7 +61,7 @@ describe('useStoredWorkspaces', () => {
         }),
       );
 
-      const { result } = renderHook(() => useStoredWorkspaces(undefined, { enabled: false }), {
+      const { result } = renderHook(() => useStoredWorkspaces({ queryOptions: { enabled: false } }), {
         wrapper: wrapper(),
       });
 

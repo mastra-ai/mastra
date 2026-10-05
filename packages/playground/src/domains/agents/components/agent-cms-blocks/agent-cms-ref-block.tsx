@@ -12,7 +12,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { useStoredAgents } from '@mastra/react/hooks';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -47,10 +47,13 @@ const RefBlockContent = ({
   schema,
   readOnly = false,
 }: RefBlockContentProps) => {
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: block.promptBlockId,
+    queryOptions: { enabled: Boolean(block.promptBlockId) },
+  });
   const isDraft = promptBlock && !promptBlock.activeVersionId;
   const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: block.promptBlockId });
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { MetricsKpiCard } from '../../../ds/components/MetricsKpiCard';
+import { useMetrics } from '../hooks/use-metrics';
 
 export interface KpiCardViewProps {
   label: string;
@@ -27,6 +28,7 @@ export function KpiCardView({
   icon,
   detail,
 }: KpiCardViewProps) {
+  const { comparisonLabel } = useMetrics();
   const hasData = value != null;
   const hasChange = changePct != null && changePct !== 0;
   const ready = hasData && !isLoading && !isError;
@@ -46,7 +48,12 @@ export function KpiCardView({
         ) : !hasData ? (
           <MetricsKpiCard.NoData />
         ) : hasChange ? (
-          <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} lowerIsBetter={lowerIsBetter} />
+          <MetricsKpiCard.Change
+            changePct={changePct}
+            comparison={comparisonLabel}
+            prevValue={prevValue}
+            lowerIsBetter={lowerIsBetter}
+          />
         ) : null}
         {prevInRow ? <MetricsKpiCard.Prev value={prevValue} /> : null}
       </MetricsKpiCard.ValueRow>

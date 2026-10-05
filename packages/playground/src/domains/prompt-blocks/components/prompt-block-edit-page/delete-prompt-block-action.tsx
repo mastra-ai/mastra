@@ -2,7 +2,7 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useStoredPromptBlockMutations } from '@mastra/react/hooks';
+import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -15,7 +15,7 @@ interface DeletePromptBlockActionProps {
 export function DeletePromptBlockAction({ blockId, blockName, disabled = false }: DeletePromptBlockActionProps) {
   const [open, setOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { deleteStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
 
   const isPending = deleteStoredPromptBlock.isPending;
 

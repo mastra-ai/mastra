@@ -1,5 +1,5 @@
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useMemoryConfig } from '@mastra/react/hooks';
+import { useMemoryConfig } from '@mastra/react/hooks/memory';
 import { getRecentMessagesSettings } from './lib/recent-messages';
 
 export interface MemoryFeatureFlags {
@@ -14,7 +14,11 @@ export interface MemoryFeatureFlags {
  * on/off flags the sidebar renders.
  */
 export function useMemoryFeatureFlags(agentId: string): MemoryFeatureFlags {
-  const { data: memoryConfig } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfig } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const config = memoryConfig?.config;
 
   return {

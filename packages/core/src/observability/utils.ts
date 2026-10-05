@@ -35,6 +35,10 @@ export function generateSignalId(): string {
  * array means "no tools enabled for this step" and is honored as such.
  * Returns `[]` (not `undefined`) when `tools` is provided but empty, so a
  * tool-less agent still reports a definitive empty list to observers.
+ *
+ * @deprecated No longer used. `availableTools` is now derived from the tool
+ * definitions serialized for the MODEL_INFERENCE `tools` attribute, which
+ * also apply `toolChoice` and drop names that are not registered tools.
  */
 export function getStepAvailableToolNames(
   tools?: Record<string, unknown> | undefined,

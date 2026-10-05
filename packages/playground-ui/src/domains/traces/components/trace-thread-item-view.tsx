@@ -1,4 +1,4 @@
-import { useTraceSpans } from '@mastra/react/hooks';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
@@ -19,7 +19,11 @@ export interface TraceThreadItemViewProps {
 const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
+  const { data, isLoading, error } = useTraceSpans({
+    traceId: traceId,
+    passive: true,
+    queryOptions: { enabled: !!traceId },
+  });
 
   if (isLoading) return <TraceMessagesSkeleton className={className} />;
 

@@ -1,20 +1,34 @@
 import type { MastraClient } from '@mastra/client-js';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 
 /**
  * Hook to fetch a single dataset item by ID
  */
-export const useDatasetItem = (datasetId: string, itemId: string) => {
+type DatasetItemResponse = Awaited<ReturnType<MastraClient['getDatasetItem']>>;
+
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useDatasetItem = <TData = DatasetItemResponse>({
+  datasetId,
+  itemId,
+  queryOptions,
+}: {
+  datasetId: string;
+  itemId: string;
+  queryOptions?: MastraQueryOptions<DatasetItemResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-item', datasetId, itemId],
     queryFn: () => client.getDatasetItem(datasetId, itemId),
-    enabled: Boolean(datasetId) && Boolean(itemId),
     retry: false, // Don't retry 404s for deleted items
+    ...queryOptions,
   });
 };
 
@@ -37,12 +51,27 @@ export type UseDatasetItemsResult = Omit<
  */
 export type DatasetItemsOrderBy = NonNullable<NonNullable<Parameters<MastraClient['listDatasetItems']>[1]>['orderBy']>;
 
-export const useDatasetItems = (
-  datasetId: string,
-  search?: string,
-  version?: number | null,
-  orderBy?: DatasetItemsOrderBy,
-): UseDatasetItemsResult => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useDatasetItems = ({
+  datasetId,
+  search,
+  version,
+  orderBy,
+  queryOptions,
+}: {
+  datasetId: string;
+  search?: string;
+  version?: number | null;
+  orderBy?: DatasetItemsOrderBy;
+  queryOptions?: MastraInfiniteQueryOptions<
+    ListDatasetItemsResponse,
+    InfiniteData<ListDatasetItemsResponse, number>,
+    QueryKey,
+    number
+  >;
+}): UseDatasetItemsResult => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
@@ -70,8 +99,8 @@ export const useDatasetItems = (
       }
       return lastPageParam + 1;
     },
-    enabled: Boolean(datasetId),
     retry: false,
+    ...queryOptions,
   });
 
   const items = query.data?.pages.flatMap(page => page?.items ?? []) ?? [];

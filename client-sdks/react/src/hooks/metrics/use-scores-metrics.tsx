@@ -1,7 +1,9 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import { formatDate } from '../shared/date-format';
 import { getOrCreate } from '../shared/map';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 export interface ScorerSummary {
@@ -17,13 +19,22 @@ export interface ScoresOverTimePoint {
   [scorer: string]: string | number;
 }
 
-export function useScoresMetrics(params: MetricsQueryFilters) {
+export interface ScoresMetricsData {
+  summaryData: ScorerSummary[];
+  overTimeData: ScoresOverTimePoint[];
+  scorerNames: string[];
+  avgScore: number | null;
+}
+
+export function useScoresMetrics<TData = ScoresMetricsData>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<ScoresMetricsData, TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = params;
+  const { datePreset, customRange, timestamp, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'scores-card', datePreset, customRange],
-    queryFn: async () => {
+    queryFn: async (): Promise<ScoresMetricsData> => {
       const filters = {
         timestamp: { start: timestamp.start, end: timestamp.end },
       };
@@ -119,5 +130,6 @@ export function useScoresMetrics(params: MetricsQueryFilters) {
         avgScore,
       };
     },
+    ...queryOptions,
   });
 }

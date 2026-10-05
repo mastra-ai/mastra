@@ -2,6 +2,7 @@ import type { ListWorkflowRunCountsResponse } from '@mastra/client-js';
 import { MastraClientError } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export const RUN_COUNTS_REFETCH_INTERVAL_MS = 5000;
 
@@ -30,17 +31,21 @@ export function runCountsRefetchInterval(error: unknown): number | false {
  * across workflows (GET /workflows/run-counts). Older servers 404 the first
  * request; polling then stops and the list renders without count columns.
  */
-export const useWorkflowsRunCounts = (options?: {
+export const useWorkflowsRunCounts = ({
+  requestContext,
+  queryOptions,
+}: {
   requestContext?: Record<string, any>;
-}): ListWorkflowRunCountsResponse => {
+  queryOptions?: MastraQueryOptions<ListWorkflowRunCountsResponse>;
+} = {}): ListWorkflowRunCountsResponse => {
   const client = useMastraClient();
-  const requestContext = options?.requestContext;
 
   const { data } = useQuery({
     queryKey: ['workflow-run-counts', requestContext],
     queryFn: () => client.listWorkflowRunCounts(requestContext),
     retry: false,
     refetchInterval: query => runCountsRefetchInterval(query.state.error),
+    ...queryOptions,
   });
 
   return data ?? NO_COUNTS;

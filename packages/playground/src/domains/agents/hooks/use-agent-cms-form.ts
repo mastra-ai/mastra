@@ -2,7 +2,7 @@ import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useStoredAgentMutations } from '@mastra/react/hooks';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -71,7 +71,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
   const needsCreate = isCodeAgentOverride && !hasStoredOverride && !overrideCreated;
 
   const { createStoredAgent } = useStoredAgentMutations();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const initialValues = useMemo(
     () => (isEdit ? computeAgentInitialValues(options.dataSource) : undefined),

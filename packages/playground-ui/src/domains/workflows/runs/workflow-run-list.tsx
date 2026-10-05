@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks/workflows';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -84,11 +84,15 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useWorkflowRuns(workflowId, { summary: true });
+  } = useWorkflowRuns({ workflowId: workflowId, summary: true });
   // The list only carries summary snapshots; the active run's input comes from the full run.
-  const { data: activeRun } = useWorkflowRun(workflowId, runId ?? '');
+  const { data: activeRun } = useWorkflowRun({
+    workflowId: workflowId,
+    runId: runId ?? '',
+    queryOptions: { enabled: Boolean(workflowId && runId) },
+  });
   const activeRunInput = formatRunInput(activeRun?.payload);
-  const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
+  const { mutateAsync: deleteRun } = useDeleteWorkflowRun({ workflowId: workflowId });
 
   const handleDelete = async (runId: string) => {
     try {

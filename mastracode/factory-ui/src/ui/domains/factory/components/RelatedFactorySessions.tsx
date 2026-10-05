@@ -9,6 +9,7 @@ import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
@@ -72,30 +73,31 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
   const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
 
-  const crumbs = currentItem ? (
-    <>
-      <Crumb as={Link} to={`/factories/${factoryId}/${isReview ? 'review' : 'work'}`}>
-        {isReview ? 'Review' : 'Work'}
-      </Crumb>
-      <Crumb as="span" isCurrent>
-        {sessionTitle(currentItem)}
-      </Crumb>
-    </>
-  ) : isUserThread && session ? (
-    <>
-      <Crumb as="span">User sessions</Crumb>
-      <Crumb as="span" isCurrent>
-        {getUserSessionLabel(session)}
-      </Crumb>
-    </>
-  ) : workspaceTitle ? (
-    <>
-      <Crumb as="span">Sessions</Crumb>
-      <Crumb as="span" isCurrent>
-        {workspaceTitle}
-      </Crumb>
-    </>
-  ) : undefined;
+  const crumbs =
+    currentItem && factoryId ? (
+      <>
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
+          {isReview ? 'Review' : 'Work'}
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          {sessionTitle(currentItem)}
+        </Crumb>
+      </>
+    ) : isUserThread && session ? (
+      <>
+        <Crumb as="span">User sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {getUserSessionLabel(session)}
+        </Crumb>
+      </>
+    ) : workspaceTitle ? (
+      <>
+        <Crumb as="span">Sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {workspaceTitle}
+        </Crumb>
+      </>
+    ) : undefined;
 
   return (
     <ChatPageLayout

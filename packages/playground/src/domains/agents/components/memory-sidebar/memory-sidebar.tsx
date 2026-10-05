@@ -8,7 +8,7 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks';
+import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -31,8 +31,8 @@ export interface MemorySidebarProps {
   onDelete?: (threadId: string) => void;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
-  /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
-  onHidePanel?: () => void;
+  /** Forwarded to ChatThreads; keeps its header in place while the list loads. */
+  isThreadsLoading?: boolean;
 }
 
 const barColor = (percent: number): string => {
@@ -55,7 +55,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border bg-muted text-foreground' : 'border-border/40 text-muted-foreground/50',
+            enabled ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground/50',
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
@@ -84,7 +84,7 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete, isThreadsLoading }: MemorySidebarProps) {
   return (
     <SidebarPanel>
       <MemorySidebarBody
@@ -92,7 +92,7 @@ export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePane
         threadId={threadId}
         threads={threads}
         onDelete={onDelete}
-        onHidePanel={onHidePanel}
+        isThreadsLoading={isThreadsLoading}
       />
     </SidebarPanel>
   );
@@ -104,11 +104,15 @@ export function MemorySidebarBody({
   threads,
   onDelete,
   threadsSlot,
-  onHidePanel,
+  isThreadsLoading,
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
@@ -131,13 +135,22 @@ export function MemorySidebarBody({
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
-  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: omData } = useObservationalMemory(
-    observationalOn ? agentId : undefined,
-    observationalOn ? threadId : undefined,
-    thread?.resourceId ?? agentId,
-  );
+  const { data: thread } = useThread({
+    threadId: threadId,
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
+  });
+  const { data: memoryConfigData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: omData } = useObservationalMemory({
+    agentId: observationalOn ? agentId : undefined,
+    threadId: observationalOn ? threadId : undefined,
+    resourceId: thread?.resourceId ?? agentId,
+  });
   const omAgentConfig = (memoryConfigData?.config as { observationalMemory?: OmAgentConfig } | undefined)
     ?.observationalMemory;
   const { messageTokens, messageThreshold } = getObservationWindowTokens({
@@ -230,7 +243,7 @@ export function MemorySidebarBody({
                 threadId={threadId}
                 onDelete={onDelete ?? (() => {})}
                 embedded
-                onHidePanel={onHidePanel}
+                isLoading={isThreadsLoading}
               />
             ) : (
               <EmptyState
@@ -259,7 +272,7 @@ export function MemorySidebarBody({
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
                 ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
-                : 'state-layer m-1 rounded-xl border border-border/40 bg-muted',
+                : 'state-layer m-1 rounded-xl border border-surface-rim bg-muted',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >

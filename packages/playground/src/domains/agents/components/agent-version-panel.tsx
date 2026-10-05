@@ -5,7 +5,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '@mastra/react/hooks';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 
 export interface AgentVersionPanelProps {
   agentId: string;
@@ -23,6 +23,7 @@ export function AgentVersionPanel({
   const { data, isLoading } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = data?.versions ?? [];

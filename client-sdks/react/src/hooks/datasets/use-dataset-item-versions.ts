@@ -1,6 +1,8 @@
 import type { DatasetItemVersionResponse } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export type DatasetItemVersion = DatasetItemVersionResponse & {
   validTo: number | null;
@@ -10,13 +12,23 @@ export type DatasetItemVersion = DatasetItemVersionResponse & {
 
 /**
  * Hook to fetch full item history (SCD-2 rows).
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
+export const useDatasetItemVersions = <TData = DatasetItemVersion[]>({
+  datasetId,
+  itemId,
+  queryOptions,
+}: {
+  datasetId: string;
+  itemId: string;
+  queryOptions?: MastraQueryOptions<DatasetItemVersion[], TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['dataset-item-versions', datasetId, itemId],
-    queryFn: async () => {
+    queryFn: async (): Promise<DatasetItemVersion[]> => {
       const res = await client.getItemHistory(datasetId, itemId);
 
       return (res?.history ?? []).map(
@@ -39,19 +51,28 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
         }),
       );
     },
-    enabled: Boolean(datasetId) && Boolean(itemId),
+    ...queryOptions,
   });
 };
 
 /**
  * Hook to fetch a specific version of a dataset item.
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useDatasetItemVersion = (
-  datasetId: string,
-  itemId: string,
-  datasetVersion: number,
-  latestVersion?: number,
-) => {
+export const useDatasetItemVersion = <TData = DatasetItemVersion>({
+  datasetId,
+  itemId,
+  datasetVersion,
+  latestVersion,
+  queryOptions,
+}: {
+  datasetId: string;
+  itemId: string;
+  datasetVersion: number;
+  latestVersion?: number;
+  queryOptions?: MastraQueryOptions<DatasetItemVersion, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
   return useQuery({
@@ -77,6 +98,6 @@ export const useDatasetItemVersion = (
         isLatest: latestVersion != null ? datasetVersion === latestVersion : false,
       };
     },
-    enabled: Boolean(datasetId) && Boolean(itemId) && datasetVersion > 0,
+    ...queryOptions,
   });
 };

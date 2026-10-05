@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 interface ApiInstructionBlock {
   type: string;
@@ -26,11 +28,18 @@ function toApiBlocks(blocks: ApiInstructionBlock[]) {
   });
 }
 
-export function usePreviewInstructions(
-  blocks: ApiInstructionBlock[] | undefined,
-  enabled: boolean,
-  requestContext?: Record<string, any>,
-) {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export function usePreviewInstructions<TData = string>({
+  blocks,
+  requestContext,
+  queryOptions,
+}: {
+  blocks: ApiInstructionBlock[] | undefined;
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<string, TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -45,6 +54,6 @@ export function usePreviewInstructions(
 
       return response.result;
     },
-    enabled: enabled && !!blocks && blocks.length > 0,
+    ...queryOptions,
   });
 }

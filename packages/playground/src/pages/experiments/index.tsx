@@ -4,7 +4,9 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useDatasets, useInfiniteExperiments, useReviewSummary } from '@mastra/react/hooks';
+import { useDatasets } from '@mastra/react/hooks/datasets';
+import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
+import { useReviewSummary } from '@mastra/react/hooks/review';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -72,7 +74,11 @@ export default function Experiments() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter, { targetType, targetId }, orderBy);
+  } = useInfiniteExperiments({
+    datasetId: datasetFilter === 'all' ? undefined : datasetFilter,
+    target: { targetType, targetId },
+    orderBy: orderBy,
+  });
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);

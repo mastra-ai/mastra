@@ -26,13 +26,14 @@ import {
 import type { OmTerminalExtractionCache } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
-import { useChat, useMastraClient } from '@mastra/react';
+import { useMastraClient } from '@mastra/react';
+import { useChat } from '@mastra/react/chat';
 import {
   memoryStatusQueryKey,
   memoryThreadMessagesQueryKey,
   observationalMemoryQueryKey,
   useMemoryConfig,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
@@ -134,7 +135,11 @@ export function ChatProvider({
   const queryClient = useQueryClient();
   const baseClient = useMastraClient();
 
-  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfigData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
     omConfig === true ||

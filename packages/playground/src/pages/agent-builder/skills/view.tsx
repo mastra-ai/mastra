@@ -2,7 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useCurrentUser, useStoredSkills } from '@mastra/react/hooks';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -54,7 +55,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   const copySkill = useCopySkill();
 
   // Suggest a non-colliding copy name based on the caller's own skills.
-  const { data: ownSkillsData } = useStoredSkills({ enabled: canCopy });
+  const { data: ownSkillsData } = useStoredSkills({ queryOptions: { enabled: canCopy } });
   const ownSkillNames = (ownSkillsData?.skills ?? []).map(s => s.name);
 
   return (

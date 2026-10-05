@@ -11,8 +11,8 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useDatasetVersions } from '@mastra/react/hooks';
-import type { DatasetVersion } from '@mastra/react/hooks';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
+import type { DatasetVersion } from '@mastra/react/hooks/datasets';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -32,7 +32,13 @@ export function DatasetVersionsPanel({
   onCompareVersionsClick,
   activeVersion,
 }: DatasetVersionsPanelProps) {
-  const { data: versions, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useDatasetVersions(datasetId);
+  const {
+    data: versions,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());

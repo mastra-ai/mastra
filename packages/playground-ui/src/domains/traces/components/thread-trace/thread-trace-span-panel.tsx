@@ -1,4 +1,4 @@
-import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks';
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import type { ComponentProps } from 'react';
 import { Panel } from 'react-resizable-panels';
 
@@ -54,8 +54,12 @@ interface SelectedSpanPanelProps {
 function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPanelProps) {
   const { selectSpan } = useThreadTrace();
   const onSpanSelect = (nextSpanId: string | undefined) => selectSpan(traceId, nextSpanId);
-  const { data: spanDetailData, isLoading } = useSpanDetail(traceId, spanId);
-  const { data: traceData } = useTraceSpans(traceId);
+  const { data: spanDetailData, isLoading } = useSpanDetail({
+    traceId: traceId,
+    spanId: spanId,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
+  const { data: traceData } = useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceData?.spans, spanId, onSpanSelect);
 
   return (
