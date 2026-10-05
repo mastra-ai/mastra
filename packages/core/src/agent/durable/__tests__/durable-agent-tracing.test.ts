@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
+import { getCurrentSpan, initContextStorage } from '../../../observability/context-storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -300,6 +301,54 @@ describe('DurableAgent observability tracing', () => {
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'Hello');
       expect(finalCall).toBeDefined();
       expect(finalCall.output.toolCalls).toBeUndefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('runs the provider call in the span context of the model span tracker, like the non-durable loop', async () => {
+    const { spy } = await spyOnSpans();
+
+    try {
+      initContextStorage();
+      const spansSeenDuringProviderCall: unknown[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          spansSeenDuringProviderCall.push(getCurrentSpan());
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'trace-agent-span-context',
+        name: 'Trace Agent (span context)',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      // Code that runs during the provider call (model middleware, span-correlated logging)
+      // must see the span the tracker reports as current, as it does in the non-durable loop.
+      const generationSpan = createdSpans.find(span => span.type === 'model_generation');
+      const tracker = generationSpan?.createTracker.mock.results.at(-1)?.value;
+      expect(tracker).toBeDefined();
+      expect(spansSeenDuringProviderCall).toHaveLength(1);
+      expect(spansSeenDuringProviderCall[0]).toBe(tracker.getTracingContext().currentSpan);
 
       cleanup();
     } finally {
