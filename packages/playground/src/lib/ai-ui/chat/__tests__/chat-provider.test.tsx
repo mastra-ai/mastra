@@ -336,12 +336,8 @@ describe('ChatProvider', () => {
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
-              const otherAction = action === 'Approve' ? 'Decline' : 'Approve';
-              for (const decidedName of [`${action}d ${toolName}`, `${otherAction} ${toolName}`]) {
-                expect(within(cards[index]).getByRole('button', { name: decidedName }).hasAttribute('disabled')).toBe(
-                  true,
-                );
-              }
+              expect(within(cards[index]).getByRole('status').textContent).toBe(`${action}d`);
+              expect(within(cards[index]).queryByRole('button', { name: /^(Approve|Decline) / })).toBeNull();
               if (index === 0)
                 expect(
                   within(cards[1])
