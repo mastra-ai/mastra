@@ -29,7 +29,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
    - Copy `.env.example` to `.env` and fill in your keys.
 3. **Connect integrations**
    - In your Mastra platform project, attach the integrations you want the agent to use. Channel integrations (Slack, Discord, Telegram) you connect become live messaging routes on the same server.
-   - **Deployed?** Set `MASTRA_PUBLIC_URL` to your deployment's public HTTPS URL before connecting channels — Slack OAuth callbacks and Telegram webhooks are registered against it, and the container's bind address won't work. On Mastra Cloud this is becoming automatic: the platform injects `MASTRA_SERVER_URL` and channel providers read it directly, at which point `MASTRA_PUBLIC_URL` (and the `server` block in `src/mastra/index.ts`) can be removed.
+   - **Deployed?** Channel providers register Slack OAuth callbacks and Telegram webhooks against `MASTRA_SERVER_URL` — the server's public HTTPS URL. Mastra Cloud injects it automatically on every deploy; on other hosts, set it yourself (the container's bind address won't work).
 4. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
