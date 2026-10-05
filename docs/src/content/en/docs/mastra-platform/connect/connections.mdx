@@ -1,0 +1,74 @@
+---
+title: 'Connections | Connect'
+description: 'Add, name, and remove provider connections for a Mastra platform project with the mastra connect CLI.'
+packages:
+  - '@mastra/connect'
+---
+
+# Connections
+
+A connection is one authorized account on a provider, such as one Linear workspace or one Slack workspace. Connections belong to your organization. You link them to the projects that should use them, and a project can link more than one connection for the same provider.
+
+The [`mastra connect`](/reference/cli/mastra) command manages connections from the terminal. It acts on the organization you're signed in to with `mastra auth login`. Switch organizations with `mastra auth orgs switch`.
+
+## Choose the project
+
+Each command works on one project. The CLI picks it from, in order:
+
+1. The `MASTRA_PROJECT_ID` environment variable.
+1. The `--project` flag, which takes a project name, slug, or ID.
+1. The `.mastra-project.json` file that `mastra deploy` writes in the current directory.
+
+## List providers
+
+```bash
+mastra connect list
+```
+
+The list shows every provider, with the ones the project already has at the top. Each provider shows whether it's connected, needs reauthorization, or is coming soon.
+
+## Add a connection
+
+```bash
+mastra connect add linear
+```
+
+What happens next depends on the provider:
+
+- **OAuth providers**, such as Linear and Notion, open the provider's consent screen in your browser. The CLI prints the consent URL too, in case the browser doesn't open, and waits until the connection is active.
+- **API key providers**, such as Resend and PostHog, prompt for the key and any other values in the terminal. The provider checks the key before the connection is saved. [Providers](/docs/mastra-platform/connect/providers) shows where to create each key and which permissions the tools need.
+
+If your organization already has a connection for the provider that isn't linked to this project, `add` offers to link it instead of authorizing again. If the project already has one, `add` asks before adding another.
+
+A running app picks up the new connection within 30 seconds, without a restart.
+
+API key prompts need an interactive terminal, so run `add` yourself rather than from CI. Pass `--yes` to skip the questions. With `--yes`, `add` always creates a new connection and doesn't set a display name.
+
+## Name connections
+
+After a new connection is active, `add` offers to set a display name, suggested from the account it connected. Agents use display names to choose between connections when a project links more than one for the same provider, so pick a name you can tell apart, such as the workspace or team. Setting a name requires the admin role in your organization.
+
+To always use one connection in code, pin it with the `connectionId` option. See [connection resolution](/reference/connect/tools#connection-resolution).
+
+## Remove a connection
+
+```bash
+mastra connect remove linear
+```
+
+`remove` unlinks the connection from the project. Agents in the project lose access right away. The connection stays in your organization, so `mastra connect add` can link it again without authorizing.
+
+If the project links more than one connection for the provider, `remove` asks which one to unlink, while `--yes` unlinks all of them without asking.
+
+## Fix a connection that needs reauthorization
+
+`mastra connect list` marks a provider as needing reauthorization when the provider revokes or expires the connection's credentials, for example after someone deletes an API key. Your app skips that provider with a warning until you fix it.
+
+Remove the connection from the project, then add a new one:
+
+```bash
+mastra connect remove posthog
+mastra connect add posthog
+```
+
+When `add` offers to link an existing connection, choose **Create a new connection**.

@@ -1,0 +1,105 @@
+---
+title: 'Connect | Mastra platform'
+description: 'Connect accounts like Linear, Slack, and GitHub to a Mastra platform project once, then use them in your app as agent tools, chat channels, or credentials with @mastra/connect.'
+packages:
+  - '@mastra/connect'
+---
+
+# Connect
+
+Connect stores your accounts on third-party providers like Linear, Notion, Slack, and GitHub in your Mastra platform project. You authorize an account once, and the `@mastra/connect` package makes it available to your app in three ways:
+
+| Use | Function | Page |
+| - | - | - |
+| Give agents the provider's API as tools | `tools()` | [Tools](/docs/mastra-platform/connect/tools) |
+| Put agents in Slack, Telegram, or Discord | `channels()` | [Channels](/docs/mastra-platform/connect/channels) |
+| Call the provider's SDK from your own code | `credential()` | [Use a raw credential](#use-a-raw-credential) |
+
+Your app never stores provider credentials. Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider.
+
+This page connects Linear and gives an agent its tools.
+
+## Before you begin
+
+- A [Mastra platform](/docs/mastra-platform/overview) project.
+- The [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+
+## Install the package
+
+```bash npm2yarn
+npm install @mastra/connect
+```
+
+## Connect a provider
+
+```bash
+mastra connect add linear
+```
+
+Linear uses OAuth. The CLI opens Linear's consent screen in your browser and waits until the connection is active. [Connections](/docs/mastra-platform/connect/connections) covers API key providers, naming, and removing connections.
+
+## Configure the environment
+
+Your app authenticates to the platform with an access token. Create one for the app:
+
+```bash
+mastra auth tokens create my-app
+```
+
+The CLI suggests saving it as `MASTRA_API_TOKEN`. `@mastra/connect` reads it from `MASTRA_PLATFORM_ACCESS_TOKEN` instead. Add the token and your project ID to the app's environment:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-token
+MASTRA_PROJECT_ID=your-project-id
+```
+
+See [environment variables](/reference/connect/tools#environment-variables) for regions and the other optional variables.
+
+## Give an agent the tools
+
+Pass [`tools()`](/reference/connect/tools) to the agent's `tools` option:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You help the team track work in Linear.',
+  model: 'openai/gpt-5-mini',
+  tools: tools(),
+})
+```
+
+Ask the agent for something that needs Linear:
+
+```typescript
+const response = await opsAgent.generate('Summarize my open Linear issues.')
+```
+
+The agent sees tools like `linear_list_issues` and `linear_create_issue`. [Tools](/docs/mastra-platform/connect/tools) covers limiting which tools an agent gets.
+
+## Use a raw credential
+
+When the generated tools don't cover what you need, [`credential()`](/reference/connect/credential) returns a connection's credential so you can call the provider's SDK yourself:
+
+```typescript
+import { credential } from '@mastra/connect'
+
+const cred = await credential('c_yourconnectionid')
+
+if (cred.type === 'oauth2') {
+  startSdkSession(cred.accessToken)
+} else {
+  startSdkSession(cred.apiKey)
+}
+```
+
+Requests made with a raw credential skip the platform proxy, which means the platform doesn't record them or limit which hosts they reach. Don't log the credential or return it in agent output.
+
+## Security model
+
+- The platform stores provider credentials and adds them to requests on the server. Your app only sees a credential when it calls `credential()`.
+- The platform records each proxied call so you can audit and count tool use. It doesn't log tool arguments or results.
+- The proxy only sends requests to the provider's own API hosts. Per-connection values, such as a Supabase project URL, extend that list for one connection only.
+- Your code decides which tools an agent gets. See [Tools](/docs/mastra-platform/connect/tools#limit-what-an-agent-can-use).

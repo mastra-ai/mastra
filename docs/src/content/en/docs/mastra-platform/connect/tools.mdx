@@ -1,0 +1,96 @@
+---
+title: 'Tools | Connect'
+description: "Give Mastra agents tools for the providers connected to a Mastra platform project with tools() from @mastra/connect, and control which tools each agent can use."
+packages:
+  - '@mastra/connect'
+---
+
+# Tools
+
+[`tools()`](/reference/connect/tools) gives an agent tools for every provider connected to your project. Each provider has its own toolset, such as `linear_list_issues` and `linear_create_issue` for Linear. A tool call goes through the platform proxy, which adds the connection's credential before forwarding the request.
+
+## Add tools to an agent
+
+Pass `tools()` to the agent's `tools` option:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: 'openai/gpt-5-mini',
+  tools: tools(),
+})
+```
+
+With no options, the agent gets the tools for every connected provider. `tools()` checks the platform for changed connections every 30 seconds. A provider you connect while the app runs shows up without a restart, and one you unlink disappears.
+
+## Limit what an agent can use
+
+The `integrations` option lists the providers an agent gets. Pass an array of provider IDs:
+
+```typescript
+tools({
+  integrations: ['linear', 'github'],
+})
+```
+
+Pass an object to filter tools per provider. Each provider takes either `allowTools` or `disallowTools`, not both:
+
+```typescript
+tools({
+  integrations: {
+    linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
+    github: { disallowTools: ['github_delete_file', 'github_merge_pull_request'] },
+    slack: { disabled: true },
+  },
+})
+```
+
+Check tool keys against the [provider toolsets reference](/reference/connect/providers). A misspelled tool key doesn't throw. When the provider's tools load, `tools()` logs a warning and skips that provider entirely. The agent gets none of its tools. A misspelled provider ID logs a warning and is ignored.
+
+## Choose between connections
+
+If a project links two Slack workspaces, the agent chooses a workspace on each call. The same applies to any provider with more than one connection: the toolset gains a `<provider>__list_connections` tool, and every other tool takes a `connection_name` input. Give connections [names you can tell apart](/docs/mastra-platform/connect/connections#name-connections).
+
+To always use one connection, pin it:
+
+```typescript
+tools({
+  integrations: {
+    slack: { connectionId: 'c_yourconnectionid' },
+  },
+})
+```
+
+## Use MCP providers
+
+Some providers serve their tools from a hosted Model Context Protocol (MCP) server instead of a generated toolset. `tools()` loads those tools from the provider at runtime, so tool keys take the form `<provider-id>_<tool-name>` and can change without a package upgrade. [Providers](/docs/mastra-platform/connect/providers#mcp-providers) lists them.
+
+Every MCP tool requires [tool approval](/docs/agents/human-in-the-loop) by default, because the provider controls the tool list. List the tools an agent may run without approval in `autoApproveTools`:
+
+```typescript
+tools({
+  integrations: {
+    'neon-mcp': { autoApproveTools: ['neon-mcp_list_projects'] },
+  },
+})
+```
+
+## Pass tools at call time
+
+Call the resolver to get the current tools as a plain record, for example to pass them for a single `generate()` call:
+
+```typescript
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+const response = await agent.generate('Summarize my open issues.', {
+  toolsets: { connect: await connected() },
+})
+```
+
+Call `connected.refresh()` to load a new connection immediately instead of waiting up to 30 seconds. See [the resolver](/reference/connect/tools#the-resolver) for the other methods.
