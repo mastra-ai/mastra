@@ -8,10 +8,34 @@ import chalk from 'chalk';
 import { surfaceShade, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 
-const bgOpen = (hex: string) => {
-  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-  return `\x1b[48;2;${r};${g};${b}m`;
-};
+/** The xterm-256 gray ramp (232-255) plus black (16) and white (231). */
+const GRAYS_256: Array<[number, number]> = [
+  [16, 0],
+  ...Array.from({ length: 24 }, (_, i): [number, number] => [232 + i, 8 + i * 10]),
+  [231, 255],
+];
+
+/**
+ * Nearest xterm-256 gray. Panel shades are a step off the background, and the nearest color of the 6×6×6 cube
+ * is often a saturated one (peach on a cream background, teal on Solarized), so panels stay neutral instead.
+ */
+function nearestGray256(rgb: number[]): number {
+  const luma = 0.299 * rgb[0]! + 0.587 * rgb[1]! + 0.114 * rgb[2]!;
+  let best = GRAYS_256[0]!;
+  for (const gray of GRAYS_256) if (Math.abs(gray[1] - luma) < Math.abs(best[1] - luma)) best = gray;
+  return best[0];
+}
+
+/** SGR opening a panel color at the terminal's color depth, so panel bodies and their half-block edges match. */
+function surfaceOpen(hex: string, layer: 38 | 48): string {
+  const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  if (chalk.level === 0) return '';
+  if (chalk.level === 2) return `\x1b[${layer};5;${nearestGray256(rgb)}m`;
+  // Level 1 is mostly a plain TERM=xterm on a truecolor terminal, so it keeps truecolor like before.
+  return `\x1b[${layer};2;${rgb.join(';')}m`;
+}
+
+const bgOpen = (hex: string) => surfaceOpen(hex, 48);
 
 /** Fill a line with `bg` across `width` columns, re-applying it after any reset inside the line. */
 export function fillBg(line: string, width: number, bg: string): string {
@@ -25,8 +49,14 @@ export function fillBg(line: string, width: number, bg: string): string {
  * ending mid-row instead of using a border.
  */
 export function halfBlockPanel(rows: string[], width: number, bg: string): string[] {
-  const edge = (ch: string) => chalk.hex(bg)(ch.repeat(Math.max(0, width)));
-  return [edge('▄'), ...rows.map(r => fillBg(r, width, bg)), edge('▀')];
+  return [panelEdge('▄', width, bg), ...rows.map(r => fillBg(r, width, bg)), panelEdge('▀', width, bg)];
+}
+
+/** A panel's ▄ or ▀ edge in the panel color. Without colors there's no panel background, so it's blank. */
+export function panelEdge(ch: '▄' | '▀', width: number, bg: string): string {
+  const open = surfaceOpen(bg, 38);
+  const n = Math.max(0, width);
+  return open ? `${open}${ch.repeat(n)}\x1b[39m` : ' '.repeat(n);
 }
 
 /** Background of the prompt and sent messages. */

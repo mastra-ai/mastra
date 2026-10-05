@@ -247,7 +247,7 @@ export function surfaceShade(step: number): string {
   const f = (step / 12) * 0.4;
   let out: number[];
   if (currentThemeMode === 'light') {
-    out = lum > 245 ? [255 - f * 255, 255 - f * 255, 255 - f * 255] : [r!, g!, b!].map(c => c * (1 - f));
+    out = [r!, g!, b!].map(c => c * (1 - f));
   } else if (lum < 10) {
     out = [f * 255, f * 255, f * 255];
   } else {

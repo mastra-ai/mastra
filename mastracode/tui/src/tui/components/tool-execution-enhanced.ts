@@ -24,7 +24,7 @@ import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import { fillBg, toolBlock, toolSurface } from './surface.js';
+import { fillBg, panelEdge, toolBlock, toolSurface } from './surface.js';
 import type {
   CommandExitRecord,
   CompactToolLabelColor,
@@ -1777,9 +1777,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const panelWidth = contentWidth + 4;
     const rule = (left: string, _right: string) =>
       left === '╭'
-        ? chalk.hex(surface)('▄'.repeat(panelWidth))
+        ? panelEdge('▄', panelWidth, surface)
         : left === '╰'
-          ? chalk.hex(surface)('▀'.repeat(panelWidth))
+          ? panelEdge('▀', panelWidth, surface)
           : fillBg('', panelWidth, surface);
     // Every row must stay on one terminal line: a row that wraps adds a line that disappears again
     // on the next update, jumping everything below it. Tabs and other control characters would make

@@ -373,12 +373,16 @@ export function handleToolApprovalRequired(
   // The card names the tool and its arguments itself unless the row above shows exactly this call: the
   // approval can target something else (a wrapper tool asking for an inner one), there can be no row, and
   // quiet mode rows show a description instead of the command.
+  // An ask_user call has no tool row: its question preview is the row, so fill it with the final arguments.
+  const askPreview = toolName === 'ask_user' ? state.pendingAskUserComponents.get(toolCallId) : undefined;
+  askPreview?.updateArgs(args);
   const visibleCall = state.pendingTools.get(toolCallId)?.getToolCall?.();
   const showTarget =
-    state.quietMode ||
-    !visibleCall ||
-    visibleCall.toolName !== toolName ||
-    safeStringify(visibleCall.args) !== safeStringify(args);
+    !askPreview &&
+    (state.quietMode ||
+      !visibleCall ||
+      visibleCall.toolName !== toolName ||
+      safeStringify(visibleCall.args) !== safeStringify(args));
 
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,

@@ -372,4 +372,26 @@ describe('handleToolApprovalRequired', () => {
     expect(ctx.state.ui.showOverlay).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
   });
+
+  it('fills the ask_user question preview and keeps the arguments out of the approval card', () => {
+    const preview = { updateArgs: vi.fn() };
+    const ctx = {
+      state: {
+        ui: { requestRender: vi.fn(), terminal: { columns: 120, rows: 40 } },
+        hookManager: undefined,
+        pendingTools: new Map(),
+        pendingAskUserComponents: new Map([['call-ask', preview]]),
+      },
+      addChildBeforeFollowUps: vi.fn(),
+      notify: vi.fn(),
+    } as any;
+    const args = { question: 'Where should the tests run?', options: [{ label: 'Vitest' }] };
+
+    handleToolApprovalRequired(ctx, 'call-ask', 'ask_user', args);
+
+    expect(preview.updateArgs).toHaveBeenCalledWith(args);
+    const card = ctx.addChildBeforeFollowUps.mock.calls[0][0].render(120).join('\n');
+    expect(card).toContain('Allow?');
+    expect(card).not.toContain('Where should the tests run?');
+  });
 });
