@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { assertCompleteModelResponse, computeDelay, isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
+import {
+  assertCompleteModelResponse,
+  computeDelay,
+  isTransientLLMError,
+  OmIncompleteResponseError,
+  RETRY_CONFIG,
+  withRetry,
+} from '../retry';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -239,7 +246,8 @@ describe('assertCompleteModelResponse', () => {
     } catch (error) {
       thrown = error;
     }
-    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toBeInstanceOf(OmIncompleteResponseError);
+    expect(thrown).toMatchObject({ name: 'OmIncompleteResponseError', finishReason });
     expect(isTransientLLMError(thrown)).toBe(true);
   });
 
