@@ -1029,7 +1029,7 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('→ steer · ');
+    expect(rendered).toContain('steer · ');
   });
 
   it('renders schedule fires as a system entry with a compact header, even when delivered while active', () => {
@@ -1106,7 +1106,7 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('→ steer · ');
+    expect(rendered).toContain('steer · ');
   });
 
   it('replaces a pending signal with the echoed user message once the stream is settled', () => {
@@ -1216,7 +1216,7 @@ describe('renderExistingMessages signals', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('→ steer · ');
+    expect(rendered).toContain('steer · ');
     expect(rendered).toContain('continue from history');
     expect(rendered).not.toContain('stale preview');
   });

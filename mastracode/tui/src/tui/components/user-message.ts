@@ -4,10 +4,12 @@
 
 import { Container, Markdown, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
-import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, getThemeGeneration, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { halfBlockPanel, promptSurface } from './surface.js';
+
+/** Columns of shaded padding on each side of a sent message's text. */
+const PAD = 2;
 
 /**
  * Strip ANSI escape sequences from a string.
@@ -18,7 +20,7 @@ function stripAnsi(s: string): string {
 
 /**
  * A renderable wrapper that puts content on the prompt's half-block panel (full width, shaded, no border).
- * `borderColor` tints the → marker; `label` (e.g. "steer") is shown before the text.
+ * `label` (e.g. "steer") is shown before the text.
  */
 export class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
@@ -62,12 +64,11 @@ export class BorderedBox {
   private renderUncached(width: number): string[] {
     // Same panel as the prompt (half blocks, shaded background, → marker) so a sent message looks like
     // what was typed. The marker is grey instead of the mode color to tell it apart from the live prompt.
-    const markerColor = this.borderColor ?? (this.pending ? theme.getTheme().dim : theme.getTheme().muted);
-    const label = this.label ? theme.fg('dim', `${this.label} · `) : '';
-    const prefix = `${chalk.hex(markerColor)('→')} ${label}`;
-    const prefixWidth = 2 + (this.label ? visibleWidth(this.label) + 3 : 0);
-    // " " + prefix + content + " "
-    const contentWidth = Math.max(1, width - BOX_INDENT_STR.length - prefixWidth - 2);
+    // Only a label (e.g. "steer · ") precedes the text; the → marker belongs to the live prompt.
+    const prefix = this.label ? theme.fg('dim', `${this.label} · `) : '';
+    const prefixWidth = this.label ? visibleWidth(this.label) + 3 : 0;
+    // PAD columns of panel on each side of the text.
+    const contentWidth = Math.max(1, width - BOX_INDENT_STR.length - prefixWidth - PAD * 2);
     const childLines = this.child.render(contentWidth);
     if (childLines.length === 0) {
       return [];
@@ -77,9 +78,12 @@ export class BorderedBox {
       // Markdown pads lines with spaces to the full width; trim them, then clamp.
       let content = line.replace(/\s+$/, '');
       if (visibleWidth(stripAnsi(content)) > contentWidth) content = truncateToWidth(content, contentWidth);
-      return ` ${i === 0 ? prefix : ' '.repeat(prefixWidth)}${content}`;
+      return `${' '.repeat(PAD)}${i === 0 ? prefix : ' '.repeat(prefixWidth)}${content}`;
     });
-    return halfBlockPanel(rows, width - BOX_INDENT_STR.length, promptSurface()).map(l => BOX_INDENT_STR + l);
+    // The panel hugs the message instead of spanning the row.
+    const fitWidth = Math.max(...rows.map(r => visibleWidth(stripAnsi(r)))) + PAD;
+    const panelWidth = Math.min(width - BOX_INDENT_STR.length, fitWidth);
+    return halfBlockPanel(rows, panelWidth, promptSurface()).map(l => BOX_INDENT_STR + l);
   }
 }
 
