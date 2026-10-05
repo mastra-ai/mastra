@@ -245,6 +245,7 @@ function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
 
   const serialized = Object.entries(attributes)
     .filter((entry): entry is [string, string | number | boolean] => entry[1] !== null && entry[1] !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, value]) => {
       assertXmlName(key, 'attribute name');
       return `${key}="${escapeXmlAttribute(String(value))}"`;
