@@ -165,7 +165,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             title={mount.error}
             className="flex shrink-0"
           >
-            <CircleAlertIcon className="text-destructive size-3" />
+            <CircleAlertIcon className="size-3 text-destructive-foreground" />
           </span>
         ) : null}
         {mount && isReadOnly(path) ? (
