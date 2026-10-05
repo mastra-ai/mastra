@@ -1,5 +1,5 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDataset } from '@mastra/react/hooks';
 import { useMemo } from 'react';
 
 /**

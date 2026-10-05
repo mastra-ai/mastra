@@ -175,7 +175,7 @@ function SidebarNewStory({ header = 'default', version, variant = 'default' }: S
                     title: 'Infrastructure',
                     links: [
                       { name: 'Deploys', url: '/deploys', icon: <Box /> },
-                      { name: 'Gateway', url: '/gateway', icon: <Workflow /> },
+                      { name: 'Gateway', url: '/gateway', icon: <Workflow />, opensView: true },
                       { name: 'Databases', url: '/databases', icon: <Database /> },
                     ],
                     moreLinks: [
@@ -197,8 +197,8 @@ function SidebarNewStory({ header = 'default', version, variant = 'default' }: S
                     key: 'project-settings',
                     separator: true,
                     links: [
-                      { name: 'Environments', url: '/environments', icon: <Waypoints /> },
-                      { name: 'Settings', url: '/settings', icon: <Settings /> },
+                      { name: 'Environments', url: '/environments', icon: <Waypoints />, opensView: true },
+                      { name: 'Settings', url: '/settings', icon: <Settings />, opensView: true },
                     ],
                   },
                 ]}

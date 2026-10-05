@@ -3,7 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import { externalLinkLabel, metadataLabelColors, metadataLabels } from '../boardItems';
 import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
@@ -34,7 +34,7 @@ export function CandidateCardRows({
         </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-semibold">
+          <Txt as="span" variant="card-title-strong" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={candidate.source} title={candidate.title} id={titleId} />
           </Txt>
           {/* Triage reads the source before deciding, so keep it one click away. */}

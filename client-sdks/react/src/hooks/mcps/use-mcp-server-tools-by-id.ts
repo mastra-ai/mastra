@@ -1,0 +1,17 @@
+import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
+
+export const useMCPServerToolsById = (serverId: string | null) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['mcpserver-tools', serverId],
+    queryFn: async () => {
+      const response = await client.getMcpServerTools(serverId!);
+      return Object.fromEntries(response.tools.map(tool => [tool.name, tool]));
+    },
+    enabled: Boolean(serverId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+};

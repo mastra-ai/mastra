@@ -408,12 +408,13 @@ export class SchedulesPG extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const result = await this.#client.query(
       `UPDATE ${this.#table(TABLE_SCHEDULES)}
-       SET next_fire_at = $1, last_fire_at = $2, last_run_id = $3, updated_at = $4
+       SET next_fire_at = $1, last_fire_at = $2, last_run_id = $3, updated_at = $4, status = COALESCE($8, status)
        WHERE id = $5 AND next_fire_at = $6 AND status = $7`,
-      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active', newStatus ?? null],
     );
     return (result.rowCount ?? 0) > 0;
   }

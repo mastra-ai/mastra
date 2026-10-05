@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentProps } from 'react';
 import type { SidebarState } from './main-sidebar-context';
@@ -17,6 +18,7 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
+  opensView?: boolean;
   /** @deprecated Prefer nested `children`; accepted for callers still rendering manual sublinks. */
   indent?: boolean;
 };
@@ -46,6 +48,7 @@ export type MainSidebarNavLinkProps = Omit<ComponentProps<'li'>, 'children'> & {
 
 type SlottedNavChildProps = {
   className?: string;
+  children?: React.ReactNode;
   'aria-current'?: 'page';
 };
 
@@ -78,7 +81,7 @@ export function MainSidebarNavLink({
 
   const itemClassName = rowAction
     ? cn(navItemLayoutClasses({ level, size }), 'flex-1 pr-1')
-    : navItemClasses({ isActive, isCollapsed, isFeatured, level, size });
+    : cn(navItemClasses({ isActive, isCollapsed, isFeatured, level, size }), link?.opensView && !isCollapsed && 'pr-1');
 
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
@@ -114,20 +117,26 @@ function navInteractiveRow({
   // The current row is announced, not merely tinted: its fill is the only thing that says
   // "you are here", and a fill says nothing to a screen reader.
   const current = isActive ? ('page' as const) : undefined;
-  if (render) {
-    return React.cloneElement(render, { className: cn(className, render.props.className), 'aria-current': current });
-  }
+  const caret =
+    link?.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null;
 
-  if (asChild) {
-    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+  if (render || asChild) {
+    const slotted = render ?? children;
+    if (!React.isValidElement<SlottedNavChildProps>(slotted)) {
       throw new Error(
         'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
       );
     }
 
-    return React.cloneElement(children, {
-      className: cn(className, children.props.className),
+    return React.cloneElement(slotted, {
+      className: cn(className, slotted.props.className),
       'aria-current': current,
+      children: (
+        <>
+          {slotted.props.children}
+          {caret}
+        </>
+      ),
     });
   }
 
@@ -140,6 +149,7 @@ function navInteractiveRow({
       {link.icon}
       <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
       {children}
+      {caret}
     </Link>
   );
 }

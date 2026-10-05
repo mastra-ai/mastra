@@ -1,4 +1,4 @@
-import { useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgentDependents } from '@mastra/react/hooks';
 
 const MAX_DEPENDENTS_SHOWN = 5;
 

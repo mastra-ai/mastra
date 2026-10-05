@@ -1,9 +1,9 @@
+import { useTraceSpans } from '@mastra/react/hooks';
 import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
-import { useTraceSpans } from '../../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';

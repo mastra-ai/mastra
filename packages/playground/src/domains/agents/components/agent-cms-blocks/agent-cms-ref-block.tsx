@@ -12,12 +12,12 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import { useStoredAgents } from '@mastra/react/hooks';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 
 export interface AgentCMSRefBlockProps {

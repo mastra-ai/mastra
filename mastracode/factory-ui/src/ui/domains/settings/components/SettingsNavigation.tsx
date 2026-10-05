@@ -37,7 +37,8 @@ type SettingsNavGroup = {
 
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
-    id: 'preferences',
+    id: 'personal',
+    label: 'Your settings',
     items: [
       {
         id: 'account',
@@ -51,24 +52,44 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Palette,
         searchText: 'preferences general theme appearance color scheme completion sound',
       },
+      {
+        id: 'personal-models',
+        label: SETTINGS_SECTION_LABELS['personal-models'],
+        icon: Bot,
+        searchText: 'your personal models defaults model packs api keys providers credentials sign in oauth',
+      },
+      {
+        id: 'memory',
+        label: SETTINGS_SECTION_LABELS.memory,
+        icon: Brain,
+        searchText:
+          'your personal memory observational recall observer reflector thresholds attachments summarize context',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'your personal connections connected accounts slack communication integrations',
+      },
     ],
   },
   {
-    id: 'agent',
-    label: 'Agent',
+    id: 'factory',
+    label: 'Factory settings',
     items: [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints',
+          'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
       },
       {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
+        id: 'factory-memory',
+        label: SETTINGS_SECTION_LABELS['factory-memory'],
         icon: Brain,
-        searchText: 'memory observational recall observer reflector thresholds attachments summarize context',
+        searchText:
+          'factory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'skills',
@@ -82,12 +103,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
-    ],
-  },
-  {
-    id: 'sources',
-    label: 'Sources',
-    items: [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
@@ -100,18 +115,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
-    ],
-  },
-  {
-    id: 'factory',
-    ariaLabel: SETTINGS_SECTION_LABELS.factory,
-    items: [
       {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,

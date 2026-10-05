@@ -1,11 +1,11 @@
 import type { ReviewSummaryResponse } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { noMcpServers, noWorkspaces } from './fixtures/nav-more';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const authDisabledCapabilities = {

@@ -7,18 +7,33 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { useEmbedders, useVectors } from '@mastra/react/hooks';
 import { Controller, useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { RegisteredMemoryNotice } from '../registered-memory-notice';
 import { SectionHeader, SubSectionHeader } from '@/domains/cms';
-import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 
 export function MemoryPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const isEnabled = useWatch({ control, name: 'memory.enabled' }) ?? false;
+  const memoryRef = useWatch({ control, name: 'memoryRef' });
+
+  if (memoryRef) {
+    return (
+      <ScrollArea className="h-full">
+        <div className="flex flex-col gap-4">
+          <SectionHeader
+            title="Memory"
+            subtitle="Configure memory settings for conversation persistence and semantic recall."
+          />
+          <RegisteredMemoryNotice memoryId={memoryRef.memoryId} />
+        </div>
+      </ScrollArea>
+    );
+  }
 
   return (
     <ScrollArea className="h-full">

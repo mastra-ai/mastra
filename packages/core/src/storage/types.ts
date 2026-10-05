@@ -526,8 +526,8 @@ export interface StorageAgentSnapshotType {
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
   outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
-  /** Memory configuration object — static or conditional on request context */
-  memory?: StorageConditionalField<SerializedMemoryConfig>;
+  /** Memory reference (registered memory id) or inline config — static or conditional on request context */
+  memory?: StorageConditionalField<StorageMemoryRef>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
@@ -634,7 +634,7 @@ export type StorageUpdateAgentInput = {
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
-    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    memory?: StorageConditionalField<StorageMemoryRef> | null;
     /** Browser configuration (inline ref), or null to disable browser */
     browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
@@ -2262,6 +2262,18 @@ export type StorageWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: StorageWorkspaceSnapshotType }
   | { type: 'provider'; provider: string; config: Record<string, unknown> };
+
+/**
+ * Memory reference configuration stored in agent snapshots.
+ * - `{ type: 'id', memoryId }` references a Memory instance registered on Mastra
+ *   (looked up by registry key first, then by the instance's own id).
+ * - `{ type: 'inline', config }` builds a new Memory from serialized config.
+ * - An untagged `SerializedMemoryConfig` is the legacy inline form and behaves like `inline`.
+ */
+export type StorageMemoryRef =
+  | { type: 'id'; memoryId: string }
+  | { type: 'inline'; config: SerializedMemoryConfig }
+  | SerializedMemoryConfig;
 
 // ============================================
 // Workflow Storage Types
