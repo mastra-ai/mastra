@@ -6,14 +6,13 @@ import { cn } from '@/lib/utils';
 import './sidebar-new-header.css';
 
 export type SidebarNewHeaderProps = ComponentPropsWithoutRef<'header'> & {
-  /** Logo for the collapsed rail. Replaces the children when collapsed and swaps to the toggle on hover. */
   collapsedLogo?: ReactNode;
+  actions?: ReactNode;
 };
 
-// Holds opacity while the sidebar collapses, so leftover hover doesn't flash the toggle.
 const hold = 'animate-[sidebar-hold_var(--resize-dur)] motion-reduce:animate-none';
 
-export function SidebarNewHeader({ className, children, collapsedLogo, ...props }: SidebarNewHeaderProps) {
+export function SidebarNewHeader({ className, children, collapsedLogo, actions, ...props }: SidebarNewHeaderProps) {
   const sidebar = useMaybeSidebarState();
   const collapsed = sidebar?.state === 'collapsed';
   const isMobile = sidebar?.isMobile ?? false;
@@ -24,14 +23,13 @@ export function SidebarNewHeader({ className, children, collapsedLogo, ...props 
       className={cn(
         'flex h-header-default shrink-0 items-center gap-2',
         collapsed ? 'px-1' : 'pr-2 pl-3.5',
-        // Target width, not the animating one, so the title doesn't re-truncate while expanding.
+        collapsed && actions && 'h-auto flex-col gap-3 py-3',
         !collapsed && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',
         className,
       )}
       {...props}
     >
       {collapsed && collapsedLogo ? (
-        // ml-0.5 instead of mx-auto, so it doesn't jump while the sidebar collapses.
         <div className="group/collapsed-logo relative ml-0.5 grid size-9 shrink-0 place-items-center">
           <span
             className={cn(
@@ -55,6 +53,7 @@ export function SidebarNewHeader({ className, children, collapsedLogo, ...props 
       ) : (
         children
       )}
+      {actions}
     </header>
   );
 }

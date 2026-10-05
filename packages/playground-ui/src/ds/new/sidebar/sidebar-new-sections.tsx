@@ -1,8 +1,8 @@
-import { useId, useState } from 'react';
-import { z } from 'zod/v4';
+import { useId } from 'react';
 import { SidebarNewMoreLinks } from './sidebar-new-more-links';
 import { SidebarNewNavHeader } from './sidebar-new-nav-header';
 import { SidebarNewSectionLink } from './sidebar-new-section-link';
+import { defaultRecentItemsStorageKey, getSidebarLinkKey, visibilitySchema } from './sidebar-new-visibility';
 import type { NavLink } from '@/ds/components/MainSidebar/main-sidebar-nav-link';
 import { MainSidebarNavList } from '@/ds/components/MainSidebar/main-sidebar-nav-list';
 import type { NavSection } from '@/ds/components/MainSidebar/main-sidebar-nav-section';
@@ -10,42 +10,33 @@ import { MainSidebarNavSection } from '@/ds/components/MainSidebar/main-sidebar-
 import { MainSidebarNavSeparator } from '@/ds/components/MainSidebar/main-sidebar-nav-separator';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 
-const recentLinkRetentionMs = 7 * 24 * 60 * 60 * 1000;
-const recentLinksSchema = z.record(z.string(), z.number());
-const defaultRecentItemsStorageKey = 'mastra:sidebar-new:recent-more-items';
-
 export type SidebarNewSection = NavSection & {
-  moreLinks?: NavLink[];
+  moreLinks?: (NavLink & { defaultVisible?: boolean })[];
 };
 
 export type SidebarNewSectionsProps = {
   sections: SidebarNewSection[];
   isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
   className?: string;
+  visibilityStorageKey?: string;
   recentItemsStorageKey?: string;
 };
-
-function getLinkKey(link: NavLink) {
-  return `${link.url}:${link.name}`;
-}
 
 export function SidebarNewSections({
   sections,
   isActive,
   className,
+  visibilityStorageKey,
   recentItemsStorageKey = defaultRecentItemsStorageKey,
 }: SidebarNewSectionsProps) {
   const baseId = useId();
-  const [renderedAt] = useState(Date.now);
-  const [recentLinks, setRecentLinks] = useLocalStorageState({
-    initialKey: recentItemsStorageKey,
+  const [visibility, setVisibility] = useLocalStorageState({
+    initialKey: visibilityStorageKey ?? recentItemsStorageKey,
     defaultValue: {},
-    schema: recentLinksSchema,
+    schema: visibilitySchema,
   });
-  const recentCutoff = renderedAt - recentLinkRetentionMs;
-
-  function rememberLink(link: NavLink) {
-    setRecentLinks(current => ({ ...current, [getLinkKey(link)]: Date.now() }));
+  function changeVisibility(link: NavLink, visible: boolean) {
+    setVisibility(current => ({ ...current, [getSidebarLinkKey(link)]: visible }));
   }
 
   return (
@@ -71,7 +62,7 @@ export function SidebarNewSections({
             <MainSidebarNavList>
               {section.links.map(link => (
                 <SidebarNewSectionLink
-                  key={getLinkKey(link)}
+                  key={getSidebarLinkKey(link)}
                   link={link}
                   activeCandidates={activeCandidates}
                   isActive={isActive}
@@ -82,9 +73,8 @@ export function SidebarNewSections({
                   links={section.moreLinks}
                   activeCandidates={activeCandidates}
                   isActive={isActive}
-                  recentLinks={recentLinks}
-                  recentCutoff={recentCutoff}
-                  onSelect={rememberLink}
+                  visibility={visibility}
+                  onVisibilityChange={changeVisibility}
                 />
               ) : null}
             </MainSidebarNavList>

@@ -1,3 +1,4 @@
+import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -12,7 +13,6 @@ import {
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest, SquareKanban } from 'lucide-react';
-import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -42,7 +42,6 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
 
-/** Nothing left to watch: the card is done or canceled, or its pull request is merged or closed. */
 function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined): boolean {
   if (item?.stages.some(isTerminalStage)) return true;
   if (!pullRequest) return false;
@@ -50,21 +49,11 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
   return status === 'merged' || status === 'closed';
 }
 
-/** Waiting on a person or moving, then open, then finished — a card the agent is still in is never finished. */
 function watchRank(row: FactoryWorkspaceRow): number {
   if (row.initializing || row.running || row.attention) return 0;
   return row.settled ? 2 : 1;
 }
 
-/**
- * Explicit intent first, then whatever still has work in it, newest first inside a tier.
- * Sorting on creation rather than activity is what keeps a row still: every card write bumps
- * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
- * Opening a session is that same reshuffle with the reader's own click behind it, so the row
- * being read holds its place and is kept reachable by `latestRows` instead.
- * Session id closes it into a total order — the sessions endpoint sorts nothing, so anything
- * falling through to its order would still shuffle.
- */
 const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
   watchRank(a) - watchRank(b) ||
@@ -319,7 +308,7 @@ function WorkspaceGroup({
   const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
-      <SidebarSectionHeading
+      <SidebarNew.NavHeader
         icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
         action={
           viewerUserId ? (
@@ -328,7 +317,7 @@ function WorkspaceGroup({
         }
       >
         {title}
-      </SidebarSectionHeading>
+      </SidebarNew.NavHeader>
       <MainSidebar.NavList>
         {visibleRows.map(row => (
           <SessionNavRow

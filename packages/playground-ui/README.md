@@ -21,6 +21,43 @@ export function SaveButton() {
 }
 ```
 
+### Shared product sidebar
+
+Studio, Factory, and Platform compose `SidebarNew` from `@mastra/playground-ui/new/sidebar`.
+The shared component owns row styling, headers, collapse, resizing, scrolling, and optional-link customization.
+Consumers supply routes, permissions, resource-dependent defaults, and product actions.
+`MainSidebar.NavHeader` and `MainSidebar.Sections` remain compatible aliases of the same implementations.
+
+```tsx
+<SidebarNew.Sections
+  visibilityStorageKey="my-app:sidebar-visibility"
+  sections={[
+    {
+      key: 'primitives',
+      title: 'Primitives',
+      links: [{ name: 'Agents', url: '/agents' }],
+      moreLinks: [
+        { name: 'Tools', url: '/tools' },
+        { name: 'Workspaces', url: '/workspaces', defaultVisible: hasWorkspaces },
+      ],
+    },
+  ]}
+/>
+```
+
+`More` opens a floating navigation menu. Its `Customize sidebar` submenu lets users show or hide optional links,
+including the active destination. Explicit choices override defaults and persist in local storage; visiting a
+destination does not pin it. `More` stays available when every optional link is visible so users can hide them again.
+Without `defaultVisible`, a single optional link or the active link is visible by default.
+
+Set a storage key per product or navigation scope, and remount `Sections` when that scope changes.
+The previous `recentItemsStorageKey` prop and default key remain supported; unexpired visit entries become visible
+preferences on first load. Invalid or unavailable storage falls back to defaults and leaves the controls usable.
+Studio's old per-route visit history is no longer used.
+
+Use `NavHeader`'s `icon` and `action` slots for section controls, and `Header`'s `collapsedLogo` and `actions` slots
+for product identity and account controls. Keep those shared layouts out of consumer-specific CSS.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.

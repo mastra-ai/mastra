@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 
 export type SidebarNewNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'children'> & {
   children?: React.ReactNode;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
   state?: SidebarState;
   href?: string;
   isActive?: boolean;
@@ -15,6 +17,8 @@ export type SidebarNewNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 
 
 export function SidebarNewNavHeader({
   children,
+  icon,
+  action,
   className,
   state: stateProp,
   href,
@@ -28,30 +32,36 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    // Same 40px slot in both states, so rows don't shift when collapsing; the divider is centered in it.
     <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'h-10', className)}>
       {showTitle ? (
-        <header
-          {...props}
-          className={cn('max-w-full min-w-0 truncate pl-3 text-column', {
-            'text-foreground': isActive,
-            'text-muted-foreground': !isActive,
-          })}
-        >
-          {href ? (
-            <Link
-              href={href}
-              className={cn('block min-w-0 truncate transition-colors duration-normal', {
-                'hover:text-foreground': !isActive,
+        <>
+          <header
+            {...props}
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-2 truncate pl-3 text-column [&_svg]:size-4 [&_svg]:shrink-0',
+              {
                 'text-foreground': isActive,
-              })}
-            >
-              {children}
-            </Link>
-          ) : (
-            children
-          )}
-        </header>
+                'text-muted-foreground': !isActive,
+              },
+            )}
+          >
+            {icon}
+            {href ? (
+              <Link
+                href={href}
+                className={cn('block min-w-0 truncate transition-colors duration-normal', {
+                  'hover:text-foreground': !isActive,
+                  'text-foreground': isActive,
+                })}
+              >
+                {children}
+              </Link>
+            ) : (
+              <span className="min-w-0 truncate">{children}</span>
+            )}
+          </header>
+          {action}
+        </>
       ) : (
         <>
           <VisuallyHidden asChild>

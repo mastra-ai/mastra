@@ -6,8 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
 import { MainSidebarProvider } from './main-sidebar-provider';
-import { SidebarNew, useSidebarNew, type SidebarNewSection } from '@/ds/new/sidebar';
-import type { LinkComponentProps } from '@/ds/types/link-component';
+import { SidebarNew, useSidebarNew } from '@/ds/new/sidebar';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -32,8 +31,6 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-// jsdom has no PointerEvent constructor; the handlers only read MouseEvent
-// fields plus `pointerId`, so a MouseEvent with `pointerId` patched on works.
 const pointerEvent = (type: string, init: MouseEventInit & { pointerId: number }) => {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
   Object.assign(event, { pointerId: init.pointerId });
@@ -71,7 +68,6 @@ describe('MainSidebar resize handle gesture', () => {
     fireEvent(separator, pointerEvent('pointerdown', { button: 0, pointerId: 1, clientX: 64 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBe('active');
 
-    // Sub-threshold wiggle (≤ 5px) is still a held gesture, not a hover state.
     fireEvent(window, pointerEvent('pointermove', { pointerId: 1, clientX: 67 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBe('active');
 
@@ -93,16 +89,12 @@ describe('MainSidebar resize handle gesture', () => {
 
     fireEvent(separator, pointerEvent('pointerdown', { button: 0, pointerId: 1, clientX: 64 }));
 
-    // Past the drag threshold but still inside the snap zone (< collapseBelow):
-    // pointer is way off the 8px handle, sidebar stays collapsed.
     fireEvent(window, pointerEvent('pointermove', { pointerId: 1, clientX: 100 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBe('active');
 
-    // Crossing collapseBelow expands the sidebar (state change + re-render).
     fireEvent(window, pointerEvent('pointermove', { pointerId: 1, clientX: 250 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBe('active');
 
-    // Back into the snap zone: collapses again mid-drag.
     fireEvent(window, pointerEvent('pointermove', { pointerId: 1, clientX: 120 }));
     expect(scope.getAttribute('data-sidebar-gesture')).toBe('active');
 
@@ -431,7 +423,6 @@ describe('MainSidebar dragging the resize handle', () => {
     const { scope, separator } = renderSidebar();
 
     press(separator, 300);
-    // Exactly the threshold is still a wiggle.
     move(305);
     expect(widthOf(scope)).toBe('300px');
 
@@ -589,7 +580,6 @@ describe('MainSidebar dragging the resize handle', () => {
     move(350);
     release();
 
-    // A stray release afterwards must not reach back into the finished drag.
     document.body.style.cursor = 'text';
     release();
     fireEvent(window, pointerEvent('pointercancel', { pointerId: 1 }));
@@ -762,7 +752,6 @@ describe('MainSidebar mobile drawer closing', () => {
         <MainSidebar.MobileTrigger />
         <MainSidebar>
           <MainSidebar.Nav>
-            {/* A placeholder anchor with nowhere to go is the case under test. */}
             <a data-testid="no-href">Coming soon</a>
           </MainSidebar.Nav>
         </MainSidebar>
@@ -805,44 +794,6 @@ function SidebarNewStackFixture() {
         </button>
       </SidebarNew.Footer>
     </SidebarNew>
-  );
-}
-
-const sidebarNewMoreStorageKey = 'sidebar-new-more-links-test';
-
-const sidebarNewSections: SidebarNewSection[] = [
-  {
-    key: 'infrastructure',
-    title: 'Infrastructure',
-    links: [{ name: 'Deploys', url: '/deploys' }],
-    moreLinks: [
-      { name: 'Tools', url: '/tools' },
-      { name: 'Workspaces', url: '/workspaces' },
-    ],
-  },
-];
-
-function SidebarNewTestLink({ onClick, ...props }: LinkComponentProps) {
-  return (
-    <a
-      {...props}
-      onClick={event => {
-        event.preventDefault();
-        onClick?.(event);
-      }}
-    />
-  );
-}
-
-function renderSidebarNewSections(sections = sidebarNewSections) {
-  return render(
-    <SidebarNew.Provider storageKey="sidebar-new-sections-test" LinkComponent={SidebarNewTestLink}>
-      <SidebarNew>
-        <SidebarNew.Nav>
-          <SidebarNew.Sections sections={sections} recentItemsStorageKey={sidebarNewMoreStorageKey} />
-        </SidebarNew.Nav>
-      </SidebarNew>
-    </SidebarNew.Provider>,
   );
 }
 
@@ -912,115 +863,6 @@ describe('SidebarNew', () => {
 
     expect(document.activeElement).toBe(back);
     expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
-  });
-
-  describe('when multiple links are folded', () => {
-    it('toggles the folded links from the More row', () => {
-      mockMatchMedia(false);
-      renderSidebarNewSections();
-
-      expect(screen.getByRole('link', { name: 'Deploys' })).toBeTruthy();
-      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
-      const more = screen.getByRole('button', { name: 'More' });
-      fireEvent.click(more);
-
-      expect(more.getAttribute('aria-expanded')).toBe('true');
-      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
-      expect(screen.getByRole('link', { name: 'Workspaces' })).toBeTruthy();
-
-      fireEvent.click(more);
-
-      expect(more.getAttribute('aria-expanded')).toBe('false');
-      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
-    });
-
-    it('surfaces a clicked link for seven days', () => {
-      mockMatchMedia(false);
-      const firstRender = renderSidebarNewSections();
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
-      fireEvent.click(screen.getByRole('link', { name: 'Tools' }));
-      firstRender.unmount();
-
-      renderSidebarNewSections();
-
-      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
-      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
-    });
-
-    it('tracks recent links by URL when labels match', () => {
-      mockMatchMedia(false);
-      const sections: SidebarNewSection[] = [
-        {
-          key: 'tools',
-          links: [],
-          moreLinks: [
-            { name: 'Tools', url: '/tools/first' },
-            { name: 'Tools', url: '/tools/second' },
-          ],
-        },
-      ];
-      const firstRender = renderSidebarNewSections(sections);
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
-      const firstLink = screen.getAllByRole('link', { name: 'Tools' })[0];
-      if (!firstLink) throw new Error('First Tools link was not rendered');
-      fireEvent.click(firstLink);
-      firstRender.unmount();
-
-      renderSidebarNewSections(sections);
-
-      expect(screen.getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/tools/first');
-    });
-
-    it('keeps an active folded link visible', () => {
-      mockMatchMedia(false);
-      render(
-        <SidebarNew.Provider storageKey="sidebar-new-active-link-test">
-          <SidebarNew>
-            <SidebarNew.Nav>
-              <SidebarNew.Sections
-                sections={sidebarNewSections}
-                recentItemsStorageKey={sidebarNewMoreStorageKey}
-                isActive={link => link.url === '/tools'}
-              />
-            </SidebarNew.Nav>
-          </SidebarNew>
-        </SidebarNew.Provider>,
-      );
-
-      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
-      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
-    });
-
-    it('hides an expired recent link', () => {
-      mockMatchMedia(false);
-      window.localStorage.setItem(
-        sidebarNewMoreStorageKey,
-        JSON.stringify({ '/tools:Tools': Date.now() - 8 * 24 * 60 * 60 * 1000 }),
-      );
-
-      renderSidebarNewSections();
-
-      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
-    });
-  });
-
-  describe('when only one link can fold', () => {
-    it('shows the link without a More row', () => {
-      mockMatchMedia(false);
-      renderSidebarNewSections([
-        {
-          key: 'infrastructure',
-          links: [{ name: 'Deploys', url: '/deploys' }],
-          moreLinks: [{ name: 'Workspaces', url: '/workspaces' }],
-        },
-      ]);
-
-      expect(screen.getByRole('link', { name: 'Workspaces' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
-    });
   });
 
   it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {

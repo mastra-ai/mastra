@@ -1,77 +1,103 @@
-import { ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react';
-import { useState } from 'react';
+import { MoreHorizontalIcon, Settings2Icon } from 'lucide-react';
+import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import { SidebarNewSectionLink } from './sidebar-new-section-link';
+import type { SidebarNewSection } from './sidebar-new-sections';
+import { getSidebarLinkKey } from './sidebar-new-visibility';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import { MainSidebarNavLabel } from '@/ds/components/MainSidebar/main-sidebar-nav-label';
 import type { NavLink } from '@/ds/components/MainSidebar/main-sidebar-nav-link';
 import { MainSidebarNavLink } from '@/ds/components/MainSidebar/main-sidebar-nav-link';
-import { cn } from '@/lib/utils';
 
 export type SidebarNewMoreLinksProps = {
-  links: NavLink[];
+  links: NonNullable<SidebarNewSection['moreLinks']>;
   activeCandidates: NavLink[];
   isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
-  recentLinks: Record<string, number>;
-  recentCutoff: number;
-  onSelect: (link: NavLink) => void;
+  visibility: Record<string, boolean>;
+  onVisibilityChange: (link: NavLink, visible: boolean) => void;
 };
 
 export function SidebarNewMoreLinks({
   links,
   activeCandidates,
   isActive,
-  recentLinks,
-  recentCutoff,
-  onSelect,
+  visibility,
+  onVisibilityChange,
 }: SidebarNewMoreLinksProps) {
-  const [expanded, setExpanded] = useState(false);
+  const context = useMaybeSidebarState();
+  const Link = context?.LinkComponent ?? 'a';
   const linkIsActive = (link: NavLink) => isActive?.(link, activeCandidates) ?? link.isActive ?? false;
-  const surfacedLinks =
-    links.length < 2
-      ? links
-      : links.filter(link => linkIsActive(link) || (recentLinks[`${link.url}:${link.name}`] ?? 0) >= recentCutoff);
-  const foldedLinks = links.filter(link => !surfacedLinks.includes(link));
+  const linkIsVisible = (link: (typeof links)[number]) =>
+    visibility[getSidebarLinkKey(link)] ?? link.defaultVisible ?? (links.length < 2 || linkIsActive(link));
+  const hiddenLinks = links.filter(link => !linkIsVisible(link));
 
-  function renderLink(link: NavLink) {
+  function renderMenuLink(link: NavLink, nested = false): ReactNode {
     return (
-      <SidebarNewSectionLink
-        key={`${link.url}:${link.name}`}
-        link={link}
-        activeCandidates={activeCandidates}
-        isActive={isActive}
-        onSelect={onSelect}
-      />
+      <Fragment key={getSidebarLinkKey(link)}>
+        <DropdownMenu.Item
+          nativeButton={false}
+          inset={nested}
+          render={
+            <Link
+              href={link.url}
+              {...(/^(https?:)?\/\//.test(link.url) ? { target: '_blank', rel: 'noreferrer' } : {})}
+            />
+          }
+          aria-current={linkIsActive(link) ? 'page' : undefined}
+        >
+          {link.icon}
+          {link.name}
+        </DropdownMenu.Item>
+        {link.children?.map(child => renderMenuLink(child, true))}
+      </Fragment>
     );
   }
 
   return (
     <>
-      {surfacedLinks.map(renderLink)}
-      {foldedLinks.length > 0 ? (
+      {links.filter(linkIsVisible).map(link => (
+        <SidebarNewSectionLink
+          key={getSidebarLinkKey(link)}
+          link={link}
+          activeCandidates={activeCandidates}
+          isActive={isActive}
+        />
+      ))}
+      <DropdownMenu modal={false}>
         <MainSidebarNavLink
           link={{ name: 'More', url: '', icon: <MoreHorizontalIcon /> }}
           render={
-            <button
-              type="button"
-              aria-label="More"
-              aria-expanded={expanded}
-              onClick={() => setExpanded(current => !current)}
-            >
+            <DropdownMenu.Trigger render={<button type="button" />} aria-label="More">
               <MoreHorizontalIcon aria-hidden="true" />
               <MainSidebarNavLabel>More</MainSidebarNavLabel>
-            </button>
-          }
-          action={
-            <ChevronDownIcon
-              aria-hidden="true"
-              className={cn(
-                'size-3.5 transition-transform duration-normal ease-out-custom motion-reduce:transition-none',
-                expanded && 'rotate-180',
-              )}
-            />
+            </DropdownMenu.Trigger>
           }
         />
-      ) : null}
-      {expanded ? foldedLinks.map(renderLink) : null}
+        <DropdownMenu.Content align="start" aria-label="More navigation">
+          {hiddenLinks.map(link => renderMenuLink(link))}
+          {hiddenLinks.length > 0 && <DropdownMenu.Separator />}
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <Settings2Icon />
+              Customize sidebar
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent aria-label="Customize sidebar">
+              {links.map(link => (
+                <DropdownMenu.CheckboxItem
+                  key={getSidebarLinkKey(link)}
+                  checked={linkIsVisible(link)}
+                  onCheckedChange={visible => onVisibilityChange(link, visible)}
+                  closeOnClick={false}
+                >
+                  {link.icon}
+                  {link.name}
+                </DropdownMenu.CheckboxItem>
+              ))}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+        </DropdownMenu.Content>
+      </DropdownMenu>
     </>
   );
 }
