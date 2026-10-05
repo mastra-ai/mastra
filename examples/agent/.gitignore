@@ -7,4 +7,3 @@ database.sqlite
 hitl-approval-recall.db*
 .duckdb
 .duckdb.wal
-src/mastra/public/workspace/uploads

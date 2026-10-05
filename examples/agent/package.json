@@ -19,7 +19,6 @@
     "@mastra/core": "latest",
     "@mastra/daytona": "latest",
     "@mastra/duckdb": "latest",
-    "@mastra/e2b": "latest",
     "@mastra/e2b-desktop": "latest",
     "@mastra/editor": "latest",
     "@mastra/evals": "latest",
