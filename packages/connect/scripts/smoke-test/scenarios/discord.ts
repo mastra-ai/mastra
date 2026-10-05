@@ -35,10 +35,9 @@ export const discordScenario: Scenario = {
         call,
         [
           ['discord_get_guild', { guildId: guild.id }],
-          ['discord_list_channels', { guildId: guild.id }],
-          ['discord_list_roles', { guildId: guild.id }],
-          ['discord_list_guild_members', { guildId: guild.id, limit: 5 }],
-          ['discord_list_webhooks', { guildId: guild.id }],
+          ['discord_list_channels', { guild_id: guild.id }],
+          ['discord_list_roles', { guild_id: guild.id }],
+          ['discord_list_guild_members', { guild_id: guild.id, limit: 5 }],
         ],
         tools,
       )),
@@ -147,7 +146,7 @@ export const discordScenario: Scenario = {
 
     if (tools['discord_list_messages']) {
       try {
-        await call('discord_list_messages', { channelId, limit: 5 });
+        await call('discord_list_messages', { channel_id: channelId, limit: 5 });
         steps.push(makeStep('list messages', 'discord_list_messages', 'pass'));
       } catch (error) {
         steps.push(makeStep('list messages', 'discord_list_messages', 'fail', errorMessage(error)));
@@ -185,7 +184,18 @@ export const discordScenario: Scenario = {
       }
     }
 
-    // Webhook lifecycle on our smoke channel.
+    // Webhook lifecycle on our smoke channel. list_webhooks is
+    // channel-scoped (GET /channels/:id/webhooks), so it runs here rather
+    // than in the guild read batch.
+    if (tools['discord_list_webhooks']) {
+      try {
+        await call('discord_list_webhooks', { channelId });
+        steps.push(makeStep('list webhooks', 'discord_list_webhooks', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list webhooks', 'discord_list_webhooks', 'fail', errorMessage(error)));
+      }
+    }
+
     let webhookId: string | undefined;
     if (tools['discord_create_webhook']) {
       try {
