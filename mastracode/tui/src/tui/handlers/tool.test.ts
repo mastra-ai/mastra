@@ -461,6 +461,20 @@ describe('inline tool approval', () => {
     expect(output).toContain('path: src/auth.ts');
   });
 
+  it('names the command in quiet mode, where the row shows a description instead', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+    const args = { command: 'rm -rf build', description: 'Cleaning the build output' };
+
+    handleToolStart(ctx, 'call-5', 'execute_command', args);
+    handleToolApprovalRequired(ctx, 'call-5', 'execute_command', args);
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow execute_command?');
+    expect(output).toContain('command: rm -rf build');
+  });
+
   it('names the tool when no row shows the call', () => {
     const ctx = createToolHandlerContext();
     (ctx.state.session as any).respondToToolApproval = vi.fn();

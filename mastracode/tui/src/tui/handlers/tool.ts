@@ -370,11 +370,15 @@ export function handleToolApprovalRequired(
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };
 
-  // The approval can target something other than the visible row (a wrapper tool asking for an inner one),
-  // or have no row at all; then the card names the tool and its arguments itself.
+  // The card names the tool and its arguments itself unless the row above shows exactly this call: the
+  // approval can target something else (a wrapper tool asking for an inner one), there can be no row, and
+  // quiet mode rows show a description instead of the command.
   const visibleCall = state.pendingTools.get(toolCallId)?.getToolCall?.();
   const showTarget =
-    !visibleCall || visibleCall.toolName !== toolName || safeStringify(visibleCall.args) !== safeStringify(args);
+    state.quietMode ||
+    !visibleCall ||
+    visibleCall.toolName !== toolName ||
+    safeStringify(visibleCall.args) !== safeStringify(args);
 
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,
