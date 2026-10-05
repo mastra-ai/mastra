@@ -1,21 +1,31 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
-import { ChartEdgeTick } from '@/ds/primitives/chart-edge-tick';
-import type { ChartEdgeTickProps } from '@/ds/primitives/chart-edge-tick';
-import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
-import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
+import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
+import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import type { ChartXLabels } from '@/ds/primitives/chart-axes';
+import { Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import type { ChartHeight } from '@/ds/primitives/chart-frame';
+import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
-import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
+import { cn } from '@/lib/utils';
 
 export type MetricsLineChartSeries = {
   dataKey: string;
   label: string;
   color: string;
   aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
+  /** A secondary reading (e.g. an average next to counts): dashed, no fill under it. */
+  dashed?: boolean;
+  /** The series to read first (e.g. P95 among percentiles): a slightly heavier line. */
+  emphasis?: boolean;
 };
 
-const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+/** Line weight; an emphasised series adds half a pixel. */
+const LINE_WIDTH = 1.75;
+/** Opacity at the top of the fill under a line (it fades to nothing at the base). */
+const AREA_OPACITY = 0.12;
 
 // Positioned via transform so the hover line glides between points instead of jumping.
 function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
@@ -27,11 +37,8 @@ function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
       x2={0}
       y1={top.y}
       y2={bottom.y}
-      stroke="currentColor"
-      strokeOpacity={0.2}
-      strokeWidth={1}
-      strokeDasharray="3 3"
-      className="pointer-events-none text-black transition-transform duration-150 ease-out dark:text-white"
+      {...CHART_CURSOR_PROPS}
+      className="pointer-events-none transition-transform duration-150 ease-out"
       style={{ transform: `translateX(${top.x}px)` }}
     />
   );
@@ -45,104 +52,133 @@ export function MetricsLineChart({
   height = 210,
   yDomain,
   onPointClick,
-  xAxisInterval = 'preserveStartEnd',
-  xAxisMinTickGap = 28,
+  onBucketClick,
+  xKey = 'time',
+  timestampKey = 'tsMs',
+  xLabels = 'auto',
+  tooltipLabelKey,
   showDots = false,
   showLegend = true,
   valueFormatter,
+  axisFormatter,
   showYAxis = true,
+  isLoading = false,
+  className,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
-  height?: number;
+  /** Pixels, or `fill` to grow with the parent (a flex column, e.g. a card's content). */
+  height?: ChartHeight;
   yDomain?: [number, number];
+  /** Click on a series' active dot. */
   onPointClick?: MetricsLineChartPointClickHandler;
-  /** X-axis tick density. Defaults to `"preserveStartEnd"`, which drops labels
-   * to fit the chart width. Pass a number for a fixed step instead. */
-  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd';
-  /** Minimum px gap between rendered ticks; recharts drops labels to honor it. Default `28`. */
-  xAxisMinTickGap?: number;
+  /** Click anywhere on a bucket (e.g. to open its traces); the plot shows a pointer cursor. */
+  onBucketClick?: (row: Record<string, unknown>, index: number) => void;
+  /** Row field printed under the x-axis. */
+  xKey?: string;
+  /** Row field with the bucket's start time (ms), which places labels on round clock times. */
+  timestampKey?: string;
+  /** `auto` fits as many labels as the width allows; `edges` prints only the first and last. */
+  xLabels?: ChartXLabels;
+  /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
+  tooltipLabelKey?: string;
   /** Render a visible dot on every point (needed for single-point series). */
   showDots?: boolean;
   /** Set to `false` to render `MetricsLineChartLegend` elsewhere, e.g. next to tabs. */
   showLegend?: boolean;
-  /** Formats y-axis ticks and tooltip values (e.g. `ms`, `%`). Defaults to compact numbers. */
+  /** Formats tooltip values (e.g. `ms`, `%`), and y-axis ticks unless `axisFormatter` is set. */
   valueFormatter?: (value: number) => string;
+  /** Formats y-axis ticks, when they need a shorter form than the tooltip. */
+  axisFormatter?: (value: number) => string;
   /**
    * Set to `false` to drop the y-axis labels and let the plot span the card. The gridlines stay
    * for relative scale; exact values come from the tooltip and the card's summary.
    */
   showYAxis?: boolean;
+  /** Show a ghost of the chart while data loads, in the chart's own footprint. */
+  isLoading?: boolean;
+  className?: string;
 }) {
-  const isClickable = typeof onPointClick === 'function';
   const id = useChartDefsId();
+  const { size, onResize, ref } = useChartSize();
+  const fill = height === 'fill';
+  const root = cn(fill && 'flex min-h-0 flex-1 flex-col', className);
+
+  // The legend stays while loading: it comes from the series, not the data.
+  if (isLoading) {
+    return (
+      <div className={root}>
+        {showLegend && <MetricsLineChartLegend series={series} className="mb-4" />}
+        <ChartSkeleton kind="line" height={height} />
+      </div>
+    );
+  }
+
+  const format = valueFormatter ?? compactNumber.format;
+  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const activeDot = (s: MetricsLineChartSeries) => ({
+    r: 3.5,
+    fill: s.color,
+    stroke: 'var(--background)',
+    strokeWidth: 2,
+    ...(onPointClick && {
+      style: { cursor: 'pointer' },
+      onClick: (_: unknown, payload: unknown) => {
+        const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
+        if (datum) onPointClick(datum, s.dataKey);
+      },
+    }),
+  });
 
   return (
-    <div>
+    <div className={root}>
       {showLegend && <MetricsLineChartLegend data={data} series={series} className="mb-4" />}
-      <div style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={CHART_MARGIN}>
-            <defs>
-              <ChartGlowFilter id={`${id}-glow`} blur={4.5} alpha={0.7} />
-            </defs>
-            <CartesianGrid
-              stroke="currentColor"
-              strokeOpacity={0.08}
-              strokeDasharray="4 4"
-              vertical={false}
-              className="text-black dark:text-white"
-            />
-            <XAxis
-              dataKey="time"
-              height={X_AXIS_HEIGHT}
-              tick={(props: Omit<ChartEdgeTickProps, 'count'>) => <ChartEdgeTick {...props} count={data.length} />}
-              tickLine={false}
-              axisLine={false}
-              interval={xAxisInterval}
-              minTickGap={xAxisMinTickGap}
-            />
-            <YAxis
-              hide={!showYAxis}
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
-              tickLine={false}
-              axisLine={false}
-              width="auto"
-              tickFormatter={(value: number) => (valueFormatter ?? compactNumber.format)(value)}
-              domain={yDomain}
-              tickCount={3}
-            />
-            <Tooltip content={<MetricsLineChartTooltip formatValue={valueFormatter} />} cursor={<SmoothCursor />} />
-            {series.map(s => (
-              <Line
-                key={s.dataKey}
-                type="monotone"
-                dataKey={s.dataKey}
-                stroke={s.color}
-                strokeWidth={2}
-                filter={`url(#${id}-glow)`}
-                dot={showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
-                activeDot={
-                  isClickable
-                    ? {
-                        r: 4,
-                        stroke: s.color,
-                        strokeOpacity: 0.3,
-                        strokeWidth: 4,
-                        style: { cursor: 'pointer' },
-                        onClick: (_: unknown, payload: unknown) => {
-                          const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
-                          if (datum) onPointClick(datum, s.dataKey);
-                        },
-                      }
-                    : { r: 4, stroke: s.color, strokeOpacity: 0.3, strokeWidth: 4 }
-                }
-                name={s.label}
-              />
+      <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
+        <ComposedChart
+          data={data}
+          margin={CHART_MARGIN}
+          onClick={state => {
+            const i = state?.activeTooltipIndex;
+            const row = i === undefined || i === null ? undefined : data[Number(i)];
+            if (onBucketClick && row) onBucketClick(row, Number(i));
+          }}
+        >
+          <defs>
+            {series.map((s, i) => (
+              <linearGradient key={s.dataKey} id={`${id}-area-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={s.color} stopOpacity={AREA_OPACITY} />
+                <stop offset="95%" stopColor={s.color} stopOpacity={0} />
+              </linearGradient>
             ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+          </defs>
+          <CartesianGrid {...CHART_GRID_PROPS} />
+          {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
+          {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
+          <Tooltip
+            content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}
+            cursor={<SmoothCursor />}
+          />
+          {series.map((s, i) => {
+            const common = {
+              type: 'monotone' as const,
+              dataKey: s.dataKey,
+              name: s.label,
+              stroke: s.color,
+              strokeWidth: s.emphasis ? LINE_WIDTH + 0.5 : LINE_WIDTH,
+              strokeDasharray: s.dashed ? '4 3' : undefined,
+              dot: showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false,
+              activeDot: activeDot(s),
+              isAnimationActive: false,
+              connectNulls: true,
+            };
+            return s.dashed ? (
+              <Line key={s.dataKey} {...common} />
+            ) : (
+              <Area key={s.dataKey} {...common} fill={`url(#${id}-area-${i})`} fillOpacity={1} />
+            );
+          })}
+        </ComposedChart>
+      </ChartPlot>
     </div>
   );
 }

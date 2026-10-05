@@ -233,6 +233,19 @@
   --xy-controls-button-border-color: transparent;
 }
 
+/* Skeleton highlight: enters off the left edge and leaves off the right before it loops. It
+   moves `translate` (what Tailwind v4's translate utilities set), so it doesn't stack on the
+   skeleton's own `-translate-x-full` start position. */
+@keyframes shimmer {
+  from {
+    translate: -100% 0;
+  }
+
+  to {
+    translate: 100% 0;
+  }
+}
+
 @keyframes click-ripple {
   0% {
     transform: scale(0);

@@ -49,7 +49,7 @@
     }
 
     [data-variant='pill'][data-size='sm'] [data-slot='tab'] {
-      padding-block: 0;
+      padding: 0 10px;
     }
 
     :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-active][data-closable] {

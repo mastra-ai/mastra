@@ -3,7 +3,6 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -60,10 +59,14 @@ export const Tab = ({
   // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
   // aria/data attributes Base UI sets.
   const size = list?.size ?? 'md';
+  // `sm` is the compact tab for card toolbars: 24px tall with 12px labels, a rung under the `sm`
+  // control (28px), which is taller than the default pill tab.
+  const small = size === 'sm' && 'h-6 px-2.5 py-0 text-column';
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
           buttonVariants({ variant: 'ghost', size }),
+          small,
           'relative z-10 whitespace-nowrap',
           'data-[active]:text-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
@@ -72,7 +75,7 @@ export const Tab = ({
         )
       : cn(
           // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
-          size === 'sm' ? controlSizeClasses.sm : 'text-label',
+          size === 'sm' ? small : 'text-label',
           quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',

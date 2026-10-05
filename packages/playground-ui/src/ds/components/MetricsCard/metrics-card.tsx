@@ -8,6 +8,7 @@ import { MetricsCardRoot } from './metrics-card-root';
 import { MetricsCardSummary } from './metrics-card-summary';
 import { MetricsCardTitle } from './metrics-card-title';
 import { MetricsCardTitleAndDescription } from './metrics-card-title-and-description';
+import { MetricsCardToolbar } from './metrics-card-toolbar';
 import { MetricsCardTopBar } from './metrics-card-top-bar';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 
@@ -15,6 +16,7 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   Root: MetricsCardRoot,
   Kpi: MetricsKpiCard,
   TopBar: MetricsCardTopBar,
+  Toolbar: MetricsCardToolbar,
   Actions: MetricsCardActions,
   TitleAndDescription: MetricsCardTitleAndDescription,
   Title: MetricsCardTitle,

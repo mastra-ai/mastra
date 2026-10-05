@@ -44,15 +44,7 @@ export function TraceScoreLineChart({
   return (
     <Card className={className}>
       <CardContent>
-        <MetricsLineChart
-          data={data}
-          series={series}
-          height={90}
-          yDomain={[0, 1]}
-          xAxisInterval="preserveStartEnd"
-          xAxisMinTickGap={40}
-          showDots
-        />
+        <MetricsLineChart data={data} series={series} height={90} yDomain={[0, 1]} showDots />
       </CardContent>
     </Card>
   );

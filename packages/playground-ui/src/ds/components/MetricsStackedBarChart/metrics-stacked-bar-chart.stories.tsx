@@ -114,3 +114,44 @@ export const WithReferenceLine: Story = {
 export const WithoutYAxis: Story = {
   args: { data: requestsByHour, series: statusSeries, valueFormatter: count, height: 260, showYAxis: false },
 };
+
+/**
+ * A handful of errors next to thousands of successes, and one request in a quiet hour: every
+ * non-zero value still draws a few readable pixels, zeros draw nothing.
+ */
+export const TinyValues: Story = {
+  args: {
+    data: Array.from({ length: 24 }, (_, i) => ({
+      time: `${i}:00`,
+      ok: i === 6 ? 1 : 3000 + 400 * Math.sin(i / 3),
+      errors: i % 4 === 0 ? 1 : 0,
+    })),
+    series: [
+      { dataKey: 'ok', label: '2xx', color: 'var(--chart-green)' },
+      { dataKey: 'errors', label: '5xx', color: 'var(--chart-red)' },
+    ],
+    valueFormatter: count,
+    showYAxis: false,
+  },
+};
+
+/** A dashed line over the bars on its own scale, e.g. average wake time over cold starts. */
+export const WithOverlay: Story = {
+  args: {
+    data: requestsByHour.map((b, i) => ({ ...b, wakeMs: 1800 + 600 * Math.sin(i / 2) })),
+    series: [{ dataKey: 'coldStarts', label: 'Cold starts', color: 'var(--chart-green)' }],
+    overlay: {
+      dataKey: 'wakeMs',
+      label: 'Avg wake time',
+      color: 'var(--chart-cyan)',
+      valueFormatter: v => `${Math.round(v)}ms`,
+    },
+    valueFormatter: count,
+    showYAxis: false,
+  },
+};
+
+/** While data loads: ghost columns with a light sweep, in the chart's footprint. */
+export const Loading: Story = {
+  args: { data: requestsByHour, series: statusSeries, isLoading: true },
+};
