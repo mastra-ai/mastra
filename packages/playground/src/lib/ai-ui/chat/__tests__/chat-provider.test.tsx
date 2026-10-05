@@ -228,7 +228,7 @@ describe('ChatProvider', () => {
       'when the transcript uses %s',
       scenario => {
         it.each(['Approve', 'Decline'])(
-          'routes %s independently and keeps decided controls disabled after settling',
+          'routes %s independently and keeps the decision after the run resumes',
           async action => {
             const signals = scenario.startsWith('signals');
             const generate = scenario.startsWith('generate');
@@ -338,6 +338,20 @@ describe('ChatProvider', () => {
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
               expect(within(cards[index]).getByRole('status').textContent).toBe(`${action}d`);
               expect(within(cards[index]).queryByRole('button', { name: /^(Approve|Decline) / })).toBeNull();
+              if (live) {
+                const resumed = {
+                  type: 'tool-call-resumed',
+                  runId: 'parent-run',
+                  from: 'AGENT',
+                  payload: { toolCallId: id, toolName, kind: 'approval' },
+                };
+                await act(async () =>
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(resumed)}\n\n`)),
+                );
+                const cardAfterResume = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge')[index];
+                expect(cardAfterResume).toBe(cards[index]);
+                expect(within(cardAfterResume).getByRole('status').textContent).toBe(`${action}d`);
+              }
               if (index === 0)
                 expect(
                   within(cards[1])
