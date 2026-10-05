@@ -121,6 +121,66 @@ describe('DuckDB trace aggregate compiler', () => {
       compileDuckDBTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total' as never }] }),
     ).toThrow('Unsupported trusted trace-aggregate measure');
   });
+
+  it('omits the usage join for plans without token or cost measures', () => {
+    const compiled = compileDuckDBTraceAggregate(plan({ measures: ['count', 'duration.p95'] }));
+
+    expect(compiled.sql).not.toContain('metric_events');
+    expect(compiled.sql).not.toContain('usage');
+  });
+
+  it('joins usage per trace, deduplicating metricId and pruning by the lower time bound only', () => {
+    const compiled = compileDuckDBTraceAggregate(
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['tokens.total.sum', 'cost.avg'] }),
+        { scope: { organizationId: 'org-a', resourceId: 'res-1' } },
+      ),
+    );
+
+    const usage = compiled.sql.slice(compiled.sql.indexOf('usage_rows AS'), compiled.sql.indexOf('facts AS'));
+    expect(usage).toContain('FROM metric_events m');
+    expect(usage).toContain('QUALIFY row_number() OVER (PARTITION BY m.metricId ORDER BY m.timestamp) = 1');
+    expect(usage).toContain('m.traceId IN (SELECT traceId FROM candidates)');
+    expect(usage).toContain('m.timestamp >= CAST(? AS TIMESTAMP)');
+    expect(usage).not.toMatch(/timestamp </);
+    expect(usage).toContain('m.organizationId = ?');
+    expect(usage).toContain('m.resourceId = ?');
+    expect(usage).not.toContain('org-a');
+    expect(usage).not.toContain('mastra_model');
+    expect(compiled.sql).toContain('LEFT JOIN usage u ON u.traceId = r.traceId');
+    expect(compiled.sql).toContain('CAST(sum(t0 + t1) AS DOUBLE)');
+    expect(compiled.sql).toContain(
+      'CAST(count_if(covered) AS DOUBLE) / NULLIF(count_if(usageBearing), 0) AS costCoverage',
+    );
+    expect(compiled.values).toEqual(expect.arrayContaining(['mastra_model_input_cache_read_tokens', 'org-a', 'res-1']));
+    expect(placeholders(compiled.sql)).toBe(compiled.values.length);
+  });
+
+  it('binds usage parameters in placeholder order alongside where, having, and interval values', () => {
+    const compiled = compileDuckDBTraceAggregate(
+      planTraceAggregate(
+        parseTraceAggregateRequest({
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } },
+          groupBy: ['entityName'],
+          interval: '1h',
+          measures: ['cost.sum', 'tokens.input.sum'],
+          having: { op: 'gt', left: { path: 'tokens.input.sum' }, right: { literal: 10 } },
+          orderBy: { field: 'cost.sum', direction: 'desc' },
+        }),
+        { scope: { organizationId: 'org-a' } },
+      ),
+    );
+
+    expect(placeholders(compiled.sql)).toBe(compiled.values.length);
+    const usageStart = placeholders(compiled.sql.slice(0, compiled.sql.indexOf('usage_rows AS')));
+    expect(compiled.values.slice(usageStart, usageStart + 2)).toEqual([
+      'mastra_model_total_input_tokens',
+      'mastra_model_total_output_tokens',
+    ]);
+    expect(compiled.values.slice(usageStart + 6, usageStart + 8)).toEqual([TIME_RANGE.from, 'org-a']);
+    expect(compiled.values.slice(-4)).toEqual([10, 101, 100, 100]);
+  });
 });
 
 describe('DuckDB trace aggregate execution', () => {
@@ -144,6 +204,31 @@ describe('DuckDB trace aggregate execution', () => {
       rows: [{ dimensions: { entityName: 'triage' }, measures: { count: 3, errorRate: 0.5 } }],
       truncated: true,
     });
+  });
+
+  it('keeps null token and cost measures null and attaches row cost fields', async () => {
+    const { db } = mockDb([
+      { d0: 'research', m0: 2, m1: null, m2: 1500, costCoverage: 1, costUnit: 'mixed' },
+      { d0: 'scheduler', m0: 2, m1: null, m2: null, costCoverage: null, costUnit: null },
+    ]);
+
+    const response = await aggregateTraces(
+      db,
+      plan({ groupBy: ['entityName'], measures: ['count', 'cost.sum', 'tokens.input.avg'] }),
+    );
+
+    expect(response.rows).toEqual([
+      {
+        dimensions: { entityName: 'research' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': 1500 },
+        cost: { coverage: 1, unit: 'mixed' },
+      },
+      {
+        dimensions: { entityName: 'scheduler' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': null },
+        cost: { coverage: null, unit: null },
+      },
+    ]);
   });
 
   it('serializes buckets as UTC ISO strings and reads truncation from the ranked count', async () => {
