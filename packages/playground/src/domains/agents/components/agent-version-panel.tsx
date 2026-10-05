@@ -5,7 +5,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useAgentVersions } from '@mastra/react/hooks';
 
 export interface AgentVersionPanelProps {
   agentId: string;

@@ -6,8 +6,8 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 

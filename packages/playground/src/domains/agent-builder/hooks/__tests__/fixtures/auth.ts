@@ -1,4 +1,4 @@
-import type { AuthCapabilities, CurrentUser } from '@/domains/auth/types';
+import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks';
 
 /** The signed-in user used by hooks that scope reads to the caller. */
 export const currentUser = {

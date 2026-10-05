@@ -2,11 +2,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useAgent, useExecuteAgentTool } from '@mastra/react/hooks';
 import { useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
-import { useAgent } from '../hooks/use-agent';
-import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 
@@ -39,12 +38,17 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
 
-    await executeTool({
-      agentId: agentId!,
-      toolId: tool.id,
-      input: data,
-      playgroundRequestContext: requestContext,
-    });
+    try {
+      await executeTool({
+        agentId: agentId!,
+        toolId: tool.id,
+        input: data,
+        playgroundRequestContext: requestContext,
+      });
+    } catch (error) {
+      toast.error('Error executing agent tool');
+      throw error;
+    }
   };
 
   const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});

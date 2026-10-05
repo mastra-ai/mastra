@@ -1,7 +1,7 @@
 import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
+import { useWorkflowRun } from '@mastra/react/hooks';
 import { useMemo } from 'react';
 
-import { useWorkflowRun } from '../hooks/use-workflow-runs';
 import { getRunTimestamp, isWorkflowRunFinished } from '../utils';
 
 const RUN_POLL_INTERVAL_MS = 5000;

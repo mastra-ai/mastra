@@ -1,9 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
-import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';

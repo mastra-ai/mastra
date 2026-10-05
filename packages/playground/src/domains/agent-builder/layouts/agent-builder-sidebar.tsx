@@ -5,6 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
@@ -12,9 +13,7 @@ import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
-import { useAuthCapabilities } from '@/domains/auth/hooks';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { isAuthenticated } from '@/domains/auth/types';
 
 const agentsLink: NavLink = {
   name: 'My agents',

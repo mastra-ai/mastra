@@ -1,15 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks';
 import { Plug, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import {
-  useChannelInstallations,
-  useChannelPlatforms,
-  useConnectChannelAction,
-} from '@/domains/agents/hooks/use-channels';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 export interface ConnectChannelMessageProps {
   platformId: string;
