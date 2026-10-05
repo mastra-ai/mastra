@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. Sent cards and user messages share the same borderless surface, radius, and subtle elevation. Image previews add a faint inset outline and a frosted caption with progressive blur and theme-aware tint. The outer card clips the square overlay layers. Images, PDFs and text support previews; spreadsheets and other binary files use file entries. ComposerAttachment remains separate.',
+          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. Sent cards and user messages share the same borderless surface, radius, and subtle elevation. Image previews add a light inner highlight and progressively blurred bands. The image itself is masked into the message surface beneath the caption, with no painted gradient. Only the outer card rounds and clips the square layers. Images, PDFs and text support previews; spreadsheets and other binary files use file entries. ComposerAttachment remains separate.',
       },
     },
   },
@@ -50,6 +50,24 @@ export const ImageSafeZone: Story = {
       />
     </div>
   ),
+};
+
+const detailedImage =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220"><defs><pattern id="lines" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="6" height="12" fill="#182c25"/><rect x="6" width="6" height="12" fill="#a3e8c0"/></pattern></defs><rect width="320" height="220" fill="url(#lines)"/></svg>';
+
+export const ProgressiveBlur: Story = {
+  args: {
+    type: 'image',
+    name: 'fine-detail.svg',
+    src: `data:image/svg+xml,${encodeURIComponent(detailedImage)}`,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Fine detail stays sharp at the top and progressively softens toward the caption.',
+      },
+    },
+  },
 };
 
 const pdf =
