@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
 import { useAgentMessages } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -142,10 +141,11 @@ describe('ToolCard dispatch', () => {
         }),
       );
 
-      expect(screen.getAllByRole<HTMLImageElement>('img', { name: 'Preview' }).map(image => image.src)).toEqual([
-        'https://example.com/generated.png',
-        'data:image/webp;base64,UklGRg==',
-        'data:image/jpeg;base64,/9j/4AAQ',
+      const images = within(screen.getByTestId('tool-result-media')).getAllByRole<HTMLImageElement>('img');
+      expect(images.map(image => ({ src: image.src, alt: image.alt }))).toEqual([
+        { src: 'https://example.com/generated.png', alt: 'generated.png' },
+        { src: 'data:image/webp;base64,UklGRg==', alt: 'Image' },
+        { src: 'data:image/jpeg;base64,/9j/4AAQ', alt: 'Image' },
       ]);
     });
   });

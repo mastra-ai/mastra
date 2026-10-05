@@ -77,6 +77,7 @@ export function AgentPlaygroundVersionBar({
   const { data } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);

@@ -28,8 +28,11 @@ export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 
 export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
-  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   return useVisibilityChangeDialog<Visibility>({
     copy: COPY,

@@ -18,7 +18,7 @@ export interface DisconnectChannelContentProps {
 }
 
 export function DisconnectChannelContent({ platform, agentId, onCancel, onClose }: DisconnectChannelContentProps) {
-  const { mutateAsync: disconnect, isPending } = useDisconnectChannel(platform.id);
+  const { mutateAsync: disconnect, isPending } = useDisconnectChannel({ platform: platform.id });
 
   const handleConfirm = async () => {
     try {

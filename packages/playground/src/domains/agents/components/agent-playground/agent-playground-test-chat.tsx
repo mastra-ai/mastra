@@ -79,7 +79,11 @@ export function AgentPlaygroundTestChat({
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (

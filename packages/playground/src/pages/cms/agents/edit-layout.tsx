@@ -1,3 +1,4 @@
+import type { AgentVersionResponse, GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -44,7 +45,7 @@ function EditFormContent({
 }: {
   agentId: string;
   selectedVersionId: string | null;
-  versionData?: ReturnType<typeof useAgentVersion>['data'];
+  versionData?: AgentVersionResponse;
   readOnly?: boolean;
   form: ReturnType<typeof useAgentCmsForm>['form'];
   handlePublish: ReturnType<typeof useAgentCmsForm>['handlePublish'];
@@ -57,7 +58,7 @@ function EditFormContent({
   hideVersionPanel?: boolean;
   isCodeAgentOverride?: boolean;
   isCodeSourceAgent?: boolean;
-  editorConfig?: NonNullable<ReturnType<typeof useAgent>['data']>['editor'];
+  editorConfig?: NonNullable<GetAgentResponse>['editor'];
 }) {
   const [, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
@@ -138,22 +139,25 @@ function EditLayoutWrapper() {
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
-  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(
-    agentId,
-    useEntityRequestContext('agent', agentId!)[0],
-  );
+  const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId, {
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent({
+    agentId: agentId,
     status: 'draft',
-    enabled: hasVersions,
+    queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
   // A code agent override is when the underlying agent is code-defined,
@@ -191,6 +195,7 @@ function EditLayoutWrapper() {
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!agentId && !!selectedVersionId },
   });
 
   const activeVersionId = agent?.activeVersionId;

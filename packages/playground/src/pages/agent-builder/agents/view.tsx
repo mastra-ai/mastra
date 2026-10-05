@@ -21,7 +21,11 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 
 export default function AgentBuilderAgentView() {
   const { id: agentId } = useParams<{ id: string }>();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(agentId, { status: 'draft' });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent({
+    agentId: agentId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { canWrite } = useBuilderAgentAccess();
   useChannelConnectToast();

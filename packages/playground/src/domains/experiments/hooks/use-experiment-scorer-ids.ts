@@ -8,7 +8,11 @@ import { useMemo } from 'react';
  * items, so fall back to whichever scorers actually produced a score.
  */
 export function useExperimentScorerIds(experiment: DatasetExperiment): string[] {
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
 
   return useMemo(() => {
     if (experiment.scorerIds?.length) return experiment.scorerIds;

@@ -37,7 +37,7 @@ function ReviewQueuePage() {
   const { Link, paths } = useLinkComponent();
   // Servers without the trace-query API don't expose feedback either.
   const traceQuery = useTraceQueryAvailable();
-  const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
+  const { data, error } = useExperimentsForDatasetFilter({ datasetId: undefined, target: { targetType, targetId } });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
   const handleFiltersChange = (next: ReviewQueueFilters, list: ReviewListFilters) => {

@@ -1,8 +1,9 @@
-import type { DatasetExperiment, ListExperimentsParams } from '@mastra/client-js';
+import type { DatasetExperiment, ListExperimentsParams, MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import type { UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 import type { ExperimentTargetFilter } from './use-experiments-for-dataset-filter';
 
@@ -15,11 +16,19 @@ export const EXPERIMENTS_PER_PAGE = 100;
  */
 export type ExperimentsOrderBy = NonNullable<ListExperimentsParams['orderBy']>;
 
-export function useInfiniteExperiments(
-  datasetId: string | undefined,
-  target?: ExperimentTargetFilter,
-  orderBy?: ExperimentsOrderBy,
-): UseInfiniteQueryResult<DatasetExperiment[], Error> & {
+type ListExperimentsResponse = Awaited<ReturnType<MastraClient['listExperiments']>>;
+
+export function useInfiniteExperiments<TData = DatasetExperiment[]>({
+  datasetId,
+  target,
+  orderBy,
+  queryOptions,
+}: {
+  datasetId: string | undefined;
+  target?: ExperimentTargetFilter;
+  orderBy?: ExperimentsOrderBy;
+  queryOptions?: MastraInfiniteQueryOptions<ListExperimentsResponse, TData, QueryKey, number>;
+}): UseInfiniteQueryResult<TData, Error> & {
   setEndOfListElement: (element: HTMLDivElement | null) => void;
 } {
   const client = useMastraClient();
@@ -46,7 +55,9 @@ export function useInfiniteExperiments(
       }
       return lastPageParam + 1;
     },
-    select: data => data.pages.flatMap(page => page?.experiments ?? []),
+    select: (data: InfiniteData<ListExperimentsResponse, number>) =>
+      data.pages.flatMap(page => page?.experiments ?? []) as TData,
+    ...queryOptions,
   });
 
   useEffect(() => {

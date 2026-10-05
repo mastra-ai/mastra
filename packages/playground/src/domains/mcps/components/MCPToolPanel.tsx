@@ -47,13 +47,17 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const canExecuteTool = canExecute('tools');
   const client = useMastraClient();
 
-  const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
+  const {
+    data: tool,
+    isLoading,
+    error,
+  } = useMCPServerTool({ serverId: serverId, toolId: toolId, queryOptions: { enabled: !!serverId && !!toolId } });
   const {
     mutateAsync: executeTool,
     isPending: isExecuting,
     data: result,
     error: executionError,
-  } = useExecuteMCPTool(serverId, toolId);
+  } = useExecuteMCPTool({ serverId: serverId, toolId: toolId });
 
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 

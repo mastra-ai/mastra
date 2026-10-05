@@ -14,7 +14,11 @@ const MCPServerToolExecutor = () => {
     { id: 'mcp-server-tool', Component: McpServerToolCrumb },
   ];
 
-  const { data: mcpTool, isLoading } = useMCPServerTool(serverId!, toolId!);
+  const { data: mcpTool, isLoading } = useMCPServerTool({
+    serverId: serverId!,
+    toolId: toolId!,
+    queryOptions: { enabled: !!serverId && !!toolId },
+  });
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>

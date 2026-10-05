@@ -1,4 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
+import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
@@ -784,9 +785,11 @@ describe('Thread', () => {
   describe('when multiple text files are uploaded and sent', () => {
     it('sends their complete text and restores distinct named previews after a fresh history fetch', async () => {
       let sentTexts: string[] = [];
+      let history: ListMemoryThreadMessagesResponse = { messages: [], uiMessages: null };
       server.use(
-        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-          const body = await captureBody(request);
+        http.post<never, StreamParams>(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          const body = await request.json();
+          history = attachmentMessages(body.messages);
           const messages = Array.isArray(body.messages) ? body.messages : [];
           sentTexts = messages.flatMap(message => {
             if (!isRecord(message)) return [];
@@ -798,9 +801,7 @@ describe('Thread', () => {
           });
           return sseResponse();
         }),
-        http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
-          HttpResponse.json(attachmentMessages(sentTexts)),
-        ),
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () => HttpResponse.json(history)),
         ...baseHandlers(),
       );
       const csv = 'name,note\r\nZoë,"hello\nworld"\r\n';
@@ -835,18 +836,34 @@ describe('Thread', () => {
         ]),
       );
       await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull());
-      expect(screen.getByRole('button', { name: 'Preview leads.csv' })).toBeTruthy();
+      const liveMessage = screen.getByText('Read both files').closest('[data-slot="message"]');
+      expect(liveMessage).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Preview leads.csv' }).closest('[data-slot="message"]')).toBe(
+        liveMessage,
+      );
+      expect(
+        liveMessage?.querySelector('[data-slot="message-attachments"]')?.nextElementSibling?.getAttribute('data-slot'),
+      ).toBe('message-content');
       mounted.unmount();
       const client = new MastraClient({ baseUrl: BASE_URL });
       const restored = await client.getMemoryThread({ threadId: 'thread-1', agentId: 'agent-1' }).listMessages();
-      expect(restored.messages[0]?.content.parts).toEqual(sentTexts.map(text => ({ type: 'text', text })));
+      expect(restored.messages).toHaveLength(1);
+      expect(restored.messages[0]?.content.parts).toMatchObject(sentTexts.map(text => ({ type: 'text', text })));
       renderThread(restored.messages);
-      expect(await screen.findByText('Read both files')).toBeTruthy();
+      const restoredMessage = (await screen.findByText('Read both files')).closest('[data-slot="message"]');
+      expect(restoredMessage).not.toBeNull();
+      expect(
+        restoredMessage
+          ?.querySelector('[data-slot="message-attachments"]')
+          ?.nextElementSibling?.getAttribute('data-slot'),
+      ).toBe('message-content');
       for (const [name, text] of [
         ['leads.csv', csv],
         ['settings.ini', notes],
       ]) {
-        fireEvent.click(await screen.findByRole('button', { name: `Preview ${name}` }));
+        const preview = await screen.findByRole('button', { name: `Preview ${name}` });
+        expect(preview.closest('[data-slot="message"]')).toBe(restoredMessage);
+        fireEvent.click(preview);
         const dialog = screen.getByRole('dialog', { name });
         expect(within(dialog).getByText(text, { normalizer: value => value }).textContent).toBe(text);
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));

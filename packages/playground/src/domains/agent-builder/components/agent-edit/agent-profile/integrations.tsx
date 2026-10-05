@@ -108,7 +108,11 @@ interface IntegrationCardProps {
 }
 
 const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelect }: IntegrationCardProps) => {
-  const { data: installations = [] } = useChannelInstallations(platform.id, agentId);
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
 
   const description = PLATFORM_DESCRIPTION[platform.id];

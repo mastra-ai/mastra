@@ -14,7 +14,7 @@ import { useCallback } from 'react';
  * after a `deep_link` or `immediate` result (used by the publish dialog).
  */
 export const useConnectChannelAction = (platform: string, opts: { onClose?: () => void } = {}) => {
-  const { mutate, isPending } = useConnectChannel(platform);
+  const { mutate, isPending } = useConnectChannel({ platform: platform });
   const { onClose } = opts;
 
   const connect = useCallback(

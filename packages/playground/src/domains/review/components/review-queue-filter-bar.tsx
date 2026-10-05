@@ -113,12 +113,10 @@ export function ReviewQueueFilterBar({
   tagOptions,
   onChange,
 }: ReviewQueueFilterBarProps) {
-  const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({
-    enabled: targetType === 'workflow',
-  });
+  const { data: agents } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
+  const { data: workflows } = useWorkflows({ queryOptions: { enabled: targetType === 'workflow' } });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors } = useProcessors({ queryOptions: { enabled: targetType === 'processor' } });
 
   const fields = useMemo<FilterBarField[]>(() => {
     const targetOptions =

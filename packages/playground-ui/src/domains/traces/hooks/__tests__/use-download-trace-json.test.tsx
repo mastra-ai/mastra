@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
-
 import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
@@ -112,7 +110,10 @@ describe('useDownloadTraceJson', () => {
       );
       const { result } = renderHook(
         () => ({
-          trace: useTraceSpans(suspendedTrace.traceId),
+          trace: useTraceSpans({
+            traceId: suspendedTrace.traceId,
+            queryOptions: { enabled: !!suspendedTrace.traceId },
+          }),
           download: useDownloadTraceJson(),
         }),
         { wrapper: makeWrapper() },

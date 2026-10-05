@@ -21,7 +21,7 @@ export interface DatasetTagsEditorProps {
  * change persists immediately; removal is via the badge only.
  */
 export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { data: datasetsData } = useDatasets();
   const { updateDataset } = useDatasetMutations();
   const [search, setSearch] = useState('');

@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 import { chooseMetricsInterval, formatMetricsBucketLabel } from './metrics-interval';
 import type { MetricsInterval } from './metrics-interval';
 import type { MetricsQueryFilters } from './metrics-query-filters';
@@ -46,14 +48,23 @@ async function fetchPercentiles(
   });
 }
 
-export function useLatencyMetrics(params: MetricsQueryFilters) {
+export interface LatencyMetricsData {
+  agentData: LatencyPoint[];
+  workflowData: LatencyPoint[];
+  toolData: LatencyPoint[];
+  interval: MetricsInterval;
+}
+
+export function useLatencyMetrics<TData = LatencyMetricsData>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<LatencyMetricsData, TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { timestamp, filters, filterKey } = params;
+  const { timestamp, filters, filterKey, queryOptions } = params;
   const interval = chooseMetricsInterval(timestamp);
 
   return useQuery({
     queryKey: ['metrics', 'latency', filterKey, interval],
-    queryFn: async () => {
+    queryFn: async (): Promise<LatencyMetricsData> => {
       const [agentData, workflowData, toolData] = await Promise.all([
         fetchPercentiles(client, 'mastra_agent_duration_ms', filters, interval),
         fetchPercentiles(client, 'mastra_workflow_duration_ms', filters, interval),
@@ -61,5 +72,6 @@ export function useLatencyMetrics(params: MetricsQueryFilters) {
       ]);
       return { agentData, workflowData, toolData, interval };
     },
+    ...queryOptions,
   });
 }

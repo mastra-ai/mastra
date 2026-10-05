@@ -47,9 +47,13 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ platform, agentId }: ChannelRowProps) {
-  const { data: installations, isLoading } = useChannelInstallations(platform.id, agentId);
+  const { data: installations, isLoading } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const { connect, isConnecting } = useConnectChannelAction(platform.id);
-  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
+  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel({ platform: platform.id });
 
   const activeInstallation = installations?.find(i => i.status === 'active');
 

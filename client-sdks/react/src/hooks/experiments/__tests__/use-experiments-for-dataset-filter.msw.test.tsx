@@ -38,7 +38,9 @@ describe('useExperimentsForDatasetFilter', () => {
   describe('when no dataset is given', () => {
     it('lists every experiment with a full page', async () => {
       const urls = trackRequests();
-      const { result } = renderHook(() => useExperimentsForDatasetFilter(undefined), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useExperimentsForDatasetFilter({ datasetId: undefined }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.experiments).toHaveLength(experiments.length);
@@ -49,7 +51,9 @@ describe('useExperimentsForDatasetFilter', () => {
   describe('when a dataset is given', () => {
     it('lists the dataset experiments with a full page', async () => {
       const urls = trackRequests();
-      const { result } = renderHook(() => useExperimentsForDatasetFilter('dataset-1'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useExperimentsForDatasetFilter({ datasetId: 'dataset-1' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.experiments).toHaveLength(1);
@@ -61,7 +65,11 @@ describe('useExperimentsForDatasetFilter', () => {
     it('forwards it to the global list', async () => {
       const urls = trackRequests();
       const { result } = renderHook(
-        () => useExperimentsForDatasetFilter(undefined, { targetType: 'agent', targetId: 'agent-1' }),
+        () =>
+          useExperimentsForDatasetFilter({
+            datasetId: undefined,
+            target: { targetType: 'agent', targetId: 'agent-1' },
+          }),
         { wrapper: makeWrapper() },
       );
 
@@ -76,7 +84,8 @@ describe('useExperimentsForDatasetFilter', () => {
     it('forwards it to the dataset list and omits empty values', async () => {
       const urls = trackRequests();
       const { result } = renderHook(
-        () => useExperimentsForDatasetFilter('dataset-1', { targetType: 'workflow', targetId: '' }),
+        () =>
+          useExperimentsForDatasetFilter({ datasetId: 'dataset-1', target: { targetType: 'workflow', targetId: '' } }),
         { wrapper: makeWrapper() },
       );
 

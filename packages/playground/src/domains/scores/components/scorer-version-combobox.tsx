@@ -26,6 +26,7 @@ export function ScorerVersionCombobox({
   const { data, isLoading } = useScorerVersions({
     scorerId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!scorerId },
   });
 
   const versions = data?.versions ?? [];

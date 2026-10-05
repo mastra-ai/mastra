@@ -134,7 +134,11 @@ export function ChatProvider({
   const queryClient = useQueryClient();
   const baseClient = useMastraClient();
 
-  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfigData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
     omConfig === true ||

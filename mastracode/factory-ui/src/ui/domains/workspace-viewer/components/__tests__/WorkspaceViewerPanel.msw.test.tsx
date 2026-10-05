@@ -292,7 +292,8 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
 
-      expect(await screen.findByRole('button', { name: /Files No files/ })).toBeInTheDocument();
+      const filesButton = screen.getByRole('button', { name: /^Files/ });
+      expect(await within(filesButton).findByText('No files')).toBeInTheDocument();
     });
   });
 
@@ -309,7 +310,8 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
 
-      const changesButton = await screen.findByRole('button', { name: /Changes No sandbox/ });
+      const changesButton = screen.getByRole('button', { name: /^Changes/ });
+      await within(changesButton).findByText('No sandbox');
       await user.click(changesButton);
 
       expect(

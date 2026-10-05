@@ -1,5 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 export interface UpdateConnectionArgs {
   providerId: string;
@@ -15,7 +17,11 @@ export interface UpdateConnectionArgs {
  * ownership (owner / admin / shared scope). On success, invalidates both
  * the per-toolkit and the fan-out connection lists so the picker re-fetches.
  */
-export const useUpdateConnection = () => {
+type UpdateConnectionResponse = Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['updateConnection']>>;
+
+export const useUpdateConnection = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<UpdateConnectionResponse, UpdateConnectionArgs> } = {}) => {
   const client = useMastraClient();
   const qc = useQueryClient();
 
@@ -28,5 +34,6 @@ export const useUpdateConnection = () => {
       void qc.invalidateQueries({ queryKey: ['tool-integration-connections', vars.providerId] });
       void qc.invalidateQueries({ queryKey: ['tool-integration-connections-all', vars.providerId] });
     },
+    ...queryOptions,
   });
 };

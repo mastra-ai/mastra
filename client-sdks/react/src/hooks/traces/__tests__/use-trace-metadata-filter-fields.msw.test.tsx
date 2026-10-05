@@ -76,7 +76,6 @@ describe('useTraceMetadataFilterFields', () => {
       const [region] = result.current.fields;
       const options = await region?.suggestions({
         query: ' eu ',
-        operatorId: 'is',
         signal: new AbortController().signal,
       });
 
@@ -101,7 +100,7 @@ describe('useTraceMetadataFilterFields', () => {
       controller.abort();
 
       const [region] = result.current.fields;
-      await expect(region?.suggestions({ query: '', operatorId: 'is', signal: controller.signal })).rejects.toThrow();
+      await expect(region?.suggestions({ query: '', signal: controller.signal })).rejects.toThrow();
     });
   });
 
@@ -132,9 +131,12 @@ describe('useTraceMetadataFilterFields', () => {
         }),
       );
 
-      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange, enabled: false }), {
-        wrapper: makeWrapper(newQueryClient()),
-      });
+      const { result } = renderHook(
+        () => useTraceMetadataFilterFields({ timeRange, queryOptions: { enabled: false } }),
+        {
+          wrapper: makeWrapper(newQueryClient()),
+        },
+      );
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(requests).toBe(0);

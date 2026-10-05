@@ -38,8 +38,8 @@ export function setDragPayload(event: DragEvent, payload: DragPayload) {
   event.dataTransfer.effectAllowed = 'move';
 }
 
-export function readDragPayload(event: DragEvent): DragPayload | undefined {
-  const raw = event.dataTransfer.getData(CARD_MIME);
+export function readDragPayload(dataTransfer: DataTransfer): DragPayload | undefined {
+  const raw = dataTransfer.getData(CARD_MIME);
   if (!raw) return;
   let parsed: unknown;
   try {

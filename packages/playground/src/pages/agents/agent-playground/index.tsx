@@ -24,8 +24,16 @@ function AgentPlayground() {
     data: codeAgent,
     isLoading: isLoadingCodeAgent,
     error,
-  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
-  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory } = useMemory({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const editorSource = useEditorSource();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
@@ -33,13 +41,15 @@ function AgentPlayground() {
   const { data: versionsData, isLoading: isLoadingVersions } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent({
+    agentId: agentId!,
     status: 'draft',
-    enabled: hasVersions,
+    queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
@@ -55,6 +65,7 @@ function AgentPlayground() {
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!agentId && !!selectedVersionId },
   });
 
   const activeVersionId = storedAgent?.activeVersionId;

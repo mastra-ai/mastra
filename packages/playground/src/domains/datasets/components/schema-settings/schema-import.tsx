@@ -80,9 +80,10 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
 
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
-  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 

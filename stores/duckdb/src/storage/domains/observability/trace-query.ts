@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { parseJson } from './helpers';
+import { parseJson, payloadColumnSql } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 
 type ParameterType = 'scalar' | 'timestamp';
@@ -118,7 +118,7 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
-  r.input AS input,
+  ${payloadColumnSql('r.input')} AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -431,6 +431,16 @@ function compileDuckDBTraceScope(
       HAVING bool_or(r.timestamp >= CAST(? AS TIMESTAMP) AND r.timestamp < CAST(? AS TIMESTAMP))
         AND bool_or(${rowConditions.join('\n          AND ')})
     )`,
+    // The `traceId IN (...)` semi-join cannot be pushed into the table scan,
+    // so without a range DuckDB still decompresses the payload columns of every
+    // root row in the table. root_bounds is the exact timestamp range of the
+    // candidate traces' root rows, read from (traceId, timestamp) only, so the
+    // scan below keeps every root row of those traces.
+    `root_bounds AS (
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE parentSpanId IS NULL AND traceId IN (SELECT traceId FROM root_trace_ids)
+    )`,
     `root_events AS (
       SELECT
         *,
@@ -440,6 +450,8 @@ function compileDuckDBTraceScope(
         END AS startedAt
       FROM span_events
       WHERE parentSpanId IS NULL
+        AND timestamp >= (SELECT minTs FROM root_bounds)
+        AND timestamp <= (SELECT maxTs FROM root_bounds)
         AND traceId IN (SELECT traceId FROM root_trace_ids)
     )`,
     `current_roots AS (
@@ -463,7 +475,15 @@ function compileDuckDBTraceScope(
   ];
 
   if (relatedCollections.has('spans')) {
-    ctes.push(`current_span_rows AS (
+    ctes.push(`span_bounds AS (
+      -- Exact event-time range of the in-scope traces, from a narrow
+      -- (traceId, timestamp) pass. The join below cannot be pushed into the
+      -- scan, so the range keeps it from decompressing every span row.
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE traceId IN (SELECT traceId FROM root_scope)
+    ),
+    current_span_rows AS (
       SELECT
         e.*,
         coalesce(
@@ -475,7 +495,11 @@ function compileDuckDBTraceScope(
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId${tenantWhere('e')}
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      WHERE e.timestamp >= (SELECT minTs FROM span_bounds)
+        AND e.timestamp <= (SELECT maxTs FROM span_bounds)${tenantConditions('e')
+          .map(condition => `\n        AND ${condition}`)
+          .join('')}
     ),
     current_spans AS (
       SELECT

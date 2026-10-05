@@ -49,10 +49,14 @@ export function TraceAsItemDialog({
   const client = useMastraClient();
 
   // Lazy-load the root span details when dialog opens and no traceDetails provided
-  const { data: lazySpanDetail } = useSpanDetail(
-    !externalTraceDetails && isOpen ? traceId : null,
-    !externalTraceDetails && isOpen ? rootSpanId : null,
-  );
+  const { data: lazySpanDetail } = useSpanDetail({
+    traceId: !externalTraceDetails && isOpen ? traceId : null,
+    spanId: !externalTraceDetails && isOpen ? rootSpanId : null,
+    queryOptions: {
+      enabled:
+        !!(!externalTraceDetails && isOpen ? traceId : null) && !!(!externalTraceDetails && isOpen ? rootSpanId : null),
+    },
+  });
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 
