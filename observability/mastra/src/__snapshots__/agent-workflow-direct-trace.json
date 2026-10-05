@@ -339,16 +339,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "You can execute workflows that exist in your config"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Execute the simpleWorkflow with test input"
-                      }
-                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -740,24 +730,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "You can execute workflows that exist in your config"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Execute the simpleWorkflow with test input"
-                      },
-                      {
-                        "role": "assistant",
-                        "content": "[tool: workflow-simpleWorkflow]"
-                      },
-                      {
-                        "role": "tool",
-                        "content": "[tool-result: workflow-simpleWorkflow]"
-                      }
-                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []

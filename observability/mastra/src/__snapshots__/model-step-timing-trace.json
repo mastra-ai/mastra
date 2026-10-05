@@ -232,16 +232,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "You are a test agent"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Hello"
-                      }
-                    ],
                     "output": {
                       "text": "Hello world",
                       "toolCalls": []

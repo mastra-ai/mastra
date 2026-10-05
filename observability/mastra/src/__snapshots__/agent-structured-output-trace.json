@@ -247,16 +247,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "Return a simple response"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Return a list of items separated by commas"
-                      }
-                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": [],

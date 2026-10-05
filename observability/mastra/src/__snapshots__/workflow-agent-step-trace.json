@@ -289,16 +289,6 @@
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
-                            "input": [
-                              {
-                                "role": "system",
-                                "content": "You are a test agent"
-                              },
-                              {
-                                "role": "user",
-                                "content": "Hello from workflow"
-                              }
-                            ],
                             "output": {
                               "text": "Mock V2 stream response",
                               "toolCalls": []

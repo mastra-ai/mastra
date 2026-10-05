@@ -163,9 +163,15 @@ const exporter = new PosthogExporter({
 | All other workflows | `$ai_span` |
 | `GENERIC` | `$ai_span` |
 
-Each call to the model provider is a `MODEL_INFERENCE` span and is exported as one `$ai_generation` event. The event carries the model, token usage, input, output, and the tool definitions sent on that call as `$ai_tools`. A run that calls the model three times sends three `$ai_generation` events.
+Each call to the model provider is a `MODEL_INFERENCE` span and is exported as one `$ai_generation` event. The event carries the model, token usage, output, and the tool definitions sent on that call as `$ai_tools`. Its `$ai_input` is the conversation that call received: the run's input messages, followed by the output and tool results of each earlier call in the run. A run that calls the model three times sends three `$ai_generation` events.
 
-The `MODEL_GENERATION` span wraps those calls. It's exported as `$ai_span` without token usage, so tokens and cost aren't counted twice. With `@mastra/core` or `@mastra/observability` versions that don't record `MODEL_INFERENCE` spans, `MODEL_GENERATION` is exported as `$ai_generation`.
+The `MODEL_GENERATION` span wraps those calls and is exported as `$ai_span`. PostHog only adds up tokens and cost on `$ai_generation` events, so they aren't counted twice. With `@mastra/core` or `@mastra/observability` versions that don't record `MODEL_INFERENCE` spans, `MODEL_GENERATION` is exported as `$ai_generation`.
+
+:::note
+
+Runs through the deprecated `generateLegacy()` and `streamLegacy()` methods don't record `MODEL_INFERENCE` spans. Their `MODEL_GENERATION` span is exported as `$ai_span`, so these runs send no `$ai_generation` events and no token or cost data to PostHog. Use `generate()` and `stream()` to keep token and cost data.
+
+:::
 
 ## Feedback export
 

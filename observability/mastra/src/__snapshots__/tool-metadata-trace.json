@@ -293,16 +293,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "You use tools and add metadata"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Use metadata tool to process some data"
-                      }
-                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -604,24 +594,6 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
-                    "input": [
-                      {
-                        "role": "system",
-                        "content": "You use tools and add metadata"
-                      },
-                      {
-                        "role": "user",
-                        "content": "Use metadata tool to process some data"
-                      },
-                      {
-                        "role": "assistant",
-                        "content": "[tool: metadataTool]"
-                      },
-                      {
-                        "role": "tool",
-                        "content": "[tool-result: metadataTool]"
-                      }
-                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []
