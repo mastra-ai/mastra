@@ -3241,7 +3241,7 @@ export class Workflow<
       } else if (restartNested) {
         res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
       } else if (resumeNested) {
-        res = await run.resume({
+        res = await run.resumeNestedByParent({
           resumeData,
           step: resume?.steps?.length ? (resume.steps as any) : undefined,
           requestContext,
@@ -4738,6 +4738,11 @@ export class Run<
     return this.watch(cb);
   }
 
+  /** @internal */
+  async resumeNestedByParent(params: Parameters<this['resume']>[0]) {
+    return this._resume({ ...params, skipParentWorkflowClaim: true });
+  }
+
   async resume<TResume>(
     params: {
       resumeData?: TResume;
@@ -4944,6 +4949,8 @@ export class Run<
       forEachIndex?: number;
       perStep?: boolean;
       actor?: ActorSignal;
+      skipParentWorkflowClaim?: boolean;
+      claimedSnapshot?: WorkflowRunState;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
@@ -4968,13 +4975,14 @@ export class Run<
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId);
+    const snapshot =
+      params.claimedSnapshot ?? (await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId));
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
-    if (snapshot.status !== 'suspended') {
+    if (!params.claimedSnapshot && snapshot.status !== 'suspended') {
       throw new Error('This workflow run was not suspended');
     }
 
@@ -5126,7 +5134,9 @@ export class Run<
     //
     // The compare-and-set is executed inside the store's own critical section, so exactly one
     // caller flips `suspended -> running` and every other caller loses and throws below.
-    await this.#claimResume({ workflowsStore, snapshot });
+    if (!params.claimedSnapshot) {
+      await this.#claimResume({ workflowsStore, snapshot });
+    }
 
     const releaseClaimIfUnused = async () => {
       // Only roll the claim back when the engine never reached its first step persist, which is
@@ -5176,6 +5186,49 @@ export class Run<
       }
     };
 
+    let claimedParent:
+      | {
+          run: Run<any, any, any, any, any, any>;
+          snapshot: WorkflowRunState;
+          store: WorkflowsStorage;
+        }
+      | undefined;
+
+    if (this.parentWorkflow && !params.skipParentWorkflowClaim && workflowsStore) {
+      const parentWorkflow = this.#mastra?.getWorkflowById(this.parentWorkflow.workflowId);
+      if (!parentWorkflow) {
+        await releaseClaimIfUnused();
+        throw new Error(`Parent workflow ${this.parentWorkflow.workflowId} is not registered`);
+      }
+
+      const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: this.parentWorkflow.workflowId,
+        runId: this.parentWorkflow.runId,
+      });
+      if (!parentSnapshot) {
+        await releaseClaimIfUnused();
+        throw new Error(`No snapshot found for parent workflow run: ${this.parentWorkflow.runId}`);
+      }
+
+      const parentRun = await parentWorkflow.createRun({ runId: this.parentWorkflow.runId });
+      try {
+        await parentRun.#claimResume({ workflowsStore, snapshot: parentSnapshot });
+      } catch (error) {
+        await releaseClaimIfUnused();
+        throw error;
+      }
+      claimedParent = { run: parentRun, snapshot: parentSnapshot, store: workflowsStore };
+    }
+
+    const releaseParentClaim = async () => {
+      if (!claimedParent) return;
+      await claimedParent.store.updateWorkflowState({
+        workflowName: claimedParent.run.workflowId,
+        runId: claimedParent.run.runId,
+        opts: { status: 'suspended', expectedStatus: 'running' },
+      });
+    };
+
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -5206,7 +5259,7 @@ export class Run<
         outputWriter: params.outputWriter,
         perStep: params.perStep,
       })
-      .then(result => {
+      .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
@@ -5215,13 +5268,30 @@ export class Run<
           this.cleanup?.();
         }
         if (result.status === 'success') {
-          this.#wakeParentWorkflow();
+          if (claimedParent && this.parentWorkflow) {
+            void claimedParent.run
+              ._resume({
+                step: this.parentWorkflow.stepId,
+                forEachIndex: this.parentWorkflow.foreachIndex,
+                claimedSnapshot: claimedParent.snapshot,
+              })
+              .catch(error => {
+                this.#mastra
+                  ?.getLogger()
+                  ?.error('Failed to resume parent workflow after nested child completion.', error);
+              });
+          } else {
+            this.#wakeParentWorkflow();
+          }
+        } else {
+          await releaseParentClaim();
         }
         result.traceId = traceId;
         result.spanId = spanId;
         return result;
       })
       .catch(async error => {
+        await releaseParentClaim();
         await releaseClaimIfUnused();
         throw error;
       });

@@ -119,6 +119,109 @@ describe('foreach nested workflow runs', () => {
       }
     },
   );
+  it('allows only one nested child to resume the suspended parent at a time', async () => {
+    let alphaResumeStarted!: () => void;
+    const alphaResumeHasStarted = new Promise<void>(resolve => {
+      alphaResumeStarted = resolve;
+    });
+    let releaseAlphaResume!: () => void;
+    const alphaResumeReleased = new Promise<void>(resolve => {
+      releaseAlphaResume = resolve;
+    });
+
+    const childStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ item: inputData.item });
+        }
+        if (resumeData && inputData.item === 'alpha') {
+          alphaResumeStarted();
+          await alphaResumeReleased;
+        }
+        return inputData.item;
+      },
+    });
+
+    const childWorkflow = createWorkflow({
+      id: 'concurrent-child-workflow',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+    })
+      .then(childStep)
+      .commit();
+
+    const parentWorkflow = createWorkflow({
+      id: 'concurrent-parent-workflow',
+      inputSchema: z.array(z.object({ item: z.string() })),
+      outputSchema: z.array(z.string()),
+    })
+      .foreach(childWorkflow, { concurrency: 2 })
+      .commit();
+
+    const storage = new MockStore();
+    new Mastra({ workflows: { parentWorkflow }, storage, logger: false });
+
+    const parentRun = await parentWorkflow.createRun();
+    expect(await parentRun.start({ inputData: [{ item: 'alpha' }, { item: 'beta' }] })).toMatchObject({
+      status: 'suspended',
+    });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) throw new Error('Workflows store is unavailable');
+    const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: parentWorkflow.id,
+      runId: parentRun.runId,
+    });
+    const iterations =
+      parentSnapshot?.context?.[childWorkflow.id]?.suspendPayload?.__workflow_meta?.foreachOutput ?? [];
+    const nestedRunIds = iterations.map(
+      (iteration: { metadata?: { nestedRunId?: string } }) => iteration.metadata?.nestedRunId,
+    ) as string[];
+    expect(nestedRunIds).toEqual([expect.any(String), expect.any(String)]);
+
+    const childRuns = await Promise.all(nestedRunIds.map((runId: string) => childWorkflow.createRun({ runId })));
+    const alphaResume = childRuns[0]!.resume({ resumeData: { approved: true } });
+    await alphaResumeHasStarted;
+
+    await expect(childRuns[1]!.resume({ resumeData: { approved: true } })).rejects.toMatchObject({
+      id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    });
+    const rejectedChildSnapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: childWorkflow.id,
+      runId: nestedRunIds[1],
+    });
+    expect(rejectedChildSnapshot?.status).toBe('suspended');
+
+    releaseAlphaResume();
+    await expect(alphaResume).resolves.toMatchObject({ status: 'success' });
+    await expect
+      .poll(async () => {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.id,
+          runId: parentRun.runId,
+        });
+        return snapshot?.status;
+      })
+      .toBe('suspended');
+
+    expect(await childRuns[1]!.resume({ resumeData: { approved: true } })).toMatchObject({
+      status: 'success',
+    });
+    await expect
+      .poll(async () => {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.id,
+          runId: parentRun.runId,
+        });
+        return snapshot?.status;
+      })
+      .toBe('success');
+  });
+
   it('continues the parent when a nested child is resumed directly', async () => {
     const childStep = createStep({
       id: 'approval-step',
