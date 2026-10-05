@@ -75,7 +75,9 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 ### Interactive API key prompt
 
-`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to change the active pack's model for the current mode. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+Model choices belong to the pack, not to an individual thread. Updating a pack changes that mode's model for every thread that uses the pack. Each thread remembers its active pack and current model. When you switch modes, Mastra Code applies the active pack's model for the new mode.
 
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 

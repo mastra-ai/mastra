@@ -1,8 +1,8 @@
 ---
-title: "Reference: Session | AgentController"
-description: "Use AgentController Session to manage per-conversation identity, threads, mode, model, run state, grants, and display snapshots within an isolated runtime."
+title: 'Reference: Session | AgentController'
+description: 'Use AgentController Session to manage per-conversation identity, threads, mode, model, run state, grants, and display snapshots within an isolated runtime.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 toc_max_heading_level: 2
 ---
 
@@ -515,7 +515,7 @@ const mode = session.mode.resolve()
 
 ### `session.mode.switch({ modeId })`
 
-Switch to another mode. The session saves the outgoing mode's model before persisting the new mode on the active thread. It then restores the incoming mode's selected or default model. The session emits `mode_changed` immediately and `model_changed` after model resolution.
+Switch to another mode and persist the mode on the active thread. The session emits `mode_changed`. Switching modes doesn't change the active model; switch the model separately when your host assigns different models to different modes.
 
 ```typescript
 await session.mode.switch({ modeId: 'build' })
@@ -523,7 +523,7 @@ await session.mode.switch({ modeId: 'build' })
 
 ## Model
 
-`session.model` owns the active model selection, including per-mode model memory.
+`session.model` owns the session's single active model selection.
 
 ### `session.model.get()`
 
@@ -551,9 +551,9 @@ if (session.model.hasSelection()) {
 }
 ```
 
-### `session.model.switch({ modelId, scope?, modeId? })`
+### `session.model.switch({ modelId, scope? })`
 
-Switch the active model. When `scope` is `'thread'` (the default), the model ID is persisted as the per-mode model so it's restored when switching back. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event.
+Switch the session's active model. When `scope` is `'thread'` (the default), the model ID is persisted as the thread's `currentModelId` and restored with that thread. When `scope` is `'global'`, the selection changes only in the live session. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event with `{ modelId, scope }`.
 
 ```typescript
 // Set for the current session only

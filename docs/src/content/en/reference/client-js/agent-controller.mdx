@@ -1,8 +1,8 @@
 ---
-title: "Reference: Agent Controller API | Client SDK"
-description: "The Agent Controller API connects a UI in another process to an agent controller session over HTTP, streaming its events and sending messages, approvals, and suspension responses."
+title: 'Reference: Agent Controller API | Client SDK'
+description: 'The Agent Controller API connects a UI in another process to an agent controller session over HTTP, streaming its events and sending messages, approvals, and suspension responses.'
 packages:
-  - "@mastra/client-js"
+  - '@mastra/client-js'
 ---
 
 # Agent Controller API
@@ -195,7 +195,7 @@ Switches the active mode.
 
 ### `switchModel(modelId, options?)`
 
-Switches the model. `options.scope` is `'thread'` (default) or `'global'`. `options.modeId` targets a specific mode.
+Switches the session's active model. `options.scope` is `'thread'` (default) or `'global'`. Thread scope persists one current model for the active thread; switching modes doesn't change it.
 
 ### `listThreads(options?)`
 
