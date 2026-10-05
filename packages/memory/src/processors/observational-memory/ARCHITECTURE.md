@@ -40,7 +40,7 @@ Buffering appends chunks in order, and activation always takes a prefix (`swapBu
 
 ## Lifecycle (as on `main`)
 
-This section describes `main`. Behavior that exists only on the open #22078 branch is marked as such.
+This section describes `main`. Behavior #22078 (PR 3) adds is marked as such; what the stack changes is in the Direction section.
 
 ### Thresholds
 
@@ -49,7 +49,7 @@ This section describes `main`. Behavior that exists only on the open #22078 bran
 | `messageTokens` (threshold)                        | Observation is due once pending message tokens reach it (`getStatus`: `shouldObserve = pendingTokens >= threshold`).                                                                                                                                                |
 | `bufferTokens`                                     | Async buffering interval. Below the threshold, each interval boundary crossed starts one background buffer op (`BufferingCoordinator.shouldTriggerAsyncObservation`; the interval halves near the threshold). `getStatus` only buffers while `pending < threshold`. |
 | `bufferActivation`                                 | How much of the pending messages one activation should remove; the rest is kept as a raw tail (retention floor).                                                                                                                                                    |
-| `blockAfter`                                       | Forces maximum activation when pending tokens reach it. (#22078 adds an async band `threshold <= pending < blockAfter` that keeps buffering and never blocks; not on `main`.)                                                                                       |
+| `blockAfter`                                       | Forces maximum activation when pending tokens reach it. (#22078, PR 3, adds an async band `threshold <= pending < blockAfter` that keeps buffering and never blocks; see D3.)                                                                                       |
 | Reflection `observationTokens`, `bufferActivation` | When reflection is due, and when to start a background reflection ahead of it.                                                                                                                                                                                      |
 
 ### Per turn (`observation-turn/turn.ts`, `observation-turn/step.ts`)
@@ -71,7 +71,7 @@ This section describes `main`. Behavior that exists only on the open #22078 bran
 2. `persist()` appends the chunk with `updateBufferedObservations` to the record id captured when the op started.
 3. Observation groups are indexed, the thread title and extracted values are saved, and the buffering-end marker is emitted.
 
-(#22078 adds a `pendingChunkWrites` phase so activation waits only for the chunk append, emits the end marker right after the append, and retargets the append to whichever record is the head at persist time.)
+(#22078 adds a `pendingChunkWrites` phase so activation waits only for the chunk append, and emits the end marker right after the append. Before the stack it also retargeted the append to the head at persist time and deferred activation while a write was in flight; PR 3 drops both, see D3.)
 
 ### Activation (`ObservationalMemory.activate`)
 
@@ -155,7 +155,7 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 - **History:** in months of use, larger Observer inputs consistently produced lower-quality observations. That's why a long-context Observer model (Gemini Flash) was originally recommended. Buffering reduced that sensitivity, and stranding brings it back.
 - **Related:** issue #25372 (agent misses recent user content). Stranding is a credible but **unconfirmed** contributor; several mechanisms are likely involved.
 
-### P2. Writing a chunk to the new head skips the cursor (#22078 head `4161e237`, proven)
+### P2. Writing a chunk to the new head skips the cursor (#22078 head `4161e237`, proven; fixed in PR 3)
 
 - **Mechanism:**
   1. `async-buffer.ts` `persist()` retargets an in-flight chunk to whichever record is the head at persist time.
@@ -164,16 +164,17 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
   4. Activating it moves the cursor past the stranded chunk's messages, so they are **never observed again**.
 - **Effect:** breaks invariant 3 and causes permanent loss. Before the retarget, both chunks were stranded and nothing was lost.
 - **Evidence:** a ready+late probe fails on `4161e237` and passes on main `056427cd`.
-- **Fix:** the retarget is only correct together with carry-forward.
+- **Fix:** carry-forward (D1) moves the ready chunks to the new head, so the head's list still starts at the cursor; PR 3 drops #22078's retarget because the queued head read (D2) and storage's retired-id redirect (D1) already send the late chunk to the head. `__tests__/ready-late-rollover.test.ts` covers the ready+late case; the probe fails on `4161e237` and passes on the stack.
 
-### P3. Step-0 reflection retires the generation an in-flight write targets (#22078, proven)
+### P3. Step-0 reflection retires the generation an in-flight write targets (#22078, proven; fixed in PR 3)
 
 - **Mechanism:**
   1. In the async band, step 0 defers observation activation while a chunk write is in flight, but still runs `maybeReflect`.
   2. Reflection creates a new head.
   3. The write lands on the retired record, which is P1 again.
 - **Why it's new:** on main, step 0 waits for the buffer op before reflecting, so this path doesn't exist there.
-- **Evidence:** reproduced with real `om.buffer()` and InMemory storage (`__tests__/buffer-write-generation.test.ts` on #22078).
+- **Evidence:** reproduced with real `om.buffer()` and InMemory storage (`__tests__/buffer-write-generation.test.ts` fails on `ede145bf`).
+- **Fix:** with D1 the write lands on the head wherever it was aimed, and its chunk is kept across the rollover. PR 3 also removes the step-0 activation deferral itself (see D3). `buffer-write-generation.test.ts` passes on the stack.
 
 ### P4. Observation activation commits to a retired generation (main, proven; fixed in PR 1)
 
@@ -190,7 +191,7 @@ Status key: **proven** = reproduced by a probe; **source-read** = follows from r
 ### P5. The swap drops a concurrently appended chunk (main, proven; fixed in PR 1)
 
 - **Mechanism:** InMemory (`inmemory.ts` `swapBufferedToActive`), OracleDB (`observational-buffering.ts`), and Convex (`omSwapBuffered`) write back what's left of the chunk list the caller read.
-- **Mitigation:** in-process only, via the activation wait (and #22078's `pendingChunkWrites`). Across processes there is none.
+- **Mitigation on `main`:** in-process only, via the activation wait. Across processes there is none. D1 makes every adapter activate from its stored list; `lifecycle-safety.test.ts` "keeps a chunk another process appends between the head read and the swap (P5)" fails when InMemory writes back the caller's list.
 - **Related:** MongoDB, OracleDB, and Convex don't dedupe a retried append by `cycleId`, so a retry stores the chunk twice.
 
 ### P6. Sync reflection uses a stale snapshot (main, proven; fixed in PR 1)
@@ -346,22 +347,33 @@ It also classifies every duplicate.
 
 What #22078 keeps: the async-band policy; per-record `blockAfter` resolution; the input-bucket fix; E2E teardown drain and the fastembed cache path; tests.
 
-What it drops, as D1 and D2 make them unnecessary: `pendingChunkWrites` and the activation deferral/timeout logic, and the retarget (D1 makes appends land on the head). Removing each guard has to be justified by a test that fails without D1 and D2. The ready+late probe (P2) and `buffer-write-generation.test.ts` (P3) become passing regression tests.
+What it drops, as D1 and D2 make them unnecessary. Each removal was checked by disabling the D1 mechanism that replaces it and watching a test fail (records in the plan's progress file):
 
-## Deferred / out of scope
+- **Persist-time retarget.** The queued head read (D2) and storage's retired-id redirect (D1) send a late chunk to the head. With InMemory carry-forward disabled, `ready-late-rollover.test.ts` fails; with the retired-id redirect disabled, it and `buffer-write-generation.test.ts` fail.
+- **Chunk-write deferral.** Step 0 no longer defers activation while a chunk write is in flight, the threshold pipeline no longer holds sync observation for one, and `activate()` no longer skips activation when the write outlasts its wait. Storage activates from its stored list and keeps a chunk appended meanwhile; with InMemory writing back the caller's list, `lifecycle-safety.test.ts` "keeps a chunk another process appends between the head read and the swap (P5)" fails. Guard-internal tests were replaced by tests of the property each guarded (no lost chunk, no duplicate coverage, no in-band wait).
+
+What remains of `pendingChunkWrites` is a cost optimization: at or above `blockAfter`, `activate()` waits up to 60s for an in-process chunk write so the chunk activates instead of the sync pass re-observing its messages. In the band nothing waits. After the timeout activation proceeds; the sync pass observes the remaining messages, and when the late chunk lands, storage skips it if the cursor covers it (or stores it with its covered part counted as accepted duplication if only partly covered).
+
+The ready+late probe (P2, `ready-late-rollover.test.ts`) and `buffer-write-generation.test.ts` (P3) are passing regression tests.
+
+## What the stack does not fix
 
 - Chunks already stranded in existing databases stay where they are (no adoption or cleanup migration).
-- #25372 chronology/speaker distortion in observations, agent evidence-selection failures, BEAM regeneration, and an investigation spike for those.
+- Mixed-version deployments: processes on older adapter versions neither set nor check `supersededBy`. Rows they retire stay live until a new-version process starts and backfills, and their writes are not fenced. Protection starts once every process is upgraded (Convex: once functions are redeployed).
 - Durable-agent gaps: a worker dying mid-buffer loses that cycle; a resumed turn across workers isn't rehydrated; durable finalize swallows OM persist errors at `warn`.
-- A real multi-worker Inngest run; cross-process behavior is tested with two OS processes sharing LibSQL and PostgreSQL plus per-adapter cross-connection tests.
+- #25372: the stack removes the lifecycle mechanisms reproduced here (P1–P6, H1–H6, H8). It does not address chronology/speaker distortion in observations or agent evidence-selection failures, and BEAM was not regenerated, so score impact is unmeasured.
+- Open findings: H7 (parts added to an already-observed message by another instance), cross-process config overrides, out-of-order message timestamps, the `triggerAsyncBuffering` flag ordering, and the H4 follow-up (see Open questions). LibSQL can still hit `SQLITE_BUSY` between OM writes and non-OM writes from other connections (see D1); Turso embedded-replica behavior is untested against a real replica.
+- Not proven end to end: Convex (server-mutation unit tests with a mocked ctx only), a real multi-worker Inngest run (cross-process behavior is tested with two OS processes sharing LibSQL and PostgreSQL plus per-adapter cross-connection tests), and real-world frequency.
 
 ## PR stack
 
-| #   | Branch                                 | Base                       | Scope                                                                    |
-| --- | -------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
-| 1   | `fix/om-lossless-rollover`             | `main`                     | D1: storage contract, `supersededBy`, all seven adapters, memory callers |
-| 2   | `fix/om-commit-queue`                  | `fix/om-lossless-rollover` | D2: in-process commit queue, interleaving fuzz harness                   |
-| 3   | `fix/om-async-band-buffering` (#22078) | `fix/om-commit-queue`      | D3: async band rebased, superseded guards removed                        |
+| #   | Branch | Base                          | Scope                      |
+| --- | ------ | ----------------------------- | -------------------------- |
+| #   | PR     | Branch                        | Base                       | Scope                                                                    |
+| --- | ------ | ----------------------------- | -------------------------- | ------------------------------------------------------------------------ |
+| 1   | #25906 | `fix/om-lossless-rollover`    | `main`                     | D1: storage contract, `supersededBy`, all seven adapters, memory callers |
+| 2   | #25998 | `fix/om-commit-queue`         | `fix/om-lossless-rollover` | D2: in-process commit queue, interleaving fuzz harness                   |
+| 3   | #22078 | `fix/om-async-band-buffering` | `fix/om-commit-queue`      | D3: async band rebased, superseded guards removed                        |
 
 Related history:
 
@@ -394,4 +406,5 @@ Related history:
 - `__tests__/lifecycle-safety.test.ts`: memory-layer behavior on retired and conflicting commits (P4, P6, H2–H8, reflection not applied, covered appends).
 - `__tests__/commit-queue.test.ts`, `__tests__/commit-queue-integration.test.ts`: queue semantics, reflection priority, every OM write inside the queue.
 - `__tests__/lifecycle-fuzz.test.ts` (InMemory) and `integration-tests/src/om-lifecycle-fuzz-libsql.test.ts` (LibSQL): seeded interleaving fuzz (D2).
-- The probes for P2 and P4 live outside the repo and are ported into the stack as regression tests: the ready+late rollover probe and the activation-vs-reflection probe matrix including the two-agent LibSQL repro.
+- `__tests__/ready-late-rollover.test.ts` (P2) and `__tests__/buffer-write-generation.test.ts` (P3): in-flight and ready chunks across a step-0 rollover (PR 3).
+- The P4 activation-vs-reflection probe matrix (including the two-agent LibSQL repro), the P1/P6 probes, the cross-process probe, and the durable-agent probe live outside the repo; their runs are recorded in the plan's proof file. The repo-side regression coverage for them is `lifecycle-safety.test.ts` and the shared conformance and concurrency suites.
