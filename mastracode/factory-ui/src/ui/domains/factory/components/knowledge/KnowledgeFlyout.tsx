@@ -293,7 +293,7 @@ export function KnowledgeFlyout({
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
-              <p className="text-icon5 px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
             ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
