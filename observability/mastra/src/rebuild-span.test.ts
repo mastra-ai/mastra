@@ -48,6 +48,7 @@ describe('rebuildSpan internal status', () => {
     });
     const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(span.exportSpan())));
     expect(rebuilt.exportSpan()?.nestedUnderParent).toBe(true);
+    expect(rebuilt.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
     rebuilt.end();
   });
 

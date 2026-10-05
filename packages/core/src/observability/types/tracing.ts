@@ -2024,7 +2024,7 @@ export interface TracingOptions {
    * run it scores. Exporters then keep the trace's own name, input, output,
    * and tags instead of replacing them with this run's. Leave unset when
    * `parentSpanId` points at a span from your own tracing system: there the
-   * Mastra run is the top of the trace. Ignored without `parentSpanId`.
+   * Mastra run is the top of the trace. Ignored without a valid `traceId` and `parentSpanId`.
    */
   nestUnderParent?: boolean;
   /**

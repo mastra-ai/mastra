@@ -2040,20 +2040,27 @@ describe('Tracing', () => {
       expect(rootSpan.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
     });
 
-    it('should ignore nestUnderParent without a parentSpanId', () => {
+    it.each([
+      ['no parentSpanId', { traceId: '0123456789abcdef0123456789abcdef' }],
+      ['no traceId', { parentSpanId: '0123456789abcdef' }],
+      ['an invalid parentSpanId', { traceId: '0123456789abcdef0123456789abcdef', parentSpanId: 'not-a-span-id' }],
+      ['an invalid traceId', { traceId: 'not-a-trace-id', parentSpanId: '0123456789abcdef' }],
+    ])('should ignore nestUnderParent with %s', (_case, ids) => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
         exporters: [testExporter],
       });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const rootSpan = observability.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'root-agent',
         attributes: { agentId: 'agent-1' },
-        tracingOptions: { nestUnderParent: true, tags: ['root-tag'] },
+        tracingOptions: { ...ids, nestUnderParent: true, tags: ['root-tag'] },
       });
       rootSpan.end();
+      consoleError.mockRestore();
 
       const exported = rootSpan.exportSpan();
       expect(exported?.nestedUnderParent).toBeUndefined();

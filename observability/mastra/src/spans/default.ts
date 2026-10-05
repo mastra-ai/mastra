@@ -296,15 +296,17 @@ function generateTraceId(): string {
 
 /**
  * Validate OpenTelemetry-compatible trace ID (1-32 hex characters)
+ * @internal
  */
-function isValidTraceId(traceId: string): boolean {
+export function isValidTraceId(traceId: string): boolean {
   return /^[0-9a-f]{1,32}$/i.test(traceId);
 }
 
 /**
  * Validate OpenTelemetry-compatible span ID (1-16 hex characters)
+ * @internal
  */
-function isValidSpanId(spanId: string): boolean {
+export function isValidSpanId(spanId: string): boolean {
   return /^[0-9a-f]{1,16}$/i.test(spanId);
 }
 

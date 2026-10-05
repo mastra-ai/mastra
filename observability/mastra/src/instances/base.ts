@@ -42,6 +42,7 @@ import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/a
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
+import { isValidSpanId, isValidTraceId } from '../spans/default';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
 import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
@@ -333,6 +334,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceId: cached.traceId,
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
+      externalParentSpanId: cached.externalParentSpanId,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
       attributes: cached.attributes,
@@ -658,11 +660,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;
 
-    // nestUnderParent only means something next to the parent it nests under.
-    // Alone it would hide the trace summary of the only run in the trace.
-    const nestedUnderParent = tracingOptions?.nestUnderParent === true && !!tracingOptions.parentSpanId;
+    // nestUnderParent only means something when the run joins the parent's trace
+    // under a parent the span accepts. Otherwise it would hide the trace summary
+    // of the only run in the trace.
+    const nestedUnderParent =
+      tracingOptions?.nestUnderParent === true &&
+      !!tracingOptions.traceId &&
+      isValidTraceId(tracingOptions.traceId) &&
+      !!tracingOptions.parentSpanId &&
+      isValidSpanId(tracingOptions.parentSpanId);
     if (tracingOptions?.nestUnderParent && !nestedUnderParent) {
-      this.logger.debug('[Observability] Ignoring tracingOptions.nestUnderParent: no parentSpanId was provided');
+      this.logger.debug(
+        '[Observability] Ignoring tracingOptions.nestUnderParent: it needs a valid traceId and parentSpanId',
+      );
     }
 
     // Return undefined if no TraceState properties are needed

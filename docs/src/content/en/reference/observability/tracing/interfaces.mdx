@@ -1207,7 +1207,7 @@ interface TracingOptions {
   /**
    * Set to true together with parentSpanId to attach this run as a child of
    * that span inside the existing trace. Exporters then keep the trace's own
-   * name, input, output, and tags. Ignored without parentSpanId.
+   * name, input, output, and tags. Ignored without a valid traceId and parentSpanId.
    */
   nestUnderParent?: boolean
 
