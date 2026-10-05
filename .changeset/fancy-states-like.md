@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Removed layout and control elements from Txt's supported tags. Txt now accepts only text elements, so typography stays on the text and native containers and controls own their layout and behavior.
