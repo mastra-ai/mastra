@@ -42,7 +42,7 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
 
   if (isImage) {
     const imageSrc = isFetchableUrl || data.startsWith('data:') ? data : `data:${mimeType};base64,${data}`;
-    return <MessageAttachment type="image" src={imageSrc} name={fileLabel} />;
+    return <MessageAttachment type="image" contentType={mimeType} src={imageSrc} name={fileLabel} />;
   }
 
   return (
