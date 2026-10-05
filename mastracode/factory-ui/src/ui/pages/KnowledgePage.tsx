@@ -362,7 +362,7 @@ function ImportRunLink({
   onOpen: (importerId: string, runId: string) => void;
 }) {
   return (
-    <Button variant="ghost" size="xs" className="ml-1" onClick={() => onOpen(importerId, runId)}>
+    <Button variant="ghost" size="sm" className="ml-1" onClick={() => onOpen(importerId, runId)}>
       {importerId}
     </Button>
   );
@@ -440,10 +440,20 @@ function ActivityPanel({
             <SelectItem value="system">System</SelectItem>
           </SelectContent>
         </Select>
-        <Input aria-label="Activity from date" type="date" value={from} onChange={event => setFrom(event.target.value)} />
-        <Input aria-label="Activity through date" type="date" value={to} onChange={event => setTo(event.target.value)} />
+        <Input
+          aria-label="Activity from date"
+          type="date"
+          value={from}
+          onChange={event => setFrom(event.target.value)}
+        />
+        <Input
+          aria-label="Activity through date"
+          type="date"
+          value={to}
+          onChange={event => setTo(event.target.value)}
+        />
       </div>
-      <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
+      <ol aria-label="Knowledge activity" className="divide-border divide-y">
         {events.map(event => (
           <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
             <div>
@@ -459,9 +469,9 @@ function ActivityPanel({
               {event.sourceId && event.importRunId ? (
                 <ImportRunLink importerId={event.sourceId} runId={event.importRunId} onOpen={onOpenRun} />
               ) : event.sourceType ? (
-                <span className="text-icon3 ml-2">{event.sourceType}</span>
+                <span className="text-muted-foreground ml-2">{event.sourceType}</span>
               ) : null}
-              <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
+              <div className="text-muted-foreground mt-1 text-xs">{event.scope.join(' → ')}</div>
             </div>
             <time className="text-muted-foreground shrink-0 text-xs" dateTime={event.createdAt}>
               {new Date(event.createdAt).toLocaleString()}
@@ -933,11 +943,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               onOpenRun={openImportRun}
             />
           ) : activeView === 'imports' ? (
-            <KnowledgeImports
-              factoryProjectId={factoryProjectId}
-              initialImporterId={importerId}
-              initialRunId={runId}
-            />
+            <KnowledgeImports factoryProjectId={factoryProjectId} initialImporterId={importerId} initialRunId={runId} />
           ) : (
             body
           )}
