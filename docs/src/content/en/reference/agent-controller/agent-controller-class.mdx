@@ -7,12 +7,6 @@ packages:
 
 # AgentController
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 The `AgentController` class is a shared host for one or more [`Session`](/reference/agent-controller/session) instances. Initialize the controller, create a session, then use `session.*` APIs for conversation state and run control.
 
 For a guided introduction, see the [AgentController overview](/docs/harness/agent-controller).
@@ -371,6 +365,14 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
     type: 'string',
     description: 'Exact thread to bind. Missing threads are created with this identifier.',
     isOptional: true,
+  },
+  {
+    name: 'createInitialThread',
+    type: 'boolean',
+    description:
+      'Create a thread when no existing thread matches. Set `false` to start the session without a thread; the first message or `session.thread.ensureId()` creates it, so unused sessions leave no empty thread behind.',
+    isOptional: true,
+    defaultValue: 'true',
   },
   {
     name: 'id',

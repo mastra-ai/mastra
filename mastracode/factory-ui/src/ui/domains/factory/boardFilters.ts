@@ -29,8 +29,9 @@ export const BOARD_FILTER_QUERY = {
 /** Every board narrowing in one value: what the URL carries, and what the cards are matched against. */
 export interface BoardFilterState {
   search: string;
-  participantId?: string;
-  /** Relevance kinds kept for the selected teammate. The full set means "not narrowed". */
+  /** Every identity of the people narrowed to (a Factory account and its GitHub login…). Empty = everyone. */
+  participantIds: ReadonlySet<string>;
+  /** Relevance kinds kept for the selected teammates. The full set means "not narrowed". */
   relevanceTypes: ReadonlySet<BoardRelevanceType>;
   labels: ReadonlySet<string>;
 }
@@ -38,7 +39,7 @@ export interface BoardFilterState {
 export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind): BoardFilterState {
   return {
     search: params.get(BOARD_FILTER_QUERY.search) ?? '',
-    participantId: params.get(BOARD_FILTER_QUERY.teammate) || undefined,
+    participantIds: new Set(params.getAll(BOARD_FILTER_QUERY.teammate).filter(Boolean)),
     relevanceTypes: boardRelevanceFromQuery(params.get(BOARD_FILTER_QUERY.relevance), kind),
     labels: boardLabelsFromQuery(params.getAll(BOARD_FILTER_QUERY.label)),
   };
@@ -47,29 +48,39 @@ export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind)
 /** Copy of `params` carrying `state`, leaving every unrelated parameter untouched. */
 export function boardFilterParams(params: URLSearchParams, state: BoardFilterState, kind: BoardKind): URLSearchParams {
   const next = new URLSearchParams(params);
-  const relevance = state.participantId ? boardRelevanceQueryValue(state.relevanceTypes, kind) : undefined;
+  const relevance = state.participantIds.size > 0 ? boardRelevanceQueryValue(state.relevanceTypes, kind) : undefined;
   const set = (key: string, value: string | undefined) => (value ? next.set(key, value) : next.delete(key));
 
   set(BOARD_FILTER_QUERY.search, state.search.trim() || undefined);
-  set(BOARD_FILTER_QUERY.teammate, state.participantId);
+  next.delete(BOARD_FILTER_QUERY.teammate);
+  for (const participantId of state.participantIds) next.append(BOARD_FILTER_QUERY.teammate, participantId);
   set(BOARD_FILTER_QUERY.relevance, relevance);
   next.delete(BOARD_FILTER_QUERY.label);
   for (const label of boardLabelsQueryValues(state.labels)) next.append(BOARD_FILTER_QUERY.label, label);
   return next;
 }
 
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+export function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
+}
+
 /** Whether anything is narrowing the board — the one fact both the bar and the empty state read. */
 export function boardFiltersActive(state: BoardFilterState, kind: BoardKind): boolean {
   return (
     state.search !== '' ||
-    state.participantId !== undefined ||
+    state.participantIds.size > 0 ||
     state.labels.size > 0 ||
     boardRelevanceQueryValue(state.relevanceTypes, kind) !== undefined
   );
 }
 
-const asStrings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+const asStrings = (value: unknown): string[] => {
+  if (typeof value === 'string') return value ? [value] : [];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry !== '');
+};
 
 /** One chip per active narrowing, keyed by field id so the URL order is the chip order. */
 export function boardFilterItems(state: BoardFilterState, kind: BoardKind): FilterBarItem[] {
@@ -82,15 +93,15 @@ export function boardFilterItems(state: BoardFilterState, kind: BoardKind): Filt
       value: state.search,
     });
   }
-  if (state.participantId) {
+  if (state.participantIds.size > 0) {
     items.push({
       id: BOARD_FILTER_FIELD.teammate,
       fieldId: BOARD_FILTER_FIELD.teammate,
-      operatorId: 'is',
-      value: state.participantId,
+      operatorId: 'in',
+      value: [...state.participantIds],
     });
   }
-  if (state.participantId && boardRelevanceQueryValue(state.relevanceTypes, kind)) {
+  if (state.participantIds.size > 0 && boardRelevanceQueryValue(state.relevanceTypes, kind)) {
     items.push({
       id: BOARD_FILTER_FIELD.relevance,
       fieldId: BOARD_FILTER_FIELD.relevance,
@@ -120,11 +131,10 @@ export function boardFilterStateFromItems(items: readonly FilterBarItem[], kind:
   const available = boardRelevanceOptions(kind).map(option => option.id);
   const selected = available.filter(type => relevance.includes(type));
   const search = valueOf(BOARD_FILTER_FIELD.text);
-  const teammate = valueOf(BOARD_FILTER_FIELD.teammate);
 
   return {
     search: typeof search === 'string' ? search : '',
-    participantId: typeof teammate === 'string' && teammate !== '' ? teammate : undefined,
+    participantIds: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.teammate))),
     relevanceTypes: new Set(selected.length > 0 ? selected : available),
     labels: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.label))),
   };

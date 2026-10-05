@@ -293,14 +293,16 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /**
    * Definitions of the tools made available to the model for this generation,
-   * captured once per generation. Per-step tool names (after `activeTools`
-   * filtering) live on MODEL_INFERENCE spans as `availableTools`.
+   * captured once per generation. The definitions sent on each provider call
+   * (after per-step changes) live on MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Whether one or more model steps omitted a primary token count */
+  usageIncomplete?: boolean;
   /** Estimated cost context, when provided directly by an SDK or provider */
   costContext?: CostContext;
   /** Model parameters */
@@ -395,6 +397,12 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   providerOptions?: Record<string, unknown>;
   /** Names of tools made available to the model on this inference call */
   availableTools?: string[];
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, JSON-schema parameters), after per-step changes from
+   * processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[];
   /**
    * How the model was instructed to choose tools: 'auto', 'none', 'required',
    * or a specific tool selection. Distinguishes "model could have called a
@@ -1591,6 +1599,7 @@ export interface ModelInferenceContext {
   parameters?: ModelInferenceAttributes['parameters'];
   providerOptions?: ModelInferenceAttributes['providerOptions'];
   availableTools?: ModelInferenceAttributes['availableTools'];
+  tools?: ModelInferenceAttributes['tools'];
   toolChoice?: ModelInferenceAttributes['toolChoice'];
   responseFormat?: ModelInferenceAttributes['responseFormat'];
 }
@@ -1615,7 +1624,7 @@ export interface IModelSpanTracker {
 
   /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
-   * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
+   * (parameters, providerOptions, availableTools, tools, toolChoice, responseFormat).
    * Call after input processors have finalised the tool set, just before
    * `startInference()`; the next inference span snapshots this context.
    */

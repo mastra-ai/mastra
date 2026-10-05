@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { useAllProviderTools } from '@mastra/react/hooks';
 import type { CSSProperties } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderPaneGates } from '../../../hooks/use-builder-pane-gates';
@@ -10,7 +11,6 @@ import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 
 export interface AgentProfileTabsProps {
   agentId: string;

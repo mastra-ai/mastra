@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-cross-project'
   | 'agent-connections-expected-reply-watchdog'
   | 'agent-connections-tool-flow'
   | 'agent-connections-notification-signal'
@@ -96,6 +97,7 @@ export type ScenarioName =
   | 'tui-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
+  | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
   | 'permission-request-hook'
@@ -200,6 +202,8 @@ export type ScenarioName =
   | 'task-progress-events'
   | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
+  | 'resume-locked-thread'
+  | 'resume-missing-thread'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'
@@ -269,7 +273,13 @@ export type McE2eStartMastraCodeAppOptions = {
   tui?: Partial<
     Pick<
       MastraTUIOptions,
-      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
+      | 'appName'
+      | 'initialMessage'
+      | 'resumeSkipNotice'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'resumeThreadId'
+      | 'verbose'
     >
   >;
 };

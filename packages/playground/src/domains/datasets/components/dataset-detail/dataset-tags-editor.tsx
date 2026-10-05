@@ -1,7 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
-import { useDatasetMutations, useDataset, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks';
 import { Check, Tag, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -21,7 +21,7 @@ export interface DatasetTagsEditorProps {
  * change persists immediately; removal is via the badge only.
  */
 export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { data: datasetsData } = useDatasets();
   const { updateDataset } = useDatasetMutations();
   const [search, setSearch] = useState('');

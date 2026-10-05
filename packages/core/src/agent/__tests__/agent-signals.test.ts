@@ -6375,6 +6375,52 @@ describe('Agent signals', () => {
     }
   });
 
+  it('answers every signal sent to an aborted run in one follow-up run, then queued messages one at a time', async () => {
+    const scope = { resourceId: 'abort-batch-user', threadId: 'abort-batch-thread' };
+    const pubsub = new EventEmitterPubSub();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'next');
+    const agent = new Agent({
+      id: 'abort-batch',
+      name: 'Abort batch',
+      instructions: 'Test',
+      model,
+      memory: new MockMemory(),
+      pubsub,
+    });
+    const subscription = await agent.subscribeToThread(scope);
+    const stream = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+
+    try {
+      await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+      for (const contents of ['sent A', 'sent B', 'sent C']) {
+        await agent.sendSignal({ type: 'user-message', contents }, scope).accepted;
+      }
+      await agent.queueMessage('queued X', scope).accepted;
+      await agent.queueMessage('queued Y', scope).accepted;
+      expect(subscription.abort()).toBe(true);
+      releaseFirst();
+      await stream.text;
+
+      await vi.waitFor(() => expect(getStreamCount()).toBe(4));
+      await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+      expect(getStreamCount()).toBe(4);
+
+      const followUp = JSON.stringify(model.doStreamCalls[1]?.prompt);
+      const positions = ['sent A', 'sent B', 'sent C'].map(contents => followUp.indexOf(contents));
+      expect(positions.every(position => position >= 0)).toBe(true);
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+      expect(followUp).not.toContain('queued X');
+
+      const queuedX = JSON.stringify(model.doStreamCalls[2]?.prompt);
+      expect(queuedX).toContain('queued X');
+      expect(queuedX).not.toContain('queued Y');
+      expect(JSON.stringify(model.doStreamCalls[3]?.prompt)).toContain('queued Y');
+    } finally {
+      releaseFirst();
+      subscription.unsubscribe();
+    }
+  });
+
   it('persists external state signals with cache-key tracking', async () => {
     const memory = new MockMemory();
     await memory.createThread({ threadId: 'state-thread', resourceId: 'state-user' });

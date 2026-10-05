@@ -1,15 +1,18 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt';
+import { messageSurfaceStyle } from '@/ds/primitives/message-surface';
 import { cn } from '@/lib/utils';
 
 export interface MessageProps extends ComponentProps<'div'> {
   from: 'user' | 'assistant';
   avatar?: ReactNode;
   footer?: ReactNode;
+  /** Sent files, displayed above and outside the text bubble. */
+  attachments?: ReactNode;
   pending?: boolean;
 }
 
-export function Message({ from, avatar, footer, pending, children, className, ...props }: MessageProps) {
+export function Message({ from, avatar, footer, attachments, pending, children, className, ...props }: MessageProps) {
   const isUser = from === 'user';
 
   return (
@@ -27,17 +30,24 @@ export function Message({ from, avatar, footer, pending, children, className, ..
     >
       {avatar}
       <div className={cn('min-w-0', isUser && 'flex flex-col items-end')}>
-        <div
-          data-slot="message-content"
-          className={cn(
-            'max-w-full min-w-0 text-body break-words',
-            isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-foreground',
-            isUser && pending && 'border-dashed border-border',
-            !isUser && footer && '[&>:last-child]:mb-0',
-          )}
-        >
-          {children}
-        </div>
+        {attachments && (
+          <div data-slot="message-attachments" className="mb-2 max-w-full min-w-0">
+            {attachments}
+          </div>
+        )}
+        {children !== undefined && children !== null && children !== false && (
+          <div
+            data-slot="message-content"
+            className={cn(
+              'max-w-full min-w-0 text-body break-words',
+              isUser && cn(messageSurfaceStyle, 'px-4 py-2'),
+              isUser && pending && 'border border-dashed border-border',
+              !isUser && footer && '[&>:last-child]:mb-0',
+            )}
+          >
+            {children}
+          </div>
+        )}
         {footer && <div className="mt-1 max-w-full">{footer}</div>}
       </div>
     </div>

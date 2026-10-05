@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useAuthCapabilities, useStoredAgentMutations } from '@mastra/react/hooks';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
@@ -12,8 +14,6 @@ import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allo
 import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-builder-settings';
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -90,9 +90,9 @@ export const AgentBuilderStarter = () => {
           What should we build today?
         </Txt>
 
-        <form
+        <Form
           onSubmit={handleSubmit}
-          className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
+          className="starter-prompt gap-0 rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -128,7 +128,7 @@ export const AgentBuilderStarter = () => {
               )}
             </Button>
           </div>
-        </form>
+        </Form>
 
         <ExampleList onExampleClick={handleExampleClick} />
       </div>

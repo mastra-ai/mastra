@@ -9,12 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { useState, useEffect } from 'react';
 
 export interface DuplicateDatasetDialogProps {
@@ -150,30 +151,29 @@ export function DuplicateDatasetDialog({
         <DialogHeader>
           <DialogTitle>Duplicate Dataset</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <DialogBody>
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">Name *</Label>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="dataset-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter dataset name"
                 autoFocus
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="dataset-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="dataset-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter dataset description (optional)"
                 disabled={isDuplicating}
               />
-            </div>
+            </Field>
 
             <Txt tone="muted">All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset</Txt>
 
@@ -195,7 +195,7 @@ export function DuplicateDatasetDialog({
               {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
             </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

@@ -2,11 +2,12 @@ import { EntityType } from '@mastra/core/observability';
 import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
 import { ModelUsageCostCardView } from '@mastra/playground-ui/domains/metrics/components/model-usage-cost-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
-import { useModelUsageCostMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-model-usage-cost-metrics';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useModelUsageCostMetrics } from '@mastra/react/hooks';
 
 export function ModelUsageCostCard() {
-  const { data, isLoading, isError } = useModelUsageCostMetrics();
+  const { data, isLoading, isError } = useModelUsageCostMetrics(useMetricsFilters());
   const { getTracesHref } = useDrilldown();
   const { Link } = useLinkComponent();
 

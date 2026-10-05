@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "description": "Isolated upstream JSON Schema validator for the ACP release checks",
   "dependencies": {
-    "ajv": "8.17.1",
-    "ajv-formats": "3.0.1"
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "fast-uri": "3.1.8"
   }
 }

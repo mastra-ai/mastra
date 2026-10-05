@@ -1,4 +1,4 @@
-import type { AuthCapabilities } from '@/domains/auth/types';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 
 /**
  * RBAC disabled → `usePermissions` allows everything, so

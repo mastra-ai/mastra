@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
@@ -280,11 +279,9 @@ describe('TraceColumnsMenu', () => {
       expect(field.getAttribute('aria-invalid')).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      // The combobox remounts inside an error wrapper, so query it again.
       const invalidField = screen.getByRole('combobox', { name: 'Metadata key' });
-      expect(invalidField.getAttribute('aria-describedby')).toBe('error-trace-metadata-key');
+      expect(invalidField.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByRole('alert').id);
       expect(invalidField.getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByRole('alert').getAttribute('id')).toBe('error-trace-metadata-key');
     });
 
     it('clears the error as soon as a key is picked', async () => {

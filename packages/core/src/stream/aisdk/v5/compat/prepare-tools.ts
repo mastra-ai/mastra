@@ -237,8 +237,12 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
 
 /**
  * Serialize a tool set into `ModelToolDefinition[]` for the `tools` attribute
- * on MODEL_GENERATION spans, reusing the same conversion the provider request
+ * on MODEL_GENERATION and MODEL_INFERENCE spans, reusing the same conversion the provider request
  * goes through so exporters see the schemas the model actually received.
+ *
+ * Pass the model's `specificationVersion` so provider tools carry the same
+ * `type` the request does ('provider' for v3/v4 models, 'provider-defined'
+ * otherwise).
  *
  * Never throws — tracing must not break model execution. Returns undefined
  * when there are no tools or serialization fails.
@@ -247,15 +251,18 @@ export function getToolDefinitionsForTracing<TOOLS extends Record<string, Tool>>
   tools,
   toolChoice,
   activeTools,
+  specificationVersion,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
+  specificationVersion?: string;
 }): ModelToolDefinition[] | undefined {
   try {
     // Pass the real toolChoice through: 'none' strips tools from the provider
     // request, and the span must not claim tools the model never received.
-    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools });
+    const targetVersion = specificationVersion === 'v4' ? 'v4' : specificationVersion === 'v3' ? 'v3' : 'v2';
+    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools, targetVersion });
     if (!prepared?.length) return undefined;
     return prepared.map(tool =>
       tool.type === 'function'

@@ -7,6 +7,13 @@ import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
+import {
+  htmlFile,
+  markdownFile,
+  typescriptFile,
+  unknownLanguageFile,
+  unsupportedFile,
+} from './fixtures/workspace-file';
 
 const FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
@@ -63,6 +70,88 @@ function pendingChangesHandler() {
 }
 
 describe('WorkspaceViewerPanel', () => {
+  describe('when a file preview needs syntax highlighting', () => {
+    it.each([typescriptFile, htmlFile])('renders $path as safe text and then adds dual-theme colors', async file => {
+      installHandlers();
+      server.use(
+        http.get(FILES_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: file.path }] }),
+        ),
+        http.get(FILE_URL, () => HttpResponse.json(file)),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      if (file.path.startsWith('src/')) await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByText(file.name));
+
+      const viewer = await screen.findByLabelText('Workspace file viewer');
+      await waitFor(() => expect(viewer.querySelector('pre')?.textContent).toBe(file.content));
+      expect(viewer.querySelector('script')).toBeNull();
+      await waitFor(() => {
+        const coloredToken = viewer.querySelector<HTMLElement>('pre span[style]');
+        expect(coloredToken?.style.getPropertyValue('--shiki-light')).toMatch(/^#/);
+        expect(coloredToken?.style.getPropertyValue('--shiki-dark')).toMatch(/^#/);
+      });
+      expect(viewer.querySelector('pre')?.textContent).toBe(file.content);
+      expect(viewer.querySelector('script')).toBeNull();
+    });
+
+    it('shows unknown languages as literal plain text', async () => {
+      installHandlers();
+      server.use(
+        http.get(FILES_URL, () =>
+          HttpResponse.json({
+            workspacePath: WORKSPACE,
+            threadId: THREAD,
+            files: [{ path: unknownLanguageFile.path }],
+          }),
+        ),
+        http.get(FILE_URL, () => HttpResponse.json(unknownLanguageFile)),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await user.click(await screen.findByText(unknownLanguageFile.name));
+
+      const viewer = await screen.findByLabelText('Workspace file viewer');
+      await waitFor(() => expect(viewer.querySelector('pre')?.textContent).toBe(unknownLanguageFile.content));
+      expect(viewer.querySelector('script')).toBeNull();
+      expect(viewer.querySelector('pre span[style]')).toBeNull();
+    });
+
+    it('still renders markdown as a document', async () => {
+      installHandlers();
+      server.use(http.get(FILE_URL, () => HttpResponse.json(markdownFile)));
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await user.click(await screen.findByText('README.md'));
+
+      const viewer = await screen.findByLabelText('Workspace file viewer');
+      expect(await within(viewer).findByRole('heading', { name: 'Workspace notes' })).toBeInTheDocument();
+      expect(viewer.querySelector('pre')).toBeNull();
+    });
+
+    it('keeps unsupported files out of the code renderer', async () => {
+      installHandlers();
+      server.use(
+        http.get(FILES_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: unsupportedFile.path }] }),
+        ),
+        http.get(FILE_URL, () => HttpResponse.json(unsupportedFile)),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await user.click(await screen.findByText(unsupportedFile.name));
+
+      const viewer = await screen.findByLabelText('Workspace file viewer');
+      expect(await within(viewer).findByText('This file type cannot be previewed as text.')).toBeInTheDocument();
+      expect(viewer.querySelector('pre')).toBeNull();
+    });
+  });
+
   describe('when a thread has persisted workspace files', () => {
     it('renders the persisted paths instead of enumerating the sandbox', async () => {
       installHandlers();
@@ -203,7 +292,8 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
 
-      expect(await screen.findByRole('button', { name: /Files No files/ })).toBeInTheDocument();
+      const filesButton = screen.getByRole('button', { name: /^Files/ });
+      expect(await within(filesButton).findByText('No files')).toBeInTheDocument();
     });
   });
 
@@ -220,7 +310,8 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
 
-      const changesButton = await screen.findByRole('button', { name: /Changes No sandbox/ });
+      const changesButton = screen.getByRole('button', { name: /^Changes/ });
+      await within(changesButton).findByText('No sandbox');
       await user.click(changesButton);
 
       expect(

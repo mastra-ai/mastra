@@ -90,7 +90,7 @@ vi.mock('./DevBundler', () => {
     watch = vi.fn().mockResolvedValue(mockWatcher);
 
     constructor(...args: any[]) {
-      devBundlerConstructorSpy(...args);
+      devBundlerConstructorSpy.apply(this, args);
     }
   }
 
@@ -682,5 +682,54 @@ describe('dev command - NODE_ENV precedence', () => {
 
     const childEnv = execaMock.mock.calls[0][2].env as Record<string, string>;
     expect(childEnv.NODE_ENV).toBe('production');
+  });
+});
+
+describe('dev command - output directory preparation', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
+
+    const { execa } = await import('execa');
+    vi.mocked(execa).mockReturnValue(new MockChildProcess() as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    devBundlerConstructorSpy.mockReset();
+  });
+
+  it('empties the output directory before extracting server options so stale build artifacts cannot be resolved', async () => {
+    const callOrder: string[] = [];
+
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockImplementation(async () => {
+      callOrder.push('getServerOptions');
+      return { port: 4111, host: 'localhost' } as any;
+    });
+
+    devBundlerConstructorSpy.mockImplementation(function (this: { prepare: ReturnType<typeof vi.fn> }) {
+      this.prepare = vi.fn().mockImplementation(async () => {
+        callOrder.push('prepare');
+      });
+    });
+
+    const { dev } = await import('./dev');
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+
+    expect(callOrder).toEqual(['prepare', 'getServerOptions']);
   });
 });

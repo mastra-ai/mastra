@@ -4,35 +4,49 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { boardFilterParams, boardFiltersFromParams } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
-import { BoardFilters } from './BoardFilters';
+import type { BoardParticipant } from '../boardRelevance';
+import type { BoardKind } from '../boardStages';
+import { BoardFilters, boardFilterFields } from './BoardFilters';
 
 const NEUTRAL = boardFiltersFromParams(new URLSearchParams(), 'work');
+const ALICE: BoardParticipant[] = [
+  { id: 'factory:alice', name: 'Alice', source: 'factory' },
+  { id: 'github:alice', name: 'alice', source: 'github' },
+];
+
+function FiltersWithFields({
+  kind = 'work',
+  filters,
+  onFiltersChange,
+}: {
+  kind?: BoardKind;
+  filters: BoardFilterState;
+  onFiltersChange: (filters: BoardFilterState) => void;
+}) {
+  const fields = boardFilterFields({
+    kind,
+    participants: ALICE,
+    availableLabels: ['bug', 'documentation', '@mastra/core'],
+    currentUserId: 'alice',
+    teammateSelected: filters.participantIds.size > 0,
+  });
+  return <BoardFilters kind={kind} fields={fields} filters={filters} onFiltersChange={onFiltersChange} removable />;
+}
 
 function renderFilters(filters: BoardFilterState = NEUTRAL) {
-  const onFiltersChange = vi.fn();
-  const view = render(
-    <BoardFilters
-      kind="work"
-      participants={[{ id: 'github:alice', name: 'Alice', source: 'github' }]}
-      availableLabels={['bug', 'documentation', '@mastra/core']}
-      currentUserId="me"
-      filters={filters}
-      onFiltersChange={onFiltersChange}
-    />,
-  );
+  const onFiltersChange = vi.fn<(filters: BoardFilterState) => void>();
+  const view = render(<FiltersWithFields filters={filters} onFiltersChange={onFiltersChange} />);
   return { onFiltersChange, view };
 }
 
-function renderControlledFilters(kind: 'work' | 'review' = 'work') {
+function renderControlledFilters(kind: BoardKind = 'work') {
   function Harness() {
     const [params, setParams] = useState(new URLSearchParams());
     return (
       <>
         <output data-testid="filter-url">{params.toString()}</output>
-        <BoardFilters
+        <FiltersWithFields
           kind={kind}
-          participants={[{ id: 'github:alice', name: 'Alice', source: 'github' }]}
-          availableLabels={['bug', 'documentation', '@mastra/core']}
           filters={boardFiltersFromParams(params, kind)}
           onFiltersChange={next => setParams(boardFilterParams(params, next, kind))}
         />
@@ -58,7 +72,7 @@ describe('BoardFilters', () => {
     expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ search: 'flaky login' }));
   });
 
-  it('keeps the teammate one arrow below the search entry, and reports the picked participant', async () => {
+  it('narrows to one person through both their Factory account and GitHub login', async () => {
     const { onFiltersChange } = renderFilters();
     input().focus();
 
@@ -67,10 +81,13 @@ describe('BoardFilters', () => {
     key('ArrowDown');
     key('Enter');
 
-    await screen.findByRole('option', { name: /Alice/ });
-    key('Enter');
+    fireEvent.click(await screen.findByRole('option', { name: /Alice \(you\)/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'A alice' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
 
-    expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'github:alice' }));
+    expect(onFiltersChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ participantIds: new Set(['factory:alice', 'github:alice']) }),
+    );
   });
 
   it('offers relevance only once a teammate narrows the board', async () => {
@@ -81,11 +98,8 @@ describe('BoardFilters', () => {
     expect(screen.queryByRole('option', { name: 'Relevant because' })).toBeNull();
 
     view.rerender(
-      <BoardFilters
-        kind="work"
-        participants={[{ id: 'github:alice', name: 'Alice', source: 'github' }]}
-        availableLabels={[]}
-        filters={{ ...NEUTRAL, participantId: 'github:alice' }}
+      <FiltersWithFields
+        filters={{ ...NEUTRAL, participantIds: new Set(['github:alice']) }}
         onFiltersChange={vi.fn()}
       />,
     );
@@ -108,8 +122,7 @@ describe('BoardFilters', () => {
     key('Enter');
     key('Enter', { metaKey: true });
 
-    const [filters] = onFiltersChange.mock.calls.at(-1) as [BoardFilterState];
-    expect(filters.labels).toEqual(new Set(['bug', 'documentation']));
+    expect(onFiltersChange.mock.lastCall?.[0].labels).toEqual(new Set(['bug', 'documentation']));
   });
 
   it('round-trips committed labels through the URL and controlled value', async () => {
@@ -143,8 +156,8 @@ describe('BoardFilters', () => {
     await screen.findByRole('option', { name: 'Teammate' });
     key('ArrowDown');
     key('Enter');
-    await screen.findByRole('option', { name: /Alice/ });
-    key('Enter');
+    fireEvent.click(await screen.findByRole('option', { name: 'A alice' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
 
     expect(screen.getByTestId('filter-url').textContent).toContain('teammate=github%3Aalice');
     type('relevant');
@@ -169,7 +182,7 @@ describe('BoardFilters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
     expect(onFiltersChange).toHaveBeenCalledWith(
-      expect.objectContaining({ search: '', participantId: undefined, labels: new Set() }),
+      expect.objectContaining({ search: '', participantIds: new Set(), labels: new Set() }),
     );
   });
 });

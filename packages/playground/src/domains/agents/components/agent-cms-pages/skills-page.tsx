@@ -2,15 +2,15 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Plus, SearchIcon } from 'lucide-react';
+import { useStoredSkills } from '@mastra/react/hooks';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useStoredSkills } from '../../hooks/use-stored-skills';
 import { SkillEditDialog } from './skill-edit-dialog';
 import { SectionHeader } from '@/domains/cms';
 
@@ -76,17 +76,7 @@ export function SkillsPage() {
           )}
         </div>
 
-        <InputGroup>
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Search skills"
-            placeholder="Search skills"
-            onChange={event => setSearch(event.target.value)}
-          />
-        </InputGroup>
+        <SearchInput label="Search skills" placeholder="Search skills" value={search} onValueChange={setSearch} />
 
         {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">

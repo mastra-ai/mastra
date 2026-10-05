@@ -105,14 +105,18 @@ Tunnel URLs are for local development. After you deploy the Mastra server, updat
 
 ## Thread context
 
-When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. On the first mention, Mastra fetches earlier messages from the platform and saves them into the agent's memory thread before the mention runs.
 
-1. On the first mention in a thread, the agent fetches recent messages from the platform.
-1. These messages are prepended to the user's message as conversation context.
+1. On the first mention in a thread, the agent fetches the thread's first message and the most recent messages before the mention. `maxMessages` (default `10`) sets the window: the first message plus up to `maxMessages - 1` recent messages. When messages fall between the two, a `[… N earlier Slack messages omitted]` marker (the platform name matches the channel) is saved in their place.
+1. Each fetched message is saved to memory as its own user message, attributed to its author and platform message id and carrying its attachments, with a `source: 'thread-history'` attribute. The mention itself then dispatches as a normal message.
 1. After responding, the agent subscribes to the thread and has full history through Mastra memory.
 1. Subsequent messages in that thread don't re-fetch from the platform.
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-direct message threads.
+
+Agents without memory can't save the rows, so they receive the same history as context text inside the mention instead. The same fallback applies when the write to memory fails.
+
+Memory's `lastMessages` option limits how many messages reach the prompt. Its default of `10` trims the first message and the omitted marker when `maxMessages` is `10`, so set `lastMessages` to at least `maxMessages + 1`.
 
 Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
 
@@ -229,7 +233,7 @@ Use `requestContext` for run-scoped configuration, such as credentials for a mes
 
 ## Error handling and delivery
 
-A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws is only logged by Chat SDK, so nothing is posted or retried. Catch failures in custom handlers yourself:
+A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws for a single message is only logged by Chat SDK, so nothing is posted or retried (see [Batched messages](#batched-messages) for multi-sender batches). Catch failures in custom handlers yourself:
 
 ```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {
@@ -252,6 +256,10 @@ channels: {
 ```
 
 Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
+
+### Batched messages
+
+When a `chatOptions.concurrency` strategy (`burst`, `debounce`, or `queue`) batches several messages into one dispatch, Mastra splits the batch into one turn per sender: consecutive messages from the same sender form one turn, oldest first. Your handler runs once per turn with its own `ctx.requestContext`, `ctx.signalMetadata`, and `ctx.skipped` (that turn's earlier messages), so authorization and context apply to every sender. Await `defaultHandler` inside your handler, otherwise senders' turns can overlap. A handler that throws for one turn is logged, the remaining turns still run, and the first error is re-thrown afterwards. In a batch routed to `onMention` because one message mentions the bot, other senders' non-mention messages also reach `onMention` with `message.isMention` set to `false`.
 
 ## Multimodal content
 
