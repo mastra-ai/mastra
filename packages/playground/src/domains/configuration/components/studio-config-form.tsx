@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -82,32 +83,38 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
 
   return (
     <TooltipProvider delayDuration={0}>
-      <form onSubmit={handleSubmit} className={isFactoryLayout ? 'flex flex-col gap-4' : 'space-y-6'}>
+      <Form onSubmit={handleSubmit} className={isFactoryLayout ? undefined : 'gap-6'}>
         <FieldsContainer>
           {connectionFields.map(({ label, ...field }) => {
             if (isFactoryLayout) {
               return (
-                <SettingsRow key={field.name} label={label} htmlFor={`input-${field.name}`}>
-                  <Input {...field} id={`input-${field.name}`} className="w-full lg:max-w-96" />
+                <SettingsRow key={field.name} label={label}>
+                  <Input {...field} className="w-full lg:max-w-96" />
                 </SettingsRow>
               );
             }
 
-            return <TextFieldBlock key={field.name} label={label} {...field} />;
+            return (
+              <Field key={field.name}>
+                <FieldLabel required={field.required}>{label}</FieldLabel>
+                <Input {...field} />
+                <FieldError />
+              </Field>
+            );
           })}
           {isFactoryLayout ? (
-            <SettingsRow label="Headers">
+            <SettingsFieldsetRow label="Headers">
               <div className="w-full lg:max-w-96">{headersEditor}</div>
-            </SettingsRow>
+            </SettingsFieldsetRow>
           ) : (
             headersEditor
           )}
         </FieldsContainer>
 
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'} icon={<SaveIcon />}>
+        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
           Save Configuration
         </Button>
-      </form>
+      </Form>
     </TooltipProvider>
   );
 };

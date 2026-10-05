@@ -1,5 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -50,14 +53,10 @@ export const AttachFilePopover = () => {
     input.click();
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // The popover is portaled out of the composer form in the DOM, but React
-    // still bubbles the submit event through the component tree; stop it so
-    // adding a URL doesn't also send the chat message.
-    e.stopPropagation();
 
-    const formData = new FormData(e.target as HTMLFormElement);
+    const formData = new FormData(e.currentTarget);
     const url = formData.get('url-attachment')?.toString().trim();
 
     if (!url) return;
@@ -83,20 +82,28 @@ export const AttachFilePopover = () => {
           <PlusIcon />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-4">
-        <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
-          <TextFieldBlock
-            name="url-attachment"
-            label="Public URL"
-            type="url"
-            className="w-full"
-            placeholder="https://placehold.co/600x400/png"
-            errorMsg={error}
-          />
-          <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
-            Add
-          </Button>
-        </form>
+      <PopoverContent
+        align="start"
+        className="w-80 p-4"
+        onSubmit={event => {
+          // The popover is portaled out of the composer form in the DOM, but React still bubbles
+          // every submit (including ones blocked by URL validation) through the component tree;
+          // stop it here so adding a URL never sends the chat message.
+          event.stopPropagation();
+        }}
+      >
+        <Form onSubmit={handleSubmit}>
+          <Field>
+            <FieldLabel>Public URL</FieldLabel>
+            <div className="flex gap-2">
+              <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
+              <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
+                Add
+              </Button>
+            </div>
+            <FieldError />
+          </Field>
+        </Form>
 
         <hr className="my-3 border-border" />
 
@@ -112,6 +119,11 @@ export const AttachFilePopover = () => {
             <CloudUpload className="size-8" />
             <Txt variant="heading">Add a local file</Txt>
           </button>
+          {error ? (
+            <div role="alert">
+              <Notice variant="destructive">{error}</Notice>
+            </div>
+          ) : null}
         </div>
       </PopoverContent>
     </Popover>

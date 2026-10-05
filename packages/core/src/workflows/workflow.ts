@@ -68,7 +68,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -127,6 +127,7 @@ import {
   cleanStepResult,
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
+  getSingleStepEntryId,
   hydrateSerializedStepErrors,
   waitForSuspendedSnapshot,
 } from './utils';
@@ -3637,6 +3638,14 @@ export class Workflow<
   }
 }
 
+const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'tripwire',
+  'bailed',
+]);
+
 /**
  * Represents a workflow run that can be executed
  */
@@ -3803,12 +3812,35 @@ export class Run<
   }
 
   /**
+   * Whether the run has already finished, according to either its in-memory status or its persisted snapshot.
+   * The snapshot covers runs finished by another Run instance; the in-memory status covers runs without storage
+   * or whose terminal snapshot was not persisted.
+   */
+  protected async hasReachedTerminalStatus(): Promise<boolean> {
+    if (TERMINAL_WORKFLOW_RUN_STATUSES.has(this.workflowRunStatus)) return true;
+    try {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+      });
+      return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Cancels the workflow execution.
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
    */
   async cancel() {
+    // Canceling a finished run is a no-op so its final status is preserved
+    if (await this.hasReachedTerminalStatus()) return;
+
     // Abort any running execution and update in-memory status
-    this.abortController.abort();
+    this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
     this.workflowRunStatus = 'canceled';
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
@@ -3906,6 +3938,36 @@ export class Run<
     }
 
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
+  }
+
+  protected async _resolveTimetravelInputData(inputData: unknown, steps: string[]) {
+    if (steps.length !== 1) {
+      return inputData;
+    }
+    const step = this.workflowSteps[steps[0]!]!;
+    // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
+    const isForeachEntry = this.executionGraph.steps.some(
+      entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
+    );
+    if (isForeachEntry && this.validateInputs && inputData !== undefined) {
+      if (!Array.isArray(inputData)) {
+        throw new MastraError({
+          category: ErrorCategory.USER,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+          text: 'Invalid inputData: \n- : Expected an array for foreach step',
+          details: { type: 'inputData' },
+        });
+      }
+      if (!step?.inputSchema) {
+        return inputData;
+      }
+      return Promise.all(inputData.map(item => this._validateTimetravelInputData(item, step)));
+    }
+    if (!inputData) {
+      return inputData;
+    }
+    return this._validateTimetravelInputData(inputData, step);
   }
 
   protected async _start(
@@ -4057,6 +4119,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5106,6 +5169,7 @@ export class Run<
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
+        this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.cleanup?.();
         }
@@ -5252,6 +5316,7 @@ export class Run<
       workflowSpan,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5327,11 +5392,7 @@ export class Run<
       typeof step === 'string' ? step : step?.id,
     );
 
-    let inputDataToUse = inputData;
-
-    if (inputDataToUse && steps.length === 1) {
-      inputDataToUse = await this._validateTimetravelInputData(inputData, this.workflowSteps[steps[0]!]!);
-    }
+    const inputDataToUse = (await this._resolveTimetravelInputData(inputData, steps)) as typeof inputData;
 
     const timeTravelData = createTimeTravelExecutionParams({
       steps,
@@ -5393,6 +5454,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }

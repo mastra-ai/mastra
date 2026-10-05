@@ -29,13 +29,13 @@ describe('SpanPayloadSection', () => {
         </SpanPayloadSection>,
       );
       const clip = () => container.querySelector<HTMLElement>('[data-slot="collapsible-box"]');
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-      expect(clip()?.style.maxHeight).toBe('');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       expect(container.querySelector('[data-slot="span-payload-json"]')).toBeTruthy();
     });
   });

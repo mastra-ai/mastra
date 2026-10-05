@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { useScoresByExperimentId } from '@mastra/react/hooks';
 import { useMemo } from 'react';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 /**
  * Scorer ids that apply to an experiment. They are pinned on the experiment at
@@ -8,7 +8,11 @@ import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-ex
  * items, so fall back to whichever scorers actually produced a score.
  */
 export function useExperimentScorerIds(experiment: DatasetExperiment): string[] {
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
 
   return useMemo(() => {
     if (experiment.scorerIds?.length) return experiment.scorerIds;

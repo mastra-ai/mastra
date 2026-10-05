@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,6 +7,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredWorkspaces } from '@mastra/react/hooks';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
@@ -13,7 +15,6 @@ import { useNavigate } from 'react-router';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [
   {
@@ -123,7 +124,7 @@ export const SkillBuilderStarter = () => {
           What skill do you want to build?
         </Txt>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <div
             className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
@@ -161,7 +162,7 @@ export const SkillBuilderStarter = () => {
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
 
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((example, i) => {

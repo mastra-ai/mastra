@@ -1,10 +1,10 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { useWorkflowsRunCounts } from '@mastra/react/hooks';
 import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
 import { sortWorkflows } from './workflows-sort';
 import type { WorkflowsSort, WorkflowsSortKey } from './workflows-sort';
-import { useWorkflowsRunCounts } from '@/domains/workflows/hooks/use-workflows-run-counts';
 import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows';
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
 import { Badge } from '@/ds/components/Badge';
@@ -197,7 +197,7 @@ function WorkflowRow({
         <DataList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning-indicator"
+              className="inline-flex items-center gap-1.5 text-warning-foreground"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />

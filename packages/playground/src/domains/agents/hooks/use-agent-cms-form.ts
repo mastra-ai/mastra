@@ -2,6 +2,7 @@ import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useStoredAgentMutations } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -27,7 +28,6 @@ import {
   type PromptBlockPublicationStatus,
   type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
-import { useStoredAgentMutations } from './use-stored-agents';
 
 type CreateOptions = {
   mode: 'create';
@@ -71,7 +71,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
   const needsCreate = isCodeAgentOverride && !hasStoredOverride && !overrideCreated;
 
   const { createStoredAgent } = useStoredAgentMutations();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const initialValues = useMemo(
     () => (isEdit ? computeAgentInitialValues(options.dataSource) : undefined),
@@ -336,7 +336,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
         if (await blocksWouldPreventSave(values)) return;
 
         const sharedParams = await buildSharedParams(values);
-        const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+        const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
 
         if (needsCreate) {
           // First save for a code agent — create the stored override.
@@ -428,7 +428,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
           } else if (needsCreate) {
             // First publish for a code agent — create and immediately publish
             const sharedParams = await buildSharedParams(values);
-            const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+            const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
             const createParams: CreateStoredAgentParams = {
               id: options.agentId,
               ...sharedParams,

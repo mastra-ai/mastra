@@ -13,7 +13,7 @@ interface ScoreDeltaProps {
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
   const tone =
-    delta > 0 ? 'text-success-indicator' : delta < 0 ? 'text-destructive-indicator' : 'text-muted-foreground';
+    delta > 0 ? 'text-success-indicator' : delta < 0 ? 'text-destructive-foreground' : 'text-muted-foreground';
 
   return (
     <Txt as="span" className={cn('inline-flex min-w-20 items-center gap-1 tabular-nums', tone)}>

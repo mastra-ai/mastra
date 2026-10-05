@@ -2,9 +2,9 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useSchedules } from '@mastra/react/hooks';
 import { useParams } from 'react-router';
 import { SchedulesPage as SchedulesPageContent } from '@/domains/schedules/components/schedules-page';
-import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 
 /**
  * Scoped schedules tab. The workflow layout owns breadcrumbs and the tab bar (and renders edge to edge

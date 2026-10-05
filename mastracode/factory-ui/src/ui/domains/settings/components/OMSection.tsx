@@ -119,7 +119,7 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-indicator px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground px-4 py-3">
           {error}
         </Txt>
       )}
@@ -136,27 +136,23 @@ export function OMSection({
       )}
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.observerModelId ?? ''}
-            placeholder="Select observer model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.observerModelId ?? ''}
+          placeholder="Select observer model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('observer', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.reflectorModelId ?? ''}
-            placeholder="Select reflector model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.reflectorModelId ?? ''}
+          placeholder="Select reflector model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('reflector', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">

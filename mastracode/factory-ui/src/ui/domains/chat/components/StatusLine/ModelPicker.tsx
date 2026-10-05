@@ -115,7 +115,7 @@ export function ModelPicker() {
   }
   if (!selectedModelId && error) {
     return (
-      <span className="text-destructive-indicator" aria-label="Model unavailable" title={error.message}>
+      <span className="text-destructive-foreground" aria-label="Model unavailable" title={error.message}>
         Model unavailable
       </span>
     );
@@ -141,7 +141,7 @@ export function ModelPicker() {
   if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
       <span
-        className={notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground'}
+        className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
@@ -183,7 +183,7 @@ export function ModelPicker() {
         aria-busy={busy}
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground',
+          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
       >
@@ -271,7 +271,7 @@ export function ModelPicker() {
                   keywords={['manage', 'model', 'packs', 'settings']}
                   onSelect={() => {
                     setOpen(false);
-                    navigate(`${settingsSectionPath(factoryId, 'models')}#model-packs`);
+                    navigate(`${settingsSectionPath(factoryId, 'personal-models')}#model-packs`);
                   }}
                 >
                   <Settings2 aria-hidden />

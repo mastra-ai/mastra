@@ -253,23 +253,44 @@ const addIssueLabels = vi.fn(
 const removeIssueLabel = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
 );
-const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
-  pullRequests: [
-    {
-      number: 34,
-      title: 'Add factory pages',
-      url: 'https://github.com/octo/hello/pull/34',
-      author: 'grace',
-      assignees: ['ada'],
-      requestedReviewers: ['octocat'],
-      baseBranch: 'main',
-      headBranch: 'feat/factory',
-      createdAt: '2026-07-03T00:00:00Z',
-      updatedAt: '2026-07-04T00:00:00Z',
-    },
-  ],
-  nextPage: null as number | null,
-}));
+interface ListedPullRequestFixture {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels?: string[];
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface OpenPullRequestPage {
+  pullRequests: ListedPullRequestFixture[];
+  nextPage: number | null;
+}
+
+const pullRequest34: ListedPullRequestFixture = {
+  number: 34,
+  title: 'Add factory pages',
+  url: 'https://github.com/octo/hello/pull/34',
+  author: 'grace',
+  assignees: ['ada'],
+  requestedReviewers: ['octocat'],
+  baseBranch: 'main',
+  headBranch: 'feat/factory',
+  createdAt: '2026-07-03T00:00:00Z',
+  updatedAt: '2026-07-04T00:00:00Z',
+};
+
+const listRepoOpenPullRequests = vi.fn(
+  async (_installationId: number, _repoFullName: string, _page: number): Promise<OpenPullRequestPage> => ({
+    pullRequests: [pullRequest34],
+    nextPage: null,
+  }),
+);
 const getIssueDetail = vi.fn(
   async (_installationId: number, _repoFullName: string, issueId: string): Promise<Record<string, unknown> | null> =>
     issueId === '12'
@@ -652,6 +673,7 @@ function buildApp(
     users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    ingestFactoryEvent?: Parameters<typeof buildGithubRoutes>[0]['ingestFactoryEvent'];
   } = {},
 ) {
   const app = new Hono();
@@ -1592,6 +1614,37 @@ describe('prs route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+
+  it('hands each listed pull request to Factory with its author and labels', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({
+      pullRequests: [{ ...pullRequest34, labels: ['bug'] }],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const listedPullRequestPayload = expect.objectContaining({
+      user: { login: 'grace' },
+      labels: [{ name: 'bug' }],
+    });
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ pull_request: listedPullRequestPayload }) }),
+    );
+  });
+
+  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      `/web/github/projects/p1/${resource}`,
+    );
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    warn.mockRestore();
   });
 });
 

@@ -1,4 +1,4 @@
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import type { StoredAgent } from '@mastra/react/hooks';
 
 export function extractWorkspaceId(workspace: StoredAgent['workspace']): string | undefined {
   if (

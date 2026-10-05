@@ -46,7 +46,7 @@ export function ToolApprovalActions({
         aria-label={toolName ? `${declineLabel} ${toolName}` : undefined}
         disabled={actionsDisabled}
         className={
-          status === 'declined' ? 'text-destructive-indicator! [&_svg]:text-destructive-indicator!' : undefined
+          status === 'declined' ? 'text-destructive-foreground! [&_svg]:text-destructive-foreground!' : undefined
         }
         onClick={onDecline}
       >

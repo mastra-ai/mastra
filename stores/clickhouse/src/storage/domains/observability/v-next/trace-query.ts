@@ -28,10 +28,10 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported } from './polling';
 import { currentScoresRelation } from './scores';
 
-type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
+export type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
-type QueryParams = Record<string, string | number>;
+export type QueryParams = Record<string, string | number>;
 type SqlFragment = { sql: string; params: QueryParams };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
 type TraceSelection = {
@@ -39,10 +39,15 @@ type TraceSelection = {
   where?: TrustedTraceQueryPredicate;
 };
 
-const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
+export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
+/** Top-level metadata string value on a trace root (alias `r`); `key` is a bound parameter placeholder. */
+export function traceMetadataValueSql(key: string): string {
+  return `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
 }
 
 const TRACE_FIELDS = {
@@ -143,7 +148,7 @@ const TRACE_PAGE_COLUMNS = [
   'status',
 ];
 
-class ParameterBuilder {
+export class ParameterBuilder {
   readonly params: QueryParams = {};
   #next = 1;
 
@@ -193,7 +198,7 @@ function compileScalarPredicate<TField extends string>(
         if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
         const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
         return {
-          sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
+          sql: traceMetadataValueSql(key),
           parameterType: 'String' as const,
         };
       })()
@@ -330,7 +335,7 @@ function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: P
 
 export interface CompiledClickHouseTraceQuery {
   query: string;
-  query_params: QueryParams;
+  query_params: Record<string, unknown>;
   sharedSnapshot?: boolean;
 }
 
@@ -350,10 +355,14 @@ function compileClickHouseTraceScope(
   relationCollections: Set<RelatedCollection>,
   parameters: ParameterBuilder,
   scope: TraceQueryTenantScope | undefined,
+  seedConjuncts: TrustedTraceQueryPredicate[] = [],
 ): string[] {
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(scope, parameters);
+  const seedFilter = seedConjuncts
+    .map(conjunct => `\n          AND (${compilePredicate(conjunct, parameters)})`)
+    .join('');
   // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
   // traces with a root in the range first. All roots of those traces stay in, so a
   // non-current root inside the range cannot resurrect a trace whose current root is outside it.
@@ -364,9 +373,9 @@ function compileClickHouseTraceScope(
       FROM ${TABLE_TRACE_ROOTS}
       WHERE traceId IN (
         SELECT traceId
-        FROM ${TABLE_TRACE_ROOTS}
+        FROM ${TABLE_TRACE_ROOTS} r
         WHERE startedAt >= ${from}
-          AND startedAt < ${to}${tenant}
+          AND startedAt < ${to}${tenant}${seedFilter}
       )
       ORDER BY dedupeKey
       LIMIT 1 BY dedupeKey
@@ -487,20 +496,49 @@ function parseDeltaWatermark(value: string): DeltaWatermark {
   }
 }
 
+/**
+ * Builds the CTE chain ending in `candidates`: the completed, current trace roots in the
+ * selection's time range and tenant scope that match its `where` predicate. Trace queries and
+ * trace aggregates both select from this CTE so they always see the same population.
+ */
+export function compileClickHouseTraceCandidates(
+  selection: TraceSelection & { scope?: TraceQueryTenantScope },
+  columns: string,
+  parameters: ParameterBuilder,
+): string[] {
+  // Top-level `where` conjuncts that only read the root row are copied into the window seed so
+  // the retry-collapse sorts only see traces that can match. This cannot drop a result: a trace's
+  // current root is itself a root row in the window that satisfies the conjunct. `candidates`
+  // still applies the full `where` to the current root, so traces seeded only by an older root
+  // are filtered out there.
+  const rootConjuncts = selection.where
+    ? (selection.where.type === 'boolean' && selection.where.operator === 'and'
+        ? selection.where.args
+        : [selection.where]
+      ).filter(conjunct => collectRelationCollections(conjunct).size === 0)
+    : [];
+  const ctes = compileClickHouseTraceScope(
+    selection,
+    collectRelationCollections(selection.where),
+    parameters,
+    selection.scope,
+    rootConjuncts,
+  );
+  const predicate = selection.where ? compilePredicate(selection.where, parameters) : '1';
+  ctes.push(`candidates AS (
+    SELECT ${columns}
+    FROM root_scope r
+    WHERE ${predicate}
+  )`);
+  return ctes;
+}
+
 export function compileClickHouseTraceQuery(
   plan: TrustedTraceQueryPlan,
   deltaHead?: DeltaWatermark,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const relationCollections = collectRelationCollections(plan.where);
-  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters, plan.scope);
-
-  const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
-  ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
-    FROM root_scope r
-    WHERE ${predicate}
-  )`);
+  const ctes = compileClickHouseTraceCandidates(plan, TRACE_SELECT, parameters);
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
@@ -716,7 +754,7 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
   let field: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
-    field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
+    field = traceMetadataValueSql(key);
   } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
     // One row per (root, distinct tag) so the count is traces carrying the tag, not tag occurrences.
     field = `arrayJoin(arrayDistinct(${TRACE_FIELDS.tags.sql}))`;
@@ -1012,4 +1050,11 @@ export async function queryThreads(
           : null,
     },
   });
+}
+
+/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  const parameters = new ParameterBuilder();
+  const sql = compileScalarPredicate(predicate, SPAN_FIELDS, parameters);
+  return { sql, params: parameters.params };
 }

@@ -12,12 +12,12 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import { useStoredAgents } from '@mastra/react/hooks';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 
 export interface AgentCMSRefBlockProps {
@@ -47,10 +47,13 @@ const RefBlockContent = ({
   schema,
   readOnly = false,
 }: RefBlockContentProps) => {
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: block.promptBlockId,
+    queryOptions: { enabled: Boolean(block.promptBlockId) },
+  });
   const isDraft = promptBlock && !promptBlock.activeVersionId;
   const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: block.promptBlockId });
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');
@@ -201,7 +204,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-destructive-indicator hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -231,7 +234,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-indicator">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -257,7 +260,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="flex items-center gap-2 py-3 text-warning-indicator">
+          <div className="flex items-center gap-2 py-3 text-warning-foreground">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

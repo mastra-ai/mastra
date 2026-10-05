@@ -53,7 +53,7 @@ import {
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput } from './utils/serialize-state';
+import { createWorkflowInput, serializeClientTools } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 
 /**
@@ -179,6 +179,7 @@ interface DurablePreparationAgent {
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
   __getMaxRetriesConfigured?(): boolean;
+  __getMaxProcessorRetries?(): number | undefined;
   __listLLMRequestProcessors(
     requestContext?: RequestContext,
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
@@ -741,6 +742,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     modelList: modelList ?? undefined,
     scorers,
     options: {
+      clientTools: serializeClientTools(execOptions?.clientTools, tools),
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
@@ -762,7 +764,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
-      maxProcessorRetries: execOptions?.maxProcessorRetries,
+      maxProcessorRetries: execOptions?.maxProcessorRetries ?? typedAgent.__getMaxProcessorRetries?.(),
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: execOptions?.returnScorerData,
       // "Configured" excludes framework default processors — the durable step

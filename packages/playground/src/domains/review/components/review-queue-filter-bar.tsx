@@ -1,21 +1,19 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import {
   DATASET_TARGET_TYPES,
   isDatasetTargetType,
   type DatasetTargetType,
 } from '@/domains/datasets/components/target-type-options';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';
@@ -115,12 +113,10 @@ export function ReviewQueueFilterBar({
   tagOptions,
   onChange,
 }: ReviewQueueFilterBarProps) {
-  const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({
-    enabled: targetType === 'workflow',
-  });
+  const { data: agents } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
+  const { data: workflows } = useWorkflows({ queryOptions: { enabled: targetType === 'workflow' } });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors } = useProcessors({ queryOptions: { enabled: targetType === 'processor' } });
 
   const fields = useMemo<FilterBarField[]>(() => {
     const targetOptions =

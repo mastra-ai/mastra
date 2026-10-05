@@ -15,9 +15,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMastraPackages } from '@mastra/react/hooks';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
-import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates } from '../hooks/use-package-updates';
 import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 
@@ -231,9 +231,9 @@ const PackagesModalContent = ({
                           className={cn(
                             'cursor-help',
                             pkg.isDeprecated
-                              ? 'text-destructive-indicator'
+                              ? 'text-destructive-foreground'
                               : pkg.isOutdated
-                                ? 'text-warning-indicator'
+                                ? 'text-warning-foreground'
                                 : '',
                           )}
                         >

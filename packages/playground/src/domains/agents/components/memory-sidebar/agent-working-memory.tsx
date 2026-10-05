@@ -11,11 +11,11 @@ import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surf
 import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useMemoryConfig } from '@mastra/react/hooks';
 import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -26,7 +26,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);

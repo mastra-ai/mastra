@@ -64,11 +64,11 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         description={
           <>
             <span>
-              Factory runs (triage, board work items) start on this model and use the Factory observational-memory
-              settings below — your personal defaults don&apos;t apply to them.
+              Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your
+              personal defaults don&apos;t apply to them.
             </span>
             {error && (
-              <Txt as="span" variant="meta" className="text-destructive-indicator">
+              <Txt as="span" variant="meta" className="text-destructive-foreground">
                 {error instanceof Error ? error.message : String(error)}
               </Txt>
             )}
@@ -76,13 +76,12 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           </>
         }
       >
-        <div className="flex w-full max-w-72 flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {setDefaultModel.isPending && (
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">Factory default model</span>
+            <div className="flex min-w-0">
               <ModelCombobox
                 models={models}
                 value={defaultModelId}
@@ -90,7 +89,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
                 disabled={projectQuery.isPending || setDefaultModel.isPending}
                 onValueChange={saveDefaultModel}
               />
-            </label>
+            </div>
           </div>
           {applyResult && (
             <Txt variant="meta">

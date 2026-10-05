@@ -88,6 +88,8 @@ function getAggregationSql(aggregation: AggregationType, measure = 'valueNumber'
       return `toFloat64(count(${measure}))`;
     case 'last':
       return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
     default:
       return `sum(${measure})`;
   }

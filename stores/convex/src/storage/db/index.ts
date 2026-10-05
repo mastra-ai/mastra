@@ -362,12 +362,14 @@ export class ConvexDB extends MastraBase {
     newNextFireAt,
     lastFireAt,
     lastRunId,
+    newStatus,
   }: {
     id: string;
     expectedNextFireAt: number;
     newNextFireAt: number;
     lastFireAt: number;
     lastRunId: string;
+    newStatus?: string;
   }): Promise<boolean> {
     return this.client.callStorage<boolean>({
       op: 'updateScheduleNextFire',
@@ -377,6 +379,7 @@ export class ConvexDB extends MastraBase {
       newNextFireAt,
       lastFireAt,
       lastRunId,
+      newStatus,
     });
   }
 
@@ -442,6 +445,11 @@ export class ConvexDB extends MastraBase {
     from?: string;
     to?: string;
     offset?: number;
+    groupId?: string;
+    recordId?: string;
+    beforeGeneration?: number;
+    afterGeneration?: number;
+    sortDirection?: 'ASC' | 'DESC';
   }): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'omGetHistory',

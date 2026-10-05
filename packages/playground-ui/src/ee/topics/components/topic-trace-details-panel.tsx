@@ -1,8 +1,7 @@
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
-import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { cn } from '@/lib/utils';
 
 export interface TopicTraceDetailsPanelProps {
@@ -18,8 +17,12 @@ export function TopicTraceDetailsPanel({
   onSpanSelect,
   onClose,
 }: TopicTraceDetailsPanelProps) {
-  const traceSpans = useTraceSpans(traceId);
-  const spanDetail = useSpanDetail(traceId, selectedSpanId);
+  const traceSpans = useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
+  const spanDetail = useSpanDetail({
+    traceId: traceId,
+    spanId: selectedSpanId,
+    queryOptions: { enabled: !!traceId && !!selectedSpanId },
+  });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(
     traceSpans.data?.spans,
     selectedSpanId,
@@ -51,6 +54,7 @@ export function TopicTraceDetailsPanel({
           isLoading={spanDetail.isLoading}
           onPrevious={handlePreviousSpan}
           onNext={handleNextSpan}
+          onClose={onSpanSelect ? () => onSpanSelect(undefined) : undefined}
         />
       ) : null}
     </div>

@@ -149,6 +149,6 @@ function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
     case 'complete':
       return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-destructive-indicator" />;
+      return <X className="h-3 w-3 shrink-0 text-destructive-foreground" />;
   }
 }

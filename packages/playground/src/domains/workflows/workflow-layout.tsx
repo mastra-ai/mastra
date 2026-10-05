@@ -8,9 +8,9 @@ import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domain
 import { PlaygroundWorkflowRunProvider } from '@mastra/playground-ui/domains/workflows/context/playground-workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
-import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
+import { useWorkflow } from '@mastra/react/hooks';
 import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
@@ -50,7 +50,11 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // Match the child segment rather than searching the pathname, so a workflow whose id is
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
-  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, useEntityRequestContext('workflow', workflowId!)[0]);
+  const { isLoading: isWorkflowLoading } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: useEntityRequestContext('workflow', workflowId!)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const { hasObservability } = useHasObservability();
 
   const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';

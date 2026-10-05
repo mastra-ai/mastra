@@ -73,18 +73,25 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
     <div className="space-y-3">
       {pairs.map(pair => (
         <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
-          <Button type="button" className="absolute top-2 right-2" onClick={() => removePair(pair.id)}>
+          <Button
+            type="button"
+            aria-label="Remove pair"
+            className="absolute top-2 right-2"
+            onClick={() => removePair(pair.id)}
+          >
             <TrashIcon className="size-4" />
           </Button>
 
           <div className="space-y-2 pt-4">
             <Input
+              aria-label="Key"
               placeholder="Key"
               value={pair.key}
               onChange={e => handleChange(pair.id, 'key', e.target.value)}
               onBlur={handleBlur}
             />
             <Input
+              aria-label="Value"
               placeholder="Value"
               value={pair.value}
               onChange={e => handleChange(pair.id, 'value', e.target.value)}

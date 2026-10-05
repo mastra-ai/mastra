@@ -1,7 +1,7 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { WorkflowCombobox } from '@mastra/playground-ui/domains/workflows/components/workflow-combobox';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { useWorkflows } from '@mastra/react/hooks';
 import { useParams } from 'react-router';
 
 export function WorkflowCrumb() {

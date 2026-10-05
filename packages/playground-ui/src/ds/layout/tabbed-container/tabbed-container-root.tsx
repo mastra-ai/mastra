@@ -12,6 +12,7 @@ import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabsContext } from '@/ds/components/Tabs/tabs-context';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
 import { Tabs } from '@/ds/components/Tabs/tabs-root';
+import type { TabsRootProps } from '@/ds/components/Tabs/tabs-root';
 import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
@@ -114,7 +115,7 @@ export type TabbedContainerProps<T extends string> = {
   defaultTab: T;
   value?: T;
   onValueChange?: (value: T) => void;
-  frame?: 'stroke' | 'inset';
+  frame?: TabsRootProps<T>['frame'];
   className?: string;
 };
 

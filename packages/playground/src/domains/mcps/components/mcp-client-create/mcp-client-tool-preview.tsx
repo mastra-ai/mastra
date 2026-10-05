@@ -13,7 +13,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
+import type { TryConnectMcpMutation } from '@mastra/react/hooks';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
@@ -125,7 +125,7 @@ function ToolList({
           return (
             <Entity key={tool.name}>
               <EntityIcon>
-                <ToolsIcon className="group-hover/entity:text-warning-indicator" />
+                <ToolsIcon className="group-hover/entity:text-warning-foreground" />
               </EntityIcon>
               <EntityContent>
                 <EntityName>{tool.name}</EntityName>

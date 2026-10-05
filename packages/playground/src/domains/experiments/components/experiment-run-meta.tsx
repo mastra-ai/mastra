@@ -5,9 +5,9 @@ import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cos
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
+import type { ExperimentMetrics } from '@mastra/react/hooks';
+import { useScoresByExperimentId } from '@mastra/react/hooks';
 import { type ReactNode, useMemo } from 'react';
-import type { ExperimentMetrics } from '../hooks/use-experiment-metrics';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 export interface ExperimentRunMetaProps {
   experiment: DatasetExperiment;
@@ -35,7 +35,11 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
  * The dataset lives in the pipeline, so it is not repeated here.
  */
 export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProps) {
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
   const isActive = experiment.status === 'running' || experiment.status === 'pending';
 
   // Averages every score fetched so far, so a running experiment reflects only
@@ -81,7 +85,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
               {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
             </span>
             {(experiment.failedCount ?? 0) > 0 && (
-              <span className="text-destructive-indicator">· {experiment.failedCount} errored</span>
+              <span className="text-destructive-foreground">· {experiment.failedCount} errored</span>
             )}
           </>
         )}

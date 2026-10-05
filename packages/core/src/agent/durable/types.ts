@@ -27,7 +27,7 @@ import type {
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, StepTripwireData } from '../../stream/types';
 import type { ToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import type {
   CoreTool,
@@ -186,9 +186,23 @@ export interface SerializableModelSettings {
 }
 
 /**
+ * JSON-safe snapshot of a call-time client tool. Client tools never execute on
+ * the server, so only the schema/metadata the model needs is persisted; the
+ * worker rebuilds the client tool from this when it runs in another process.
+ */
+export interface SerializableClientTool {
+  id?: string;
+  description?: string;
+  inputSchema: JSONSchema7;
+  requireApproval?: boolean;
+}
+
+/**
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
+  /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
+  clientTools?: Record<string, SerializableClientTool>;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -344,7 +358,7 @@ export interface DurableLLMStepOutput {
   toolCalls: DurableToolCallInput[];
   /** Step result metadata */
   stepResult: {
-    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -352,6 +366,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     messageId?: string;
     request?: LanguageModelRequestMetadata;
+    /** Set when a processOutputStep processor rejected this step */
+    tripwire?: StepTripwireData;
   };
   /** Response metadata from the model */
   metadata: {
@@ -398,6 +414,15 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /**
+   * Serialized from the step's *effective* tool set at emission time (processors may add
+   * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
+   * `resolveDurableToolCallConcurrency` can enforce sequential execution for
+   * approval/suspend-capable tools even on a cold resume.
+   */
+  requireApproval?: boolean;
+  /** @see requireApproval */
+  hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
 }
@@ -410,6 +435,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   result?: unknown;
   /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
   modelOutputComputed?: boolean;
+  /** A toModelOutput failure serialized for propagation across the durable boundary. */
+  mappingError?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
   /**
    * Set when execution was interrupted by request abort (not a tool error).
    * The call carries no result/error so the mapping step leaves it incomplete.
@@ -548,6 +579,11 @@ export interface AgentStreamEvent<T = unknown> {
   data: T;
   /** Epoch ms at which a `chunk` event's chunk was produced. */
   producedAt?: number;
+  /**
+   * The `chunk` event's chunk already ran through the run's output processors
+   * before it was published, so the stream consumer must not run them again.
+   */
+  outputProcessed?: boolean;
 }
 
 /**

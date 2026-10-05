@@ -268,14 +268,19 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   const threadId = root.threadId ?? undefined;
 
   const messages: TraceViewMastraDBMessage[] = [
-    {
-      id: `${root.traceId}:${root.spanId}:user`,
-      role: 'user',
-      createdAt: new Date(root.startedAt),
-      threadId,
-      content: { format: 2, parts: userParts, content: messageContent(userParts) },
-      traceSpanIds: [root.spanId],
-    },
+    // A resumed run's input is the resume payload, not a user message: no user bubble then.
+    ...(userParts.length > 0
+      ? [
+          {
+            id: `${root.traceId}:${root.spanId}:user`,
+            role: 'user' as const,
+            createdAt: new Date(root.startedAt),
+            threadId,
+            content: { format: 2 as const, parts: userParts, content: messageContent(userParts) },
+            traceSpanIds: [root.spanId],
+          },
+        ]
+      : []),
     // One message per tool call so each part maps to exactly the spans behind it.
     ...tools.map<TraceViewMastraDBMessage>(({ part, spanIds }) => ({
       id: `${root.traceId}:${spanIds[0]}:tool`,

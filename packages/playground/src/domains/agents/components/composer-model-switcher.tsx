@@ -3,12 +3,13 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useLLMProviders } from '@mastra/react/hooks';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, useLLMProviders, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, findProviderById } from '@/domains/llm';
 
 export const ComposerModelSwitcher = () => {
   const selection = usePlaygroundModelOptional();
@@ -125,7 +126,7 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
         <div
-          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-indicator"
+          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -143,7 +144,7 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-indicator">
+        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
             Set{' '}
