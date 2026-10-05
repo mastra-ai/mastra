@@ -1279,6 +1279,25 @@ describe('DockerSandbox', () => {
         const result = await handle.wait();
         expect(result.stdout).toBe('a\uFFFD');
       });
+
+      it('keeps flushed stderr instead of the fallback when the stream errors', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const handle = await sandbox.processes!.spawn('emit', { stdinMode: 'ignore' });
+
+        stream.write(frame(2, [0xe2]));
+        await new Promise(resolve => setImmediate(resolve));
+        stream.emit('error', new Error('ECONNRESET'));
+
+        const result = await handle.wait();
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toBe('\uFFFD');
+      });
     });
 
     it('should close the writable side of the exec stream to signal EOF', async () => {

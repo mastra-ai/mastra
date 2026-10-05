@@ -482,6 +482,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
+      // Flush any incomplete trailing sequence before anything reads the final output.
+      let decodersFlushed = false;
+      const flushDecoders = () => {
+        if (decodersFlushed) return;
+        decodersFlushed = true;
+        const stdoutRest = stdoutDecoder.end();
+        if (stdoutRest) handle.emitStdout(stdoutRest);
+        const stderrRest = stderrDecoder.end();
+        if (stderrRest) handle.emitStderr(stderrRest);
+      };
+
       // Every stream event settles through here and only the first one wins.
       // Previously 'end' resolved first and 'close' — the only path that attached
       // `killed`/`timedOut` — bailed out because the exit code was already set, so
@@ -491,11 +502,7 @@ export class DockerProcessManager extends SandboxProcessManager {
       const settle = (exitCode: number, metadata: Partial<CommandResult> = {}) => {
         if (settled) return;
         settled = true;
-        // Flush any incomplete trailing sequence before the result reads the output.
-        const stdoutRest = stdoutDecoder.end();
-        if (stdoutRest) handle.emitStdout(stdoutRest);
-        const stderrRest = stderrDecoder.end();
-        if (stderrRest) handle.emitStderr(stderrRest);
+        flushDecoders();
         handle._setExitCode(exitCode);
         resolve({
           success: exitCode === 0,
@@ -602,6 +609,7 @@ export class DockerProcessManager extends SandboxProcessManager {
           settleTerminated();
           return;
         }
+        flushDecoders();
         settle(1, { stderr: handle.stderr || 'Stream error' });
       });
     });
