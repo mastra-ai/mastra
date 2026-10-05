@@ -49,6 +49,7 @@
   .factory-stage-label {
     justify-content: center;
     gap: 0;
+    font-size: 0;
   }
 
   .factory-stage-label::before {

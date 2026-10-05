@@ -126,8 +126,8 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <Txt as="span" variant="caption" className="block">
+          <div className="flex h-full items-center justify-center">
+            <Txt tone="muted" as="span" variant="caption" className="block">
               Select a file to edit its content
             </Txt>
           </div>

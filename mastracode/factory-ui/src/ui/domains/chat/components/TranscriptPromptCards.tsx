@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Code } from '@mastra/playground-ui/components/Code';
 import type { PlanResume } from '@mastra/client-js';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -13,7 +13,7 @@ import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
   'border-border border-l-warning-indicator bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
-const promptTitle = 'mb-1.5   ';
+const promptTitle = 'mb-1.5';
 const promptActions = 'mt-2 flex gap-2';
 
 function lastSegment(id: string): string {
@@ -47,9 +47,13 @@ export function ApprovalCard({
       onApprove={() => onApprove(prompt.toolCallId, true, prompt.id)}
       onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
     >
-      <Txt as="pre" variant="caption" tone="ink" font="mono" className={resultBlock}>
-        {truncate(stringify(prompt.args), 400)}
-      </Txt>
+      <Code
+        variant="caption"
+        tone="ink"
+        font="mono"
+        className={resultBlock}
+        code={truncate(stringify(prompt.args), 400)}
+      />
     </ToolApproval>
   );
 }
@@ -118,17 +122,13 @@ export function SuspensionCard({
   if (prompt.toolName === 'request_access') {
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
-        <div className={cn('text-foreground', promptTitle)}>
-          <Txt as="span" variant="subheading" className="block">
-            Grant access to {payload.requestedPath ?? 'a path'}?
-          </Txt>
-        </div>
+        <Txt as="p" variant="subheading" tone="ink" className={promptTitle}>
+          Grant access to {payload.requestedPath ?? 'a path'}?
+        </Txt>
         {payload.reason && (
-          <div className="text-muted-foreground mt-0.5">
-            <Txt as="span" variant="caption" className="block">
-              Reason: {payload.reason}
-            </Txt>
-          </div>
+          <Txt as="p" variant="caption" tone="muted" className="mt-0.5">
+            Reason: {payload.reason}
+          </Txt>
         )}
         <div className={promptActions}>
           <Button
@@ -173,11 +173,9 @@ function AskUserCard({
   const question = payload.question ?? 'The agent has a question';
   return (
     <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
-      <div className={cn('text-foreground', promptTitle)}>
-        <Txt as="span" variant="subheading" className="block">
-          {question}
-        </Txt>
-      </div>
+      <Txt as="p" variant="subheading" tone="ink" className={promptTitle}>
+        {question}
+      </Txt>
       {options.length > 0 ? (
         <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
           {options.map(opt => (

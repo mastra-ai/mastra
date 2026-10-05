@@ -42,11 +42,9 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
       </div>
 
       {validCount > 0 && (
-        <div className="text-muted-foreground">
-          <Txt as="span" variant="body" className="block">
-            {validCount} rows will be imported
-          </Txt>
-        </div>
+        <Txt as="p" variant="body" tone="muted">
+          {validCount} rows will be imported
+        </Txt>
       )}
 
       {/* Failing rows table */}

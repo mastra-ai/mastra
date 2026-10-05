@@ -222,9 +222,9 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="mr-auto flex min-w-0 items-center gap-2 text-muted-foreground">
-      <Txt as="span" variant="caption" className={dotClassName}></Txt>
-      <Txt as="span" variant="caption" className="truncate">
+    <div role="status" className="mr-auto flex min-w-0 items-center gap-2">
+      <span className={dotClassName} />
+      <Txt tone="muted" as="span" variant="caption" className="truncate">
         {message}
       </Txt>
     </div>

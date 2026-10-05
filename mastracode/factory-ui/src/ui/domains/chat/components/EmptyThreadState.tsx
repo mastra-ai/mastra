@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -11,19 +13,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
-function FactoryMetadata({ label, value, font }: { label: string; value: string; font?: 'mono' }) {
+function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value: string; font?: 'body' | 'mono' }) {
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
-      <dt className="text-muted-foreground">
-        <Txt as="span" variant="caption" className="block">
-          {label}
-        </Txt>
-      </dt>
-      <dd className="text-foreground min-w-0 truncate">
-        <Txt as="span" variant="caption" font={font} className="block">
-          {value}
-        </Txt>
-      </dd>
+      <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{label}</dt>
+      <dd className={cn(textStyle({ variant: 'caption', tone: 'ink', font }), 'min-w-0 truncate')}>{value}</dd>
     </div>
   );
 }
@@ -90,10 +84,10 @@ export function EmptyThreadState() {
           />
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
-          <FactoryMetadata label="Factory" value={activeFactory.name} />
-          {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} font="mono" />}
-          {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} font="mono" />}
-          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} font="mono" />}
+          <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />
+          {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
+          {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
+          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
         </dl>
       </details>
     </section>

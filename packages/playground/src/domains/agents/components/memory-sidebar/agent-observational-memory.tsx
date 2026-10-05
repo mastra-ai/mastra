@@ -97,18 +97,14 @@ const ProgressBar = ({
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
             <div className="space-y-1.5">
-              <div className="text-foreground">
-                <Txt as="span" variant="column" className="block">
-                  {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
-                </Txt>
-              </div>
+              <Txt as="p" variant="column" tone="ink">
+                {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
+              </Txt>
               <div className="space-y-0.5">
-                <div>
-                  <Txt as="span" variant="caption" className="block">
-                    <span className="text-muted-foreground">Model:</span>{' '}
-                    <span className="text-foreground">{model || 'not configured'}</span>
-                  </Txt>
-                </div>
+                <Txt as="p" variant="caption">
+                  <span className="text-muted-foreground">Model:</span>{' '}
+                  <span className="text-foreground">{model || 'not configured'}</span>
+                </Txt>
                 {modelRouting?.length ? (
                   <div>
                     <Txt as="span" variant="caption" tone="muted">
@@ -116,30 +112,24 @@ const ProgressBar = ({
                     </Txt>
                     <div className="mt-0.5 space-y-0.5 pl-2">
                       {modelRouting.map(route => (
-                        <div key={`${route.upTo}-${route.model}`} className="text-foreground">
-                          <Txt as="span" variant="caption" className="block">
-                            ≤{formatTokens(route.upTo)} → {route.model}
-                          </Txt>
-                        </div>
+                        <Txt as="p" variant="caption" tone="ink" key={`${route.upTo}-${route.model}`}>
+                          ≤{formatTokens(route.upTo)} → {route.model}
+                        </Txt>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <Txt as="span" variant="caption" className="block">
-                      <span className="text-muted-foreground">Threshold:</span>{' '}
-                      <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
-                    </Txt>
-                  </div>
+                  <Txt as="p" variant="caption">
+                    <span className="text-muted-foreground">Threshold:</span>{' '}
+                    <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
+                  </Txt>
                 )}
                 {isAdaptive && totalBudget && (
-                  <div>
-                    <Txt as="span" variant="caption" className="block">
-                      <span className="text-muted-foreground">Mode:</span>{' '}
-                      <span className="text-badge-amber-indicator">Adaptive</span>{' '}
-                      <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
-                    </Txt>
-                  </div>
+                  <Txt as="p" variant="caption">
+                    <span className="text-muted-foreground">Mode:</span>{' '}
+                    <span className="text-badge-amber-indicator">Adaptive</span>{' '}
+                    <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
+                  </Txt>
                 )}
               </div>
             </div>
@@ -213,15 +203,13 @@ const ProgressBar = ({
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <div>
-                  <Txt as="span" variant="caption" className="block">
-                    <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
-                    <span className="text-muted-foreground"> is the configured threshold. </span>
-                    <span className="text-foreground">
-                      Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
-                    </span>
-                  </Txt>
-                </div>
+                <Txt as="p" variant="caption">
+                  <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
+                  <span className="text-muted-foreground"> is the configured threshold. </span>
+                  <span className="text-foreground">
+                    Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
+                  </span>
+                </Txt>
               </TooltipContent>
             </Tooltip>
           )}

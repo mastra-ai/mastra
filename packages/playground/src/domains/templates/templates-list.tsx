@@ -66,7 +66,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               })}
             >
               {template.imageURL && (
-                <div className={cn('overflow-hidden')}>
+                <div className="overflow-hidden">
                   <div
                     className="thumb transition-scale h-full w-full bg-cover duration-150"
                     style={{
@@ -138,9 +138,9 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                       </Txt>
                     </small>
                   )}
-                  <div className="flex items-center gap-4 text-muted-foreground">
+                  <div className="flex items-center gap-4">
                     {template.supportedProviders.map(provider => (
-                      <Txt as="span" variant="body" key={provider}>
+                      <Txt tone="muted" as="span" variant="body" key={provider}>
                         {provider}
                       </Txt>
                     ))}

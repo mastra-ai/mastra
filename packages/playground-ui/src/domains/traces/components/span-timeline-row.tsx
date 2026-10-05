@@ -76,14 +76,12 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           )}
         >
           {spanUI?.color && (
-            <Txt
-              as="span"
-              variant="caption"
+            <span
               aria-hidden
               title={spanUI.label}
               style={{ backgroundColor: spanUI.color }}
               className="inline-block size-2 shrink-0 rounded-full"
-            ></Txt>
+            />
           )}
           <Txt
             as="span"
@@ -136,11 +134,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className={cn('text-muted-foreground', 'w-12 text-right')}>
-            <Txt as="span" variant="meta" font="mono" className="block">
-              {formatDurationPrecise(span.latency)}
-            </Txt>
-          </div>
+          <Txt as="p" variant="meta" font="mono" tone="muted" className="w-12 text-right">
+            {formatDurationPrecise(span.latency)}
+          </Txt>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
       </HoverCard>

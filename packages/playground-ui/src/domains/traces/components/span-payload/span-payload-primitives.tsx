@@ -8,11 +8,9 @@ import { Txt } from '@/ds/components/Txt';
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-placeholder uppercase">
-      <Txt as="span" variant="meta" className="block">
-        {children}
-      </Txt>
-    </div>
+    <Txt as="span" variant="meta" tone="faint" className="block uppercase">
+      {children}
+    </Txt>
   );
 }
 

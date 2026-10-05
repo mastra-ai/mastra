@@ -185,22 +185,18 @@ function DatasetItemVersionsComparePage() {
           </CardHeader>
           <CardContent className="grid content-start gap-5 overflow-y-auto">
             {isLoading ? (
-              <div className="text-muted-foreground">
-                <Txt as="span" variant="body" className="block">
-                  Loading...
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
             ) : leftItem ? (
               <DatasetItemDetails
                 item={leftItem}
                 diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
             ) : (
-              <div className="text-muted-foreground">
-                <Txt as="span" variant="body" className="block">
-                  Item data not available
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted">
+                Item data not available
+              </Txt>
             )}
           </CardContent>
         </Card>
@@ -223,22 +219,18 @@ function DatasetItemVersionsComparePage() {
                 descriptionSlot="Pick a version above to compare it with the one on the left."
               />
             ) : isRightLoading ? (
-              <div className="text-muted-foreground">
-                <Txt as="span" variant="body" className="block">
-                  Loading...
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
             ) : rightItem ? (
               <DatasetItemDetails
                 item={rightItem}
                 diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
               />
             ) : (
-              <div className="text-muted-foreground">
-                <Txt as="span" variant="body" className="block">
-                  Version {rightNumber} not found
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted">
+                Version {rightNumber} not found
+              </Txt>
             )}
           </CardContent>
         </Card>

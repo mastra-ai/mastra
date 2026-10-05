@@ -77,11 +77,9 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
           {getPhaseMessage()}
         </Txt>
         {(streamResult?.runId || runId) && (
-          <div className="mt-2 text-muted-foreground">
-            <Txt as="span" variant="caption" className="block">
-              Run ID: {streamResult?.runId ?? runId}
-            </Txt>
-          </div>
+          <Txt as="p" variant="caption" tone="muted" className="mt-2">
+            Run ID: {streamResult?.runId ?? runId}
+          </Txt>
         )}
       </div>
 

@@ -1,3 +1,4 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -64,14 +65,15 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
           <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left">
             {validationErrors.map((error, index) => (
               <div key={index} className="border-l-2 border-destructive-indicator pl-2">
-                <div className="text-destructive-foreground">
-                  <Txt as="span" variant="column" className="block">
-                    {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
-                  </Txt>
-                </div>
-                <Txt as="pre" variant="caption" tone="muted" className="mt-1 wrap-break-word whitespace-pre-wrap">
-                  {error.message}
+                <Txt as="p" variant="column" className="text-destructive-foreground">
+                  {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </Txt>
+                <Code
+                  variant="caption"
+                  tone="muted"
+                  className="mt-1 wrap-break-word whitespace-pre-wrap"
+                  code={error.message}
+                />
               </div>
             ))}
           </div>
@@ -87,9 +89,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
             </Txt>
           </summary>
           <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
-            <Txt as="pre" variant="caption" className="wrap-break-word whitespace-pre-wrap">
-              {errorString}
-            </Txt>
+            <Code variant="caption" className="wrap-break-word whitespace-pre-wrap" code={errorString} />
           </div>
         </details>
       )}

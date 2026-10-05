@@ -7,6 +7,7 @@ import {
 } from './observation-marker-format';
 import { ObservationRenderer } from './observation-renderer';
 import { ActivityItem } from '@/ds/components/ai/activity';
+import { Code } from '@/ds/components/Code';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 import { formatDuration } from '@/utils/duration';
@@ -101,19 +102,15 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
     <ActivityItem icon={<Braces />} label="Extractions" detail={detail} detailFont="sans" aria-label="Extractions">
       {entries.map(([slug, value]) => (
         <div key={slug} className="rounded-md border border-border bg-fill-subtle p-2">
-          <div className="text-muted-foreground uppercase">
-            <Txt as="span" variant="meta" className="block">
-              {slug}
-            </Txt>
-          </div>
+          <Txt as="p" variant="meta" tone="muted" className="uppercase">
+            {slug}
+          </Txt>
           {typeof value === 'object' && value !== null ? (
-            <Txt
-              as="pre"
+            <Code
               variant="caption"
               className="mt-1 max-h-40 overflow-auto break-words whitespace-pre-wrap text-foreground/80"
-            >
-              {formatExtractedValue(value)}
-            </Txt>
+              code={formatExtractedValue(value)}
+            />
           ) : (
             <MarkdownRenderer variant="caption" className={`mt-1 text-foreground/80`}>
               {formatExtractedValue(value)}
@@ -126,16 +123,12 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
           key={failure.slug}
           className="rounded-md border border-destructive-edge bg-destructive-subtle p-2 text-destructive-subtle-foreground"
         >
-          <div className="uppercase">
-            <Txt as="span" variant="meta" className="block">
-              {failure.slug}
-            </Txt>
-          </div>
-          <div className="mt-1">
-            <Txt as="span" variant="caption" className="block">
-              {failure.error}
-            </Txt>
-          </div>
+          <Txt as="p" variant="meta" className="uppercase">
+            {failure.slug}
+          </Txt>
+          <Txt as="p" variant="caption" className="mt-1">
+            {failure.error}
+          </Txt>
         </div>
       ))}
     </ActivityItem>

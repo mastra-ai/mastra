@@ -28,7 +28,7 @@ function ProgressBar({
 
   return (
     <div className={cn('min-w-0 flex-1', toneClass[tone])}>
-      <div className="mb-1 flex items-center justify-between gap-2 text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <Txt as="span" variant="meta" tone="ink" className="uppercase">
           {label}
         </Txt>

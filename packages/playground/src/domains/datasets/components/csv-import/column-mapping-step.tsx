@@ -48,11 +48,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-4">
-        <div className="text-muted-foreground">
-          <Txt as="span" variant="body" className="block">
-            Drag columns to assign them to dataset fields
-          </Txt>
-        </div>
+        <Txt as="p" variant="body" tone="muted">
+          Drag columns to assign them to dataset fields
+        </Txt>
 
         {ZONES.map(zone => {
           const columnsInZone = getColumnsForZone(zone.id);
@@ -138,11 +136,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <div className="text-warning-foreground">
-            <Txt as="span" variant="body" className="block">
-              At least one column must be mapped to Input
-            </Txt>
-          </div>
+          <Txt as="p" variant="body" className="text-warning-foreground">
+            At least one column must be mapped to Input
+          </Txt>
         )}
       </div>
     </DragDropContext>

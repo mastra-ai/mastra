@@ -1,9 +1,10 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, Code, FileText } from 'lucide-react';
+import { ChevronRight, Code as CodeIcon, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -43,9 +44,7 @@ function SkillContent({ content }: { content: string }) {
       <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
         <ScrollAreaViewport className="px-4 pb-4">
           {raw ? (
-            <Txt as="pre" variant="caption" font="mono" tone="muted" className="m-0 whitespace-pre-wrap">
-              {content}
-            </Txt>
+            <Code variant="caption" font="mono" tone="muted" className="m-0 whitespace-pre-wrap" code={content} />
           ) : (
             <MarkdownRenderer variant="caption" className="text-muted-foreground">
               {content}
@@ -59,7 +58,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <Code />}
+        {raw ? <FileText /> : <CodeIcon />}
       </Button>
     </div>
   );

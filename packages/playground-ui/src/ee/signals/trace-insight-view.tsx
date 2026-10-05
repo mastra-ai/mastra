@@ -7,6 +7,7 @@ import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 interface TraceInsightViewProps {
@@ -110,16 +111,8 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
           </Txt>
           {insight.summary.currentTask !== undefined && (
             <dl className="mt-4">
-              <dt className="text-muted-foreground">
-                <Txt as="span" variant="body" className="block">
-                  Current task
-                </Txt>
-              </dt>
-              <dd className="mt-1 text-foreground">
-                <Txt as="span" variant="body" className="block">
-                  {insight.summary.currentTask}
-                </Txt>
-              </dd>
+              <dt className={textStyle({ tone: 'muted', variant: 'body' })}>Current task</dt>
+              <dd className={cn(textStyle({ tone: 'ink', variant: 'body' }), 'mt-1')}>{insight.summary.currentTask}</dd>
             </dl>
           )}
           {insight.summary.degenerate === true && (

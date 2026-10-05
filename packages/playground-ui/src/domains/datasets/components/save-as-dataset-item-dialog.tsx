@@ -15,7 +15,6 @@ import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 import { toast } from '@/utils/toast';
 
 export type SaveAsDatasetItemDialogProps = {
@@ -242,11 +241,9 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
-                    <Txt as="span" variant="body" className="block">
-                      No datasets available
-                    </Txt>
-                  </div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

@@ -1,8 +1,10 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
@@ -87,9 +89,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <Txt as="pre" variant="body" tone="muted" font="mono" className={codeBoxClass}>
-            {outputStr}
-          </Txt>
+          <Code variant="body" tone="muted" font="mono" className={codeBoxClass} code={outputStr} />
         </ComparisonSection>
       )}
 
@@ -120,17 +120,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
               <div key={key} className="flex items-start justify-between gap-4">
-                <dt className="text-muted-foreground">
-                  <Txt as="span" variant="body" className="block">
-                    {key}
-                  </Txt>
-                </dt>
-                <dd className="break-all text-foreground">
-                  <Txt as="span" variant="body" className="block">
-                    <Txt as="span" variant="body" font="mono">
-                      {formatValue(value)}
-                    </Txt>
-                  </Txt>
+                <dt className={textStyle({ tone: 'muted', variant: 'body' })}>{key}</dt>
+                <dd className={cn(textStyle({ tone: 'ink', variant: 'body', font: 'mono' }), 'break-all')}>
+                  {formatValue(value)}
                 </dd>
               </div>
             ))}

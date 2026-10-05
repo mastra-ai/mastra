@@ -133,14 +133,10 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                     className="tabular-nums"
                   >{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</Txt>
                 </div>
-                <div className="mt-2">
-                  <Txt as="span" variant="body-sm" className="block">
-                    {score.reason ||
-                      (isCodeBased
-                        ? 'N/A — code-based scorer does not generate a reason'
-                        : 'N/A — step not configured')}
-                  </Txt>
-                </div>
+                <Txt as="p" variant="body-sm" className="mt-2">
+                  {score.reason ||
+                    (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
+                </Txt>
               </div>
 
               <div className="grid gap-4">

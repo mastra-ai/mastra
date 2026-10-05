@@ -117,11 +117,9 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
-                    <Txt as="span" variant="body" className="block">
-                      No datasets available
-                    </Txt>
-                  </div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

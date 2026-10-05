@@ -177,11 +177,9 @@ export function DatasetCompareVersionsList({
                 transitions.colors,
               )}
             >
-              <div className="truncate py-[0.6rem] text-placeholder">
-                <Txt as="span" variant="body" className="block">
-                  {id}
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="faint" className="truncate py-[0.6rem]">
+                {id}
+              </Txt>
               {status !== 'same' ? (
                 <>
                   {itemA?.datasetVersion ? (

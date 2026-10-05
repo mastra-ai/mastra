@@ -137,11 +137,9 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-muted-foreground">
-                  <Txt as="span" variant="body" className="block">
-                    No working memory content yet. Click "Edit Working Memory" to add content.
-                  </Txt>
-                </div>
+                <Txt as="p" variant="body" tone="muted">
+                  No working memory content yet. Click "Edit Working Memory" to add content.
+                </Txt>
               )}
             </>
           ) : (

@@ -1,3 +1,4 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
@@ -31,9 +32,7 @@ export function CodeDisplay({
               className={`absolute inset-0 z-10 rounded-md ${focusRingInset}`}
             />
           )}
-          <Txt as="pre" variant="meta" className="pointer-events-none whitespace-pre-wrap">
-            {content}
-          </Txt>
+          <Code variant="meta" className="pointer-events-none whitespace-pre-wrap" code={content} />
           {isDraft && (
             <div className="mt-1.5">
               <Txt

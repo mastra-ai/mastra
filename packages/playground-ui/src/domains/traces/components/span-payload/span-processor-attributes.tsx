@@ -40,8 +40,8 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
 
         return (
           <li key={index} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2 text-foreground">
-              <Txt as="span" variant="body">
+            <div className="flex flex-wrap items-center gap-2">
+              <Txt tone="ink" as="span" variant="body">
                 {MUTATION_LABELS[mutation.type] ?? mutation.type}
               </Txt>
               {detail && (

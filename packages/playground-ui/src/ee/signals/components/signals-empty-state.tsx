@@ -10,6 +10,7 @@ import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel
 import { Txt } from '@/ds/components/Txt';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 const traceRows = [
@@ -75,40 +76,20 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-muted-foreground">
-          <Txt as="span" variant="caption" className="block">
-            Traces analyzed
-          </Txt>
-        </dt>
-        <dd className="mt-1 text-foreground">
-          <Txt as="span" variant="heading" className="block">
-            {formatNumber(progress.traceCount)}
-          </Txt>
+        <dt className={textStyle({ tone: 'muted', variant: 'caption' })}>Traces analyzed</dt>
+        <dd className={cn(textStyle({ tone: 'ink', variant: 'heading' }), 'mt-1')}>
+          {formatNumber(progress.traceCount)}
         </dd>
       </div>
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-muted-foreground">
-          <Txt as="span" variant="caption" className="block">
-            Trace signal types ready
-          </Txt>
-        </dt>
-        <dd className="mt-1 text-foreground">
-          <Txt as="span" variant="heading" className="block">
-            {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
-          </Txt>
+        <dt className={textStyle({ tone: 'muted', variant: 'caption' })}>Trace signal types ready</dt>
+        <dd className={cn(textStyle({ tone: 'ink', variant: 'heading' }), 'mt-1')}>
+          {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
         </dd>
       </div>
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-muted-foreground">
-          <Txt as="span" variant="caption" className="block">
-            Status
-          </Txt>
-        </dt>
-        <dd className="mt-1 text-foreground capitalize">
-          <Txt as="span" variant="heading" className="block">
-            {progress.status}
-          </Txt>
-        </dd>
+        <dt className={textStyle({ tone: 'muted', variant: 'caption' })}>Status</dt>
+        <dd className={cn(textStyle({ tone: 'ink', variant: 'heading' }), 'mt-1 capitalize')}>{progress.status}</dd>
       </div>
     </dl>
   );

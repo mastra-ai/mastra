@@ -48,7 +48,7 @@ export function ExperimentTraceTimelineTimingCol({
         <div className={cn('w-full min-w-40 rounded-lg bg-muted p-2.5', surfaceGroupStateLayerStyle)}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
+              className="absolute top-0 h-1.5 rounded-sm bg-placeholder"
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -58,11 +58,9 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('text-muted-foreground', 'flex justify-end')}>
-          <Txt as="span" variant="caption" font="mono">
-            {formatDurationPrecise(span.latency)}
-          </Txt>
-        </div>
+        <Txt as="span" variant="caption" tone="muted" font="mono" className="block text-right">
+          {formatDurationPrecise(span.latency)}
+        </Txt>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content

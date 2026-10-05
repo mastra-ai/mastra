@@ -2,6 +2,7 @@ import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
+import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { ErrorBoundary } from '@/ds/components/ErrorBoundary';
 import { Txt } from '@/ds/components/Txt';
@@ -47,9 +48,11 @@ export function WorkflowGraphBoundary({
                   </Txt>
                 </summary>
                 <CopyButton content={definition} tooltip="Copy workflow definition" />
-                <Txt as="pre" variant="meta" className="mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap">
-                  {definition}
-                </Txt>
+                <Code
+                  variant="meta"
+                  className="mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap"
+                  code={definition}
+                />
               </details>
             </div>
           </div>

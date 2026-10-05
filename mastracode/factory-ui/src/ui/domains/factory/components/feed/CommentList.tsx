@@ -188,16 +188,12 @@ export function CommentList({
           {/* Chat anchoring: a short stream sits against the composer, not the description. */}
           <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
             {!showSkeleton && leading !== undefined && (
-              <div
-                aria-hidden
-                style={landingStyle(1)}
-                className="text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
-              >
-                <Txt as="span" variant="meta" className="bg-border h-px flex-1"></Txt>
-                <Txt as="span" variant="meta" className="block">
+              <div aria-hidden style={landingStyle(1)} className="stream-landing flex items-center gap-2 px-3 pb-1">
+                <span className="bg-border h-px flex-1" />
+                <Txt tone="muted" as="span" variant="meta" className="block">
                   Activity
                 </Txt>
-                <Txt as="span" variant="meta" className="bg-border h-px flex-1"></Txt>
+                <span className="bg-border h-px flex-1" />
               </div>
             )}
             {showSkeleton ? (

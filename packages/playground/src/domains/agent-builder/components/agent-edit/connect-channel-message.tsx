@@ -39,11 +39,9 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
         <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-        <div className="flex-1 text-muted-foreground">
-          <Txt as="span" variant="body" className="block">
-            {platform.name}
-          </Txt>
-        </div>
+        <Txt as="p" variant="body" tone="muted" className="flex-1">
+          {platform.name}
+        </Txt>
         {!platform.isConfigured ? (
           <Badge variant="warning" size="sm" indicator="dot">
             Not configured

@@ -1,6 +1,7 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -220,28 +221,24 @@ export function ReviewItemCard({
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <Txt
-              as="pre"
+            <Code
               variant="caption"
               tone="ink"
               className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
-            >
-              {formatUnknown(item.input)}
-            </Txt>
+              code={formatUnknown(item.input)}
+            />
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <Txt
-                as="pre"
+              <Code
                 variant="caption"
                 tone="ink"
                 className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
-              >
-                {formatUnknown(item.output)}
-              </Txt>
+                code={formatUnknown(item.output)}
+              />
             </div>
           )}
           {Boolean(item.error) && (
@@ -249,13 +246,11 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <Txt
-                as="pre"
+              <Code
                 variant="caption"
                 className="max-h-20 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-destructive-foreground"
-              >
-                {formatUnknown(item.error)}
-              </Txt>
+                code={formatUnknown(item.error)}
+              />
             </div>
           )}
           {/* Comment */}

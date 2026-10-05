@@ -1,6 +1,7 @@
 import { Txt } from '../Txt';
 import { Icon } from '@/ds/icons';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
@@ -56,13 +57,7 @@ export const EntityName = ({
 };
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
-  return (
-    <div className={cn('text-muted-foreground', className)}>
-      <Txt as="span" variant="caption" className="block">
-        {children}
-      </Txt>
-    </div>
-  );
+  return <div className={cn(textStyle({ variant: 'caption', tone: 'muted' }), className)}>{children}</div>;
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {

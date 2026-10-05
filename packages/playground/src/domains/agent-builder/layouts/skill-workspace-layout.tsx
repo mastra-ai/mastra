@@ -56,11 +56,9 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-foreground">
-            <Txt as="span" variant="body" className="block">
-              {title}
-            </Txt>
-          </div>
+          <Txt as="p" variant="body" tone="ink" className="min-w-0 truncate">
+            {title}
+          </Txt>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}

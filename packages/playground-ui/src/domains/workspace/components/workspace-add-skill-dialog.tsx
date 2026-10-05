@@ -200,11 +200,9 @@ export function WorkspaceAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-muted-foreground">
-                <Txt as="span" variant="eyebrow" className="block">
-                  {hasSearchResults ? 'Search Results' : 'Popular Skills'}
-                </Txt>
-              </div>
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
+                {hasSearchResults ? 'Search Results' : 'Popular Skills'}
+              </Txt>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport
                   className={
@@ -258,11 +256,9 @@ export function WorkspaceAddSkillDialog({
                                     </Txt>
                                   )}
                                 </div>
-                                <div className="truncate text-muted-foreground">
-                                  <Txt as="span" variant="caption" className="block">
-                                    {skill.topSource}
-                                  </Txt>
-                                </div>
+                                <Txt as="p" variant="caption" tone="muted" className="truncate">
+                                  {skill.topSource}
+                                </Txt>
                               </div>
                               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                                 <Download className="size-3" />
@@ -281,11 +277,9 @@ export function WorkspaceAddSkillDialog({
             </div>
 
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-muted-foreground">
-                <Txt as="span" variant="eyebrow" className="block">
-                  Preview
-                </Txt>
-              </div>
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
+                Preview
+              </Txt>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">

@@ -70,13 +70,11 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
       ) : null}
 
       {/* Row count indicator */}
-      <div className="text-muted-foreground">
-        <Txt as="span" variant="caption" className="block">
-          {displayData.length < totalRows
-            ? `Showing ${displayData.length} of ${totalRows} rows`
-            : `${totalRows} row${totalRows !== 1 ? 's' : ''}`}
-        </Txt>
-      </div>
+      <Txt as="p" variant="caption" tone="muted">
+        {displayData.length < totalRows
+          ? `Showing ${displayData.length} of ${totalRows} rows`
+          : `${totalRows} row${totalRows !== 1 ? 's' : ''}`}
+      </Txt>
     </div>
   );
 }

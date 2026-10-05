@@ -191,11 +191,9 @@ export function BuilderAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-muted-foreground">
-                <Txt as="span" variant="eyebrow" className="block">
-                  {hasSearchResults ? 'Search results' : 'Popular skills'}
-                </Txt>
-              </div>
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
+                {hasSearchResults ? 'Search results' : 'Popular skills'}
+              </Txt>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
@@ -239,11 +237,9 @@ export function BuilderAddSkillDialog({
                                   </Txt>
                                 )}
                               </div>
-                              <div className="truncate text-muted-foreground">
-                                <Txt as="span" variant="caption" className="block">
-                                  {skill.topSource}
-                                </Txt>
-                              </div>
+                              <Txt as="p" variant="caption" tone="muted" className="truncate">
+                                {skill.topSource}
+                              </Txt>
                             </div>
                             <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                               <Download className="h-3 w-3" />

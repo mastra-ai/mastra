@@ -278,11 +278,11 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
-        <Txt as="span" variant="column" tone="ink" className={cn('', useInheritedTextColor ? 'opacity-80' : '')}>
+        <Txt as="span" variant="column" tone="ink" className={useInheritedTextColor ? 'opacity-80' : undefined}>
           {block.date}
         </Txt>
         {block.relativeTime && (
-          <Txt as="span" variant="meta" tone="muted" className={cn('', useInheritedTextColor ? 'opacity-60' : '')}>
+          <Txt as="span" variant="meta" tone="muted" className={useInheritedTextColor ? 'opacity-60' : undefined}>
             ({block.relativeTime})
           </Txt>
         )}
@@ -311,20 +311,20 @@ function ThreadSection({
   return (
     <div className="mb-3">
       {showThreadId && thread.threadId !== 'default' && (
-        <div
+        <Txt
+          as="p"
+          variant="meta"
+          tone="muted"
           className={cn(
-            'text-muted-foreground',
             'mb-1 inline-block rounded px-1 py-0.5',
             useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50',
           )}
         >
-          <Txt as="span" variant="meta" className="block">
-            Thread{' '}
-            <Txt as="span" variant="meta" font="mono">
-              {thread.threadId}
-            </Txt>
+          Thread{' '}
+          <Txt as="span" variant="meta" font="mono">
+            {thread.threadId}
           </Txt>
-        </div>
+        </Txt>
       )}
       {thread.dateBlocks.map((block, i) => (
         <DateBlock key={i} block={block} useInheritedTextColor={useInheritedTextColor} />
@@ -361,11 +361,9 @@ export function ObservationRenderer({
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
     return (
-      <div className={cn('text-muted-foreground', 'italic', className)}>
-        <Txt as="span" variant="caption" className="block">
-          No observations
-        </Txt>
-      </div>
+      <Txt as="p" variant="caption" tone="muted" className={cn('italic', className)}>
+        No observations
+      </Txt>
     );
   }
 
@@ -387,31 +385,23 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-muted-foreground uppercase">
-            <Txt as="span" variant="meta" className="block">
-              Current Task
-            </Txt>
-          </div>
-          <div className="whitespace-pre-wrap text-foreground">
-            <Txt as="span" variant="caption" className="block">
-              {parsed.currentTask}
-            </Txt>
-          </div>
+          <Txt as="p" variant="meta" tone="muted" className="mb-1 uppercase">
+            Current Task
+          </Txt>
+          <Txt as="p" variant="caption" tone="ink" className="whitespace-pre-wrap">
+            {parsed.currentTask}
+          </Txt>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-muted-foreground uppercase">
-            <Txt as="span" variant="meta" className="block">
-              Suggested Response
-            </Txt>
-          </div>
-          <div className="whitespace-pre-wrap text-foreground/80 italic">
-            <Txt as="span" variant="caption" className="block">
-              {parsed.suggestedResponse}
-            </Txt>
-          </div>
+          <Txt as="p" variant="meta" tone="muted" className="mb-1 uppercase">
+            Suggested Response
+          </Txt>
+          <Txt as="p" variant="caption" className="whitespace-pre-wrap text-foreground/80 italic">
+            {parsed.suggestedResponse}
+          </Txt>
         </div>
       )}
     </div>

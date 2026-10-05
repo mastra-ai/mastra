@@ -9,6 +9,7 @@ import {
 } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
@@ -91,11 +92,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
 
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
-      <div className="pb-2 text-foreground">
-        <Txt as="span" variant="caption" className="block">
-          Approval required for <InlineCode>{toolName}</InlineCode>
-        </Txt>
-      </div>
+      <Txt as="p" variant="caption" tone="ink" className="pb-2">
+        Approval required for <InlineCode>{toolName}</InlineCode>
+      </Txt>
       <div className="flex items-center gap-2">
         <Button
           variant="default"
@@ -304,16 +303,18 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <div className="text-foreground">
-            <Txt as="span" variant="subheading" className="block">
-              Something went wrong while building the agent.
-            </Txt>
-          </div>
-          <div data-testid="agent-builder-chat-error-summary" className="break-words text-muted-foreground">
-            <Txt as="span" variant="caption" className="block">
-              {error.summary}
-            </Txt>
-          </div>
+          <Txt as="p" variant="subheading" tone="ink">
+            Something went wrong while building the agent.
+          </Txt>
+          <Txt
+            as="p"
+            variant="caption"
+            tone="muted"
+            data-testid="agent-builder-chat-error-summary"
+            className="break-words"
+          >
+            {error.summary}
+          </Txt>
         </div>
       </div>
 
@@ -339,15 +340,13 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             </CollapsibleTrigger>
           </div>
           <CollapsibleContent>
-            <Txt
-              as="pre"
+            <Code
               variant="caption"
               tone="muted"
               className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
-            >
-              {error.details}
-            </Txt>
+              code={error.details}
+            />
           </CollapsibleContent>
         </Collapsible>
       ) : (
@@ -432,14 +431,12 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <div className="min-w-0 flex-1 truncate text-muted-foreground">
-      <Txt as="span" variant="body" className="block">
-        {label}{' '}
-        <Txt as="strong" variant="subheading" tone="ink">
-          {value}
-        </Txt>
+    <Txt tone="muted" as="p" variant="body" className="min-w-0 flex-1 truncate">
+      {label}{' '}
+      <Txt as="strong" variant="subheading" tone="ink">
+        {value}
       </Txt>
-    </div>
+    </Txt>
   </div>
 );
 

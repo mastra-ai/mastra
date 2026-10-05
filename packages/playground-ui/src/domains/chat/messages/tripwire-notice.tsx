@@ -2,6 +2,7 @@ import type { TripwireMetadata } from '@mastra/react';
 import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
+import { Code } from '@/ds/components/Code';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 
@@ -66,9 +67,11 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                     <Txt as="span" variant="caption" className="opacity-70">
                       Metadata
                     </Txt>
-                    <Txt as="pre" variant="caption" className="overflow-x-auto rounded-lg bg-current/10 p-2">
-                      {JSON.stringify(tripwire.metadata, null, 2)}
-                    </Txt>
+                    <Code
+                      variant="caption"
+                      className="overflow-x-auto rounded-lg bg-current/10 p-2"
+                      code={JSON.stringify(tripwire.metadata, null, 2)}
+                    />
                   </div>
                 )}
               </div>

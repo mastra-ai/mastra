@@ -6,6 +6,7 @@ import { Badge } from '@/ds/components/Badge';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface EntityIndexCompactGridProps {
@@ -51,39 +52,17 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-muted-foreground">
-              <Txt as="span" variant="meta" className="block">
-                Traces
-              </Txt>
-            </dt>
-            <dd className="text-foreground">
-              <Txt as="span" variant="caption" className="block">
-                {metadata.traceCount}
-              </Txt>
-            </dd>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Traces</dt>
+            <dd className={textStyle({ tone: 'ink', variant: 'caption' })}>{metadata.traceCount}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">
-              <Txt as="span" variant="meta" className="block">
-                Signals set
-              </Txt>
-            </dt>
-            <dd className="text-foreground">
-              <Txt as="span" variant="caption" className="block">
-                {metadata.signalsSet}
-              </Txt>
-            </dd>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Signals set</dt>
+            <dd className={textStyle({ tone: 'ink', variant: 'caption' })}>{metadata.signalsSet}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">
-              <Txt as="span" variant="meta" className="block">
-                Updated
-              </Txt>
-            </dt>
-            <dd title={entity.updatedAt} className="text-foreground">
-              <Txt as="span" variant="caption" className="block">
-                {metadata.updatedAt}
-              </Txt>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Updated</dt>
+            <dd title={entity.updatedAt} className={textStyle({ tone: 'ink', variant: 'caption' })}>
+              {metadata.updatedAt}
             </dd>
           </div>
         </dl>

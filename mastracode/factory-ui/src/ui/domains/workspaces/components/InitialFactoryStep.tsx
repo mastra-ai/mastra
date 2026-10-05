@@ -11,9 +11,9 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
       <div className="w-full max-w-2xl text-left" aria-hidden="true">
         <div className="grid grid-cols-3 gap-3">
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-muted-foreground mb-3 flex items-center gap-2">
-              <Txt as="span" variant="meta" className="bg-placeholder size-2 rounded-full"></Txt>
-              <Txt as="span" variant="meta" className="block">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="bg-placeholder size-2 rounded-full" />
+              <Txt tone="muted" as="span" variant="meta" className="block">
                 To do
               </Txt>
             </div>
@@ -37,18 +37,18 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
             </div>
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-muted-foreground mb-3 flex items-center gap-2">
-              <Txt as="span" variant="meta" className="bg-badge-green-indicator size-2 rounded-full"></Txt>
-              <Txt as="span" variant="meta" className="block">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="bg-badge-green-indicator size-2 rounded-full" />
+              <Txt tone="muted" as="span" variant="meta" className="block">
                 In progress
               </Txt>
             </div>
             <div className="min-h-[140px]" />
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-muted-foreground mb-3 flex items-center gap-2">
-              <Txt as="span" variant="meta" className="bg-badge-blue-indicator size-2 rounded-full"></Txt>
-              <Txt as="span" variant="meta" className="block">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="bg-badge-blue-indicator size-2 rounded-full" />
+              <Txt tone="muted" as="span" variant="meta" className="block">
                 Deployed
               </Txt>
             </div>

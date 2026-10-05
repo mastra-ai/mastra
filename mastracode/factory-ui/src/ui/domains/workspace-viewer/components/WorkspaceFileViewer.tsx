@@ -68,18 +68,18 @@ export function WorkspaceFileViewer({
       </div>
 
       {file ? (
-        <div className="text-muted-foreground border-border flex shrink-0 items-center gap-3 border-b px-3 py-2">
-          <Txt as="span" variant="caption" className="min-w-0 truncate">
+        <div className="border-border flex shrink-0 items-center gap-3 border-b px-3 py-2">
+          <Txt tone="muted" as="span" variant="caption" className="min-w-0 truncate">
             {file.path}
           </Txt>
-          <Txt as="span" variant="caption" className="ml-auto shrink-0">
+          <Txt tone="muted" as="span" variant="caption" className="ml-auto shrink-0">
             {formatBytes(file.size)}
           </Txt>
-          <Txt as="span" variant="caption" className="shrink-0">
+          <Txt tone="muted" as="span" variant="caption" className="shrink-0">
             {new Date(file.updatedAt).toLocaleString()}
           </Txt>
           {file.truncated ? (
-            <Txt as="span" variant="caption" className="shrink-0">
+            <Txt tone="muted" as="span" variant="caption" className="shrink-0">
               Truncated
             </Txt>
           ) : null}

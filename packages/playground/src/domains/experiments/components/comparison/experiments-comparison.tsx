@@ -116,11 +116,9 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
 
   if (!comparison || comparison.items.length === 0) {
     return (
-      <div className={cn('text-muted-foreground', 'py-5 text-center')}>
-        <Txt as="span" variant="body" className="block">
-          No comparison data
-        </Txt>
-      </div>
+      <Txt as="p" variant="body" tone="muted" className="py-5 text-center">
+        No comparison data
+      </Txt>
     );
   }
 

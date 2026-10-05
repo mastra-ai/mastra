@@ -57,8 +57,8 @@ function Stage({
         {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="flex min-h-5 items-center text-foreground">
-          <Txt as="span" variant="caption" className="block">
+        <div className="flex min-h-5 items-center">
+          <Txt tone="ink" as="span" variant="caption" className="block">
             {subject}
           </Txt>
         </div>

@@ -1,3 +1,5 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
@@ -162,11 +164,7 @@ function RecordCard({
       {expanded ? (
         <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
-            <dt>
-              <Txt as="span" variant="body-sm" className="block">
-                Captured in session
-              </Txt>
-            </dt>
+            <dt className={textStyle({ variant: 'body-sm' })}>Captured in session</dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
@@ -183,50 +181,18 @@ function RecordCard({
                 '—'
               )}
             </dd>
-            <dt>
-              <Txt as="span" variant="body-sm" className="block">
-                Captured at
-              </Txt>
-            </dt>
-            <dd>
-              <Txt as="span" variant="body-sm" className="block">
-                {new Date(record.capturedAt).toLocaleString()}
-              </Txt>
-            </dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Captured at</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>{new Date(record.capturedAt).toLocaleString()}</dd>
             {record.when ? (
               <>
-                <dt>
-                  <Txt as="span" variant="body-sm" className="block">
-                    When
-                  </Txt>
-                </dt>
-                <dd>
-                  <Txt as="span" variant="body-sm" className="block">
-                    {record.when}
-                  </Txt>
-                </dd>
+                <dt className={textStyle({ variant: 'body-sm' })}>When</dt>
+                <dd className={textStyle({ variant: 'body-sm' })}>{record.when}</dd>
               </>
             ) : null}
-            <dt>
-              <Txt as="span" variant="body-sm" className="block">
-                Scope chain
-              </Txt>
-            </dt>
-            <dd className="break-all">
-              <Txt as="span" variant="body-sm" className="block">
-                {record.scope.join(' → ')}
-              </Txt>
-            </dd>
-            <dt>
-              <Txt as="span" variant="body-sm" className="block">
-                Pinned
-              </Txt>
-            </dt>
-            <dd>
-              <Txt as="span" variant="body-sm" className="block">
-                {record.pinned ? 'yes' : 'no'}
-              </Txt>
-            </dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Scope chain</dt>
+            <dd className={cn(textStyle({ variant: 'body-sm' }), 'break-all')}>{record.scope.join(' → ')}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Pinned</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>{record.pinned ? 'yes' : 'no'}</dd>
           </dl>
           {reason ? (
             <div
@@ -250,18 +216,12 @@ function RecordCard({
             </Txt>
           )}
           {otherMetadata.length > 0 ? (
-            <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
-                  <dt>
-                    <Txt as="span" variant="meta" className="block">
-                      {key}
-                    </Txt>
-                  </dt>
-                  <dd className="break-all">
-                    <Txt as="span" variant="meta" className="block">
-                      {typeof value === 'string' ? value : JSON.stringify(value)}
-                    </Txt>
+                  <dt className={textStyle({ variant: 'meta', tone: 'muted' })}>{key}</dt>
+                  <dd className={cn(textStyle({ variant: 'meta', tone: 'muted' }), 'break-all')}>
+                    {typeof value === 'string' ? value : JSON.stringify(value)}
                   </dd>
                 </div>
               ))}
@@ -305,11 +265,9 @@ export function KnowledgeFlyout({
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
-        <div className="text-muted-foreground p-4">
-          <Txt as="span" variant="body" className="block">
-            Loading knowledge node…
-          </Txt>
-        </div>
+        <Txt as="p" variant="body" tone="muted" className="p-4">
+          Loading knowledge node…
+        </Txt>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
@@ -353,56 +311,26 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
-                  <dt>
-                    <Txt as="span" variant="caption" className="block">
-                      Kind
-                    </Txt>
-                  </dt>
-                  <dd className="text-foreground text-right">
-                    <Txt as="span" variant="caption" className="block">
-                      {nodeQuery.data.node.kind}
-                    </Txt>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {nodeQuery.data.node.kind}
                   </dd>
-                  <dt>
-                    <Txt as="span" variant="caption" className="block">
-                      Scope
-                    </Txt>
-                  </dt>
-                  <dd className="text-foreground text-right break-all">
-                    <Txt as="span" variant="caption" className="block">
-                      {nodeQuery.data.node.scope.join(' → ')}
-                    </Txt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right break-all')}>
+                    {nodeQuery.data.node.scope.join(' → ')}
                   </dd>
-                  <dt>
-                    <Txt as="span" variant="caption" className="block">
-                      Created
-                    </Txt>
-                  </dt>
-                  <dd className="text-foreground text-right">
-                    <Txt as="span" variant="caption" className="block">
-                      {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
-                    </Txt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Created</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
                   </dd>
-                  <dt>
-                    <Txt as="span" variant="caption" className="block">
-                      Updated
-                    </Txt>
-                  </dt>
-                  <dd className="text-foreground text-right">
-                    <Txt as="span" variant="caption" className="block">
-                      {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
-                    </Txt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
                   </dd>
-                  <dt>
-                    <Txt as="span" variant="caption" className="block">
-                      Knowledge records
-                    </Txt>
-                  </dt>
-                  <dd className="text-foreground text-right">
-                    <Txt as="span" variant="caption" className="block">
-                      {nodeQuery.data.records.length}
-                    </Txt>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {nodeQuery.data.records.length}
                   </dd>
                 </dl>
               </CollapsibleContent>

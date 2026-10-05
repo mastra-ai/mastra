@@ -65,11 +65,11 @@ export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPo
           );
         })}
       </div>
-      <div className="mt-1 flex justify-between text-muted-foreground">
-        <Txt as="span" variant="caption">
+      <div className="mt-1 flex justify-between">
+        <Txt tone="muted" as="span" variant="caption">
           {formatSnapshotDate(firstPoint.startedAt)}
         </Txt>
-        <Txt as="span" variant="caption">
+        <Txt tone="muted" as="span" variant="caption">
           {formatSnapshotDate(lastPoint.startedAt)}
         </Txt>
       </div>

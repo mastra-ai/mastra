@@ -114,8 +114,8 @@ export function TemplateForm({
               )}
             </div>
             <div className="relative mt-3.5 border-t border-border pt-12">
-              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background text-muted-foreground">
-                <Txt as="span" variant="caption" className="block">
+              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background">
+                <Txt tone="muted" as="span" variant="caption" className="block">
                   And
                 </Txt>
               </div>

@@ -189,22 +189,22 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
           </div>
         )}
         {diffLines.map((line, idx) => (
-          <div
+          <Txt
+            as="p"
+            variant="body"
+            tone="muted"
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
               line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
               line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
-              line.type === 'equal' && 'text-muted-foreground',
             )}
           >
-            <Txt as="span" variant="body" className="block">
-              <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
-                {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
-              </span>
-              {line.text || '\u00A0'}
-            </Txt>
-          </div>
+            <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+              {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+            </span>
+            {line.text || '\u00A0'}
+          </Txt>
         ))}
       </div>
     );
@@ -273,22 +273,22 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               </div>
             )}
             {diffLines.map((line, lidx) => (
-              <div
+              <Txt
+                as="p"
+                variant="body"
+                tone="muted"
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
                   line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
                   line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
-                  line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
-                <Txt as="span" variant="body" className="block">
-                  <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
-                    {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
-                  </span>
-                  {line.text || '\u00A0'}
-                </Txt>
-              </div>
+                <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+                  {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+                </span>
+                {line.text || '\u00A0'}
+              </Txt>
             ))}
           </div>
         );
@@ -690,7 +690,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
 
   return (
-    <div className={cn('flex h-full flex-col')}>
+    <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3" />
 
       <ScrollArea className="min-h-0 flex-1">

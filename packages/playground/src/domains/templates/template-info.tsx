@@ -23,7 +23,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
   return (
     <>
-      <div className={cn('mt-5 grid items-center')}>
+      <div className="mt-5 grid items-center">
         <div
           className={cn('flex items-center gap-3', '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50', {
             '[&>svg]:opacity-20': isLoading,
@@ -65,20 +65,16 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
                     A new Git branch will be created
                   </Txt>
                 </div>
-                <div className="space-y-1 text-muted-foreground">
-                  <div>
-                    <Txt as="span" variant="caption" className="block">
-                      <Txt as="span" variant="column">
-                        Branch name:
-                      </Txt>{' '}
-                      <InlineCode>{branchName}</InlineCode>
-                    </Txt>
-                  </div>
-                  <div>
-                    <Txt as="span" variant="caption" className="block">
-                      This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
-                    </Txt>
-                  </div>
+                <div className="space-y-1">
+                  <Txt tone="muted" as="p" variant="caption">
+                    <Txt as="span" variant="column">
+                      Branch name:
+                    </Txt>{' '}
+                    <InlineCode>{branchName}</InlineCode>
+                  </Txt>
+                  <Txt tone="muted" as="p" variant="caption">
+                    This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
+                  </Txt>
                 </div>
               </div>
             </div>

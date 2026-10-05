@@ -66,11 +66,9 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
         <Notice variant="destructive" title="Tripwire">
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
-            <div>
-              <Txt as="span" variant="caption" className="block">
-                Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
-              </Txt>
-            </div>
+            <Txt as="p" variant="caption">
+              Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
+            </Txt>
           )}
         </Notice>
       )}

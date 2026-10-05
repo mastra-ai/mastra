@@ -17,7 +17,6 @@ import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 import { toast } from '@/utils/toast';
 
 type AddTraceMocksToItemDialogProps = {
@@ -80,11 +79,9 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         </SideDialog.Header>
 
         {isTrajectoryLoading ? (
-          <div className="px-2 py-4 text-muted-foreground">
-            <Txt as="span" variant="body" className="block">
-              Loading tool calls from trace...
-            </Txt>
-          </div>
+          <Txt as="p" variant="body" tone="muted" className="px-2 py-4">
+            Loading tool calls from trace...
+          </Txt>
         ) : (
           // Remount when the source trace changes so the form's useState seeds
           // from the freshly derived mocks — no state-reset effect needed.
@@ -186,11 +183,9 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
-                <Txt as="span" variant="body" className="block">
-                  No datasets available
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                No datasets available
+              </Txt>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -218,11 +213,9 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
-                <Txt as="span" variant="body" className="block">
-                  No items available
-                </Txt>
-              </div>
+              <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                No items available
+              </Txt>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>

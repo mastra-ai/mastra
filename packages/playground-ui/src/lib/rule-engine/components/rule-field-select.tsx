@@ -134,11 +134,9 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
 
   if (selectors.length === 0) {
     return (
-      <div className={cn('text-muted-foreground', '', className)}>
-        <Txt as="span" variant="body" className="block">
-          No fields available
-        </Txt>
-      </div>
+      <Txt as="p" variant="body" tone="muted" className={className}>
+        No fields available
+      </Txt>
     );
   }
 

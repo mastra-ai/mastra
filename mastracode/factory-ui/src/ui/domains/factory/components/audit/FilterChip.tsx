@@ -27,9 +27,7 @@ export function FilterChip({
           : 'hover:bg-fill hover:text-foreground focus-visible:bg-fill focus-visible:text-foreground',
       )}
     >
-      {dotClass ? (
-        <Txt as="span" variant="meta" aria-hidden="true" className={cn('size-1.5 rounded-full', dotClass)}></Txt>
-      ) : null}
+      {dotClass ? <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotClass)} /> : null}
       <Txt as="span" variant="meta" className="block">
         {label}
       </Txt>

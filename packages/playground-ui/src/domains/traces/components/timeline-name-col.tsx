@@ -78,14 +78,12 @@ export function TimelineNameCol({
         )}
       >
         {spanUI?.color && (
-          <Txt
-            as="span"
-            variant="caption"
+          <span
             aria-hidden
             title={spanUI.label}
             style={{ backgroundColor: spanUI.color }}
             className="mt-[5px] inline-block size-2 shrink-0 rounded-full"
-          ></Txt>
+          />
         )}
         {/* Searchable: the span name is what the timeline search matches on. When the match
             is in the span's payload instead, the whole name is painted in the indirect color
