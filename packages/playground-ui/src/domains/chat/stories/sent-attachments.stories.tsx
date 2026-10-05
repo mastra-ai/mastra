@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. Sent cards and user messages share the same borderless surface, radius, and subtle elevation. Image captions sit over a gradient with progressively masked blur. Images, PDFs and text support previews; spreadsheets and other binary files use file entries. ComposerAttachment remains separate.',
+          'The shared sent-attachment component used by Studio and Factory through UserFilePartRenderer. Sent cards and user messages share the same borderless surface, radius, and subtle elevation. Image previews add a faint inset outline and a frosted caption with progressive blur and theme-aware tint. The outer card clips the square overlay layers. Images, PDFs and text support previews; spreadsheets and other binary files use file entries. ComposerAttachment remains separate.',
       },
     },
   },
