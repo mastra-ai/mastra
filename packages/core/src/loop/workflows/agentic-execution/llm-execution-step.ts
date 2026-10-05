@@ -3314,6 +3314,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
         processorRetryCount: context.inputData.processorRetryCount,
         fallbackModelIndex: attempt.fallbackModelIndex ?? context.inputData.fallbackModelIndex,
+        ...(context.inputData.skipUnavailableAttachments ? { skipUnavailableAttachments: true } : {}),
       };
       if (aborted) {
         const abortReason = options?.abortSignal?.reason;
