@@ -2,7 +2,19 @@
 '@mastra/playground-ui': minor
 ---
 
-Added shared headline, introduction, and uppercase section-label roles to Txt. Txt supports text elements only; native containers and controls retain their markup, default typography, and child composition.
+**Text roles**
+
+Added shared headline, introduction, and uppercase section-label roles to Txt:
+
+```tsx
+<Txt as="h1" variant="hero">Welcome</Txt>
+<Txt variant="lead">Introduction</Txt>
+<Txt as="span" variant="eyebrow">Recent activity</Txt>
+```
+
+**Text elements and component ownership**
+
+Txt supports text elements only; native containers and controls retain their markup, default typography, and child composition.
 
 Migrate text-only div usages to paragraphs:
 
@@ -14,6 +26,8 @@ Migrate text-only div usages to paragraphs:
 <Txt as="p" variant="body">Content</Txt>
 ```
 
-Keep a native layout wrapper for controls or multiple blocks. Use Code for preformatted code and Txt at the text leaf. Shared components continue to own their typography through existing size and semantic variants, without generic text-role forwarding props.
+Keep a native layout wrapper for controls or multiple blocks. Use Code for preformatted code and Txt at the text leaf. Shared components continue to own their typography through existing size and semantic variants, without generic text-role forwarding props. Command groups retain compact uppercase headings.
 
-CodeEditor accepts `font="body"` for prose editors and defaults to `font="mono"` for code. Command groups retain compact uppercase headings.
+**Editor fonts**
+
+CodeEditor accepts `font="body"` for prose editors and defaults to `font="mono"` for code.
