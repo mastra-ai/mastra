@@ -41,7 +41,10 @@ vi.mock('../components/obi-loader.js', () => ({
 vi.mock('../theme.js', () => ({
   theme: {
     fg: (_tone: string, value: string) => value,
+    bold: (value: string) => value,
+    getTheme: () => ({ accent: '#62f69d' }),
   },
+  displayModeColor: (color: string) => color,
   mastra: {
     orange: '#f97316',
     pink: '#ec4899',
@@ -185,19 +188,32 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('Using fallback OpenAI (Anthropic failed)');
   });
 
-  it('shows active elapsed time directly after the model name', () => {
+  it('shows active elapsed time in the Working row instead of the status line', () => {
     vi.useFakeTimers();
     vi.setSystemTime(62_000);
     const state = createState();
+    state.activityLine = { setText: vi.fn() };
     state.agentRunStartedAt = 1_000;
+    state.tokensPerSec = 48;
     state.controller.session.model.get.mockReturnValue('openai/gpt-5');
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('openai/gpt-5 1m1s');
-    expect(rendered).not.toContain('worked for');
+    const activity = state.activityLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5');
+    expect(rendered).not.toContain('1m1s');
+    expect(activity).toContain('Working 1m1s · 48 tok/s · esc to interrupt');
     vi.useRealTimers();
+  });
+
+  it('clears the Working row when the agent is idle', () => {
+    const state = createState();
+    state.activityLine = { setText: vi.fn() };
+
+    updateStatusLine(state);
+
+    expect(state.activityLine.setText).toHaveBeenCalledWith('');
   });
 
   it('keeps successful completed run timing beside the model with a checkmark', () => {
@@ -285,15 +301,14 @@ describe('updateStatusLine', () => {
     const state = createState();
     state.currentThreadTitle = 'A very long thread title that must be truncated';
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
-    process.stdout.columns = 70;
+    process.stdout.columns = 80;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(70);
+    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(80);
     expect(rendered).toContain('PR#17439');
     expect(rendered).toContain('60/120k');
-    expect(rendered).not.toContain('━━━━━━━━━━');
   });
 
   it('shows the PR label without a thread title or branch and uses orange for high priority', () => {
@@ -410,14 +425,12 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('judge');
-    expect(rendered).toContain('openai/gpt-5.4-mini');
+    expect(rendered).toMatch(/^ judge · openrouter\/openai\/gpt-5\.4-mini/);
     expect(rendered).not.toContain('goal');
     expect(rendered).not.toContain('anthropic/claude-sonnet-4-20250514');
-    expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
-  it('shows the thread title in the center and abbreviates it when needed', () => {
+  it('shows the thread title as the location and truncates it when needed', () => {
     const state = createState();
     state.currentThreadTitle = 'A much longer generated thread title that should appear';
     state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
@@ -426,11 +439,22 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('A much longe..d appear');
+    expect(rendered).toContain('A much longer');
+    expect(rendered).toContain('…');
     expect(rendered).toContain('60/120k');
-    expect(rendered).not.toContain('━━━━━━━━━━');
     expect(rendered).not.toContain('feature/super-long-branch');
-    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux');
+    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(80);
+  });
+
+  it('shows the project path and branch when there is no thread title', () => {
+    const state = createState();
+    state.projectInfo.rootPath = '/repo/acme-api';
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toBe(
+      ' anthropic/claude-sonnet-4-20250514 · 60/120k↓ 50% · /repo/acme-api (feat/mc-queueing-ux)',
+    );
   });
 
   it('shows active goal duration instead of attempt count', () => {
@@ -452,17 +476,17 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('goal 1hr10m');
-    expect(rendered).not.toContain('· goal');
+    expect(rendered).toContain(' · goal 1hr10m · ');
     expect(rendered).not.toContain('goal attempt');
     expect(rendered).not.toContain('1/20');
     vi.useRealTimers();
   });
 
-  it('places goal after run duration, hides a matching goal time, and puts throughput before context', () => {
+  it('hides a goal time that matches the active run and keeps throughput out of the status line', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:30.000Z'));
     const state = createState();
+    state.activityLine = { setText: vi.fn() };
     state.agentRunStartedAt = Date.parse('2026-05-15T12:00:00.000Z');
     state.tokensPerSec = 80;
     state.goalManager = {
@@ -475,16 +499,10 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0] as string;
-    expect(rendered).toContain('30s · goal');
+    expect(rendered).toContain(' · goal · ');
     expect(rendered).not.toContain('goal <1m');
-    expect(rendered).toMatch(/ 80 t\/s\s+━━━━━━━━━━/);
-    expect(rendered).not.toContain('tok/s');
-
-    state.tokensPerSec = 120;
-    updateStatusLine(state);
-    const renderedOver100 = state.statusLine.setText.mock.calls[1]?.[0] as string;
-    expect(renderedOver100).toMatch(/120 t\/s\s+━━━━━━━━━━/);
-    expect(renderedOver100.indexOf(state.projectInfo.gitBranch)).toBe(rendered.indexOf(state.projectInfo.gitBranch));
+    expect(rendered).not.toContain('t/s');
+    expect(state.activityLine.setText.mock.calls[0]?.[0]).toContain('30s · 80 tok/s');
   });
 
   it('freezes active goal duration while waiting for user input', () => {
@@ -563,39 +581,34 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('anthropic/claude-sonnet-4-20250514');
   });
 
-  it('renders one unified context indicator with combined totals and savings', () => {
+  it('renders the context as combined totals, savings arrow and percentage', () => {
     const state = createState();
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('━━━━━━━━━━  60/120k↓ ');
-    expect(rendered.indexOf('feat/mc-queueing-ux')).toBeLessThan(rendered.indexOf('━━━━━━━━━━'));
-    expect(rendered).toMatch(/━━━━━━━━━━  60\/120k↓ $/);
+    expect(rendered).toContain(' · 60/120k↓ 50% · ');
+    expect(rendered).not.toContain('━');
     expect(rendered).not.toContain('messages');
     expect(rendered).not.toContain('memory');
   });
 
-  it('keeps the indicator anchored when the savings arrow disappears', () => {
+  it('drops the savings arrow when nothing is buffered', () => {
     const state = createState();
-    updateStatusLine(state);
-    const withSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
-
     const displayState = state.session.displayState.get();
     displayState.omProgress.buffered.observations.projectedMessageRemoval = 0;
     displayState.omProgress.buffered.reflection.inputObservationTokens = 3_000;
     displayState.omProgress.buffered.reflection.observationTokens = 3_000;
     state.session.displayState.get.mockReturnValue(displayState);
-    state.statusLine.setText.mockClear();
-    updateStatusLine(state);
-    const withoutSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
 
-    expect(withoutSavings).not.toContain('↓');
-    expect(withoutSavings.indexOf('━━━━━━━━━━')).toBe(withSavings.indexOf('━━━━━━━━━━'));
-    expect(visibleWidthMock(withoutSavings)).toBe(visibleWidthMock(withSavings));
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0] as string;
+    expect(rendered).toContain(' · 60/120k 50% · ');
+    expect(rendered).not.toContain('↓');
   });
 
-  it('drops only the context bar before core status content at 60 columns', () => {
+  it('shortens the location before dropping core status content at 60 columns', () => {
     const state = createState();
     process.stdout.columns = 60;
 
@@ -603,13 +616,13 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('feat/mc-que');
+    expect(rendered).toContain('…');
     expect(rendered).toContain('60/120k');
-    expect(rendered).not.toContain('━━━━━━━━━━');
+    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(60);
   });
 
-  it('keeps the provider animation active while animating the message segment', () => {
+  it('sweeps the context counter in the mode color while messages buffer', () => {
     const state = createState();
-    process.stdout.columns = 200;
     state.controller.listModes.mockReturnValue([
       { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
       { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
@@ -625,23 +638,12 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
-    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
-      'anthropic/claude-sonnet-4-20250514',
-      '━━━',
-    ]);
-    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#00ff00', 0);
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k↓ ');
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('60/120k↓', 0.5, '#00ff00', 0);
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('<sweep>60/120k↓</sweep> 50%');
   });
 
-  it('keeps the provider animation active while animating the memory segment', () => {
+  it('sweeps the context counter in blue while observations buffer', () => {
     const state = createState();
-    process.stdout.columns = 200;
-    state.controller.listModes.mockReturnValue([
-      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
-      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
-    ]);
     const displayState = state.session.displayState.get();
     state.session.displayState.get.mockReturnValue({ ...displayState, bufferingObservations: true });
     state.gradientAnimator = {
@@ -652,27 +654,11 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
-    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
-      'anthropic/claude-sonnet-4-20250514',
-      '━━',
-    ]);
-    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#2563eb', 0.1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('60/120k↓', 0.25, '#3b82f6', 0.1);
   });
 
-  it('keeps the provider animation active while animating both occupied segments', () => {
+  it('does not animate the model name while the agent runs', () => {
     const state = createState();
-    process.stdout.columns = 200;
-    state.controller.listModes.mockReturnValue([
-      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
-      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
-    ]);
-    const displayState = state.session.displayState.get();
-    state.session.displayState.get.mockReturnValue({
-      ...displayState,
-      bufferingMessages: true,
-      bufferingObservations: true,
-    });
     state.gradientAnimator = {
       isRunning: vi.fn(() => true),
       getOffset: vi.fn(() => 0.5),
@@ -681,11 +667,6 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(3);
-    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
-      'anthropic/claude-sonnet-4-20250514',
-      '━━',
-      '━━━',
-    ]);
+    expect(applyGradientSweepMock).not.toHaveBeenCalled();
   });
 });
