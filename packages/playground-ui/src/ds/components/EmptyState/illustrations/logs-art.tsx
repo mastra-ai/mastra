@@ -3,146 +3,146 @@ export function LogsArt() {
     <>
       <g opacity="0.5">
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 17.0238 60.5679)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 17.024 60.568)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 31.4191 52.1576)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 31.419 52.158)"
           className="fill-background"
           stroke="currentColor"
         />
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 33.5431 70.8252)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 33.543 70.825)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 47.9385 62.4149)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 47.938 62.415)"
           className="fill-background"
           stroke="currentColor"
         />
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 50.0625 81.083)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 50.063 81.083)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 64.4579 72.6728)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 64.458 72.673)"
           className="fill-background"
           stroke="currentColor"
         />
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 66.5818 91.3403)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 66.582 91.34)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 80.9771 82.9301)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 80.977 82.93)"
           className="fill-background"
           stroke="currentColor"
         />
       </g>
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 17.3683 55.6152)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 17.368 55.615)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 31.7636 47.205)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 31.764 47.205)"
           className="fill-background"
           stroke="currentColor"
         />
       </g>
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-75 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-75 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 33.8876 65.8726)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 33.888 65.873)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 48.283 57.4623)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 48.283 57.462)"
           className="fill-background"
           stroke="currentColor"
         />
       </g>
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-150 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-150 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 50.407 76.1304)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 50.407 76.13)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 64.8024 67.7201)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 64.802 67.72)"
           className="fill-background"
           stroke="currentColor"
         />
       </g>
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-200 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-200 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <circle
-          cx="6.18729"
-          cy="6.18729"
-          r="5.68729"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 66.9263 86.3877)"
+          cx="6.187"
+          cy="6.187"
+          r="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 66.926 86.388)"
           className="fill-background"
           stroke="currentColor"
         />
         <rect
-          x="0.849545"
+          x="0.85"
           width="164.731"
-          height="11.3731"
-          rx="5.68654"
-          transform="matrix(0.849545 -0.527517 0.849545 0.527517 81.3215 77.9774)"
+          height="11.373"
+          rx="5.687"
+          transform="matrix(0.85 -0.528 0.85 0.528 81.322 77.977)"
           className="fill-background"
           stroke="currentColor"
         />

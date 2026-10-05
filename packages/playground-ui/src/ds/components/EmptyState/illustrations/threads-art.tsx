@@ -3,125 +3,125 @@ export function ThreadsArt() {
     <>
       <rect
         opacity="0.5"
-        x="0.966926"
-        width="57.9559"
-        height="4.68411"
-        rx="2.34205"
-        transform="matrix(0.850337 -0.526239 0.850337 0.526239 37.4949 79.5533)"
+        x="0.967"
+        width="57.956"
+        height="4.684"
+        rx="2.342"
+        transform="matrix(0.85 -0.526 0.85 0.526 37.495 79.553)"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <rect
-          x="0.966926"
-          width="57.9559"
-          height="4.68411"
-          rx="2.34205"
-          transform="matrix(0.850337 -0.526239 0.850337 0.526239 37.4949 76.5616)"
+          x="0.967"
+          width="57.956"
+          height="4.684"
+          rx="2.342"
+          transform="matrix(0.85 -0.526 0.85 0.526 37.495 76.562)"
           className="fill-background"
           stroke="currentColor"
-          strokeWidth="1.13711"
+          strokeWidth="1.137"
         />
       </g>
       <rect
         opacity="0.5"
-        x="0.966926"
-        width="57.9559"
-        height="4.68411"
-        rx="2.34205"
-        transform="matrix(0.850337 -0.526239 0.850337 0.526239 31.3959 41.3399)"
+        x="0.967"
+        width="57.956"
+        height="4.684"
+        rx="2.342"
+        transform="matrix(0.85 -0.526 0.85 0.526 31.396 41.34)"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <rect
-          x="0.966926"
-          width="57.9559"
-          height="4.68411"
-          rx="2.34205"
-          transform="matrix(0.850337 -0.526239 0.850337 0.526239 31.3959 38.3482)"
+          x="0.967"
+          width="57.956"
+          height="4.684"
+          rx="2.342"
+          transform="matrix(0.85 -0.526 0.85 0.526 31.396 38.348)"
           className="fill-background"
           stroke="currentColor"
-          strokeWidth="1.13711"
+          strokeWidth="1.137"
         />
       </g>
       <rect
         opacity="0.5"
-        x="0.966926"
-        width="61.7083"
-        height="4.68411"
-        rx="2.34205"
-        transform="matrix(0.850337 -0.526239 0.850337 0.526239 45.751 84.6626)"
+        x="0.967"
+        width="61.708"
+        height="4.684"
+        rx="2.342"
+        transform="matrix(0.85 -0.526 0.85 0.526 45.751 84.663)"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <rect
-          x="0.966926"
-          width="61.7083"
-          height="4.68411"
-          rx="2.34205"
-          transform="matrix(0.850337 -0.526239 0.850337 0.526239 45.751 81.6705)"
+          x="0.967"
+          width="61.708"
+          height="4.684"
+          rx="2.342"
+          transform="matrix(0.85 -0.526 0.85 0.526 45.751 81.671)"
           className="fill-background"
           stroke="currentColor"
-          strokeWidth="1.13711"
+          strokeWidth="1.137"
         />
       </g>
       <rect
         opacity="0.5"
-        x="0.966926"
-        width="45.0009"
-        height="4.68411"
-        rx="2.34205"
-        transform="matrix(0.850337 -0.526239 0.850337 0.526239 39.6513 46.4493)"
+        x="0.967"
+        width="45.001"
+        height="4.684"
+        rx="2.342"
+        transform="matrix(0.85 -0.526 0.85 0.526 39.651 46.449)"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <rect
-          x="0.966926"
-          width="45.0009"
-          height="4.68411"
-          rx="2.34205"
-          transform="matrix(0.850337 -0.526239 0.850337 0.526239 39.6513 43.4576)"
+          x="0.967"
+          width="45.001"
+          height="4.684"
+          rx="2.342"
+          transform="matrix(0.85 -0.526 0.85 0.526 39.651 43.458)"
           className="fill-background"
           stroke="currentColor"
-          strokeWidth="1.13711"
+          strokeWidth="1.137"
         />
       </g>
       <rect
         opacity="0.5"
-        x="0.966926"
-        width="42.6753"
-        height="4.68411"
-        rx="2.34205"
-        transform="matrix(0.850337 -0.526239 0.850337 0.526239 54.0063 89.7715)"
+        x="0.967"
+        width="42.675"
+        height="4.684"
+        rx="2.342"
+        transform="matrix(0.85 -0.526 0.85 0.526 54.006 89.772)"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
-      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/illustration:-translate-y-1">
+      <g className="motion-safe:transition-[translate,rotate] motion-safe:delay-100 motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/empty-state:-translate-y-1">
         <rect
-          x="0.966926"
-          width="42.6753"
-          height="4.68411"
-          rx="2.34205"
-          transform="matrix(0.850337 -0.526239 0.850337 0.526239 54.0063 86.7798)"
+          x="0.967"
+          width="42.675"
+          height="4.684"
+          rx="2.342"
+          transform="matrix(0.85 -0.526 0.85 0.526 54.006 86.78)"
           className="fill-background"
           stroke="currentColor"
-          strokeWidth="1.13711"
+          strokeWidth="1.137"
         />
       </g>
       <path
         opacity="0.5"
-        d="M33.798 74.5972L87.5054 41.3598C91.2546 39.0396 97.3332 39.0398 101.083 41.3598L119.229 52.5902C122.979 54.9105 122.979 58.6723 119.229 60.9926L66.1216 93.8588L66.1075 94.0197L65.3277 102.512L33.798 82.9995C30.0491 80.6793 30.0491 76.9174 33.798 74.5972Z"
+        d="m33.8 74.6 53.7-33.24c3.75-2.32 9.83-2.32 13.58 0l18.15 11.23c3.75 2.32 3.75 6.08 0 8.4l-53.1 32.87-.02.16-.78 8.5L33.8 83c-3.75-2.32-3.75-6.08 0-8.4"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
       <path
         opacity="0.5"
-        d="M81.0333 4.09379L27.3259 37.3311C23.5767 39.6513 23.5769 43.4131 27.3259 45.7335L37.7143 52.1624C41.4636 54.4825 47.5423 54.4826 51.2915 52.1624L104.399 19.2961L104.659 19.2874L118.381 18.8043L94.6105 4.09379C90.8612 1.77376 84.7826 1.77376 81.0333 4.09379Z"
+        d="m81.03 4.1-53.7 33.23c-3.75 2.32-3.75 6.08 0 8.4l10.38 6.43c3.75 2.32 9.83 2.32 13.58 0l53.1-32.86.27-.01 13.72-.49L94.61 4.1c-3.75-2.33-9.83-2.33-13.58 0"
         stroke="currentColor"
-        strokeWidth="1.13711"
+        strokeWidth="1.137"
       />
     </>
   );

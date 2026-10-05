@@ -15,7 +15,22 @@ import { ServerErrorArt } from './illustrations/server-error-art';
 import { ThreadsArt } from './illustrations/threads-art';
 import { TracesArt } from './illustrations/traces-art';
 
-const artByName = {
+export type EmptyStateIllustrationName =
+  | 'traces'
+  | 'logs'
+  | 'api-keys'
+  | 'environments'
+  | 'requests'
+  | 'databases'
+  | 'threads'
+  | 'deploys'
+  | 'disconnected'
+  | 'locked'
+  | 'rate-limited'
+  | 'server-error'
+  | 'not-a-member';
+
+const artByName: Record<EmptyStateIllustrationName, (props: { id: string }) => ReactNode> = {
   traces: TracesArt,
   logs: LogsArt,
   'api-keys': ApiKeysArt,
@@ -29,16 +44,14 @@ const artByName = {
   'rate-limited': RateLimitedArt,
   'server-error': ServerErrorArt,
   'not-a-member': NotAMemberArt,
-} satisfies Record<string, (props: { id: string }) => ReactNode>;
-
-export type EmptyStateIllustrationName = keyof typeof artByName;
+};
 
 export function EmptyStateIllustration({ name }: { name: EmptyStateIllustrationName }) {
   const id = useId().replace(/[^\w-]/g, '');
   const Art = artByName[name];
 
   return (
-    <div className="group/illustration mb-5 w-30 max-w-full text-foreground group-data-[tone=error]/empty-state:text-destructive-indicator">
+    <div className="mb-5 w-30 max-w-full text-foreground group-data-[tone=error]/empty-state:text-destructive-indicator">
       <svg
         viewBox="0 0 120 120"
         fill="none"
