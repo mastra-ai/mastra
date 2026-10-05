@@ -13,7 +13,7 @@
  * - `toolCalls`      → tool routing (id, name, args), independent of order
  * - `toolResults`    → tool outputs, independent of order
  * - `stepCount`      → loop-iteration count (catches stopWhen drift)
- * - `chunks`         → `from:type` sequence of `fullStream`
+ * - `chunks`         → `from:type` sequence of `fullStream` (`from:type:toolName` for tool chunks)
  * - `streamedText`   → concatenated `text-delta` payloads
  * - `finishChunk`    → payload keys, reason and usage of the last `finish` chunk
  * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
@@ -92,7 +92,7 @@ export interface ParitySnapshot {
   /** Sorted to match `toolCalls`. */
   toolResults: Array<{ toolCallId: string; toolName: string; result: unknown }>;
   stepCount: number;
-  /** `${from}:${type}` for every chunk on `fullStream`, in order. */
+  /** `${from}:${type}` for every chunk on `fullStream`, in order, with `:${toolName}` appended when the payload has one. */
   chunks: string[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
@@ -115,7 +115,10 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
   let streamedText = '';
   let finishPayload: any;
   for await (const chunk of output.fullStream as AsyncIterable<{ from?: string; type: string; payload?: any }>) {
-    chunks.push(`${chunk.from}:${chunk.type}`);
+    // Tool chunks carry their tool name so a swapped tool order shows up here;
+    // toolCallIds are compared through `toolCalls`/`toolResults`.
+    const toolName = chunk.payload?.toolName;
+    chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
     if (chunk.type === 'text-delta') streamedText += chunk.payload?.text ?? '';
     if (chunk.type === 'finish') finishPayload = chunk.payload ?? {};
   }
@@ -470,7 +473,7 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
 /**
  * Keys plain's `finish` chunk payload carries that durable and evented omit.
  * Found by harness case T29 (engine comparison FAIL, batch
- * 2026-09-25T16-30-32.791Z); no ticket yet. Every scenario hits it, so it is
+ * 2026-09-25T16-30-32.791Z); tracked as COR-1390. Every scenario hits it, so it is
  * declared once here instead of in each case's `differences`. Which of these
  * keys plain emits depends on the scenario (`response` only appears with
  * memory), so only the keys plain emits on a turn are excused, and the check

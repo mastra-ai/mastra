@@ -86,6 +86,50 @@ describe('expectEngineParity', () => {
     }
   });
 
+  it('fails when an engine emits the same tool calls in a different order', async () => {
+    const tool = (id: string) =>
+      createTool({ id, description: id, inputSchema: z.object({}), execute: async () => `${id} done` });
+    const twoToolCalls = (order: string[]) => [
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id: 'parity-id-tool', modelId: 'parity-model', timestamp: new Date(0) },
+      ...order.map(toolName => ({
+        type: 'tool-call',
+        toolCallId: `call-${toolName}`,
+        toolName,
+        input: '{}',
+        providerExecuted: false,
+      })),
+      { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+    ];
+    // The script cannot see the engine, so durable's model reverses the tool calls.
+    let reversed = false;
+
+    const error = await expectEngineParity({
+      model: {
+        respond: (_request, callIndex) =>
+          callIndex === 0 ? twoToolCalls(reversed ? ['second', 'first'] : ['first', 'second']) : textOnlyTape('Done.'),
+      },
+      buildAgent: ({ engine, model }) => {
+        reversed = engine === 'durable';
+        return new Agent({
+          id: 'parity-tool-order',
+          name: 'Tool Order',
+          instructions: 'Use both tools',
+          model,
+          tools: { first: tool('first'), second: tool('second') },
+        });
+      },
+      input: 'use both',
+      options: { maxSteps: 2 },
+    }).catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain('durable differs from plain at turns[0].chunks');
+    expect(message).toContain('AGENT:tool-call:first');
+    expect(message).not.toContain('evented differs');
+  });
+
   it('records one request per model call with the prompt sent', async () => {
     const results = await expectEngineParity({
       model: { respond: request => textOnlyTape(`answer to: ${lastUserText(request)}`) },

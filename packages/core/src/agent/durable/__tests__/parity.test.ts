@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { expectEngineParity, textOnlyTape } from './parity-harness';
+import { expectEngineParity, PARITY_ENGINES, textOnlyTape, toolCallTape } from './parity-harness';
 
 describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
   describe('basic text streaming', () => {
@@ -36,14 +36,31 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
       });
     });
 
-    // TODO(parity): DurableAgent stops after the tool-call step with
-    // `finishReason: 'tool-calls'` and `stepCount: 1`, while Agent continues
-    // to a second LLM step and produces `text: 'Echoed: hi'`. The tool-call
-    // chunk fields (`toolCallId`, `toolName`, `args`) also round-trip as
-    // `undefined` through the durable serialization layer. Tracked under the
-    // broader serialization/loop-continuation gap — flip this back on once
-    // tool-call round-tripping is verified.
-    it.todo('preserves multi-step accumulated usage across tool→text');
+    it('preserves multi-step accumulated usage across tool→text', async () => {
+      const echo = createTool({
+        id: 'echo',
+        description: 'Echo the input',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }) => `echo:${value}`,
+      });
+
+      const results = await expectEngineParity({
+        model: { tapes: [toolCallTape('echo', { value: 'hi' }), textOnlyTape('Echoed: hi')] },
+        buildAgent: ({ model }) =>
+          new Agent({ id: 'parity-tool-text', name: 'Tool Text', instructions: 'Use echo', model, tools: { echo } }),
+        input: 'echo hi',
+        options: { maxSteps: 2 },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        const turn = results[engine]!.turns.at(-1)!;
+        expect(turn.stepCount).toBe(2);
+        expect(turn.finishReason).toBe('stop');
+        expect(turn.text).toBe('Echoed: hi');
+        // Tool step (15/10/25) plus text step (10/20/30).
+        expect(turn.usage).toEqual({ inputTokens: 25, outputTokens: 30, totalTokens: 55 });
+      }
+    });
   });
 
   describe('activeTools filtering', () => {
