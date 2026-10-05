@@ -168,14 +168,14 @@
       "header": {
         "borderBottomWidth": "1px",
         "borderTopWidth": "0px",
-        "bottom": "oklch(1 0 0 / 0.09)",
+        "bottom": "oklch(1 0 0 / 0.05)",
         "box": {
           "height": 40,
           "width": 592,
           "x": 32,
           "y": 142.9375
         },
-        "top": "oklch(1 0 0 / 0.09)"
+        "top": "oklch(1 0 0 / 0.05)"
       },
       "sidebar": {
         "borderBottomWidth": "0px",
@@ -372,14 +372,14 @@
       "header": {
         "borderBottomWidth": "1px",
         "borderTopWidth": "0px",
-        "bottom": "oklch(0.205 0 0 / 0.09)",
+        "bottom": "oklch(0 0 0 / 0.08)",
         "box": {
           "height": 40,
           "width": 592,
           "x": 32,
           "y": 142.9375
         },
-        "top": "oklch(0.205 0 0 / 0.09)"
+        "top": "oklch(0 0 0 / 0.08)"
       },
       "sidebar": {
         "borderBottomWidth": "0px",

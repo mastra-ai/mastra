@@ -1,6 +1,6 @@
 {
   "before": "73aaaca04e0777f175f7274f5f98bc729cbc173a",
-  "after": "ce679e650704964920cbb696d791f5da372c75cd",
+  "after": "3aeb3be55919d791ef5848c840778244a8491ac3",
   "viewport": [
     1280,
     690
@@ -22,5 +22,5 @@
   "state": "Resting borders: inputs blurred and pointer outside components. No border-style overrides.",
   "fixture": "call-sites-fixture.tsx; substitute __CHECKOUT_ROOT__ with the corresponding checkout path. Sidebar contents are sample text.",
   "styling": "Each checkout uses its own playground-ui theme and source CSS. Include the two consumer source files in Tailwind scanning and Factory's authored --radius-card: 1.375rem. Unchanged DS dependencies used by consumer components resolve to the shared installed build.",
-  "verification": "All 8 measured border edges differ in computed color between revisions; bounding boxes match exactly. No browser errors."
+  "verification": "Header keeps the same rim color in both revisions; the other 7 measured border edges change color. All bounding boxes match exactly. Default, framed, and borderless Header states pass in both themes. No browser errors."
 }

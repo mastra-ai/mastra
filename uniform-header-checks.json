@@ -1,0 +1,62 @@
+[
+  {
+    "story": "default",
+    "color": "oklch(1 0 0 / 0.05)",
+    "rim": "oklch(1 0 0 / 0.05)",
+    "theme": "dark",
+    "width": "1px"
+  },
+  {
+    "story": "in-frame",
+    "color": "oklch(1 0 0 / 0.05)",
+    "frame": "oklch(1 0 0 / 0.03) 0px 1px 0px 0px inset, oklch(1 0 0 / 0.05) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0) 0px 0px 0px 9999px inset, oklch(0 0 0 / 0.22) 0px 1px 2px -1px, oklch(0 0 0 / 0.14) 0px 2px 3px -2px",
+    "rim": "oklch(1 0 0 / 0.05)",
+    "theme": "dark",
+    "width": "1px"
+  },
+  {
+    "story": "no-border",
+    "color": "oklch(1 0 0 / 0.09)",
+    "rim": "oklch(1 0 0 / 0.05)",
+    "theme": "dark",
+    "width": "0px"
+  },
+  {
+    "story": "in-frame&args=border:false",
+    "color": "oklch(1 0 0 / 0.09)",
+    "frame": "oklch(1 0 0 / 0.03) 0px 1px 0px 0px inset, oklch(1 0 0 / 0.05) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0) 0px 0px 0px 9999px inset, oklch(0 0 0 / 0.22) 0px 1px 2px -1px, oklch(0 0 0 / 0.14) 0px 2px 3px -2px",
+    "rim": "oklch(1 0 0 / 0.05)",
+    "theme": "dark",
+    "width": "0px"
+  },
+  {
+    "story": "default",
+    "color": "oklch(0 0 0 / 0.08)",
+    "rim": "oklch(0 0 0 / 0.08)",
+    "theme": "light",
+    "width": "1px"
+  },
+  {
+    "story": "in-frame",
+    "color": "oklch(0 0 0 / 0.08)",
+    "frame": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0 0 0 / 0.08) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0) 0px 0px 0px 9999px inset, oklch(0 0 0 / 0.05) 0px 1px 2px -1px, oklch(0 0 0 / 0.04) 0px 1px 3px -2px",
+    "rim": "oklch(0 0 0 / 0.08)",
+    "theme": "light",
+    "width": "1px"
+  },
+  {
+    "story": "no-border",
+    "color": "oklch(0.205 0 0 / 0.09)",
+    "rim": "oklch(0 0 0 / 0.08)",
+    "theme": "light",
+    "width": "0px"
+  },
+  {
+    "story": "in-frame&args=border:false",
+    "color": "oklch(0.205 0 0 / 0.09)",
+    "frame": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0 0 0 / 0.08) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0) 0px 0px 0px 9999px inset, oklch(0 0 0 / 0.05) 0px 1px 2px -1px, oklch(0 0 0 / 0.04) 0px 1px 3px -2px",
+    "rim": "oklch(0 0 0 / 0.08)",
+    "theme": "light",
+    "width": "0px"
+  }
+]

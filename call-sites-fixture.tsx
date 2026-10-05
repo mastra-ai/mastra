@@ -21,7 +21,7 @@ export const CallSites: Story = {
     <div className="grid grid-cols-2 items-start gap-8">
      <div className="flex flex-col gap-7">
       <section data-example="header">
-       <Txt variant="label" className="mb-3">Content header</Txt>
+       <Txt variant="label" className="mb-3">Layout header</Txt>
        <Header><HeaderTitle>Templates</HeaderTitle></Header>
       </section>
       <section data-example="composer">
