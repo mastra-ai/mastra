@@ -2439,6 +2439,25 @@ export class EventedRun<
           resourceId: this.resourceId,
         },
       });
+
+      if (this.parentWorkflow) {
+        await requireFGA({
+          fgaProvider,
+          user: params.requestContext?.get('user' as any),
+          resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.parentWorkflow.workflowId) },
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+          requestContext: params.requestContext,
+          actor: params.actor,
+          context: {
+            resourceId: this.resourceId,
+          },
+          metadata: {
+            workflowId: this.parentWorkflow.workflowId,
+            runId: this.parentWorkflow.runId,
+            resourceId: this.resourceId,
+          },
+        });
+      }
     }
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');

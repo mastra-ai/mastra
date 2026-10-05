@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createStep, createWorkflow } from '.';
 
@@ -210,6 +211,92 @@ describe('evented concurrent resume', () => {
         .toBe('success');
     } finally {
       releaseAlphaResume();
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('requires permission to execute the parent before directly resuming a nested child', async () => {
+    const childStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) await suspend({ item: inputData.item });
+        return inputData.item;
+      },
+    });
+    const childWorkflow = createWorkflow({
+      id: 'evented-authorized-child-workflow',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+    })
+      .then(childStep)
+      .commit();
+    const parentWorkflow = createWorkflow({
+      id: 'evented-unauthorized-parent-workflow',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+    })
+      .then(childWorkflow)
+      .commit();
+    const storage = new MockStore();
+    const fgaProvider = {
+      require: vi.fn(async (_user, { resource }: { resource: { id: string } }) => {
+        if (resource.id === parentWorkflow.id) throw new Error('parent execution denied');
+      }),
+      check: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { [parentWorkflow.id]: parentWorkflow, [childWorkflow.id]: childWorkflow },
+      server: { fga: fgaProvider },
+    });
+
+    await mastra.startWorkers();
+    try {
+      const parentRun = await parentWorkflow.createRun({ resourceId: 'tenant-1' });
+      await expect(
+        parentRun.start({
+          inputData: { item: 'widget' },
+          actor: { actorKind: 'system', sourceWorkflow: 'test-setup' },
+        }),
+      ).resolves.toMatchObject({ status: 'suspended' });
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: parentWorkflow.id,
+        runId: parentRun.runId,
+      });
+      const childRunId = (parentSnapshot?.context?.[childWorkflow.id] as any)?.suspendPayload?.__workflow_meta?.runId;
+      expect(childRunId).toEqual(expect.any(String));
+
+      const childRun = await childWorkflow.createRun({ runId: childRunId, resourceId: 'tenant-1' });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(childRun.resume({ resumeData: { approved: true }, requestContext })).rejects.toThrow(
+        'parent execution denied',
+      );
+      expect(fgaProvider.require).toHaveBeenCalledTimes(2);
+      expect(fgaProvider.require).toHaveBeenLastCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'workflow', id: parentWorkflow.id },
+          permission: 'workflows:execute',
+          context: expect.objectContaining({ resourceId: 'tenant-1', requestContext }),
+        }),
+      );
+      await expect(
+        workflowsStore.loadWorkflowSnapshot({ workflowName: childWorkflow.id, runId: childRunId }),
+      ).resolves.toMatchObject({ status: 'suspended' });
+      await expect(
+        workflowsStore.loadWorkflowSnapshot({ workflowName: parentWorkflow.id, runId: parentRun.runId }),
+      ).resolves.toMatchObject({ status: 'suspended' });
+    } finally {
       await mastra.stopWorkers();
     }
   });
