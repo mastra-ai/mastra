@@ -8,6 +8,7 @@
  */
 
 import type { Duplex } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
@@ -441,6 +442,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       // Docker multiplexes stdout/stderr into a single stream with 8-byte headers
       // when Tty is false. We need to parse these headers.
       const buffer: Buffer[] = [];
+      // Frame boundaries are not UTF-8 character boundaries, so a multibyte
+      // character can be split across frames. Each stream gets its own decoder
+      // because stdout and stderr frames interleave.
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
 
       stream.on('data', (chunk: Buffer) => {
         buffer.push(chunk);
@@ -458,11 +464,13 @@ export class DockerProcessManager extends SandboxProcessManager {
             break;
           }
 
-          const payload = combined.subarray(8, 8 + size).toString('utf-8');
+          const payload = combined.subarray(8, 8 + size);
           if (type === 1) {
-            handle.emitStdout(payload);
+            const text = stdoutDecoder.write(payload);
+            if (text) handle.emitStdout(text);
           } else if (type === 2) {
-            handle.emitStderr(payload);
+            const text = stderrDecoder.write(payload);
+            if (text) handle.emitStderr(text);
           }
 
           combined = combined.subarray(8 + size);
@@ -483,6 +491,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       const settle = (exitCode: number, metadata: Partial<CommandResult> = {}) => {
         if (settled) return;
         settled = true;
+        // Flush any incomplete trailing sequence before the result reads the output.
+        const stdoutRest = stdoutDecoder.end();
+        if (stdoutRest) handle.emitStdout(stdoutRest);
+        const stderrRest = stderrDecoder.end();
+        if (stderrRest) handle.emitStderr(stderrRest);
         handle._setExitCode(exitCode);
         resolve({
           success: exitCode === 0,
