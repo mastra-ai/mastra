@@ -1,6 +1,6 @@
+import { useWorkspaceSearch } from '@mastra/react/hooks';
 import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
-import { useWorkspaceSearch } from '../hooks/use-workspace-search';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
 import { Button } from '@/ds/components/Button';

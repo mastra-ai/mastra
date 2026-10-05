@@ -1,4 +1,4 @@
-import { useMastraClient } from '@mastra/react';
+import { useTraceColumnPreferencesStorageKey } from '@mastra/react/hooks';
 import { useEffect, useState } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
@@ -29,11 +29,7 @@ function writePreferences(storageKey: string, preferences: TraceColumnPreference
 }
 
 export function useTraceColumnPreferences() {
-  const client = useMastraClient();
-  const projectUrl =
-    client.options.baseUrl || (typeof window === 'undefined' ? 'local' : window.location.origin || 'local');
-  const apiPrefix = client.options.apiPrefix ?? '/api';
-  const storageKey = `mastra:traces:columns:${projectUrl}:${apiPrefix}`;
+  const storageKey = useTraceColumnPreferencesStorageKey();
   const [state, setState] = useState(() => ({
     storageKey,
     preferences: readPreferences(storageKey),

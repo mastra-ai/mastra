@@ -1,13 +1,11 @@
 import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
-import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig, useThread } from '@mastra/react/hooks';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';
 import type { OmAgentConfig } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 
 export interface MemoryDetailViewProps {
   agentId: string;

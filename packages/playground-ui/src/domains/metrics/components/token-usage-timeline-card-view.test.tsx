@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import type { TokenTimelinePoint } from '@mastra/react/hooks';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { TokenTimelinePoint } from '../hooks/use-token-usage-timeseries';
 import { TokenUsageTimelineCardView } from './token-usage-timeline-card-view';
 
 const firstPoint: TokenTimelinePoint = {

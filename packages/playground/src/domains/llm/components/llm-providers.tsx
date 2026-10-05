@@ -4,11 +4,11 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useLLMProviders } from '@mastra/react/hooks';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
-import { useLLMProviders } from '../hooks/use-llm-providers';
 import { findProviderById } from '../utils';
 import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 

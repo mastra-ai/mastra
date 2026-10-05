@@ -1,3 +1,4 @@
+import { useMcpAppTools } from '@mastra/react/hooks';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -21,7 +22,6 @@ import {
   toolInteraction,
 } from '@/domains/chat/tools/tool-card-kind';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
-import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */

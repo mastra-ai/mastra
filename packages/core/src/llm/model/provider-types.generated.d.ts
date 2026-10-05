@@ -4476,7 +4476,6 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash-fin',
     'inclusionai/ling-3.0-flash-sante',
-    'inclusionai/ling-3.0-flash-sante-free',
     'inclusionai/ling-3.0-flash-vl',
     'inclusionai/ling-3.1-flash',
     'inclusionai/ling-3.1-flash-free',
