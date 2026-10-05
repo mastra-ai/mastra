@@ -59,16 +59,10 @@ export class HttpTransport extends LoggerTransport {
     this.flushIntervalId = setInterval(() => this.backgroundFlush(), this.flushInterval);
   }
 
-  // Tracked so _destroy can wait for flushes that may re-buffer logs on failure
   private backgroundFlush(): void {
-    const flush = this._flush()
-      .catch(err => {
-        console.error('Error flushing logs to HTTP endpoint:', err);
-      })
-      .finally(() => {
-        this.inFlightFlushes.delete(flush);
-      });
-    this.inFlightFlushes.add(flush);
+    this._flush().catch(err => {
+      console.error('Error flushing logs to HTTP endpoint:', err);
+    });
   }
 
   private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
@@ -108,7 +102,19 @@ export class HttpTransport extends LoggerTransport {
     }
   }
 
-  async _flush(): Promise<void> {
+  // Every flush is tracked so _destroy can wait for ones that may re-buffer logs on failure
+  _flush(): Promise<void> {
+    const flush = this.sendBatch();
+    const tracked: Promise<void> = flush
+      .catch(() => {})
+      .finally(() => {
+        this.inFlightFlushes.delete(tracked);
+      });
+    this.inFlightFlushes.add(tracked);
+    return flush;
+  }
+
+  private async sendBatch(): Promise<void> {
     if (this.logBuffer.length === 0) {
       return;
     }

@@ -439,6 +439,33 @@ describe('HttpTransport', () => {
         expect(sentBatchSizes()).toEqual([2, 1]);
         expect(drainTransport.getBufferedLogs()).toEqual([]);
       });
+
+      it('waits for a directly called flush whose logs are restored on failure', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        let rejectFirstRequest!: (reason: Error) => void;
+        fetchMock.mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              rejectFirstRequest = reject;
+            }),
+        );
+        bufferLogs(3);
+
+        const directFlush = drainTransport._flush().catch(() => {});
+        const callback = vi.fn();
+        drainTransport._destroy(null as any, callback);
+        await Promise.resolve();
+
+        expect(callback).not.toHaveBeenCalled();
+
+        rejectFirstRequest(new Error('network down'));
+        await directFlush;
+        await vi.waitFor(() => expect(callback).toHaveBeenCalled());
+
+        expect(callback).toHaveBeenCalledWith(null);
+        expect(sentBatchSizes()).toEqual([2, 2, 1]);
+        expect(drainTransport.getBufferedLogs()).toEqual([]);
+      });
     });
   });
 
