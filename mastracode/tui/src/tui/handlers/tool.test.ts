@@ -2,7 +2,6 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
 import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
