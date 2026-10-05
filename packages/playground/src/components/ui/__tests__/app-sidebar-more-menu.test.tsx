@@ -1,4 +1,5 @@
 import type { ListWorkspacesResponse, McpServerListResponse } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 
 import { http, HttpResponse } from 'msw';
@@ -6,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { noMcpServers, noWorkspaces, oneMcpServer, oneWorkspace } from './fixtures/nav-more';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;

@@ -1,8 +1,8 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useMCPServerTool } from '@mastra/react/hooks';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';
-import { useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import { McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
 import { mcpServerCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 

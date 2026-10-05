@@ -9,7 +9,7 @@ export { ScorersToolbar, type ScorersToolbarProps } from './components/scorers-l
 export * from './components/scorer-edit-page';
 export * from './components/scorer-create-content';
 export { useScorers } from './hooks/use-scorers';
-export { useStoredScorer, useStoredScorerMutations } from './hooks/use-stored-scorers';
-export * from './hooks/use-scorer-versions';
+export { useStoredScorer, useStoredScorerMutations } from '@mastra/react/hooks';
+export * from '@mastra/react/hooks';
 export * from './components/scorer-version-combobox';
 export * from './components/scorer-create-content';

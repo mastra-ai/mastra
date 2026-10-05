@@ -1,5 +1,5 @@
+import { isModelNotAllowedError } from '@mastra/react/hooks';
 import { describe, expect, it } from 'vitest';
-import { isModelNotAllowedError } from '../is-model-not-allowed';
 
 // The wire-level code the server emits on a 422. Kept as a local literal so this
 // browser-side test never imports server-only agent-builder EE code.

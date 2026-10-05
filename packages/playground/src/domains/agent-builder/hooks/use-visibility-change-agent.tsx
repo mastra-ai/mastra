@@ -1,11 +1,11 @@
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { useStoredAgentDependents, useStoredAgentMutations } from '@mastra/react/hooks';
 import { useFormContext } from 'react-hook-form';
 
 import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
-import { useStoredAgentDependents, useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
 type Visibility = NonNullable<AgentBuilderEditFormValues['visibility']>;
 

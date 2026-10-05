@@ -3,13 +3,13 @@ import '@/test/jsdom-polyfills';
 
 import { SpanType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
+import { useTraceOrBranchSpans } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../test/msw-server';
-import { useTraceOrBranchSpans } from '../use-trace-or-branch-spans';
 import { useTraceSearch } from '../use-trace-search';
 
 const BASE_URL = 'http://localhost:4111';

@@ -1,6 +1,6 @@
+import { useAgentPlan } from '@mastra/react/hooks';
 import { Check, MessageSquareText, X } from 'lucide-react';
 import { useState } from 'react';
-import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
 import type { MessageMetadata } from '@/domains/chat';
 import { useToolCall } from '@/domains/chat/context/tool-call-context';
 import {

@@ -6,11 +6,11 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useAgents } from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useAgents } from '../../hooks/use-agents';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 

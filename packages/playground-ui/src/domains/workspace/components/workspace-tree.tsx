@@ -1,9 +1,9 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
+import { useWorkspaceDirectory } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
 import { ROOT_PATH, joinPath, parentOf } from '../path';
 import { MountIcon } from './mount-icon';
 import type { WorkspaceMount } from './mount-icon';

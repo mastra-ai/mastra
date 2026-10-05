@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
+import { useMcpAppTools } from '@mastra/react/hooks';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
@@ -29,7 +30,6 @@ import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
 import { badgeStatus, isSettledState } from '@/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@/domains/chat/tools/tool-groups';
-import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
 import { useRevealedParts } from '@/ds/components/ai/message-reveal';
 import { ToolCallGroup } from '@/ds/components/ai/tool-call';
 import { Arriving } from '@/ds/components/Arrival';

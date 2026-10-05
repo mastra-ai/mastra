@@ -1,5 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
@@ -8,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 
 import { useBuilderAgentAccess } from '../use-builder-agent-access';
 import { authDisabledCapabilities, rbacCapabilities } from './fixtures/auth';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

@@ -2,11 +2,11 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AgentImpactWarnings } from './agent-impact-warnings';
-import { useStoredAgentMutations, useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
 
 interface UseDeleteAgentActionParams {
   agentId: string;
