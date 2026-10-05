@@ -56,9 +56,7 @@ To always use one connection in code, pin it with the `connectionId` option. See
 mastra connect remove linear
 ```
 
-`remove` unlinks the connection from the project. Agents in the project lose access right away. The connection stays in your organization, so `mastra connect add` can link it again without authorizing.
-
-If the project links more than one connection for the provider, `remove` asks which one to unlink, while `--yes` unlinks all of them without asking.
+`remove` unlinks the connection from the project, and asks which one to unlink when the project has more than one for the provider. Pass `--yes` to unlink all of them without asking. Agents in the project lose access right away. The connection stays in your organization, so `mastra connect add` can link it again without authorizing.
 
 ## Fix a connection that needs reauthorization
 
