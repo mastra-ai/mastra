@@ -103,6 +103,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.ensureSkipIndexes(TABLE_THREADS);
+    await this.#db.ensureSkipIndexes(TABLE_MESSAGES);
+    await this.#db.ensureSkipIndexes(TABLE_RESOURCES);
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -605,44 +608,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (messages.length === 0) return { messages };
 
     for (const message of messages) {
-      const resourceId = message.resourceId;
-      if (!resourceId) {
+      if (!message.resourceId) {
         throw new Error('Resource ID is required');
       }
 
       if (!message.threadId) {
         throw new Error('Thread ID is required');
       }
+    }
 
-      // Check if thread exists
-      const thread = await this.getThreadById({ threadId: message.threadId });
-      if (!thread) {
+    // One lookup for every distinct thread in the batch instead of two per message.
+    const threadIdSet = await this.getLatestThreads([...new Set(messages.map(m => m.threadId!))]);
+    for (const message of messages) {
+      if (!threadIdSet.has(message.threadId!)) {
         throw new Error(`Thread ${message.threadId} not found`);
       }
     }
-
-    const threadIdSet = new Map();
-
-    await Promise.all(
-      messages.map(async m => {
-        const resourceId = m.resourceId;
-        if (!resourceId) {
-          throw new Error('Resource ID is required');
-        }
-
-        if (!m.threadId) {
-          throw new Error('Thread ID is required');
-        }
-
-        // Check if thread exists
-        const thread = await this.getThreadById({ threadId: m.threadId });
-        if (!thread) {
-          throw new Error(`Thread ${m.threadId} not found`);
-        }
-
-        threadIdSet.set(m.threadId, thread);
-      }),
-    );
 
     try {
       // Clickhouse's MergeTree engine does not support native upserts or unique constraints on (id, thread_id).
@@ -780,6 +761,38 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         error,
       );
     }
+  }
+
+  /** Newest version of each requested thread, keyed by id. Missing threads are absent. */
+  private async getLatestThreads(threadIds: string[]): Promise<Map<string, StorageThreadType>> {
+    const result = await this.client.query({
+      query: `SELECT
+          id,
+          "resourceId",
+          title,
+          metadata,
+          toDateTime64(createdAt, 3) as createdAt,
+          toDateTime64(updatedAt, 3) as updatedAt
+        FROM "${TABLE_THREADS}"
+        WHERE id IN {threadIds:Array(String)}
+        ORDER BY updatedAt DESC
+        LIMIT 1 BY id`,
+      query_params: { threadIds },
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+
+    const rows = await result.json();
+    const threads = new Map<string, StorageThreadType>();
+    for (const row of rows.data) {
+      const thread = transformRow(row) as StorageThreadType;
+      threads.set(thread.id, { ...thread, metadata: parseMetadata(thread.metadata) });
+    }
+    return threads;
   }
 
   async getThreadById({
@@ -1031,20 +1044,35 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       }
 
-      // Get total count - count AFTER ranking to ensure we count latest versions only
+      // Newest version of each thread. Filters must apply to that version, and
+      // ClickHouse cannot push them through LIMIT 1 BY, so a resourceId filter
+      // first narrows to thread ids that ever had that resource (a superset of
+      // the threads whose newest version matches). The outer WHERE is exact.
+      const idScope = filter?.resourceId
+        ? `WHERE id IN (SELECT id FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String})`
+        : '';
+      const latestThreads = `
+        latest_threads AS (
+          SELECT
+            id,
+            resourceId,
+            title,
+            metadata,
+            toDateTime64(createdAt, 3) as createdAt,
+            toDateTime64(updatedAt, 3) as updatedAt
+          FROM ${TABLE_THREADS}
+          ${idScope}
+          ORDER BY updatedAt DESC
+          LIMIT 1 BY id
+        )`;
+      const latestWhere = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
       const countResult = await this.client.query({
         query: `
-          WITH ranked_threads AS (
-            SELECT
-              id,
-              resourceId,
-              metadata,
-              ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
-            FROM ${TABLE_THREADS}
-          )
-          SELECT count(*) as total 
-          FROM ranked_threads 
-          WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
+          WITH ${latestThreads}
+          SELECT count(*) as total
+          FROM latest_threads
+          ${latestWhere}
         `,
         query_params: queryParams,
         clickhouse_settings: {
@@ -1067,21 +1095,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Get paginated threads - get newest version of each thread
-      // Important: Apply WHERE filters AFTER row ranking to ensure we filter on latest versions
       const dataResult = await this.client.query({
         query: `
-              WITH ranked_threads AS (
-                SELECT
-                  id,
-                  resourceId,
-                  title,
-                  metadata,
-                  toDateTime64(createdAt, 3) as createdAt,
-                  toDateTime64(updatedAt, 3) as updatedAt,
-                  ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
-                FROM ${TABLE_THREADS}
-              )
+              WITH ${latestThreads}
               SELECT
                 id,
                 resourceId,
@@ -1089,8 +1105,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 metadata,
                 createdAt,
                 updatedAt
-              FROM ranked_threads
-              WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
+              FROM latest_threads
+              ${latestWhere}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
@@ -1259,6 +1275,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 date_time_input_format: 'best_effort',
                 use_client_time_zone: 1,
                 output_format_json_quote_64bit_integers: 0,
+                // Wait for the mutation on the replica that ran it, so the verify
+                // read below sees it, instead of rewriting the table with OPTIMIZE
+                // FINAL. Not '2': with any replica down it throws UNFINISHED even
+                // though the update was applied.
+                mutations_sync: '1',
               },
             }),
           );
@@ -1270,17 +1291,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         await Promise.all(updatePromises);
       }
 
-      // Optimize table to apply changes immediately
-      await this.client.command({
-        query: `OPTIMIZE TABLE ${TABLE_MESSAGES} FINAL`,
+      // Verify updates were applied and retry if needed. One read for the whole batch.
+      const verifyResult = await this.client.query({
+        query: `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
           use_client_time_zone: 1,
           output_format_json_quote_64bit_integers: 0,
         },
       });
+      const verifiedById = new Map<string, MastraDBMessage>();
+      for (const row of transformRows<MastraDBMessage>((await verifyResult.json()).data)) {
+        if (!verifiedById.has(row.id)) verifiedById.set(row.id, row);
+      }
 
-      // Verify updates were applied and retry if needed
       for (const existingMessage of parsedExistingMessages) {
         const updatePayload = messages.find(m => m.id === existingMessage.id);
         if (!updatePayload) continue;
@@ -1288,21 +1314,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const { id, ...fieldsToUpdate } = updatePayload;
         if (Object.keys(fieldsToUpdate).length === 0) continue;
 
-        // Check if the update was actually applied
-        const verifyResult = await this.client.query({
-          query: `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
-          query_params: { messageId: id },
-          clickhouse_settings: {
-            date_time_input_format: 'best_effort',
-            date_time_output_format: 'iso',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        });
-
-        const verifyRows = await verifyResult.json();
-        if (verifyRows.data.length > 0) {
-          const updatedMessage = transformRows<MastraDBMessage>(verifyRows.data)[0];
+        if (verifiedById.has(id)) {
+          const updatedMessage = verifiedById.get(id);
 
           if (updatedMessage) {
             // Check if the update was applied correctly
@@ -1394,87 +1407,54 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         // Add a small delay to ensure timestamp difference
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        const now = new Date().toISOString().replace('Z', '');
+        const now = Date.now();
 
-        // Get existing threads to preserve their data
-        const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
-          // Get existing thread data - get newest version by updatedAt
-          const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
-            query_params: { threadId },
+        // Insert a newer version of each thread; threads is a ReplacingMergeTree
+        // and every read takes the newest row by updatedAt.
+        const existingThreads = await this.getLatestThreads(Array.from(threadIdsToUpdate));
+        if (existingThreads.size > 0) {
+          await this.client.insert({
+            table: TABLE_THREADS,
+            format: 'JSONEachRow',
+            values: Array.from(existingThreads.values()).map(existingThread => ({
+              id: existingThread.id,
+              resourceId: existingThread.resourceId,
+              title: existingThread.title,
+              metadata: serializeMetadata(existingThread.metadata),
+              createdAt: existingThread.createdAt,
+              // Strictly newer than the version read, so the bump always wins.
+              updatedAt: new Date(Math.max(now, new Date(existingThread.updatedAt).getTime() + 1))
+                .toISOString()
+                .replace('Z', ''),
+            })),
             clickhouse_settings: {
               date_time_input_format: 'best_effort',
-              date_time_output_format: 'iso',
               use_client_time_zone: 1,
               output_format_json_quote_64bit_integers: 0,
             },
           });
-
-          const threadRows = await threadResult.json();
-          if (threadRows.data.length > 0) {
-            const existingThread = threadRows.data[0] as any;
-
-            // Delete existing thread
-            await this.client.command({
-              query: `DELETE FROM ${TABLE_THREADS} WHERE id = {threadId:String}`,
-              query_params: { threadId },
-              clickhouse_settings: {
-                date_time_input_format: 'best_effort',
-                use_client_time_zone: 1,
-                output_format_json_quote_64bit_integers: 0,
-              },
-            });
-
-            // Insert updated thread with new timestamp
-            await this.client.insert({
-              table: TABLE_THREADS,
-              format: 'JSONEachRow',
-              values: [
-                {
-                  id: existingThread.id,
-                  resourceId: existingThread.resourceId,
-                  title: existingThread.title,
-                  metadata:
-                    typeof existingThread.metadata === 'string'
-                      ? existingThread.metadata
-                      : serializeMetadata(existingThread.metadata as Record<string, unknown>),
-                  createdAt: existingThread.createdAt,
-                  updatedAt: now,
-                },
-              ],
-              clickhouse_settings: {
-                date_time_input_format: 'best_effort',
-                use_client_time_zone: 1,
-                output_format_json_quote_64bit_integers: 0,
-              },
-            });
-          }
-        });
-
-        await Promise.all(threadUpdatePromises);
-      }
-
-      // Re-fetch to return the fully updated messages
-      const updatedMessages: MastraDBMessage[] = [];
-      for (const messageId of messageIds) {
-        const updatedResult = await this.client.query({
-          query: `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
-          query_params: { messageId },
-          clickhouse_settings: {
-            date_time_input_format: 'best_effort',
-            date_time_output_format: 'iso',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        });
-        const updatedRows = await updatedResult.json();
-        if (updatedRows.data.length > 0) {
-          const message = transformRows<MastraDBMessage>(updatedRows.data)[0];
-          if (message) {
-            updatedMessages.push(message);
-          }
         }
       }
+
+      // Re-fetch to return the fully updated messages, in request order.
+      const updatedResult = await this.client.query({
+        query: `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const updatedById = new Map<string, MastraDBMessage>();
+      for (const row of transformRows<MastraDBMessage>((await updatedResult.json()).data)) {
+        if (!updatedById.has(row.id)) updatedById.set(row.id, row);
+      }
+      const updatedMessages = messageIds.flatMap(messageId => {
+        const message = updatedById.get(messageId);
+        return message ? [message] : [];
+      });
 
       // Parse content back to objects
       return updatedMessages.map(message => {
@@ -1612,40 +1592,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           ...existingResource.metadata,
           ...metadata,
         },
-        updatedAt: new Date(),
+        // Strictly newer than the current version so reads (newest by updatedAt) pick it.
+        updatedAt: new Date(Math.max(Date.now(), existingResource.updatedAt.getTime() + 1)),
       };
 
-      // Use ALTER TABLE UPDATE for ClickHouse
-      const updateQuery = `
-            ALTER TABLE ${TABLE_RESOURCES}
-            UPDATE workingMemory = {workingMemory:String}, metadata = {metadata:String}, updatedAt = {updatedAt:String}
-            WHERE id = {resourceId:String}
-          `;
-
-      await this.client.command({
-        query: updateQuery,
-        query_params: {
-          workingMemory: updatedResource.workingMemory,
-          metadata: JSON.stringify(updatedResource.metadata),
-          updatedAt: updatedResource.updatedAt.toISOString().replace('Z', ''),
-          resourceId,
-        },
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      // Optimize table to apply changes
-      await this.client.command({
-        query: `OPTIMIZE TABLE ${TABLE_RESOURCES} FINAL`,
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
+      // Insert a new version rather than mutating: resources is a
+      // ReplacingMergeTree, so this avoids an ALTER mutation plus an
+      // OPTIMIZE TABLE FINAL that rewrote the whole table on every update.
+      await this.saveResource({ resource: updatedResource });
 
       return updatedResource;
     } catch (error) {
