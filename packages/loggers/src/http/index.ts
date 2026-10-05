@@ -30,6 +30,7 @@ export class HttpTransport extends LoggerTransport {
   private maxBufferSize: number;
   private droppedLogCount = 0;
   private flushPromise: Promise<void> | null = null;
+  private flushRequested = false;
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
 
@@ -130,21 +131,23 @@ export class HttpTransport extends LoggerTransport {
   _flush(): Promise<void> {
     // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
     if (this.flushPromise) {
+      this.flushRequested = true;
       return this.flushPromise;
     }
     if (this.logBuffer.length === 0) {
       return Promise.resolve();
     }
 
+    this.flushRequested = false;
     const flush = this.flushBatch().finally(() => {
       this.flushPromise = null;
     });
     this.flushPromise = flush;
-    // Writes that filled a batch while this request was in flight only got this promise back, so send them now.
-    // On failure, wait for the next interval instead of retrying straight away.
+    // Flushes requested while this request was in flight only got this promise back, so send their logs now,
+    // and keep draining full batches. On failure, wait for the next interval instead of retrying straight away.
     flush.then(
       () => {
-        if (this.logBuffer.length >= this.batchSize) {
+        if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
           this._flush().catch(err => {
             console.error('Error flushing logs to HTTP endpoint:', err);
           });

@@ -443,6 +443,33 @@ describe('HttpTransport', () => {
       guarded.destroy();
     });
 
+    it('sends a partial batch after a successful request when a flush was requested meanwhile', async () => {
+      let resolveRequest!: (value: unknown) => void;
+      fetchMock.mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveRequest = resolve;
+          }),
+      );
+      const guarded = new HttpTransport({ ...outageOptions });
+      guarded._transform({ msg: 'm0' } as any, 'utf8', () => {});
+      guarded._transform({ msg: 'm1' } as any, 'utf8', () => {});
+      guarded._transform({ msg: 'm2' } as any, 'utf8', () => {});
+      void guarded._flush();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      resolveRequest({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(fetchMock.mock.calls[1]![1].body).logs.map((log: any) => log.msg)).toEqual(['m2']);
+
+      resolveRequest({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(guarded.getBufferedLogs()).toHaveLength(0);
+      guarded.destroy();
+    });
+
     it('waits for the next interval instead of retrying straight away after a failed flush', async () => {
       const capped = new HttpTransport({ ...outageOptions });
       for (let i = 0; i < 4; i++) {
