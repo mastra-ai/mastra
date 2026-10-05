@@ -126,20 +126,6 @@
   }
 }
 
-@utility concentric-frame-* {
-  --concentric-radius: --value(--radius-*, [length]);
-  border-radius: var(--concentric-radius);
-}
-
-@utility concentric-inset-* {
-  --concentric-inset: --spacing(--value(number));
-  padding: var(--concentric-inset);
-}
-
-@utility rounded-concentric {
-  border-radius: max(0px, calc(var(--concentric-radius, 0px) - var(--concentric-inset, 0px)));
-}
-
 @utility rounded-studio-frame {
   border-radius: var(--studio-frame-radius, 1.5rem);
 }
