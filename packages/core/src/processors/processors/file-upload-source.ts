@@ -21,14 +21,26 @@ export function isInline(candidate: FileCandidate): candidate is InlineFileCandi
 }
 
 /**
- * Decoded size of base64 data, computed without decoding it, so a file over its
- * limit is never loaded. `undefined` for a percent-encoded data URL, whose size
- * is only checked once decoded.
+ * Decoded size of inline data, computed from its encoded form without decoding
+ * it, so a file over its limit is never loaded. Exact for valid data; invalid
+ * data is still refused when it's decoded.
  */
-export function base64SizeOf(data: string): number | undefined {
+export function decodedSizeOf(data: string): number {
   const { isDataUri, base64Content } = parseDataUri(data);
-  if (isDataUri && !BASE64_DATA_URI.test(data)) return undefined;
+  if (isDataUri && !BASE64_DATA_URI.test(data)) return percentDecodedSizeOf(base64Content);
   return Buffer.byteLength(base64Content.replace(/\s+/g, ''), 'base64');
+}
+
+/**
+ * Size in bytes of percent-encoded text once decoded, without decoding it.
+ *
+ * Decoding turns each `%XX` escape into exactly one byte, and every other
+ * character into its UTF-8 bytes. Replacing each escape with a one-byte
+ * placeholder and measuring the UTF-8 length therefore gives the same count:
+ * `caf%C3%A9` becomes `caf__`, 5 bytes, like the decoded `café`.
+ */
+function percentDecodedSizeOf(content: string): number {
+  return Buffer.byteLength(content.replace(/%[0-9a-f]{2}/gi, '_'), 'utf8');
 }
 
 export function decodeInline(data: string, file: FileUploadFailureDetails): Result<Buffer> {

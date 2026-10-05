@@ -4,7 +4,7 @@ import { fileInfoOf } from './file-upload-file-info';
 import type { FileUploadFileInfo } from './file-upload-file-info';
 import { buildUploadPath } from './file-upload-filename';
 import type { FileCandidate } from './file-upload-messages';
-import { base64SizeOf, decodeInline } from './file-upload-source';
+import { decodedSizeOf, decodeInline } from './file-upload-source';
 import type { InlineFileCandidate } from './file-upload-source';
 
 export type FileUploadMaxFileSize = (file: FileUploadFileInfo) => number;
@@ -23,8 +23,8 @@ interface PlannedFile {
 
 /**
  * Checks and decodes every file before the first write: one bad file stops the
- * whole turn. Nothing is decoded until every file has a limit, and a base64 file
- * over its limit is refused from its encoded length, without being decoded.
+ * whole turn. Nothing is decoded until every file has a limit, and a file over
+ * its limit is refused from its encoded form, without being decoded.
  */
 export function prepareFiles(
   candidates: InlineFileCandidate[],
@@ -39,8 +39,8 @@ export function prepareFiles(
 function planFile(candidate: InlineFileCandidate, maxFileSize: FileUploadMaxFileSize): Result<PlannedFile> {
   const limit = resolveMaxFileSize(candidate, maxFileSize);
   if (!limit.ok) return limit;
-  const size = base64SizeOf(candidate.data);
-  if (size !== undefined && size > limit.value) return tooLarge(candidate, size, limit.value);
+  const size = decodedSizeOf(candidate.data);
+  if (size > limit.value) return tooLarge(candidate, size, limit.value);
   return ok({ candidate, maxFileSize: limit.value });
 }
 

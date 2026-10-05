@@ -605,6 +605,42 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes).toEqual([]);
     });
 
+    it('checks the size of a percent-encoded data URL before decoding it: a bad escape over the limit is too large, not invalid', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent } = createHarness(sandbox, { maxFileSize: () => 5 });
+
+      const result = await agent.generate(
+        [userMessage(file('data:text/plain,hello%20world%ZZ', 'hello.txt', 'text/plain'))],
+        {
+          memory: MEMORY,
+        },
+      );
+
+      expect(result.tripwire?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE,
+        fileName: 'hello.txt',
+        mimeType: 'text/plain',
+        size: 14,
+        maxFileSize: 5,
+      });
+      expect(writes).toEqual([]);
+    });
+
+    it('reports the decoded size of a percent-encoded data URL with escaped and literal non-ASCII text', async () => {
+      const { sandbox } = createFakeSandbox();
+      const { agent } = createHarness(sandbox, { maxFileSize: () => 1 });
+
+      const result = await agent.generate(
+        [userMessage(file('data:text/plain,caf%C3%A9 😀', 'cafe.txt', 'text/plain'))],
+        {
+          memory: MEMORY,
+        },
+      );
+
+      expect(result.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE, size: 10 });
+    });
+
     it('defaults to 10 MB', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox);
