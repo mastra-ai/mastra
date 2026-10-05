@@ -57,6 +57,7 @@ import {
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
+import { releaseMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable tool call step.
@@ -333,6 +334,12 @@ export function createDurableToolCallStep() {
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+
+      // Every durable suspension happens in this step. On resume, drop the
+      // recalled messages this process verified before suspending, so the run
+      // picks up edits or deletions made in memory meanwhile, as it would in
+      // another process.
+      if (workflowResumeData !== undefined) releaseMessageListState(params);
 
       const typedInput = inputData as DurableToolCallInput;
       const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;

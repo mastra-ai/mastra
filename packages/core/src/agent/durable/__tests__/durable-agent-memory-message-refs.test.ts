@@ -59,7 +59,7 @@ function createModel(prompts: string[]) {
 
 // A fresh module graph per process keeps module-level state (run registry,
 // verified memory rows) from carrying over into recovery.
-async function startProcess(messages: MastraDBMessage[]) {
+async function startProcess(messages: MastraDBMessage[], { requireApproval = false } = {}) {
   vi.resetModules();
   const [{ Mastra }, { InMemoryStore }, { MockMemory }, { Agent }, { createDurableAgent }] = await Promise.all([
     import('../../../mastra'),
@@ -86,6 +86,7 @@ async function startProcess(messages: MastraDBMessage[]) {
         id: 'lookup',
         description: 'Looks something up',
         inputSchema: z.object({ query: z.string() }),
+        requireApproval,
         execute: async () => ({ found: true }),
       },
     },
@@ -98,7 +99,7 @@ async function startProcess(messages: MastraDBMessage[]) {
     recovery: { durableAgents: 'auto' },
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, prompts };
+  return { durableAgent, workflows, prompts, storage };
 }
 
 const refIds = (snapshot: WorkflowRunState | undefined) =>
@@ -195,4 +196,43 @@ describe('memory-recalled messages in durable runs', () => {
     expect(modelCalls).toContain(1);
     expect(modelCalls).toContain(0);
   }, 60_000);
+
+  it('resumes an approval in the same process with the stored version of recalled messages edited or deleted while suspended', async () => {
+    const { durableAgent, workflows, prompts, storage } = await startProcess(history(), { requireApproval: true });
+    const memoryOption = { thread: threadId, resource: resourceId };
+
+    const result = await durableAgent.stream('Look it up', { memory: memoryOption });
+    let toolCallId: string | undefined;
+    for await (const chunk of result.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBe('call-1');
+    await vi.waitFor(async () => {
+      const run = await workflows.getWorkflowRunById({
+        runId: result.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      expect(run?.snapshot).toMatchObject({ status: 'suspended' });
+    });
+
+    const memoryStore = (await storage.getStore('memory'))!;
+    await memoryStore.updateMessages({
+      messages: [{ id: 'history-0', content: { format: 2, parts: [{ type: 'text', text: 'edited meanwhile' }] } }],
+    });
+    await memoryStore.deleteMessages(['history-1']);
+
+    const resumed = await durableAgent.approveToolCall({ runId: result.runId, toolCallId, memory: memoryOption });
+    expect(await collectText(resumed)).toBe('done');
+
+    expect(prompts).toHaveLength(2);
+    const afterResume = prompts[1]!;
+    expect(afterResume).toContain('edited meanwhile');
+    expect(afterResume).not.toContain(historyText(0));
+    expect(afterResume).not.toContain(historyText(1));
+    expect(afterResume).toContain(historyText(2));
+    expect(afterResume).toContain(historyText(3));
+  });
 });
