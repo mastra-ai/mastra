@@ -1986,8 +1986,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // input processor / prepareStep / processLLMRequest work, and that
           // tools / availableTools / toolChoice reflect any per-step mutations.
           // availableTools is derived from the serialized definitions so the
-          // two can't disagree; skipped entirely when tracing is off.
-          const inferenceTools = modelSpanTracker
+          // two can't disagree. Skipped when tracing is off or the trace was
+          // not sampled (a no-op span still hands out a tracker).
+          const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: currentStep.tools,
                 toolChoice: currentStep.toolChoice,
