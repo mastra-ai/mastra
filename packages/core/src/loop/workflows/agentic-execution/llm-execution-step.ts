@@ -26,7 +26,7 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
-import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } from '../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
@@ -41,6 +41,7 @@ import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
+import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -1983,14 +1984,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tool set + per-step settings, then open the inference span. Doing this
           // immediately before execute() ensures the span's startTime excludes
           // input processor / prepareStep / processLLMRequest work, and that
-          // availableTools / toolChoice reflect any per-step mutations.
+          // tools / availableTools / toolChoice reflect any per-step mutations.
+          // availableTools is derived from the serialized definitions so the
+          // two can't disagree. Skipped when tracing is off or the trace was
+          // not sampled (a no-op span still hands out a tracker).
+          const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
+            ? getToolDefinitionsForTracing({
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                specificationVersion: currentStep.model.specificationVersion,
+              })
+            : undefined;
           modelSpanTracker?.setInferenceContext?.({
             parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
-            availableTools: getStepAvailableToolNames(
-              currentStep.tools as Record<string, unknown> | undefined,
-              currentStep.activeTools as readonly string[] | undefined,
-            ),
+            availableTools: inferenceTools?.map(tool => tool.name) ?? [],
+            tools: inferenceTools,
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });

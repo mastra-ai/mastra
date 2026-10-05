@@ -27,12 +27,13 @@ import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic
 import type { Mastra } from '../../../../mastra';
 import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
+import { getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
+import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
@@ -1118,18 +1119,28 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Apply post-processor request-side context to MODEL_INFERENCE then
             // open the inference span immediately before the model call so its
-            // startTime excludes any input processor work and availableTools /
-            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // startTime excludes any input processor work and tools /
+            // availableTools / toolChoice reflect per-step mutations.
+            // availableTools is derived from the serialized definitions so the
+            // two can't disagree. responseFormat tracks the
             // actual structuredOutput payload sent to execute() — which is
             // undefined when structuringModelConfig routes through a separate
             // structuring step instead of asking the model for json_schema.
+            // Skipped when tracing is off or the trace was not sampled (a
+            // no-op span still hands out a tracker).
+            const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
+              ? getToolDefinitionsForTracing({
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  specificationVersion: currentModel.specificationVersion,
+                })
+              : undefined;
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
               providerOptions: currentProviderOptions as Record<string, unknown> | undefined,
-              availableTools: getStepAvailableToolNames(
-                currentTools as Record<string, unknown> | undefined,
-                currentActiveTools,
-              ),
+              availableTools: inferenceTools?.map(tool => tool.name) ?? [],
+              tools: inferenceTools,
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });

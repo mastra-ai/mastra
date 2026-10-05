@@ -1,9 +1,19 @@
+import type { MastraClient } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 const OBSERVABILITY_CAPABILITIES_STALE_TIME = 24 * 60 * 60 * 1000;
 
-export const useObservabilityCapabilities = () => {
+type ObservabilityCapabilitiesResponse = Awaited<ReturnType<MastraClient['getObservabilityCapabilities']>>;
+
+export const useObservabilityCapabilities = <TData = ObservabilityCapabilitiesResponse>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<ObservabilityCapabilitiesResponse, TData> } = {}): UseQueryResult<
+  TData,
+  Error
+> => {
   const client = useMastraClient();
 
   return useQuery({
@@ -11,5 +21,6 @@ export const useObservabilityCapabilities = () => {
     queryFn: () => client.getObservabilityCapabilities(),
     retry: false,
     staleTime: OBSERVABILITY_CAPABILITIES_STALE_TIME,
+    ...queryOptions,
   });
 };

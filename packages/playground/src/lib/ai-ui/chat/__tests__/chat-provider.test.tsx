@@ -3,12 +3,8 @@ import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { MastraReactProvider } from '@mastra/react';
-import {
-  useAgentMessages,
-  useMemoryThreadMessages,
-  useObservationalMemory,
-  useMemoryConfig,
-} from '@mastra/react/hooks';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -206,8 +202,8 @@ const ModelSelectionHarness = () => {
  * hooks) so the test can observe whether OM stream events trigger a refetch.
  */
 const PanelQueriesConsumer = ({ agentId, threadId }: { agentId: string; threadId: string }) => {
-  useObservationalMemory(agentId, threadId);
-  useMemoryThreadMessages(threadId);
+  useObservationalMemory({ agentId: agentId, threadId: threadId });
+  useMemoryThreadMessages({ threadId: threadId });
   return null;
 };
 
@@ -985,8 +981,8 @@ describe('ChatProvider', () => {
     );
 
     const SendAfterPanelLoads = () => {
-      const om = useObservationalMemory('agent-1', 'thread-1');
-      const messages = useMemoryThreadMessages('thread-1');
+      const om = useObservationalMemory({ agentId: 'agent-1', threadId: 'thread-1' });
+      const messages = useMemoryThreadMessages({ threadId: 'thread-1' });
       const send = useChatSend();
       return (
         <button disabled={!om.isSuccess || !messages.isSuccess} onClick={() => send({ message: 'just finish' })}>
@@ -1031,7 +1027,7 @@ describe('ChatProvider', () => {
       });
       const Probe = () => {
         const { workingMemoryData } = useWorkingMemory();
-        const { data } = useMemoryConfig('agent-1');
+        const { data } = useMemoryConfig({ agentId: 'agent-1' });
         return (
           <>
             <div data-testid="wm-value">{workingMemoryData}</div>
@@ -1113,7 +1109,7 @@ describe('ChatProvider', () => {
     const Probe = () => {
       const send = useChatSend();
       const { workingMemoryData } = useWorkingMemory();
-      const { data } = useMemoryConfig('agent-1');
+      const { data } = useMemoryConfig({ agentId: 'agent-1' });
       return (
         <>
           <div>{workingMemoryData}</div>

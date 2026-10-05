@@ -4,6 +4,7 @@ import type { ListTracesArgs as StorageListTracesArgs } from '@mastra/core/stora
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 
 export const TRACE_QUERY_PER_PAGE = 25;
@@ -21,12 +22,20 @@ export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;
   limit?: number;
   enabled?: boolean;
-  refetchInterval?: number | false;
-  refetchOnWindowFocus?: boolean;
   /** When false, lists traces through the legacy `listTracesLight` endpoint instead of the trace-query API. */
   withQueryTrace?: boolean;
   /** Filters for the legacy endpoint, as built by `buildTraceListFilters`. Only read when `withQueryTrace` is false. */
   legacyFilters?: LegacyTraceListFilters;
+  /** TanStack options spread last into the trace-query (`traceQuery`) and legacy (`legacy`) infinite queries. */
+  queryOptions?: {
+    traceQuery?: MastraInfiniteQueryOptions<
+      TraceQueryKeysetTraceResponse,
+      TraceQueryTrace[],
+      readonly unknown[],
+      string | undefined
+    >;
+    legacy?: MastraInfiniteQueryOptions<ListTracesLightResponse, TraceQueryTrace[], readonly unknown[], number>;
+  };
 }
 
 export interface UseTraceQueryReturn {
@@ -109,10 +118,9 @@ export function useTraceQuery({
   query,
   limit = TRACE_QUERY_PER_PAGE,
   enabled = true,
-  refetchInterval,
-  refetchOnWindowFocus,
   withQueryTrace = true,
   legacyFilters,
+  queryOptions,
 }: UseTraceQueryArgs): UseTraceQueryReturn {
   const client = useMastraClient();
   const { inView, setRef: setEndOfListElement } = useInView();
@@ -138,9 +146,8 @@ export function useTraceQuery({
     select: selectTraceQueryTraces,
     retry: false,
     placeholderData: keepPreviousData,
-    refetchInterval,
-    refetchOnWindowFocus,
     enabled: enabled && withQueryTrace,
+    ...queryOptions?.traceQuery,
   });
   const orderBy = query?.orderBy;
   const legacyDirection = orderBy?.[0]?.direction === 'asc' ? 'ASC' : 'DESC';
@@ -158,9 +165,8 @@ export function useTraceQuery({
     select: selectLegacyTraceQueryTraces,
     retry: false,
     placeholderData: keepPreviousData,
-    refetchInterval,
-    refetchOnWindowFocus,
     enabled: enabled && !withQueryTrace,
+    ...queryOptions?.legacy,
   });
   const result = withQueryTrace ? queryResult : legacyResult;
   const {

@@ -5,7 +5,7 @@ import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/co
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
@@ -79,7 +79,11 @@ export function AgentPlaygroundTestChat({
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (

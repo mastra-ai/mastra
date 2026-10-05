@@ -8,7 +8,7 @@ import {
   useDatasetExperiment,
   useDatasetExperimentResults,
   useScoresByExperimentId,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
@@ -30,10 +30,27 @@ const cell = 'min-w-0 px-4 py-3';
  */
 export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB }: ExperimentsComparisonProps) {
   const { Link, paths } = useLinkComponent();
-  const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
+  const {
+    data: comparison,
+    isLoading,
+    error,
+  } = useCompareExperiments({
+    datasetId: datasetId,
+    experimentIdA: experimentIdA,
+    experimentIdB: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB) },
+  });
 
-  const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
-  const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
+  const { data: expA } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const { data: expB } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
 
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
@@ -47,16 +64,26 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     datasetId,
     experimentId: baselineId,
     experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(baselineId) },
   });
   const { data: contenderResults, isLoading: isContenderLoading } = useDatasetExperimentResults({
     datasetId,
     experimentId: contenderId,
     experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(contenderId) },
   });
 
   // Scorer reasons live in the scores store, not on the result rows.
-  const { data: baselineScores } = useScoresByExperimentId(baselineId, baselineExperiment?.status);
-  const { data: contenderScores } = useScoresByExperimentId(contenderId, contenderExperiment?.status);
+  const { data: baselineScores } = useScoresByExperimentId({
+    experimentId: baselineId,
+    experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(baselineId) },
+  });
+  const { data: contenderScores } = useScoresByExperimentId({
+    experimentId: contenderId,
+    experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(contenderId) },
+  });
 
   const rows = useMemo(
     () =>

@@ -955,7 +955,6 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
-        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -963,6 +962,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'feedback',
         'trace-query-context-ids',
         'trace-aggregate',
+        ...spanQueryFeatures,
       ] as const;
     }
 
@@ -977,7 +977,6 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
-      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -985,6 +984,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'feedback',
       'trace-query-context-ids',
       'trace-aggregate',
+      ...spanQueryFeatures,
     ] as const;
   }
 

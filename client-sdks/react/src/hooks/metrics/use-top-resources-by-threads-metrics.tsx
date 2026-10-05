@@ -1,7 +1,9 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMastraClient } from '../../mastra-client-context';
 import { getOrCreate } from '../shared/map';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 export interface ResourceThreadsRow {
@@ -20,9 +22,11 @@ const TOP_N = 20;
  *
  *  Tokens + cost are joined in from parallel breakdowns on `resourceId` so the
  *  table can show cost/usage without a separate backend aggregation. */
-export function useTopResourcesByThreadsMetrics(params: MetricsQueryFilters) {
+export function useTopResourcesByThreadsMetrics<TData = ResourceThreadsRow[]>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<ResourceThreadsRow[], TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { filters, filterKey } = params;
+  const { filters, filterKey, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'top-resources-by-threads', filterKey],
@@ -95,5 +99,6 @@ export function useTopResourcesByThreadsMetrics(params: MetricsQueryFilters) {
           };
         });
     },
+    ...queryOptions,
   });
 }

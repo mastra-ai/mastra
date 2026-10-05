@@ -9,7 +9,8 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useWorkspaceInfo, useStoredWorkspaces, useAuthCapabilities } from '@mastra/react/hooks';
+import { useAuthCapabilities } from '@mastra/react/hooks/auth';
+import { useWorkspaceInfo, useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import {
   AlertTriangle,
   ChevronDown,
@@ -97,7 +98,10 @@ export function SkillEditDialog({
         .map(ws => ({ value: ws.id, label: ws.name })),
     [workspacesData],
   );
-  const { data: workspaceInfo } = useWorkspaceInfo(workspaceId || undefined);
+  const { data: workspaceInfo } = useWorkspaceInfo({
+    workspaceId: workspaceId || undefined,
+    queryOptions: { enabled: !!workspaceId },
+  });
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
 
   const builderDefaultWorkspaceId = useMemo(() => {

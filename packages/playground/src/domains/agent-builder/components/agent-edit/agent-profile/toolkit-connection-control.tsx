@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks';
+import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks/tool-providers';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -139,12 +139,15 @@ export const ToolkitConnectionControl = ({
   const { setValue } = useFormContext<AgentBuilderEditFormValues>();
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
-  const connectionsQuery = useExistingConnections(providerId, toolkit, { scopeToSelf: true });
+  const connectionsQuery = useExistingConnections({ providerId: providerId, toolkit: toolkit, scopeToSelf: true });
 
   const [manageOpen, setManageOpen] = useState(false);
 
   // Only resolve the toolkit icon while the manage dialog is open.
-  const toolkitsQuery = useToolkits(manageOpen ? providerId : null);
+  const toolkitsQuery = useToolkits({
+    providerId: manageOpen ? providerId : null,
+    queryOptions: { enabled: !!(manageOpen ? providerId : null) },
+  });
   const iconUrl = useMemo(
     () => toolkitsQuery.data?.data?.find(entry => entry.slug === toolkit)?.icon,
     [toolkitsQuery.data?.data, toolkit],

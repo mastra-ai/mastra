@@ -8,7 +8,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';

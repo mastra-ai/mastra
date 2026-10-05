@@ -10,7 +10,9 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
-import { useMemory, useThreads, useAuthCapabilities, isAuthenticated, useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -48,8 +50,16 @@ function AgentThread() {
     data: agent,
     isLoading: isAgentLoading,
     error,
-  } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
-  const { data: memory } = useMemory(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory } = useMemory({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
@@ -73,14 +83,13 @@ function AgentThread() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads(
-    {
-      agentId: agentId!,
-      isMemoryEnabled: hasMemory,
-      resourceId: agentId!,
-    },
-    useEntityRequestContext('agent', agentId!)[0],
-  );
+  } = useThreads({
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    resourceId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(hasMemory) },
+  });
 
   const sidebarThreads = useMemo(
     () =>

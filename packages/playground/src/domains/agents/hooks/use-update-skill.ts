@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useWriteWorkspaceFile } from '@mastra/react/hooks';
+import { useWriteWorkspaceFile } from '@mastra/react/hooks/workspace';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree-utils';

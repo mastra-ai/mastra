@@ -1,4 +1,4 @@
-import { useMastraPackages } from '@mastra/react/hooks';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 
 export const useHasObservability = () => {
   const { data, isLoading } = useMastraPackages();

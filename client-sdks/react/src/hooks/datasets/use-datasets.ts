@@ -1,19 +1,30 @@
 import type { ExperimentTargetType, ListDatasetsParams, MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import type { UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
+
+type ListDatasetsResponse = Awaited<ReturnType<MastraClient['listDatasets']>>;
+type DatasetResponse = Awaited<ReturnType<MastraClient['getDataset']>>;
 
 /**
  * Hook to list all datasets with optional pagination
  */
-export const useDatasets = (pagination?: { page?: number; perPage?: number }) => {
+export const useDatasets = <TData = ListDatasetsResponse>({
+  pagination,
+  queryOptions,
+}: {
+  pagination?: { page?: number; perPage?: number };
+  queryOptions?: MastraQueryOptions<ListDatasetsResponse, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['datasets', pagination],
     queryFn: () => client.listDatasets(pagination),
     placeholderData: previousData => previousData,
+    ...queryOptions,
   });
 };
 
@@ -26,19 +37,25 @@ export interface DatasetTargetFilter {
 
 export type DatasetsOrderBy = NonNullable<ListDatasetsParams['orderBy']>;
 
-type DatasetRecord = Awaited<ReturnType<MastraClient['listDatasets']>>['datasets'][number];
+type DatasetRecord = ListDatasetsResponse['datasets'][number];
 
-export type UseInfiniteDatasetsResult = UseInfiniteQueryResult<DatasetRecord[], Error> & {
+export type UseInfiniteDatasetsResult<TData = DatasetRecord[]> = UseInfiniteQueryResult<TData, Error> & {
   setEndOfListElement: (element: HTMLDivElement | null) => void;
 };
 
 /**
  * Hook to list datasets with infinite scroll pagination, optionally scoped server-side to a target.
+ * `data` defaults to the flattened dataset list; a user `select` replaces that flattening.
  */
-export const useInfiniteDatasets = (
-  filter?: DatasetTargetFilter,
-  orderBy?: DatasetsOrderBy,
-): UseInfiniteDatasetsResult => {
+export const useInfiniteDatasets = <TData = DatasetRecord[]>({
+  filter,
+  orderBy,
+  queryOptions,
+}: {
+  filter?: DatasetTargetFilter;
+  orderBy?: DatasetsOrderBy;
+  queryOptions?: MastraInfiniteQueryOptions<ListDatasetsResponse, TData, QueryKey, number>;
+} = {}): UseInfiniteDatasetsResult<TData> => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const targetType = filter?.targetType || undefined;
@@ -55,7 +72,9 @@ export const useInfiniteDatasets = (
       }
       return lastPageParam + 1;
     },
-    select: data => data.pages.flatMap(page => page?.datasets ?? []),
+    select: (data: InfiniteData<ListDatasetsResponse, number>) =>
+      data.pages.flatMap(page => page?.datasets ?? []) as TData,
+    ...queryOptions,
   });
 
   useEffect(() => {
@@ -69,12 +88,20 @@ export const useInfiniteDatasets = (
 
 /**
  * Hook to fetch a single dataset by ID
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useDataset = (datasetId: string) => {
+export const useDataset = <TData = DatasetResponse>({
+  datasetId,
+  queryOptions,
+}: {
+  datasetId: string;
+  queryOptions?: MastraQueryOptions<DatasetResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset', datasetId],
     queryFn: () => client.getDataset(datasetId),
-    enabled: Boolean(datasetId),
+    ...queryOptions,
   });
 };

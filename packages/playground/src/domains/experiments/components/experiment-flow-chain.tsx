@@ -7,7 +7,7 @@ import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useDataset } from '@mastra/react/hooks';
+import { useDataset } from '@mastra/react/hooks/datasets';
 import type { ReactNode } from 'react';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
@@ -77,7 +77,10 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const { Link: LinkComponent, paths } = useLinkComponent();
   const registries = useTargetRegistries();
   const { scorers } = registries;
-  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
+  const { data: dataset, isLoading: isDatasetLoading } = useDataset({
+    datasetId: experiment.datasetId ?? '',
+    queryOptions: { enabled: Boolean(experiment.datasetId) },
+  });
   const scorerIds = useExperimentScorerIds(experiment);
 
   const targetType = experiment.targetType;

@@ -15,8 +15,8 @@ export const Header = ({ children, border = true, className }: HeaderProps) => {
       className={cn(
         'z-50 flex h-header-default w-full items-center gap-2 bg-transparent px-2',
         {
-          // Match the frame's inset rim where the header divider meets it.
-          'border-b border-(--surface-rim)': border,
+          // Layout headers share the same edge color as their surrounding surface.
+          'border-b border-surface-rim': border,
         },
         className,
       )}

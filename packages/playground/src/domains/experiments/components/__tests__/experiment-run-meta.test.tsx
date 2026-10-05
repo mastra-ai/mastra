@@ -1,5 +1,5 @@
 import type { DatasetExperiment, DatasetRecord, GetScorerResponse } from '@mastra/client-js';
-import type { ExperimentMetrics } from '@mastra/react/hooks';
+import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

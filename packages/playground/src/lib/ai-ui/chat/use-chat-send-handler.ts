@@ -3,7 +3,11 @@ import { RequestContext } from '@mastra/core/di';
 import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { injectBufferingEnds } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
 import { useMastraClient } from '@mastra/react';
-import { memoryStatusQueryKey, memoryThreadMessagesQueryKey, observationalMemoryQueryKey } from '@mastra/react/hooks';
+import {
+  memoryStatusQueryKey,
+  memoryThreadMessagesQueryKey,
+  observationalMemoryQueryKey,
+} from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
