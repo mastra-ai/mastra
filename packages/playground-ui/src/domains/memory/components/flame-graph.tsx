@@ -66,7 +66,7 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         Time
       </Txt>
       <div className="flex justify-between px-1 py-1.5">
@@ -150,8 +150,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = getAreaRowYMax(data, dataKey, threshold);
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -193,8 +193,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -254,8 +254,8 @@ function CombinedRow({
   const combinedData = toCombinedRowData(areaData, areaDataKey, eventData);
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -361,8 +361,8 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border/50">
-      <div className="flex items-center gap-1 self-stretch border-r border-border/50 pl-3">
+    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border">
+      <div className="flex items-center gap-1 self-stretch border-r border-border pl-3">
         <Txt variant="meta" tone="muted">
           Zoom
         </Txt>
@@ -396,7 +396,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-part="band"
-          className="absolute inset-y-0 border-y border-border/30 bg-fill-subtle"
+          className="absolute inset-y-0 border-y border-surface-rim bg-fill-subtle"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div

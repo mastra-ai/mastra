@@ -417,10 +417,7 @@ export const ToolCard = ({
 }) => (
   <Card
     data-testid={testId}
-    className={cn(
-      'max-w-[80%] animate-in border-border/60 bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2',
-      className,
-    )}
+    className={cn('max-w-[80%] animate-in bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2', className)}
   >
     {children}
   </Card>

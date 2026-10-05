@@ -29,7 +29,7 @@ export function AgentSidebarLoadingSkeleton() {
         </div>
       </div>
 
-      <div className="m-2 rounded-studio-panel border border-border/40 bg-muted px-3 py-2.5">
+      <div className="m-2 rounded-studio-panel border border-surface-rim bg-muted px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />

@@ -221,7 +221,7 @@ function ObservationItem({
     : 'border-l-transparent';
 
   return (
-    <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
+    <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border pl-2')}>
       <div
         className={cn(
           'flex items-start gap-1.5',
