@@ -466,10 +466,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   private hasUiMetadata(): boolean {
-    return Object.values(this.convertedTools).some(tool => {
-      const meta = tool.mcp?._meta as { ui?: { resourceUri?: string } } | undefined;
-      return Boolean(meta?.ui?.resourceUri);
-    });
+    return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
   }
 
   // ---------------------------------------------------------------------------
@@ -841,15 +838,24 @@ export class MCPServer extends MCPServerBase {
       this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
       return errorResult(value.message);
     }
+    // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
+    const resourceUri = uiResourceUri(tool.mcp?._meta);
+    const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
     if (!tool.outputSchema) {
       return {
         isError: false,
         content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+        ...meta,
       };
     }
     // Tools with an output schema already validated `value` against it.
     const structuredContent = value as Record<string, unknown>;
-    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+    return {
+      isError: false,
+      structuredContent,
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      ...meta,
+    };
   }
 
   private registerResourceHandlers(server: Server): void {
@@ -1290,14 +1296,18 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
-/** Keeps `_meta.ui.resourceUri` and the flat MCP Apps key in sync for older hosts. */
+/** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */
+function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
+  const ui = meta?.ui as { resourceUri?: string } | undefined;
+  return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */
 function normalizeUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  if (!meta) return undefined;
-  const ui = meta.ui as { resourceUri?: string } | undefined;
-  const flat = meta[RESOURCE_URI_META_KEY] as string | undefined;
-  if (ui?.resourceUri && !flat) return { ...meta, [RESOURCE_URI_META_KEY]: ui.resourceUri };
-  if (flat && !ui?.resourceUri) return { ...meta, ui: { ...(ui ?? {}), resourceUri: flat } };
-  return meta;
+  const resourceUri = uiResourceUri(meta);
+  if (!meta || !resourceUri) return meta;
+  const ui = meta.ui as Record<string, unknown> | undefined;
+  return { ...meta, ui: { ...ui, resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri };
 }
 
 export { ServerPromptActions, ServerResourceActions, ServerToolActions };
