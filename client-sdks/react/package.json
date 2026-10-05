@@ -36,6 +36,16 @@
         "default": "./dist/ui/index.cjs"
       }
     },
+    "./chat": {
+      "import": {
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.js"
+      },
+      "require": {
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.cjs"
+      }
+    },
     "./hooks/shared": null,
     "./hooks/*": {
       "import": {

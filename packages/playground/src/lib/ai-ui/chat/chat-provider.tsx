@@ -27,7 +27,7 @@ import type { OmTerminalExtractionCache } from '@mastra/playground-ui/domains/ch
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
 import { useMastraClient } from '@mastra/react';
-import { useChat } from '@mastra/react/hooks/agents';
+import { useChat } from '@mastra/react/chat';
 import {
   memoryStatusQueryKey,
   memoryThreadMessagesQueryKey,
