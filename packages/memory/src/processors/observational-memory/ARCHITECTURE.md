@@ -228,7 +228,7 @@ Start/end markers went on the newest assistant message in the live list, or in s
 
 ### H6. Observed messages carrying later OM markers were observed again (main, proven; fixed in PR 1)
 
-`createUnobservedMessage` kept every part after the last end marker except `data-om-observation-*`. A later buffering cycle's `data-om-buffering-*` markers on an already observed message made it "unobserved" with no content, and it went back to the Observer (duplicate cost and, with a real model, possibly invented observations). **Fix:** a message whose remaining parts are all `data-om-*` markers has nothing to observe. The activation context cleanup, which also uses `getUnobservedParts`, is unchanged.
+`createUnobservedMessage` kept every part after the last end marker except `data-om-observation-*`. A later buffering cycle's `data-om-buffering-*` markers on an already observed message made it "unobserved" with no content, and it went back to the Observer (duplicate cost and, with a real model, possibly invented observations). **Fix:** a message whose remaining parts are all `data-om-*` markers has nothing to observe. The activation context cleanup, which also uses `getUnobservedParts`, is unchanged. `getUnobservedMessages` also feeds pending-token counting, so such messages (including ones whose tail is a `data-om-activation` part carrying observation text) no longer count toward the observation threshold; they have nothing for the Observer to read.
 
 ### H7. A part added to an observed message by another instance is never observed (main, source-read and reproduced; open)
 
