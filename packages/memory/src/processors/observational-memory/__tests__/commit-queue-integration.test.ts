@@ -123,6 +123,7 @@ function recordWrites(storage: InMemoryMemory) {
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 });
