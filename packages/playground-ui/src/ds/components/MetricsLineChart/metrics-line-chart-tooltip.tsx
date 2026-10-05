@@ -39,8 +39,7 @@ export function MetricsLineChartTooltip({
         ))}
         {showTotal && (
           <div className="col-span-3 grid grid-cols-subgrid items-center border-t border-border pt-1">
-            <span />
-            <Txt as="span" variant="caption" tone="muted">
+            <Txt as="span" variant="caption" tone="muted" className="col-span-2">
               Total
             </Txt>
             <span className="text-right font-mono text-foreground tabular-nums">
