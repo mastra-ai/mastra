@@ -135,6 +135,14 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     return rows;
   }
 
+  /**
+   * Whether Ctrl+E belongs to the card (it lists the arguments). Otherwise Ctrl+E keeps its usual job of
+   * expanding the tool row above, so a collapsed preview can be read in full before approving.
+   */
+  handlesExpand(): boolean {
+    return this.showTarget;
+  }
+
   /** Arguments as "key: value" lines (used by tests and for tools without a call row). */
   describeArgs(): string {
     return this.formatArgs(this.args);

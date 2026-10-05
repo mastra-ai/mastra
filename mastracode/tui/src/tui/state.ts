@@ -310,7 +310,7 @@ export interface TUIState {
   /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
   pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
   /** Inline tool approval prompt currently waiting for y / a / Y / n. */
-  activeInlineApproval?: { handleInput(data: string): void };
+  activeInlineApproval?: { handleInput(data: string): void; handlesExpand?(): boolean };
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;

@@ -267,6 +267,18 @@ describe('ToolApprovalDialogComponent.render', () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  it('owns Ctrl+E only when it lists the arguments, leaving it to the tool row otherwise', () => {
+    expect(makeDialog().dialog.handlesExpand()).toBe(false);
+    const listed = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'a.ts' },
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    expect(listed.handlesExpand()).toBe(true);
+  });
+
   it('never renders wider than the terminal', () => {
     const { dialog } = makeDialog();
     for (const line of dialog.render(20)) {

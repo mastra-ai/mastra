@@ -290,8 +290,10 @@ export class MastraTUI {
       // swallow it and leave the suspended submit_plan run parked. Fall through
       // to the editor's Ctrl+C handler (which clears inline state and aborts).
       if (this.state.activeInlineApproval) {
-        // Inline tool approval: y / a / Y / n / Esc. Ctrl+C falls through (declines via the editor).
-        if (data !== '\x03') {
+        // Inline tool approval: y / a / Y / n / Esc. Ctrl+C falls through (declines via the editor), and so
+        // does Ctrl+E unless the card lists the arguments itself, so the tool row above can be expanded.
+        const expandsRow = data === '\x05' && !this.state.activeInlineApproval.handlesExpand?.();
+        if (data !== '\x03' && !expandsRow) {
           this.state.activeInlineApproval.handleInput(data);
           return;
         }
