@@ -12807,6 +12807,51 @@ describe('Full Async Buffering Flow', () => {
     }
   });
 
+  it('should not let a buffer op queued behind an in-flight one restore a boundary activation reset', async () => {
+    // op2 is queued behind op1 (still indexing) when a band activation resets the boundary.
+    // op2's start-of-run write must not put its pre-activation boundary back once op1 finishes.
+    let releaseIndexing!: () => void;
+    const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
+    const indexSpy = vi
+      .spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups')
+      .mockImplementationOnce(() => indexingHeld);
+    try {
+      const { om, step, waitForAsyncOps, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+      const bufferKey = `obs:thread:${threadId}`;
+
+      // op1 persists its chunk, then sits in its indexing tail.
+      await step(0);
+      await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
+      expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
+
+      // op2 queues behind op1 with its own starting boundary.
+      const status = await om.getStatus({ threadId, resourceId });
+      const op2 = om.buffer({ threadId, resourceId, pendingTokens: status.pendingTokens });
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey)).toBe(status.pendingTokens);
+
+      // Next turn: activation in the band resets the boundary while op2 still waits for op1.
+      await step(0, { freshState: true });
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey) ?? 0).toBe(0);
+
+      releaseIndexing();
+      await op2;
+      await waitForAsyncOps();
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey) ?? 0).toBe(0);
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastBufferedAtTokens ?? 0).toBe(0);
+    } finally {
+      releaseIndexing();
+      indexSpy.mockRestore();
+    }
+  });
+
   describe('threshold→blockAfter band with a ready chunk at step > 0', () => {
     async function setupReadyChunkInBand(holdObserver: () => Promise<void> | undefined) {
       const scenario = await setupAsyncBufferingScenario({

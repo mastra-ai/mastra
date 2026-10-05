@@ -2308,7 +2308,7 @@ ${formattedMessages}
     const currentTokens =
       contextWindowTokens ??
       (await this.tokenCounter.countMessagesAsync(unobservedMessages)) + (record.pendingMessageTokens ?? 0);
-    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
+    BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens);
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
     registerOp(record.id, 'bufferingObservation');
@@ -2824,7 +2824,7 @@ ${formattedMessages}
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
     const bufKey = this.buffering.getObservationBufferKey(lockKey);
 
-    BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
+    BufferingCoordinator.setObservationBoundary(bufKey, 0);
     await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(recordId, false, 0)).catch(() => {});
 
     if (activatedMessageIds && activatedMessageIds.length > 0) {
@@ -3388,7 +3388,9 @@ ${formattedMessages}
     // Set lastBufferedBoundary IMMEDIATELY (before ANY async work) to prevent
     // shouldTriggerAsyncObservation from triggering again on the next step.
     // This MUST happen before the first await when buffer() is called fire-and-forget.
-    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
+    // The op owns the boundary until anything else writes it (see recordBufferedChunk).
+    const boundaryOwner = Symbol('observation-boundary');
+    BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens, boundaryOwner);
 
     // Queue behind any existing buffering operation (mutex behavior). Reading the previous op and
     // registering this one happen before any await, so concurrent calls form a chain instead of
@@ -3418,9 +3420,14 @@ ${formattedMessages}
     const opRecordId = record.id;
     registerOp(opRecordId, 'bufferingObservation');
     const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
+    // Waiting for the previous op may have let an activation reset the boundary (or a later op
+    // take it); then this op no longer persists its starting boundary.
+    const ownsStartBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
     inMemoryRecord.isBufferingObservation = true;
-    inMemoryRecord.lastBufferedAtTokens = currentTokens;
-    runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, true, currentTokens)).catch(err => {
+    if (ownsStartBoundary) inMemoryRecord.lastBufferedAtTokens = currentTokens;
+    runOMCommit(lockKey, () =>
+      this.storage.setBufferingObservationFlag(record.id, true, ownsStartBoundary ? currentTokens : undefined),
+    ).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
@@ -3515,8 +3522,8 @@ ${formattedMessages}
 
       // Record the chunk as soon as it's persisted, before the op's post-persist work
       // (indexing, thread title). Activation doesn't wait for this op in the async band, so
-      // it may already have reset the token boundary (or a later op replaced it). Only an op
-      // that still owns the boundary it set at its start moves it; otherwise its pre-activation
+      // it may already have reset the token boundary (or a later op taken it). Only the op that
+      // still owns the boundary moves it, here and at its start; otherwise its pre-activation
       // token count would stall the next buffer trigger. The check and the in-memory write run
       // before any await, so an activation reset can't slip between them, and its queued
       // storage reset lands after this op's queued write.
@@ -3524,14 +3531,14 @@ ${formattedMessages}
       const recordBufferedChunk = async () => {
         if (chunkRecorded) return;
         chunkRecorded = true;
-        const ownsBoundary = BufferingCoordinator.lastBufferedBoundary.get(bufferKey) === currentTokens;
-        if (ownsBoundary) BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
+        const ownsBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
+        if (ownsBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, newTokens, boundaryOwner);
         await runOMCommit(lockKey, () =>
           this.storage.setBufferingObservationFlag(record.id, false, ownsBoundary ? newTokens : undefined),
         ).catch(() => {});
         flagCleared = true;
         const stillOwnsBoundary =
-          ownsBoundary && BufferingCoordinator.lastBufferedBoundary.get(bufferKey) === newTokens;
+          ownsBoundary && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
         setBufferingState(false, stillOwnsBoundary ? newTokens : undefined);
 
         // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
@@ -3674,7 +3681,7 @@ ${formattedMessages}
           omDebug(
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
           );
-          BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
+          BufferingCoordinator.setObservationBoundary(bufKey, 0);
           await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, 0)).catch(
             () => {},
           );
