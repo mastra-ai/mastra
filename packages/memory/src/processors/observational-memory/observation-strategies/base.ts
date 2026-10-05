@@ -50,7 +50,6 @@ function isOmPart(part: unknown): boolean {
   return String((part as { type?: string } | undefined)?.type ?? '').startsWith('data-om-');
 }
 
-/** True when the message has parts no completed observation boundary covers (OM markers aside). */
 /**
  * Index in `message` right after this cycle's start marker (and any OM parts directly after it),
  * or -1 when the message doesn't carry it.
@@ -68,6 +67,7 @@ function afterOwnStartMarker(message: MastraDBMessage, marker: { type: string; d
   return index;
 }
 
+/** True when the message has parts no completed observation boundary covers (OM markers aside). */
 function hasUnobservedContent(message: MastraDBMessage): boolean {
   return getUnobservedParts(message).some(part => !isOmPart(part));
 }
@@ -564,7 +564,7 @@ export abstract class ObservationStrategy {
   }
 
   /** What the cycle observed of each message, captured when it placed its first marker there. */
-  private readonly observedParts = new Map<string, { count: number; afterBoundary: boolean }>();
+  private readonly observedParts = new Map<string, { count: number; observedIsTrimmed: boolean }>();
 
   /**
    * Index in `stored` right after the parts the cycle observed in `observed` (and any OM markers
@@ -579,12 +579,12 @@ export abstract class ObservationStrategy {
     if (!this.observedParts.has(observed.id)) {
       this.observedParts.set(observed.id, {
         count: (observed.content?.parts ?? []).filter(part => !isOmPart(part)).length,
-        afterBoundary: findLastCompletedObservationBoundary(observed) === -1,
+        observedIsTrimmed: findLastCompletedObservationBoundary(observed) === -1,
       });
     }
-    const { count, afterBoundary } = this.observedParts.get(observed.id)!;
+    const { count, observedIsTrimmed } = this.observedParts.get(observed.id)!;
     const parts = stored.content.parts;
-    let index = afterBoundary ? findLastCompletedObservationBoundary(stored) + 1 : 0;
+    let index = observedIsTrimmed ? findLastCompletedObservationBoundary(stored) + 1 : 0;
     let seen = 0;
     while (index < parts.length && seen < count) {
       if (!isOmPart(parts[index])) seen++;
@@ -639,27 +639,26 @@ export abstract class ObservationStrategy {
         orderBy: { field: 'createdAt', direction: 'DESC' },
         ...(opts?.notAfter ? { filter: { dateRange: { end: opts.notAfter } } } : {}),
       });
-      const messages = result?.messages ?? [];
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          const afterStart = afterOwnStartMarker(msg, marker);
-          // A marker after content the cycle never observed would hide it from the actor.
-          if (opts?.onlyIfObserved && afterStart === -1 && hasUnobservedContent(msg)) return;
-          if (!alreadyPresent) {
-            msg.content.parts.splice(afterStart !== -1 ? afterStart : msg.content.parts.length, 0, marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
+      const assistants = (result?.messages ?? []).filter(
+        msg => msg?.role === 'assistant' && Array.isArray(msg.content?.parts),
+      );
+      // An end/failed marker belongs with this cycle's start marker, even if a newer assistant
+      // message was saved meanwhile; otherwise the start marker would look in progress forever.
+      const msg =
+        (opts?.onlyIfObserved ? assistants.find(m => afterOwnStartMarker(m, marker) !== -1) : undefined) ??
+        assistants[0];
+      if (!msg) return;
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      const afterStart = afterOwnStartMarker(msg, marker);
+      // A marker after content the cycle never observed would hide it from the actor.
+      if (opts?.onlyIfObserved && afterStart === -1 && hasUnobservedContent(msg)) return;
+      if (!alreadyPresent) {
+        msg.content.parts.splice(afterStart !== -1 ? afterStart : msg.content.parts.length, 0, marker as any);
       }
+      await this.messageHistory.persistMessages({ messages: [msg], threadId, resourceId });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
