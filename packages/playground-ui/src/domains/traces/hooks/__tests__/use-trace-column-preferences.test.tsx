@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';

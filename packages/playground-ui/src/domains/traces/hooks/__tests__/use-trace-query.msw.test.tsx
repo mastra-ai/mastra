@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import type { TraceQueryArgs } from '@mastra/react/hooks';
