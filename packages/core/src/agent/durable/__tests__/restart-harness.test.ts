@@ -1,7 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { DurableStepIds } from '../constants';
+import { DurableStepIds, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { consumeText, createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
 import type { Gate } from './restart-harness';
 
@@ -153,6 +153,22 @@ describe('restart harness', () => {
       expect(recovered.onFinishCalls).toBe(1);
     }, 30_000);
   }
+
+  // Positive control for the isolation assertions above: `finishEvents` really
+  // does read live. Graph 2 already counted its one FINISH; a FINISH published
+  // onto its topic *after* `restart()` returned must still bump the count, which
+  // the old snapshot-at-return fields could not observe.
+  it('counts a FINISH published after restart returned (live counters)', async () => {
+    const runId = 'restart-live-counter';
+    const { scenario, gate } = toolScenario('durable', runId);
+    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    await gate.reached;
+    const recovered = await scenario.restart(await original.checkpoint());
+    expect(recovered.finishEvents).toBe(1);
+
+    await recovered.graph.mastra.pubsub.publish(AGENT_STREAM_TOPIC(runId), { type: AgentStreamEventTypes.FINISH });
+    expect(recovered.finishEvents).toBe(2);
+  }, 30_000);
 
   it('workflow: restarts a default-engine run blocked in step 2, and from every running write', async () => {
     const runId = 'restart-workflow';

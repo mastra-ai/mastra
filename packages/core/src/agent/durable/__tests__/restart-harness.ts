@@ -108,6 +108,14 @@ export type SnapshotRow = {
 };
 
 export type Checkpoint = {
+  /**
+   * Every workflow row as it stood when the copy was taken.
+   *
+   * The copy is read from storage *after* the write that triggered it completes,
+   * so a concurrent write that lands in between is included: two checkpoints with
+   * distinct `write` indexes can therefore describe the same later state. Exact
+   * per-write coverage of concurrently written steps is not guaranteed.
+   */
   rows: SnapshotRow[];
   /** 1-based index of the write this copy was taken after; 0 for a gate checkpoint. */
   write: number;

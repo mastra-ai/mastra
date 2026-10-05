@@ -74,6 +74,7 @@ describe('T58 evented workflow sleep restart in a fresh module graph', () => {
 
       const { result } = await scenario.restart(checkpoint);
       expect(result.status).toBe('success');
+      expect(result.result).toEqual({ n: 3 });
       // The passed sleep is a completed step: the restart resumes after it.
       expect(executed.filter(e => e.startsWith('2:'))).toEqual(['2:after']);
     }, 60_000);

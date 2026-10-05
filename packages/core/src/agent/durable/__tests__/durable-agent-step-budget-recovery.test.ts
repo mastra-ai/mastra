@@ -123,8 +123,9 @@ async function drain(fullStream: AsyncIterable<{ type: string }>) {
 
 const count = (types: string[], type: string) => types.filter(t => t === type).length;
 
-// The T20 checks. `restarted` relaxes the model-call ceiling by the one call a
-// restart may re-issue, exactly as the harness does for cells with a mechanism.
+// The T20 checks. For the cells with a restart mechanism the harness relaxes its
+// bounds by one model call, because a restart may legitimately re-issue the call
+// it was interrupted in; `restarted` applies that same relaxation here.
 function evaluate({
   variant,
   types,
@@ -149,21 +150,34 @@ function evaluate({
     expect(started, 'the script answered at once, so no tool step ran').toEqual([]);
     return;
   }
-  // The mock is a pure function of the prompt, so the whole run is deterministic:
-  // the script asks for steps 1..3 and the third model call answers. Pinning the
-  // exact values (the harness' compared contract) catches an engine that stops
-  // early, which a `<=` bound alone would let pass.
+  const noStepBeyondTheBudget = () =>
+    expect(
+      started.every(n => n <= MAX),
+      `no step beyond the budget (n <= ${MAX}): ${started}`,
+    ).toBe(true);
+  if (restarted) {
+    // Same bounds the harness applies to a cell with a mechanism: the run may
+    // re-issue the interrupted call, but the budget still caps it. Not exercised
+    // is not a pass, hence the non-empty guard on the step list.
+    expect(started.length, 'a step ran').toBeGreaterThan(0);
+    noStepBeyondTheBudget();
+    expect(probe.modelCalls, `at most ${MAX + 1} model calls across both runs`).toBeLessThanOrEqual(MAX + 1);
+    return;
+  }
+  // No restart: the mock is a pure function of the prompt, so the run is
+  // deterministic — the script asks for steps 1..3 and the third model call gets
+  // tool call 3, which spends the budget and ends the run. Pinning the exact
+  // values (the harness' compared contract) catches an engine that stops early,
+  // which a `<=` bound alone would let pass.
   expect(started, 'the script got steps 1..3').toEqual([1, 2, 3]);
   expect(probe.modelCalls, `made exactly ${MAX} model calls`).toBe(MAX);
-  expect(
-    started.every(n => n <= MAX),
-    `no step beyond the budget (n <= ${MAX}): ${started}`,
-  ).toBe(true);
-  expect(probe.modelCalls, `at most ${MAX} model calls in total`).toBeLessThanOrEqual(MAX + (restarted ? 1 : 0));
+  noStepBeyondTheBudget();
 }
 
 const gates: Gate[] = [];
-afterEach(() => {
+const scenarios: { stop(): Promise<void> }[] = [];
+afterEach(async () => {
+  await Promise.all(scenarios.splice(0).map(s => s.stop()));
   for (const gate of gates.splice(0)) gate.release();
 });
 
@@ -182,10 +196,17 @@ describe('T20 step budget across recovery', () => {
               ? createDurableAgent({ agent })
               : createEventedAgent({ agent });
         const mastra = new Mastra({ logger: false, storage: new InMemoryStore(), agents: { t20: runner as any } });
-        const result: any = await (mastra.getAgent('t20') as any).stream('Go.', streamOptions(runId, variant, scorer));
-        const types = await drain(result.fullStream);
-        result.cleanup?.();
-        evaluate({ variant, types, probe, scorerCalls: scorer.calls, restarted: false });
+        try {
+          const result: any = await (mastra.getAgent('t20') as any).stream(
+            'Go.',
+            streamOptions(runId, variant, scorer),
+          );
+          const types = await drain(result.fullStream);
+          result.cleanup?.();
+          evaluate({ variant, types, probe, scorerCalls: scorer.calls, restarted: false });
+        } finally {
+          await mastra.stopWorkers();
+        }
       }, 30_000);
     }
   }
@@ -205,6 +226,7 @@ describe('T20 step budget across recovery', () => {
           return buildAgent(core, { variant: 'default', probe, block: generation === 1 ? gate : undefined });
         },
       });
+      scenarios.push(scenario);
       const original = await scenario.start(({ agent }) =>
         agent.stream('Go.', streamOptions(runId, 'default', { calls: 0 })),
       );

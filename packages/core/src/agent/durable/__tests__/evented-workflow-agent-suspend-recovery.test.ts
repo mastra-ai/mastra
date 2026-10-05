@@ -13,12 +13,12 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
-import type { CoreGraph, Gate } from './restart-harness';
+import { createRestartScenario, findRow, loadGraph } from './restart-harness';
+import type { CoreGraph } from './restart-harness';
 
-const gates: Gate[] = [];
+const scenarios: { stop(): Promise<void> }[] = [];
 afterEach(async () => {
-  for (const gate of gates.splice(0)) gate.release();
+  await Promise.all(scenarios.splice(0).map(s => s.stop()));
 });
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -46,8 +46,6 @@ function createSayHiModel() {
 describe('T53 evented workflow agent suspend recovery in a fresh module graph', () => {
   it('resumes a suspended agent step in a fresh graph without calling the agent again', async () => {
     const runId = 't53-recover';
-    const gate = createGate();
-    gates.push(gate);
     const suspensions: number[] = [];
     const build = (core: CoreGraph, generation: number) => {
       const agent = new core.Agent({
@@ -84,6 +82,7 @@ describe('T53 evented workflow agent suspend recovery in a fresh module graph', 
       runId,
       build: ({ core, generation }) => build(core, generation),
     });
+    scenarios.push(scenario);
     const original = await scenario.start(async ({ workflow }) => {
       const run = await workflow.createRun({ runId });
       return run.start({ inputData: { prompt: 'go' } });
@@ -111,7 +110,6 @@ describe('T53 evented workflow agent suspend recovery in a fresh module graph', 
       expect(suspensions).toEqual([1]);
     } finally {
       await mastra.stopWorkers();
-      gate.release();
     }
   }, 60_000);
 });
