@@ -1322,9 +1322,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         });
         // Same recovery as a failed nack republish: the entry is still
         // pending, so let a future reclaim (or the next timeout pass, if the
-        // handler is still hung) retry it.
+        // handler is still hung) retry it. Fan-out readers have no reclaim
+        // scan, so they keep the timeout registration for the next pass.
         settled = false;
-        sub.inFlight.delete(streamId);
+        sub.settling.set(streamId, cb => settleMember(cb, false));
+        if (sub.isGrouped) sub.inFlight.delete(streamId);
+        else sub.inFlight.set(streamId, { since: Date.now(), expire });
         return;
       }
       sub.inFlight.delete(streamId);
