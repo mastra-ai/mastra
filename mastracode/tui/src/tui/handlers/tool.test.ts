@@ -414,11 +414,13 @@ describe('inline tool approval', () => {
     (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
     (ctx.state as any).pendingApprovalDismiss = null;
 
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
     handleToolApprovalRequired(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
 
     const approval = ctx.state.activeInlineApproval;
     expect(approval).toBeDefined();
     expect(visibleChildren(ctx)).toContain(approval);
+    // The tool row above already shows the call, so the prompt is just the question and the keys.
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('Allow?');
 
     approval!.handleInput('y');
@@ -443,6 +445,30 @@ describe('inline tool approval', () => {
       declineContext: undefined,
     });
     expect(ctx.state.activeInlineApproval).toBeUndefined();
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('Allow?');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('Allow');
+  });
+
+  it('names the tool and its arguments when the approval targets a different call than the visible row', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    // A wrapper tool asks approval for an inner tool under its own call id.
+    handleToolStart(ctx, 'call-3', 'execute_command', { command: 'run-wrapper' });
+    handleToolApprovalRequired(ctx, 'call-3', 'write_file', { path: 'src/auth.ts' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow write_file?');
+    expect(output).toContain('path: src/auth.ts');
+  });
+
+  it('names the tool when no row shows the call', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    handleToolApprovalRequired(ctx, 'call-4', 'mcp_search', { query: 'release notes' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow mcp_search?');
+    expect(output).toContain('query: release notes');
   });
 });

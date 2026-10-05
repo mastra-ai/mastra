@@ -370,11 +370,18 @@ export function handleToolApprovalRequired(
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };
 
+  // The approval can target something other than the visible row (a wrapper tool asking for an inner one),
+  // or have no row at all; then the card names the tool and its arguments itself.
+  const visibleCall = state.pendingTools.get(toolCallId)?.getToolCall?.();
+  const showTarget =
+    !visibleCall || visibleCall.toolName !== toolName || safeStringify(visibleCall.args) !== safeStringify(args);
+
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,
     toolName,
     args,
     categoryLabel,
+    showTarget,
     onAction: (action: ApprovalAction) => {
       removeApproval();
       state.pendingApprovalDismiss = null;

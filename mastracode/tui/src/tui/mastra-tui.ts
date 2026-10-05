@@ -270,6 +270,20 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
+      // Setup (onboarding) covers the terminal, so it takes keys before any inline prompt: a key meant for
+      // setup must never approve a pending tool call or answer a hidden question.
+      if (this.state.activeOnboarding) {
+        // Ctrl+C during onboarding — cancel it
+        if (data === '\x03') {
+          this.state.activeOnboarding.cancel();
+          this.state.activeOnboarding = undefined;
+          // Fall through to let the editor's 'clear' action fire
+          originalHandleInput(data);
+        } else {
+          this.state.activeOnboarding.handleInput(data);
+        }
+        return;
+      }
       // If there's an active plan approval, route input to it. Ctrl+C still
       // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
       // process SIGINT never fires), so the inline component would otherwise
@@ -292,18 +306,6 @@ export class MastraTUI {
       else if (this.state.activeInlineQuestion) {
         if (data !== '\x03') {
           this.state.activeInlineQuestion.handleInput(data);
-          return;
-        }
-      }
-      // If onboarding is active, route input there
-      if (this.state.activeOnboarding) {
-        // Ctrl+C during onboarding — cancel it
-        if (data === '\x03') {
-          this.state.activeOnboarding.cancel();
-          this.state.activeOnboarding = undefined;
-          // Fall through to let the editor's 'clear' action fire
-        } else {
-          this.state.activeOnboarding.handleInput(data);
           return;
         }
       }

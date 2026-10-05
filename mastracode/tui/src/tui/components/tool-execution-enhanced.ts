@@ -408,6 +408,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.rebuild();
   }
 
+  getToolCall(): { toolName: string; args: unknown } {
+    return { toolName: this.toolName, args: this.args };
+  }
+
   setCompactToolModeColor(color: string | undefined): void {
     const nextColor = normalizeHexColor(color);
     if (this.compactToolModeColor === nextColor) return;

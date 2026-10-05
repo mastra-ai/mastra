@@ -359,6 +359,7 @@ describe('handleToolApprovalRequired', () => {
           terminal: { columns: 120, rows: 40 },
         },
         hookManager: undefined,
+        pendingTools: new Map(),
       },
       addChildBeforeFollowUps: vi.fn(),
       notify: vi.fn(),

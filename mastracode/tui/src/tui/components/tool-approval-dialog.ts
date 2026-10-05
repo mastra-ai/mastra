@@ -27,6 +27,11 @@ export interface ToolApprovalDialogOptions {
   args: unknown;
   /** Human-readable category label, e.g. "Edit" or "Execute" */
   categoryLabel?: string;
+  /**
+   * Name the tool and list its arguments in the card. Set when no visible tool row shows this exact call,
+   * e.g. a wrapper tool asking approval for an inner tool, or a tool without a call row.
+   */
+  showTarget?: boolean;
   onAction: (action: ApprovalAction) => void;
 }
 
@@ -34,6 +39,7 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
   private toolName: string;
   private args: unknown;
   private categoryLabel: string | undefined;
+  private showTarget: boolean;
   private onAction: (action: ApprovalAction) => void;
   private resolved = false;
 
@@ -50,6 +56,7 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     this.toolName = options.toolName;
     this.args = options.args;
     this.categoryLabel = options.categoryLabel;
+    this.showTarget = options.showTarget ?? false;
     this.onAction = options.onAction;
   }
 
@@ -59,7 +66,10 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
    * One inline row under the pending tool call (which already shows the command / path):
    *   ▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no
    * On narrow terminals the options wrap under "Allow?".
-   * Tools without a visible call row (e.g. MCP tools) get the tool name in front.
+   * When no visible row shows this exact call (`showTarget`), the card names the tool and lists its arguments:
+   *   ▎ Allow write_file?
+   *   ▎   path: src/auth.ts
+   *   ▎ y yes  ·  a always allow Edit  ·  Y YOLO  ·  n no
    */
   render(width: number): string[] {
     const warning = theme.getTheme().warning;
@@ -67,12 +77,22 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     const always = this.categoryLabel ? `always allow ${this.categoryLabel}` : 'always allow category';
     const options = [key('y', 'yes'), key('a', always), key('Y', 'YOLO'), key('n', 'no')];
     const sep = theme.fg('dim', '  ·  ');
-    const label = theme.bold(theme.fg('text', 'Allow?'));
     const room = width - 2; // "▎ "
-    const line = `${label}   ${options.join(sep)}`;
-    if (visibleWidth(line) <= room) return card(warning, [line]);
-    // Narrow: the question on its own row, then the options packed into as few rows as fit.
-    const rows = [label];
+    if (!this.showTarget) {
+      const label = theme.bold(theme.fg('text', 'Allow?'));
+      const line = `${label}   ${options.join(sep)}`;
+      if (visibleWidth(line) <= room) return card(warning, [line]);
+    }
+    const label = this.showTarget
+      ? theme.bold(theme.fg('text', `Allow ${this.toolName}?`))
+      : theme.bold(theme.fg('text', 'Allow?'));
+    const argRows = this.showTarget
+      ? this.describeArgs()
+          .split('\n')
+          .map(arg => theme.fg('muted', `  ${arg}`))
+      : [];
+    // The question on its own row (then the arguments), then the options packed into as few rows as fit.
+    const rows = [label, ...argRows];
     let row = '';
     for (const option of options) {
       const next = row ? `${row}${sep}${option}` : option;

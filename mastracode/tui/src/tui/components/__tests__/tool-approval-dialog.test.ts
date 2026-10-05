@@ -200,6 +200,24 @@ describe('ToolApprovalDialogComponent.render', () => {
     expect(lines).toEqual(['▎ Allow?', '▎ y yes  ·  a always allow Execute', '▎ Y YOLO  ·  n no']);
   });
 
+  it('names the tool and lists its arguments when showTarget is set', () => {
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'src/auth.ts', overwrite: true },
+      categoryLabel: 'Edit',
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const lines = dialog.render(120).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toEqual([
+      '▎ Allow write_file?',
+      '▎   path: src/auth.ts',
+      '▎   overwrite: true',
+      '▎ y yes  ·  a always allow Edit  ·  Y YOLO  ·  n no',
+    ]);
+  });
+
   it('never renders wider than the terminal', () => {
     const { dialog } = makeDialog();
     for (const line of dialog.render(20)) {
