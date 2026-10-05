@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { SidebarNewMoreLinks } from './sidebar-new-more-links';
 import { SidebarNewNavHeader } from './sidebar-new-nav-header';
 import { SidebarNewSectionLink } from './sidebar-new-section-link';
-import { defaultRecentItemsStorageKey, getSidebarLinkKey, visibilitySchema } from './sidebar-new-visibility';
+import { defaultVisibilityStorageKey, getSidebarLinkKey, visibilitySchema } from './sidebar-new-visibility';
 import type { NavLink } from '@/ds/components/MainSidebar/main-sidebar-nav-link';
 import { MainSidebarNavList } from '@/ds/components/MainSidebar/main-sidebar-nav-list';
 import type { NavSection } from '@/ds/components/MainSidebar/main-sidebar-nav-section';
@@ -19,24 +19,22 @@ export type SidebarNewSectionsProps = {
   isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
   className?: string;
   visibilityStorageKey?: string;
-  recentItemsStorageKey?: string;
 };
 
 export function SidebarNewSections({
   sections,
   isActive,
   className,
-  visibilityStorageKey,
-  recentItemsStorageKey = defaultRecentItemsStorageKey,
+  visibilityStorageKey = defaultVisibilityStorageKey,
 }: SidebarNewSectionsProps) {
   const baseId = useId();
   const [visibility, setVisibility] = useLocalStorageState({
-    initialKey: visibilityStorageKey ?? recentItemsStorageKey,
+    initialKey: visibilityStorageKey,
     defaultValue: {},
     schema: visibilitySchema,
   });
-  function changeVisibility(link: NavLink, visible: boolean) {
-    setVisibility(current => ({ ...current, [getSidebarLinkKey(link)]: visible }));
+  function changeVisibility(visibilityKey: string, visible: boolean) {
+    setVisibility(current => ({ ...current, [visibilityKey]: visible }));
   }
 
   return (
@@ -70,6 +68,7 @@ export function SidebarNewSections({
               ))}
               {section.moreLinks?.length ? (
                 <SidebarNewMoreLinks
+                  sectionKey={section.key}
                   links={section.moreLinks}
                   activeCandidates={activeCandidates}
                   isActive={isActive}

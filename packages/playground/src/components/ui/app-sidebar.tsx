@@ -92,7 +92,6 @@ export function AppSidebar() {
         .map(item => ({
           ...linkForItem(item),
           defaultVisible:
-            getIsLinkActive(item, pathname, items) ||
             (item.url === '/mcps' && !!mcpServers?.length) ||
             (item.url === '/workspaces' && !!workspaces?.workspaces.length),
         })),

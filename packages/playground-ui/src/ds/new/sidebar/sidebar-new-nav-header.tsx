@@ -31,21 +31,21 @@ export function SidebarNewNavHeader({
   const showTitle = state === 'default';
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
+  const toneClassName = isActive ? 'text-foreground' : 'text-muted-foreground';
+
   return (
     <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'h-10', className)}>
       {showTitle ? (
         <>
+          {icon ? (
+            <span aria-hidden="true" className={cn('flex shrink-0 pl-3 [&_svg]:size-4', toneClassName)}>
+              {icon}
+            </span>
+          ) : null}
           <header
             {...props}
-            className={cn(
-              'flex min-w-0 flex-1 items-center gap-2 truncate pl-3 text-column [&_svg]:size-4 [&_svg]:shrink-0',
-              {
-                'text-foreground': isActive,
-                'text-muted-foreground': !isActive,
-              },
-            )}
+            className={cn('max-w-full min-w-0 flex-1 truncate text-column', icon ? 'pl-2' : 'pl-3', toneClassName)}
           >
-            {icon}
             {href ? (
               <Link
                 href={href}
@@ -57,7 +57,7 @@ export function SidebarNewNavHeader({
                 {children}
               </Link>
             ) : (
-              <span className="min-w-0 truncate">{children}</span>
+              children
             )}
           </header>
           {action}
