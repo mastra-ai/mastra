@@ -933,6 +933,44 @@ Revokes an API token.
 mastra auth tokens revoke <token-id>
 ```
 
+## `mastra connect`
+
+Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
+
+The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <project>` to select a project when `MASTRA_PROJECT_ID` isn't set.
+
+### `mastra connect list`
+
+Lists the available providers. Providers already connected to the project are shown in green, and unconnected providers are shown in grey.
+
+```bash
+mastra connect list
+```
+
+### `mastra connect add`
+
+Connects a provider to the project. When the organization already has connections for the provider that aren't attached to the project, the command lists them and lets you attach an existing connection or create a new one. With no existing connections it goes straight to the provider's auth flow.
+
+OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+
+Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming.
+
+```bash
+mastra connect add <provider>
+```
+
+Pass `--yes` to skip all prompts. This always creates a new connection without a display name, even when existing connections could be reused.
+
+### `mastra connect remove`
+
+Unlinks a provider's connection from the project. The organization-level connection is kept and can be re-attached later.
+
+```bash
+mastra connect remove <provider>
+```
+
+When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation. Without a terminal, or with `--yes`, removing several connections at once requires `--all`, and `--connection <id>` removes a single one.
+
 ## `mastra lint`
 
 The `mastra lint` command validates the structure and code of your Mastra project.
