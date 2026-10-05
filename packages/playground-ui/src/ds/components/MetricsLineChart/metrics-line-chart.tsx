@@ -1,6 +1,8 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
+import { ChartEdgeTick } from '@/ds/primitives/chart-edge-tick';
+import type { ChartEdgeTickProps } from '@/ds/primitives/chart-edge-tick';
 import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
 import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
@@ -88,7 +90,7 @@ export function MetricsLineChart({
             <XAxis
               dataKey="time"
               height={X_AXIS_HEIGHT}
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={(props: Omit<ChartEdgeTickProps, 'count'>) => <ChartEdgeTick {...props} count={data.length} />}
               tickLine={false}
               axisLine={false}
               interval={xAxisInterval}

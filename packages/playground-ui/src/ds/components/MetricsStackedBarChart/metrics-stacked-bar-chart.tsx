@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
+import { ChartEdgeTick } from '@/ds/primitives/chart-edge-tick';
+import type { ChartEdgeTickProps } from '@/ds/primitives/chart-edge-tick';
 import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
 import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
@@ -140,7 +142,7 @@ export function MetricsStackedBarChart({
             <XAxis
               dataKey="time"
               height={X_AXIS_HEIGHT}
-              tick={tick}
+              tick={(props: Omit<ChartEdgeTickProps, 'count'>) => <ChartEdgeTick {...props} count={data.length} />}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
