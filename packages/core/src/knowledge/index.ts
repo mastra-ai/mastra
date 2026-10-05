@@ -189,14 +189,6 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).search(input);
   }
 
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }) {
-    return (await this.getStorage()).getCurationCursor(input);
-  }
-
-  async advanceCurationCursor(input: { sourceThreadId: string; agent: string; lastKnowledgeId: string }) {
-    return (await this.getStorage()).advanceCurationCursor(input);
-  }
-
   async listActivity(input: { scope: KnowledgeScope; after?: string; limit?: number }) {
     return (await this.getStorage()).listActivity(input);
   }
