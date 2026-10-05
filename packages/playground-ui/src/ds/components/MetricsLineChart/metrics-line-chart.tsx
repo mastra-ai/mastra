@@ -2,6 +2,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
+import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
 
@@ -73,7 +74,7 @@ export function MetricsLineChart({
       {showLegend && <MetricsLineChartLegend data={data} series={series} className="mb-4" />}
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+          <LineChart data={data} margin={CHART_MARGIN}>
             <defs>
               <ChartGlowFilter id={`${id}-glow`} blur={4.5} alpha={0.7} />
             </defs>
@@ -86,6 +87,7 @@ export function MetricsLineChart({
             />
             <XAxis
               dataKey="time"
+              height={X_AXIS_HEIGHT}
               tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}

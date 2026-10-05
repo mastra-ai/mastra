@@ -13,6 +13,7 @@ import {
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
 import { ChartGlowFilter } from '@/ds/primitives/chart-glow';
+import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
 
@@ -113,7 +114,7 @@ export function MetricsStackedBarChart({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
-            margin={{ top: 5, right: 5, bottom: 5, left: 0 }}
+            margin={CHART_MARGIN}
             onMouseMove={state => {
               const index = state?.activeTooltipIndex;
               setHovered(index === undefined || index === null ? null : Number(index));
@@ -138,6 +139,7 @@ export function MetricsStackedBarChart({
             />
             <XAxis
               dataKey="time"
+              height={X_AXIS_HEIGHT}
               tick={tick}
               tickLine={false}
               axisLine={false}
