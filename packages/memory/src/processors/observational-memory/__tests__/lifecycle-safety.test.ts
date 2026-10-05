@@ -878,6 +878,39 @@ describe('markers on already marked messages', () => {
     ]);
   });
 
+  it("the end marker joins this cycle's start marker when a newer assistant message is saved meanwhile", async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 100 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const earlier = message(ids.threadId, ids.resourceId, 'oo-a', 'EARLIER answer', at(1), 'assistant');
+    earlier.content.parts.push(
+      marker('data-om-observation-start', 'c0') as any,
+      marker('data-om-observation-end', 'c0') as any,
+    );
+    const asked = message(ids.threadId, ids.resourceId, 'oo-q', 'question '.repeat(200), at(3));
+    await storage.saveMessages({ messages: [earlier, asked] });
+    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      // Another writer saves an assistant message timestamped before the observed range.
+      await storage.saveMessages({
+        messages: [message(ids.threadId, ids.resourceId, 'oo-late', 'LATE answer', at(2), 'assistant')],
+      });
+      return { observations: '- question observed' } as Awaited<ReturnType<typeof om.observer.call>>;
+    });
+
+    const result = await om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages: [asked] });
+
+    expect(result.observed).toBe(true);
+    const after = (await storage.listMessagesById({ messageIds: [earlier.id] })).messages[0]!;
+    expect(shape(after)).toEqual([
+      'EARLIER',
+      'data-om-observation-start',
+      'data-om-observation-end',
+      'data-om-observation-start',
+      'data-om-observation-end',
+    ]);
+  });
+
   it("resource scope: no marker lands on another thread's message that still has unobserved parts", async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage, { scope: 'resource', messageTokens: 100 });
@@ -948,7 +981,7 @@ describe('concurrent buffer() calls', () => {
     expect((head.bufferedObservationChunks ?? []).map(c => c.messageIds)).toEqual([['cb-1'], ['cb-2']]);
   });
 
-  it('keep a later buffer() registered when the processor-path op ahead of it finishes', async () => {
+  it('keep a later buffer() registered when a triggerAsyncBuffering op ahead of it finishes', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
     const ids = await setupThread(storage);
@@ -968,7 +1001,7 @@ describe('concurrent buffer() calls', () => {
       return { observations: '- buffered' } as Awaited<ReturnType<typeof om.observer.call>>;
     });
 
-    // The processor path starts an op; buffer() queues behind it.
+    // triggerAsyncBuffering's path starts an op; buffer() queues behind it.
     await internals.startAsyncBufferedObservation({ ...turnRecord }, ids.threadId, [first], lockKey, undefined, 1_000);
     await vi.waitFor(() => expect(observerCall).toHaveBeenCalledTimes(1));
     const queued = om.buffer({
