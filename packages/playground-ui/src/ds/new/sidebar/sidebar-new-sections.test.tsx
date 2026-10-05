@@ -99,6 +99,26 @@ describe('SidebarNew.Sections', () => {
     expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
   });
 
+  it('keeps More when the active link and defaults leave nothing hidden', async () => {
+    renderSections(
+      [
+        {
+          key: 'primitives',
+          links: [],
+          moreLinks: [
+            { name: 'MCP Servers', url: '/mcps', defaultVisible: true },
+            { name: 'Tools', url: '/tools' },
+            { name: 'Workspaces', url: '/workspaces', defaultVisible: true },
+          ],
+        },
+      ],
+      '/tools',
+    );
+    expect(screen.getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(await customizeSidebar('MCP Servers'));
+    expect(screen.queryByRole('link', { name: 'MCP Servers' })).toBeNull();
+  });
+
   it('shows a hidden link in place while its route is current, without saving it', async () => {
     const first = renderSections(sections, '/tools');
     const navigation = screen.getByRole('navigation', { name: 'Main' });

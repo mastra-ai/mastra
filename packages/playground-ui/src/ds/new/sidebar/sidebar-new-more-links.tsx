@@ -36,7 +36,7 @@ export function SidebarNewMoreLinks({
   const shownLinks = links.filter(link => linkIsActive(link) || savedVisibility(link));
   const hiddenLinks = links.filter(link => !shownLinks.includes(link));
   const isCustomized = links.some(link => savedVisibility(link) !== defaultVisibility(link));
-  const hasMenu = hiddenLinks.length > 0 || isCustomized;
+  const hasMenu = links.length > 1 || hiddenLinks.length > 0 || isCustomized;
 
   function renderMenuLink(link: NavLink, nested = false): ReactNode {
     return (
