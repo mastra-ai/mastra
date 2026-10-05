@@ -130,16 +130,10 @@ export class TelegramProvider implements ChannelProvider {
 
   /** Discovery metadata for the editor UI. */
   getInfo(): ChannelPlatformInfo {
-    // Configured means "ready to connect agents": either a bot is already
-    // registered (#configured) or a credential source exists — a default
-    // `botToken`, or a `tokenResolver` in delegated mode (@mastra/connect).
-    // Without this, a freshly attached platform credential reports
-    // unconfigured and UIs hide the connect action entirely.
-    const hasCredentialSource = Boolean(this.#config.tokenResolver ?? this.#config.botToken);
     return {
       id: this.id,
       name: 'Telegram',
-      isConfigured: this.#configured || hasCredentialSource,
+      isConfigured: this.isConfigured(),
       connectOptionsSchema: {
         type: 'object',
         properties: {
@@ -495,12 +489,15 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   /**
-   * Whether at least one bot is actively registered. Mirrors
-   * `SlackProvider.isConfigured` (Telegram has no global credential to check —
-   * "configured" means an active installation exists).
+   * Whether the provider is ready to connect agents: either a bot is already
+   * registered (#configured) or a credential source exists — a default
+   * `botToken`, or a `tokenResolver` in delegated mode (@mastra/connect).
+   * Without the credential-source half, a freshly attached platform credential
+   * reports unconfigured and UIs hide the connect action entirely. Mirrors
+   * `DiscordProvider.isConfigured` / `SlackProvider.isConfigured`.
    */
   isConfigured(): boolean {
-    return this.#configured;
+    return this.#configured || Boolean(this.#config.tokenResolver ?? this.#config.botToken);
   }
 
   /**

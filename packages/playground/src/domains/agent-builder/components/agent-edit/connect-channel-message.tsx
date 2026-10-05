@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface ConnectChannelMessageProps {
   platformId: string;
@@ -22,6 +23,8 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
     queryOptions: { enabled: Boolean(platformId && agentId) },
   });
   const installation = installations.find(i => i.status === 'active');
+  const hasPendingInstall = installations.some(i => i.status === 'pending');
+  useReconcilePendingInstallOnFocus({ platform: platformId, agentId: agentId ?? '', hasPendingInstall });
   const { connect, isConnecting } = useConnectChannelAction(platformId);
   const [dialogOpen, setDialogOpen] = useState(false);
 

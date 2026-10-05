@@ -110,7 +110,7 @@ describe('ChannelDialog (default platform)', () => {
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
-  it('surfaces a popup-blocked toast when the oauth tab cannot be opened', async () => {
+  it('falls back to navigating this tab when the popup blocker eats every window.open', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({
@@ -121,23 +121,47 @@ describe('ChannelDialog (default platform)', () => {
       ),
     );
 
-    vi.spyOn(window, 'open').mockImplementation(() => null);
-
-    render(
-      <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={() => {}}
-        />
-      </Wrapper>,
-    );
-
-    fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
-    await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith('Popup blocked — please allow popups and try again');
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const originalLocation = window.location;
+    const hrefSetter = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: new Proxy(originalLocation, {
+        set(_target, prop, value) {
+          if (prop === 'href') hrefSetter(value);
+          return true;
+        },
+        get(target, prop) {
+          // @ts-expect-error indexed access
+          return target[prop];
+        },
+      }),
     });
+
+    try {
+      render(
+        <Wrapper>
+          <ChannelDialog
+            platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+            agentId="agent-1"
+            open
+            onOpenChange={() => {}}
+          />
+        </Wrapper>,
+      );
+
+      fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+      // Pre-open on click is blocked, the fresh attempt on resolve is blocked —
+      // the connect POST already created the pending install, so the flow must
+      // not dead-end: it navigates the current tab instead of toasting.
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://oauth.example.com/authorize?id=abc');
+      });
+      expect(openSpy).toHaveBeenCalledTimes(2);
+      expect(toastErrorMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+    }
   });
 
   it('handles deep_link result by navigating the pre-opened tab to the deep link', async () => {

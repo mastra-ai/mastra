@@ -1,5 +1,7 @@
 export { DiscordProvider, resolveDiscordAdapterConfig } from './discord-provider';
 export { DiscordInstallStore, toInstallationInfo, PLATFORM } from './install-store';
+export { planReconcile, isInviteFlowLive, hasReconcilableSnapshot, SNAPSHOT_TTL_MS } from './reconcile';
+export type { ReconcileActivation } from './reconcile';
 export {
   validateApp,
   guildHealthCheck,

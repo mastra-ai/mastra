@@ -293,7 +293,7 @@ export interface DiscordInstallation {
   installedAt: Date;
   /**
    * The bot's guild ids at the moment a pending invite was issued. Lets
-   * {@link DiscordProvider.listInstallations} reconcile the install after the
+   * {@link DiscordProvider.reconcileInstallation} confirm the install after the
    * operator completes the invite in another tab: exactly one guild appearing
    * since the snapshot is the authorized guild, so the install activates
    * without waiting for a first interaction. `undefined` when the snapshot
@@ -302,6 +302,23 @@ export interface DiscordInstallation {
    * activation.
    */
   guildSnapshot?: string[];
+  /**
+   * When the invite flow that owns {@link guildSnapshot} was last (re)started.
+   * The snapshot is only trusted for a bounded claim window after this moment
+   * (see `SNAPSHOT_TTL_MS` in `reconcile.ts`) — an abandoned Connect click must
+   * not claim a guild the bot joins days later. Set on every invite-flow
+   * `connect()`, including when the fetch that should have produced
+   * {@link guildSnapshot} failed. Cleared on activation.
+   */
+  snapshotAt?: Date;
+  /**
+   * The Discord application {@link guildSnapshot} was taken against. A baseline
+   * from app A says nothing about app B's membership — after `configure()`
+   * swaps the bot token, every guild B was already in would look newly
+   * authorized. Reconciliation and snapshot reuse require it to match the
+   * current app. Cleared on activation.
+   */
+  snapshotApplicationId?: string;
   /**
    * The guild `connect()` explicitly targeted (`options.guildId`) when the
    * pending invite was issued, if any. Reconciliation only auto-activates this

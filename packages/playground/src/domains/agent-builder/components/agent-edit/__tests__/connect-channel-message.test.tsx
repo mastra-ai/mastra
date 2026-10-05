@@ -37,16 +37,29 @@ const installRadixDomShims = () => {
   }
 };
 
-type TabStub = { opener: Window | null; location: { href: string }; close: ReturnType<typeof vi.fn> };
-
 /**
- * jsdom has no window.open; stub it with a navigable tab handle shaped like the
- * one the connect action pre-opens on click and navigates once the request resolves.
+ * jsdom throws on real navigation; intercept `window.location.href = …` with a
+ * spy. Slack's connect flow redirects back to Studio, so the action navigates
+ * the CURRENT tab instead of pre-opening a new one.
  */
-const stubOpenTab = (): TabStub => {
-  const tab: TabStub = { opener: window, location: { href: 'about:blank' }, close: vi.fn() };
-  vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
-  return tab;
+const stubLocationHref = () => {
+  const originalLocation = window.location;
+  const hrefSetter = vi.fn();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: new Proxy(originalLocation, {
+      set(_target, prop, value) {
+        if (prop === 'href') hrefSetter(value);
+        return true;
+      },
+      get(target, prop) {
+        // @ts-expect-error indexed access
+        return target[prop];
+      },
+    }),
+  });
+  const restore = () => Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  return { hrefSetter, restore };
 };
 
 const platformsHandler = (platforms: unknown[]) =>
@@ -110,9 +123,10 @@ describe('ConnectChannelMessage', () => {
     expect(badge?.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('shows "Continue with Slack" and opens the OAuth URL in a new tab when configured but not yet connected', async () => {
+  it('shows "Continue with Slack" and navigates this tab to the OAuth URL when configured but not yet connected', async () => {
     let connectCalled = false;
-    const tab = stubOpenTab();
+    const openSpy = vi.spyOn(window, 'open');
+    const { hrefSetter, restore } = stubLocationHref();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -127,27 +141,30 @@ describe('ConnectChannelMessage', () => {
       }),
     );
 
-    render(
-      <Wrapper>
-        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
-      </Wrapper>,
-    );
+    try {
+      render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
 
-    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
-    expect(button.textContent).toContain('Continue with Slack');
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      expect(button.textContent).toContain('Continue with Slack');
 
-    fireEvent.click(button);
+      fireEvent.click(button);
 
-    // The tab opens synchronously on click (while user activation is live),
-    // then navigates once the connect request resolves.
-    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
-    await waitFor(() => {
-      expect(connectCalled).toBe(true);
-    });
-    await waitFor(() => {
-      expect(tab.location.href).toBe('https://slack.example/oauth');
-    });
-    expect(tab.opener).toBeNull();
+      await waitFor(() => {
+        expect(connectCalled).toBe(true);
+      });
+      // Slack's flow redirects back to Studio, so the CURRENT tab navigates —
+      // no pre-opened tab that would leave this Studio copy stale.
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://slack.example/oauth');
+      });
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 
   it('shows a "Connected" badge and a Manage button when there is an active installation', async () => {
@@ -180,8 +197,9 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Manage');
   });
 
-  it('closes the pre-opened tab without navigating it when the connect mutation settles with an error', async () => {
-    const tab = stubOpenTab();
+  it('leaves this tab alone when the connect mutation settles with an error', async () => {
+    const openSpy = vi.spyOn(window, 'open');
+    const { hrefSetter, restore } = stubLocationHref();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -189,24 +207,28 @@ describe('ConnectChannelMessage', () => {
       http.post('*/api/channels/slack/connect', () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
     );
 
-    render(
-      <Wrapper>
-        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
-      </Wrapper>,
-    );
+    try {
+      render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
 
-    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
-    fireEvent.click(button);
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      fireEvent.click(button);
 
-    // The error path closes the tab — waiting on it (not the label, which starts
-    // as "Continue with Slack") guarantees the mutation actually settled.
-    await waitFor(() => expect(tab.close).toHaveBeenCalled());
-    expect(tab.location.href).toBe('about:blank'); // never navigated
-    await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
+      // The button label flips back once the mutation settles — the error path
+      // must never navigate away from Studio or open a tab.
+      await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
+      expect(hrefSetter).not.toHaveBeenCalled();
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 
-  it('navigates the pre-opened tab even when the surface unmounts before connect resolves', async () => {
-    const tab = stubOpenTab();
+  it('navigates this tab even when the surface unmounts before connect resolves', async () => {
+    const { hrefSetter, restore } = stubLocationHref();
     let releaseConnect!: () => void;
     const gate = new Promise<void>(resolve => {
       releaseConnect = resolve;
@@ -225,26 +247,28 @@ describe('ConnectChannelMessage', () => {
       }),
     );
 
-    const { unmount } = render(
-      <Wrapper>
-        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
-      </Wrapper>,
-    );
+    try {
+      const { unmount } = render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
 
-    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
-    fireEvent.click(button);
-    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      fireEvent.click(button);
 
-    // The surface goes away while the request is in flight (e.g. the user
-    // closes the dialog). React Query's per-call mutate callbacks are skipped
-    // after unmount — the tab must still be navigated, not stranded on
-    // about:blank with authorization never starting.
-    unmount();
-    releaseConnect();
+      // The surface goes away while the request is in flight (e.g. the user
+      // closes the dialog). React Query's per-call mutate callbacks are skipped
+      // after unmount — the flow must still navigate, not silently dead-end
+      // with a pending install already created server-side.
+      unmount();
+      releaseConnect();
 
-    await waitFor(() => {
-      expect(tab.location.href).toBe('https://slack.example/oauth');
-    });
-    expect(tab.close).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://slack.example/oauth');
+      });
+    } finally {
+      restore();
+    }
   });
 });
