@@ -174,9 +174,9 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
     name: 'includeSubAgentMetadata',
     type: 'boolean',
     description:
-      'Whether to emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Set to `false` to drop them from the stream.',
+      'Whether to emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Pass `true` to stream sub-agent progress live as `data-tool-agent` parts. These parts can include reasoning and intermediate tool inputs and results from the sub-agent, so only enable it for clients allowed to see them.',
     isOptional: true,
-    defaultValue: 'true',
+    defaultValue: 'false',
   },
   {
     name: 'onError',

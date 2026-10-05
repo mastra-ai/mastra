@@ -1296,7 +1296,7 @@ For a complete implementation, see the [workflow-suspend-resume example](https:/
 
 Tools can call agents internally and stream the agent's output back to the UI. This creates compact `data-tool-agent` snapshots while the nested step is still running, `data-tool-agent-step` parts when a nested step finishes, and one full `data-tool-agent` snapshot when the nested run finishes.
 
-`handleChatStream()` and `chatRoute()` emit these parts for sub-agents by default. Pass `includeSubAgentMetadata: false` to drop them.
+`handleChatStream()` and `chatRoute()` don't emit these parts for sub-agents by default. Pass `includeSubAgentMetadata: true` to stream sub-agent progress live as `data-tool-agent` parts. These parts can include the sub-agent's reasoning and intermediate tool inputs and results, so only enable it for clients allowed to see them.
 
 Both part types include delegation metadata for nested supervisor chains:
 

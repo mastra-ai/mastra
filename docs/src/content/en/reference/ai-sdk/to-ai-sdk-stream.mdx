@@ -133,7 +133,7 @@ The second parameter is an options object:
     name: 'includeSubAgentMetadata',
     type: 'boolean',
     description:
-      '(Agent only) Whether to emit `data-tool-agent` parts for sub-agents. Unlike `handleChatStream()` and `chatRoute()`, which default to `true`, this defaults to `false`.',
+      '(Agent only) Whether to emit `data-tool-agent` parts for sub-agents. Like `handleChatStream()` and `chatRoute()`, this defaults to `false`. These parts can include reasoning and intermediate tool inputs and results from the sub-agent, so only enable it for clients allowed to see them.',
     isOptional: true,
     defaultValue: 'false',
   },

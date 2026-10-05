@@ -232,7 +232,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  /** Emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Defaults to `true`. */
+  /** Emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Defaults to `false`. These parts can include the sub-agent's reasoning and intermediate tool inputs and results, so only enable it for clients allowed to see them. */
   includeSubAgentMetadata?: boolean;
   onError?: (error: unknown) => string;
   messageMetadata?: UI_MESSAGE extends V6UIMessage
@@ -309,7 +309,7 @@ export async function handleChatStream<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
-  includeSubAgentMetadata = true,
+  includeSubAgentMetadata = false,
   onError,
   messageMetadata,
 }: Omit<ChatStreamHandlerOptions<any, OUTPUT>, 'messageMetadata'> & {
@@ -510,7 +510,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
-    /** Emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Defaults to `true`. */
+    /** Emit `data-tool-agent` parts for sub-agents, so the UI can render their progress live. Defaults to `false`. These parts can include the sub-agent's reasoning and intermediate tool inputs and results, so only enable it for clients allowed to see them. */
     includeSubAgentMetadata?: boolean;
     /** Target interval for periodic SSE comment heartbeats. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`. */
     heartbeatMs?: number;
@@ -532,7 +532,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
- * @param {boolean} [options.includeSubAgentMetadata=true] - Whether to emit `data-tool-agent` parts for sub-agents so the UI can render their progress live
+ * @param {boolean} [options.includeSubAgentMetadata=false] - Whether to emit `data-tool-agent` parts for sub-agents so the UI can render their progress live. These parts can include the sub-agent's reasoning and intermediate tool data, so only enable it for clients allowed to see them
  * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts.
@@ -578,7 +578,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
-  includeSubAgentMetadata = true,
+  includeSubAgentMetadata = false,
   heartbeatMs,
   onError,
   messageMetadata,

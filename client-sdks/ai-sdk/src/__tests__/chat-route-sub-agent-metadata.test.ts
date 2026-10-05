@@ -1,8 +1,8 @@
 /**
  * Regression coverage for https://github.com/mastra-ai/mastra/issues/25955.
  *
- * `handleChatStream` and `chatRoute` must emit `data-tool-agent` parts for
- * sub-agents by default and forward `includeSubAgentMetadata` to every
+ * `handleChatStream` and `chatRoute` must leave `data-tool-agent` parts out by
+ * default (opt-in, like `toAISdkStream`) and forward `includeSubAgentMetadata` to every
  * `toAISdkStream` call, including the v6/v7 approval-resume path.
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -95,7 +95,7 @@ async function collect(stream: ReadableStream) {
 const countSubAgentParts = (chunks: any[]) => chunks.filter(chunk => chunk.type === 'data-tool-agent').length;
 
 describe('handleChatStream includeSubAgentMetadata (issue #25955)', () => {
-  it.each(['v5', 'v6', 'v7'] as const)('emits data-tool-agent parts by default (%s)', async version => {
+  it.each(['v5', 'v6', 'v7'] as const)('omits data-tool-agent parts by default (%s)', async version => {
     const chunks = await collect(
       await handleChatStream({
         mastra: createMastra(),
@@ -105,11 +105,11 @@ describe('handleChatStream includeSubAgentMetadata (issue #25955)', () => {
       }),
     );
 
-    expect(countSubAgentParts(chunks)).toBeGreaterThan(0);
+    expect(countSubAgentParts(chunks)).toBe(0);
   });
 
   it.each(['v5', 'v6', 'v7'] as const)(
-    'omits data-tool-agent parts when includeSubAgentMetadata is false (%s)',
+    'emits data-tool-agent parts when includeSubAgentMetadata is true (%s)',
     async version => {
       const chunks = await collect(
         await handleChatStream({
@@ -117,11 +117,11 @@ describe('handleChatStream includeSubAgentMetadata (issue #25955)', () => {
           agentId: 'coordinator',
           params: { messages } as any,
           version,
-          includeSubAgentMetadata: false,
+          includeSubAgentMetadata: true,
         }),
       );
 
-      expect(countSubAgentParts(chunks)).toBe(0);
+      expect(countSubAgentParts(chunks)).toBeGreaterThan(0);
       // The delegation itself is still streamed as a regular tool call.
       expect(chunks.some(chunk => chunk.type === 'tool-input-available' && chunk.toolName === 'agent-helper')).toBe(
         true,
@@ -194,18 +194,19 @@ describe('chatRoute includeSubAgentMetadata (issue #25955)', () => {
     return response.text();
   }
 
-  it.each(['v5', 'v6', 'v7'] as const)('emits data-tool-agent parts by default (%s)', async version => {
+  it.each(['v5', 'v6', 'v7'] as const)('omits data-tool-agent parts by default (%s)', async version => {
     const body = await invokeRoute(chatRoute({ path: '/chat/:agentId', version }));
 
-    expect(body).toContain('"type":"data-tool-agent"');
+    expect(body).not.toContain('"type":"data-tool-agent"');
+    expect(body).toContain('agent-helper');
   });
 
   it.each(['v5', 'v6', 'v7'] as const)(
-    'omits data-tool-agent parts when includeSubAgentMetadata is false (%s)',
+    'emits data-tool-agent parts when includeSubAgentMetadata is true (%s)',
     async version => {
-      const body = await invokeRoute(chatRoute({ path: '/chat/:agentId', version, includeSubAgentMetadata: false }));
+      const body = await invokeRoute(chatRoute({ path: '/chat/:agentId', version, includeSubAgentMetadata: true }));
 
-      expect(body).not.toContain('"type":"data-tool-agent"');
+      expect(body).toContain('"type":"data-tool-agent"');
       expect(body).toContain('agent-helper');
     },
   );
