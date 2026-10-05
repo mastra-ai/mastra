@@ -6,7 +6,7 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useMemoryConfig } from '@mastra/react/hooks';
+import { useMemoryConfig } from '@mastra/react/hooks/memory';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 

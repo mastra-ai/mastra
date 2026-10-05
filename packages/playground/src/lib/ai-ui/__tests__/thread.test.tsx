@@ -293,7 +293,7 @@ describe('Thread', () => {
       expect(heading.classList.contains('font-normal')).toBe(true);
       const name = screen.getByText('Helper');
       expect(name.classList.contains('font-medium')).toBe(true);
-      expect(name.classList.contains('starter-shimmer-ink')).toBe(true);
+      expect(name.classList.contains('text-foreground')).toBe(true);
       const landing = screen.getByTestId('thread-landing');
       expect(landing.contains(heading)).toBe(true);
       expect(landing.contains(screen.getByRole('textbox'))).toBe(true);

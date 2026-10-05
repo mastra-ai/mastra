@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { useLogout as useLogoutMutation } from '@mastra/react/hooks';
+import { useLogout as useLogoutMutation } from '@mastra/react/hooks/auth';
 
 import { clearDraftsOnLogout } from '@/domains/conversation/context/thread-draft-state';
 

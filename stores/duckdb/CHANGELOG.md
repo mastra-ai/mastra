@@ -1,5 +1,25 @@
 # @mastra/duckdb
 
+## 1.13.0-alpha.2
+
+### Patch Changes
+
+- Fixed trace list pages and trace queries that loaded most of the observability table and could fail with an out-of-memory error ([#25518](https://github.com/mastra-ai/mastra/issues/25518)). ([#25802](https://github.com/mastra-ai/mastra/pull/25802))
+
+  - `listTraces`, `listTracesLight` and `listBranches` now read only the page's own spans. Oldest-first pages, such as the ones a retention job reads, no longer load the whole table.
+  - `queryTraces` reads only traces whose root spans fall in the requested time range, including when it filters on related spans.
+
+  On a 100k-trace store, the oldest `listTraces` page went from loading about 1.9 GB of table data to about 32 MB, and `queryTraces` from about 860 MB to about 25 MB. Results are unchanged.
+
+- Reduced memory use when reading spans that carry large inputs or outputs ([#25518](https://github.com/mastra-ai/mastra/issues/25518)). ([#25932](https://github.com/mastra-ai/mastra/pull/25932))
+
+  DuckDB loads every large value stored near a requested span when those values sit next to empty ones. Fetching one span or one trace page could therefore load hundreds of megabytes. New spans store missing `input`, `output`, `attributes` and `requestContext` values to avoid this. On a store with large agent payloads, reading one span went from about 316 MB to about 1 MB. The oldest trace page went from about 469 MB to about 145 MB.
+
+  Results are unchanged. Spans written by earlier versions read the same as before and keep the old memory use until they are pruned.
+
+- Updated dependencies [[`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751)]:
+  - @mastra/core@1.75.0-alpha.4
+
 ## 1.13.0-alpha.1
 
 ### Minor Changes

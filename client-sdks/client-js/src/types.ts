@@ -127,34 +127,16 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
@@ -165,10 +147,9 @@ export interface SubscribeAgentThreadParams {
   withInitialHistory?: boolean | { perPage?: number };
 }
 
-/** @experimental Agent thread cancellation is experimental. */
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
 
-/** @experimental Cancels pending signals on the server process handling the request. */
+/** Cancels pending signals on the server process handling the request. */
 export type CancelQueuedAgentMessagesParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
 
 export type CancelQueuedAgentMessagesResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
@@ -188,9 +169,6 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface ProcessAgentThreadStreamOptions {
   /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
   onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;

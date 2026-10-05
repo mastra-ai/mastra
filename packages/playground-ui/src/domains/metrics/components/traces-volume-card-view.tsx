@@ -1,4 +1,4 @@
-import type { VolumeRow } from '@mastra/react/hooks';
+import type { VolumeRow } from '@mastra/react/hooks/metrics';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars/horizontal-bars';

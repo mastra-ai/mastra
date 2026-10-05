@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useMastraPackages } from '@mastra/react/hooks';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { usePackageUpdates } from '../hooks/use-package-updates';

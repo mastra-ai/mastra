@@ -6,11 +6,11 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
-import { useMemory, useThreads, useAuthCapabilities, isAuthenticated, useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -19,15 +19,18 @@ import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import {
   AgentChatLoadingSkeleton,
   AgentLandingLoadingSkeleton,
-  AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
+import { ChatThreads } from '@/domains/agents/components/chat-threads';
+import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
+import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
+import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
@@ -53,14 +56,13 @@ function AgentThread() {
     requestContext: useEntityRequestContext('agent', agentId!)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
-  const { data: memory } = useMemory({
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
     agentId: agentId!,
     requestContext: useEntityRequestContext('agent', agentId!)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
-  const threadsPanel = useRef<CollapsiblePanelHandle>(null);
+  const threadsPanel = useThreadsPanel();
   const draftHandle = useRef<ThreadDraftHandle>(null);
   const isNewThread = threadId === 'new';
 
@@ -89,37 +91,10 @@ function AgentThread() {
     queryOptions: { enabled: Boolean(hasMemory) },
   });
 
-  const sidebarThreads = useMemo(
-    () =>
-      (threads || []).map(thread => ({
-        ...thread,
-        createdAt: new Date(thread.createdAt),
-        updatedAt: new Date(thread.updatedAt),
-      })),
-    [threads],
-  );
-
   const messageId = searchParams.get('messageId') ?? undefined;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
-
-  // With memory the panel also hosts the memory card, so it stays mounted (reachable via `{`
-  // or the expand button) but starts collapsed, and reopens once the first thread exists.
-  // Collapse is one-shot per agent so query refetches can't re-collapse a panel the user opened.
-  const collapseThreadsPanel =
-    isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
-  const hasThread = !isNewThread || sidebarThreads.length > 0;
-  const collapsedForAgent = useRef<string | undefined>(undefined);
-  useLayoutEffect(() => {
-    if (collapseThreadsPanel && collapsedForAgent.current !== agentId) {
-      collapsedForAgent.current = agentId;
-      threadsPanel.current?.collapse();
-    } else if (hasThread && collapsedForAgent.current === agentId) {
-      collapsedForAgent.current = undefined;
-      threadsPanel.current?.expand();
-    }
-  }, [collapseThreadsPanel, hasThread, agentId]);
 
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
@@ -142,7 +117,18 @@ function AgentThread() {
   }
 
   if (isAgentLoading || !auth) {
-    return isNewThread ? <AgentLandingLoadingSkeleton /> : <AgentThreadLoadingSkeleton />;
+    // Same layout shell as the resolved page, so the threads panel doesn't pop in and push the chat sideways.
+    return (
+      <AgentLayout
+        agentId={agentId!}
+        leftSlot={
+          isNewThread && !isMemoryLoading && !hasMemory ? undefined : <ThreadsPanelLoadingShell agentId={agentId!} />
+        }
+        leftDrawerLabel="Threads"
+      >
+        {isNewThread ? <AgentLandingLoadingSkeleton /> : <AgentThreadLoadingSkeleton />}
+      </AgentLayout>
+    );
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
@@ -161,7 +147,7 @@ function AgentThread() {
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
   // A first visit has nothing to list: give the landing the full width until a thread exists.
   // Without memory there is nothing else in the panel, so it is dropped entirely.
-  const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || sidebarThreads.length === 0);
+  const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || !threads?.length);
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {
@@ -171,6 +157,8 @@ function AgentThread() {
         void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
       }
     }
+    // The first thread now exists: reopen the panel if the empty landing folded it away.
+    threadsPanel?.expandIfAutoCollapsed();
 
     await refreshThreads();
   };
@@ -199,22 +187,11 @@ function AgentThread() {
               <ObservationalMemoryProvider>
                 <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                    <ThreadsPanelShortcuts panel={threadsPanel} />
+                    <ThreadsPanelShortcuts />
                     <AgentLayout
                       agentId={agentId!}
-                      leftPanel={threadsPanel}
                       leftSlot={
-                        hideThreadsPanel ? undefined : isThreadsLoading ? (
-                          <AgentSidebarLoadingSkeleton />
-                        ) : (
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId}
-                            threads={sidebarThreads}
-                            // The mobile drawer has its own close control, so no hide button there.
-                            onHidePanel={isMobile ? undefined : () => threadsPanel.current?.collapse()}
-                          />
-                        )
+                        hideThreadsPanel ? undefined : <AgentSidebar agentId={agentId!} threadId={actualThreadId} />
                       }
                       leftDrawerLabel="Threads"
                     >
@@ -248,7 +225,31 @@ function AgentThread() {
   );
 }
 
-export default AgentThread;
+// Keyed by agent so the threads panel's first-visit auto-collapse is tracked per agent.
+function AgentThreadPage() {
+  const { agentId } = useParams();
+  return (
+    <ThreadsPanelProvider key={agentId}>
+      <AgentThread />
+    </ThreadsPanelProvider>
+  );
+}
+
+export default AgentThreadPage;
+
+const ThreadsPanelLoadingShell = ({ agentId }: { agentId: string }) => (
+  <SidebarPanel>
+    <ChatThreads
+      threads={[]}
+      threadId=""
+      onDelete={() => {}}
+      resourceId={agentId}
+      resourceType="agent"
+      embedded
+      isLoading
+    />
+  </SidebarPanel>
+);
 
 const AgentThreadLoadingSkeleton = () => (
   <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-thread-skeleton" aria-busy="true">

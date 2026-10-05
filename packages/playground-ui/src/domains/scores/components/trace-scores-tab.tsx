@@ -1,5 +1,5 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
-import { useTraceSpanScores } from '@mastra/react/hooks';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
