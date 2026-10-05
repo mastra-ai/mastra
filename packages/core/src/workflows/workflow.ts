@@ -2967,7 +2967,7 @@ export class Workflow<
       run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
-      run.parentWorkflow = storedSnapshot?.parentWorkflow;
+      run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {

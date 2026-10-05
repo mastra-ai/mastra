@@ -348,6 +348,84 @@ describe('foreach nested workflow runs', () => {
       .toBe('suspended');
   });
 
+  it('restores a legacy nested child parent association before it suspends again', async () => {
+    const childStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.string(),
+      outputSchema: z.string(),
+      resumeSchema: z.object({ stage: z.number() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData || resumeData.stage === 1) {
+          await suspend({ stage: resumeData?.stage ?? 0 });
+        }
+        return inputData;
+      },
+    });
+    const childWorkflow = createWorkflow({
+      id: 'legacy-child-workflow',
+      inputSchema: z.string(),
+      outputSchema: z.string(),
+    })
+      .then(childStep)
+      .commit();
+    const parentWorkflow = createWorkflow({
+      id: 'legacy-parent-workflow',
+      inputSchema: z.array(z.string()),
+      outputSchema: z.array(z.string()),
+    })
+      .foreach(childWorkflow)
+      .commit();
+
+    const storage = new MockStore();
+    new Mastra({ workflows: { parentWorkflow }, storage, logger: false });
+    const parentRun = await parentWorkflow.createRun();
+    expect(await parentRun.start({ inputData: ['alpha'] })).toMatchObject({ status: 'suspended' });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) throw new Error('Workflows store is unavailable');
+    const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: parentWorkflow.id,
+      runId: parentRun.runId,
+    });
+    const nestedRunId =
+      parentSnapshot?.context?.[childWorkflow.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[0]?.metadata
+        ?.nestedRunId;
+    if (!nestedRunId) throw new Error('Nested run ID is unavailable');
+
+    const legacyChildSnapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: childWorkflow.id,
+      runId: nestedRunId,
+    });
+    if (!legacyChildSnapshot) throw new Error('Nested snapshot is unavailable');
+    delete legacyChildSnapshot.parentWorkflow;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: childWorkflow.id,
+      runId: nestedRunId,
+      snapshot: legacyChildSnapshot,
+    });
+
+    expect(
+      await parentRun.resume({
+        step: [childWorkflow.id, childStep.id],
+        resumeData: { stage: 1 },
+        forEachIndex: 0,
+      }),
+    ).toMatchObject({ status: 'suspended' });
+
+    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    expect(await childRun.resume({ resumeData: { stage: 2 } })).toMatchObject({ status: 'success' });
+
+    await expect
+      .poll(async () => {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.id,
+          runId: parentRun.runId,
+        });
+        return snapshot?.status;
+      })
+      .toBe('success');
+  });
+
   it('continues the parent when a nested child is resumed directly', async () => {
     const childStep = createStep({
       id: 'approval-step',
