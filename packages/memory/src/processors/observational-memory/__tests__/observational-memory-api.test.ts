@@ -1437,7 +1437,6 @@ describe('activate()', () => {
           lastObservedAt: lateAt,
         },
       });
-      releaseChunkWrite();
       return originalSwap(input);
     });
     vi.useFakeTimers();
