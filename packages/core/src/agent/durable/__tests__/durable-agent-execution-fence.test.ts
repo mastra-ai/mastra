@@ -48,7 +48,7 @@ import {
 } from '../execution-fence';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
-import { emitChunkEvent } from '../stream-adapter';
+import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -343,6 +343,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       tools?: Record<string, any>;
       agents?: Record<string, Agent>;
       cache?: InMemoryServerCache;
+      cleanupTimeoutMs?: number;
     }) {
       const durableAgent = createDurableAgent({
         agent: new Agent({
@@ -356,6 +357,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         }),
         pubsub,
         ...(args.cache ? { cache: args.cache } : {}),
+        ...(args.cleanupTimeoutMs !== undefined ? { cleanupTimeoutMs: args.cleanupTimeoutMs } : {}),
       });
       new Mastra({
         agents: { 'fence-agent': durableAgent as any },
@@ -909,6 +911,109 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await stream.stop();
       result.cleanup();
     });
+
+    it.each([
+      ['stream', 'takeOver'],
+      ['stream', 'vanish'],
+      ['resume', 'takeOver'],
+      ['resume', 'vanish'],
+      ['generate', 'takeOver'],
+      ['generate', 'vanish'],
+      ['recover', 'takeOver'],
+      ['recover', 'vanish'],
+    ] as const)(
+      "cleaning up after a %s() execution that lost its run (%s) leaves the run's topics to whoever takes it over",
+      async (caller, loss) => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const originalCall = gate();
+        const lostCall = gate();
+        // A resumed run first suspends on a tool call awaiting approval; a
+        // recovered run was first driven by an execution that lost it.
+        const earlier = caller === 'resume' || caller === 'recover' ? 1 : 0;
+        const { model, prompts } = recordingModel(
+          [caller === 'recover' ? originalCall.opened : undefined, lostCall.opened].slice(1 - earlier),
+          caller === 'resume' ? 'lookup' : undefined,
+        );
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        });
+        const durableAgent = buildAgent({ model, storage, memory, tools: { lookup }, cleanupTimeoutMs: 10 });
+        const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+        const runId = crypto.randomUUID();
+        const cleanups: Array<() => void> = [];
+
+        let ended: Promise<unknown>;
+        if (caller === 'generate') {
+          ended = durableAgent.generate('What is the answer?', {
+            runId,
+            memory: { thread: THREAD, resource: RESOURCE },
+          });
+        } else {
+          let suspended = false;
+          const started = await durableAgent.stream('What is the answer?', {
+            runId,
+            memory: { thread: THREAD, resource: RESOURCE },
+            requireToolApproval: caller === 'resume',
+            onSuspended: () => {
+              suspended = true;
+            },
+          });
+          cleanups.push(started.cleanup);
+          let result = started;
+          if (caller === 'resume') {
+            const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+            await vi.waitFor(() => expect(suspended).toBe(true));
+            await suspendedFence.whenSettled;
+            result = await durableAgent.resume(runId, { approved: true });
+            cleanups.push(result.cleanup);
+          }
+          if (caller === 'recover') {
+            // The first execution loses the run with nobody taking it over and
+            // ends; this process then recovers the run. `force`: the lost
+            // execution still holds the thread's lease.
+            await vi.waitFor(() => expect(prompts).toHaveLength(1));
+            await waitForCheckpoint(storage, runId);
+            await foreignOwnership(backend, storage, durableAgent.pubsub).vanish(ExecutionFence.getLocalActive(runId)!);
+            originalCall.open();
+            await drain(started.fullStream).catch(() => {});
+            result = await durableAgent.recover(runId, { force: true });
+            cleanups.push(result.cleanup);
+          }
+          ended = drain(result.fullStream);
+        }
+        ended.catch(() => {}); // awaited below
+        await vi.waitFor(() => expect(prompts).toHaveLength(earlier + 1));
+        await waitForCheckpoint(storage, runId);
+
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+        if (loss === 'takeOver') await foreign.takeOver(fence, 'foreign-recoverer');
+        else await foreign.vanish(fence);
+
+        lostCall.open();
+        await fence.whenSettled;
+        expect(await fence.settle(async () => {})).toBe(loss === 'takeOver' ? 'superseded' : 'orphaned');
+        // A lost lease is reported by the execution itself; a run taken over
+        // ends when the execution that took it ends.
+        if (loss === 'takeOver') {
+          await emitErrorEvent(durableAgent.pubsub, runId, new Error('ended elsewhere'), (fence.generation ?? 0) + 1);
+        }
+        await ended.catch(() => {});
+
+        // The caller's cleanup ran (its timer, or generate()'s own) and dropped
+        // the run's registry entry...
+        await vi.waitFor(() => expect(globalRunRegistry.get(runId)).toBeUndefined());
+        for (const cleanup of cleanups) cleanup();
+        // ...but left the topics alone.
+        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        expect(clearTopic).not.toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
+      },
+    );
 
     it.each([
       ['stream', 'before'],

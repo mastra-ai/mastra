@@ -2357,7 +2357,9 @@ export class DurableAgent<
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
     // then tears down the registry entries and pubsub topic this execution
     // still owns — an execution that recovered the run in this process holds
-    // its own. Idempotent via `cleanedUp`.
+    // its own. The topic stays when the run's latest execution here (this one
+    // or a later resume()) lost the run: whoever took it over, in any process,
+    // writes to it. Idempotent via `cleanedUp`.
     const performCleanup = () => {
       if (autoCleanupTimer) {
         clearTimeout(autoCleanupTimer);
@@ -2372,7 +2374,7 @@ export class DurableAgent<
       }
       if (globalRunRegistry.get(runId) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
+        if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
       }
       cleanedUp = true;
     };
@@ -2776,7 +2778,9 @@ export class DurableAgent<
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
     // then tears down the registry entries and pubsub topic this execution
     // still owns — an execution that recovered the run in this process holds
-    // its own. Idempotent via `cleanedUp`.
+    // its own. The topic stays when the run's latest execution here (this one
+    // or a later resume()) lost the run: whoever took it over, in any process,
+    // writes to it. Idempotent via `cleanedUp`.
     const performCleanup = () => {
       if (autoCleanupTimer) {
         clearTimeout(autoCleanupTimer);
@@ -2791,7 +2795,7 @@ export class DurableAgent<
       }
       if (globalRunRegistry.get(runId) === globalEntryForAbort) {
         globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
+        if (!(globalEntryForAbort?.executionFence ?? executionFence).isLost()) this.#clearPubsubTopic(runId);
       }
       cleanedUp = true;
     };
@@ -3241,7 +3245,9 @@ export class DurableAgent<
       }
       if (globalRunRegistry.get(runId) === registryEntry) {
         globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
+        // The topic stays when the run's latest execution here (this one or a
+        // later resume()) lost the run: whoever took it over writes to it.
+        if (!registryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
       }
       cleanedUp = true;
     };
@@ -3567,7 +3573,8 @@ export class DurableAgent<
         if (!cleanedUp) {
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
+          // An execution that took the run over writes to the topic.
+          if (!executionFence.isLost()) this.#clearPubsubTopic(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -3667,7 +3674,7 @@ export class DurableAgent<
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
+        if (!executionFence.isLost()) this.#clearPubsubTopic(runId);
         cleanedUp = true;
       }
     };
@@ -4237,11 +4244,13 @@ export class DurableAgent<
    * This needs no restart guard of its own — the lifecycle facts are
    * engine-agnostic: cleanup timers arm only on terminal outcomes
    * (FINISH/ERROR/ABORT — never SUSPENDED), `resume()` rejects runs whose
-   * snapshot isn't `suspended`, `untilIdle` continuations mint a fresh runId
-   * per segment, and cross-process `recover()` can't race a dead process's
-   * timer. The one evented-only edge — at-least-once redelivery writing to
-   * the workflow events topic after this clear — is covered by the WEP's own
-   * cleanup, which reschedules deletion on that run's terminal end.
+   * snapshot isn't `suspended`, and `untilIdle` continuations mint a fresh
+   * runId per segment. An execution that lost its run never calls this:
+   * the execution that took the run over, in this or another process, may
+   * still be writing to both topics, so it clears them when it ends. The one
+   * evented-only edge — at-least-once redelivery writing to the workflow
+   * events topic after this clear — is covered by the WEP's own cleanup,
+   * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
