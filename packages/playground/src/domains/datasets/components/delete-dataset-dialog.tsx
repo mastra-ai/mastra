@@ -2,7 +2,7 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 
 export interface DeleteDatasetDialogProps {
   open: boolean;

@@ -1,4 +1,4 @@
-import { useExperiments } from '@mastra/react/hooks';
+import { useExperiments } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 

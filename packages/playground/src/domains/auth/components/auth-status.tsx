@@ -1,4 +1,4 @@
-import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { LoginButton } from './login-button';
 import { UserMenu } from './user-menu';
 

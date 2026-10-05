@@ -1,4 +1,4 @@
-import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks';
+import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks/auth';
 
 /** The signed-in user returned by `GET /api/auth/me`. */
 export const currentUser = {

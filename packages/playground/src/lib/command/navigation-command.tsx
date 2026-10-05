@@ -15,7 +15,11 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useWorkflows, useMCPServers, useProcessors, useTools, useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
+import { useProcessors } from '@mastra/react/hooks/processors';
+import { useTools } from '@mastra/react/hooks/tools';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import {
   Cpu,
   EyeIcon,

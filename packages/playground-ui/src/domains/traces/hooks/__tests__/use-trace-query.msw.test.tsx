@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import type { MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
-import type { TraceQueryArgs } from '@mastra/react/hooks';
-import { getTraceQueryNextPageParam, useTraceQuery, useTraceMetadataFilterFields } from '@mastra/react/hooks';
+import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
+import { getTraceQueryNextPageParam, useTraceQuery, useTraceMetadataFilterFields } from '@mastra/react/hooks/traces';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

@@ -1,4 +1,4 @@
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/react/hooks';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/react/hooks/query';
 import { PermissionDenied } from '@/domains/auth/components/permission-denied';
 import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { EmptyState } from '@/ds/components/EmptyState';

@@ -6,12 +6,8 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useExperiments,
-  useExperimentMetrics,
-} from '@mastra/react/hooks';
+import { useDatasetExperiment, useDatasetExperimentResults, useExperiments } from '@mastra/react/hooks/datasets';
+import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';

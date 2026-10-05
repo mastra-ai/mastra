@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';

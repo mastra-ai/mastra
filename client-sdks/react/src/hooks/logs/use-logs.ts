@@ -2,7 +2,7 @@ import type { MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query/query-utils';
 import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 
 import { useInView } from '../shared/use-in-view';

@@ -1,5 +1,5 @@
 import type { McpServerInfo, McpServerToolListResponse, McpToolInfo } from '@mastra/client-js';
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 const versionDetail: McpServerInfo['version_detail'] = {
   version: '1.0.0',

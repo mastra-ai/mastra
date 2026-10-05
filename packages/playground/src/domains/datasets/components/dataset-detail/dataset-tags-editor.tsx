@@ -1,7 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks';
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
 import { Check, Tag, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

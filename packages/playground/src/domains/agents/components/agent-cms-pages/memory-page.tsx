@@ -7,7 +7,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { useEmbedders, useVectors } from '@mastra/react/hooks';
+import { useEmbedders } from '@mastra/react/hooks/embedders';
+import { useVectors } from '@mastra/react/hooks/vectors';
 import { Controller, useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';

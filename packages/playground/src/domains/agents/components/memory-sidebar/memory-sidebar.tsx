@@ -8,7 +8,7 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks';
+import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';

@@ -5,7 +5,7 @@ import {
   useExistingConnections,
   useToolProviders,
   useToolkits,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/tool-providers';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
