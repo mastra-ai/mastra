@@ -9,7 +9,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
-import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks';
+import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';

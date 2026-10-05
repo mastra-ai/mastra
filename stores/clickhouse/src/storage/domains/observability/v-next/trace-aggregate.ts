@@ -15,6 +15,7 @@ import { TABLE_METRIC_EVENTS } from './ddl';
 import type { CompiledClickHouseTraceQuery } from './trace-query';
 import {
   compileClickHouseTraceCandidates,
+  compileTenantScope,
   durationMsSql,
   ParameterBuilder,
   runWithClickHouseTraceQueryTimeout,
@@ -277,16 +278,14 @@ function usageMetricIndex(name: string): number {
 function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterBuilder): string {
   const names = USAGE_METRIC_NAMES.map(name => parameters.add(name, 'String'));
   const costNames = coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES.map(name => names[usageMetricIndex(name)]);
-  const scope = plan.scope
-    ? `\n        AND organizationId = ${parameters.add(plan.scope.organizationId, 'String')}${
-        plan.scope.resourceId === undefined
-          ? ''
-          : `\n        AND resourceId = ${parameters.add(plan.scope.resourceId, 'String')}`
-      }`
-    : '';
   const costRow = `name IN (${costNames.join(', ')})`;
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const tenant = compileTenantScope(plan.scope, parameters);
   const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasError`;
   const failed = `${costRow} AND (hasError OR (isNotNull(estimatedCost) AND isNull(costUnit)))`;
+  // Retried writes share a metricId, and copies with different timestamps never merge under the
+  // (name, timestamp, metricId) sort key. Collapse them with a parallel, spillable aggregation
+  // that deterministically keeps the latest copy; one tuple keeps every column from that copy.
   return `usage AS (
     SELECT traceId,
       toUInt8(1) AS hasUsage,
@@ -297,13 +296,25 @@ function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterB
       minIf(assumeNotNull(costUnit), ${priced}) AS unitMin,
       maxIf(assumeNotNull(costUnit), ${priced}) AS unitMax
     FROM (
-      SELECT traceId, name, value, estimatedCost, costUnit,
-        ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0) AS hasError
-      FROM ${TABLE_METRIC_EVENTS}
-      WHERE traceId IN (SELECT traceId FROM candidates)
-        AND name IN (${names.join(', ')})
-        AND timestamp >= ${parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')")}${scope}
-      LIMIT 1 BY metricId
+      SELECT traceId,
+        latest.1 AS name,
+        latest.2 AS value,
+        latest.3 AS estimatedCost,
+        latest.4 AS costUnit,
+        latest.5 AS hasError
+      FROM (
+        SELECT traceId,
+          argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest
+        FROM (
+          SELECT traceId, metricId, timestamp, name, value, estimatedCost, costUnit,
+            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError
+          FROM ${TABLE_METRIC_EVENTS}
+          WHERE traceId IN (SELECT traceId FROM candidates)
+            AND name IN (${names.join(', ')})
+            AND timestamp >= ${from}${tenant}
+        )
+        GROUP BY traceId, metricId
+      )
     )
     GROUP BY traceId
   )`;

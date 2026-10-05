@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useToolkits } from '@mastra/react/hooks';
+import { useToolkits } from '@mastra/react/hooks/tool-providers';
 
 export const SELECTED_TOOLKIT_SENTINEL = '__selected__';
 

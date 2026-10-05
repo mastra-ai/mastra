@@ -63,6 +63,7 @@ type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
   size?: DialogSize;
   showOverlay?: boolean;
+  showCloseButton?: boolean;
   overlayClassName?: string;
 };
 
@@ -71,6 +72,7 @@ function DialogContent({
   children,
   size = 'md',
   showOverlay = true,
+  showCloseButton = true,
   overlayClassName,
   initialFocus,
   ...props
@@ -86,7 +88,7 @@ function DialogContent({
         data-size={size}
         data-intent={intent}
         role={isDestructive ? 'alertdialog' : 'dialog'}
-        initialFocus={initialFocus ?? (isDestructive ? closeRef : true)}
+        initialFocus={initialFocus ?? (isDestructive && showCloseButton ? closeRef : true)}
         aria-busy={pending || undefined}
         className={cn(
           dialogPopupClassName,
@@ -97,17 +99,19 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          ref={closeRef}
-          disabled={pending}
-          data-slot="dialog-close"
-          className="absolute top-4 right-4"
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label="Close">
-              <X />
-            </Button>
-          }
-        />
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            ref={closeRef}
+            disabled={pending}
+            data-slot="dialog-close"
+            className="absolute top-4 right-4"
+            render={
+              <Button variant="ghost" size="icon-sm" aria-label="Close">
+                <X />
+              </Button>
+            }
+          />
+        )}
       </DialogPrimitive.Popup>
     </DialogPortal>
   );

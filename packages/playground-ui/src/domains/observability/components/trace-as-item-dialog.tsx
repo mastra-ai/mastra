@@ -3,7 +3,7 @@
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
-import { useSpanDetail } from '@mastra/react/hooks';
+import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets';

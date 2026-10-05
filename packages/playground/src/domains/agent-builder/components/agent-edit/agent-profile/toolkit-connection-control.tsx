@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks';
+import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks/tool-providers';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';

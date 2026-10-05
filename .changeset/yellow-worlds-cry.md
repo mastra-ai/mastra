@@ -2,4 +2,21 @@
 '@mastra/pg': patch
 ---
 
-Added token and cost measures to `aggregateTraces()` in the PostgreSQL observability store. Requests can now use `tokens.input`, `tokens.output`, `tokens.total`, `tokens.reasoning`, and `tokens.cached` (`.sum` / `.avg`) plus `cost.sum` / `cost.avg`, and rows for cost requests include `cost: { coverage, unit }`. Usage is read from model token metrics for each trace, so retried metric writes count once and spend recorded after the window ends still counts for traces that started inside it.
+Added token and cost measures to `aggregateTraces()` in the PostgreSQL observability store.
+
+- **Token measures:** `tokens.input`, `tokens.output`, `tokens.total`, `tokens.reasoning`, and `tokens.cached`, each as `.sum` or `.avg`.
+- **Cost measures:** `cost.sum` and `cost.avg`. Rows for cost requests also include `cost: { coverage, unit }`.
+
+```ts
+const plan = planTraceAggregate(
+  parseTraceAggregateRequest({
+    timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    groupBy: ['entityName'],
+    measures: ['tokens.total.sum', 'cost.sum'],
+  }),
+);
+const { rows } = await observability.aggregateTraces(plan);
+// rows[0] → { dimensions: { entityName: 'support' }, measures: { 'tokens.total.sum': 7800, 'cost.sum': 3.75 }, cost: { coverage: 0.75, unit: 'usd' } }
+```
+
+Usage comes from the model token metrics of each trace. Retried metric writes count once, and spend recorded after the window ends still counts for traces that started inside it.

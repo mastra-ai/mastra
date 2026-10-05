@@ -1,5 +1,26 @@
 # @mastra/core
 
+## 1.75.0-alpha.4
+
+### Minor Changes
+
+- Added `traceId` to agent stream chunks, next to `runId`. Clients that call `/stream` can now link a run to its trace without switching to `/generate`. The field is undefined when tracing is disabled. Custom `data-*` chunks (for example, from `writer.custom()`) are left exactly as written and don't include `traceId`. Fixes [#25811](https://github.com/mastra-ai/mastra/issues/25811). ([#25927](https://github.com/mastra-ai/mastra/pull/25927))
+
+  ```ts
+  const stream = await agent.stream('hi');
+  for await (const chunk of stream.fullStream) {
+    console.log(chunk.runId, chunk.traceId);
+  }
+  ```
+
+### Patch Changes
+
+- Fixed model call spans that listed tools the model did not receive. Each `MODEL_INFERENCE` span now has a `tools` attribute with the tool definitions (name, description, parameters) sent to the provider on that call, after input processors, `prepareStep`, `activeTools`, and `toolChoice` are applied. `availableTools` on the same span now matches it: it is empty when `toolChoice` is `'none'`, and it no longer lists names that are not registered tools. ([#25917](https://github.com/mastra-ai/mastra/pull/25917))
+
+- Removed the @experimental annotation from Agent goal APIs (goal config, setObjective, GoalSignalProvider) now that goals are stable. ([#25941](https://github.com/mastra-ai/mastra/pull/25941))
+
+- Removed the @experimental annotation from Agent signal APIs (sendSignal, subscribeToThread, sendMessage, queueMessage, cancelQueuedMessages, abortThread, state and notification signals, and signal providers) now that signals are stable. ([#25946](https://github.com/mastra-ai/mastra/pull/25946))
+
 ## 1.75.0-alpha.3
 
 ### Minor Changes

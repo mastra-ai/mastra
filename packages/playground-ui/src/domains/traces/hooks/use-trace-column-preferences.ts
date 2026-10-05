@@ -1,4 +1,4 @@
-import { useTraceColumnPreferencesStorageKey } from '@mastra/react/hooks';
+import { useTraceColumnPreferencesStorageKey } from '@mastra/react/hooks/traces';
 import { useEffect, useState } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,

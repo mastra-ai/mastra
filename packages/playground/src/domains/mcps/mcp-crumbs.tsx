@@ -1,5 +1,5 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
-import { useMCPServerTool, useMCPServers } from '@mastra/react/hooks';
+import { useMCPServerTool, useMCPServers } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { MCPServerCombobox } from './components/mcp-server-combobox';
 

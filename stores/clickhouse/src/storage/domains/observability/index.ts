@@ -635,17 +635,12 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         if (filters.hasChildError !== undefined) {
           const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
           const finalClause = engine.startsWith('ReplacingMergeTree') ? 'FINAL' : '';
-          if (filters.hasChildError) {
-            conditions.push(`EXISTS (
-              SELECT 1 FROM ${TABLE_SPANS} ${finalClause} c
-              WHERE c.traceId = ${TABLE_SPANS}.traceId AND c.error IS NOT NULL AND c.error != ''
-            )`);
-          } else {
-            conditions.push(`NOT EXISTS (
-              SELECT 1 FROM ${TABLE_SPANS} ${finalClause} c
-              WHERE c.traceId = ${TABLE_SPANS}.traceId AND c.error IS NOT NULL AND c.error != ''
-            )`);
-          }
+          // Set-based rather than a correlated EXISTS: the error-trace set is
+          // built once and the outer traceId test runs against the sort key.
+          conditions.push(`traceId ${filters.hasChildError ? 'IN' : 'NOT IN'} (
+            SELECT c.traceId FROM ${TABLE_SPANS} ${finalClause} c
+            WHERE c.error IS NOT NULL AND c.error != ''
+          )`);
         }
       }
 
@@ -769,42 +764,70 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
 
       // Note: ClickHouse doesn't support traditional UPDATE operations with MergeTree engines.
       // Updates are performed by loading existing data, merging changes, and re-inserting.
-      // This sequential processing may be slow for large batches - consider batching at the
-      // application level if high-volume updates are needed.
-      // For each update, load existing, merge, and re-insert
+      // All spans are loaded in one (traceId, spanId) sort-key lookup and re-inserted in
+      // one batch; repeated updates to the same span apply in order.
+      if (args.records.length === 0) return;
+
+      const keyParams: Record<string, string> = {};
+      const keyTuples = args.records.map((record, i) => {
+        keyParams[`t_${i}`] = record.traceId;
+        keyParams[`s_${i}`] = record.spanId;
+        return `({t_${i}:String}, {s_${i}:String})`;
+      });
+      const existingResult = await this.client.query({
+        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt
+                FROM ${TABLE_SPANS}
+                WHERE (traceId, spanId) IN (${keyTuples.join(', ')})
+                -- Newest version per span, which is what ReplacingMergeTree(updatedAt)
+                -- keeps. FINAL would merge every part the batch's keys touch, which
+                -- costs far more than reading the unmerged versions and sorting them.
+                ORDER BY updatedAt DESC
+                LIMIT 1 BY traceId, spanId`,
+        query_params: keyParams,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const spanKey = (traceId: string, spanId: string) => `${traceId}\u0000${spanId}`;
+      const current = new Map<string, Record<string, any>>();
+      for (const row of transformRows((await existingResult.json()).data) as Record<string, any>[]) {
+        current.set(spanKey(row.traceId, row.spanId), row);
+      }
+
       for (const record of args.records) {
-        const existing = await this.#db.load<SpanRecord>({
-          tableName: TABLE_SPANS,
-          keys: { spanId: record.spanId, traceId: record.traceId },
-        });
+        const key = spanKey(record.traceId, record.spanId);
+        const existing = current.get(key);
+        if (!existing) continue;
 
-        if (existing) {
-          // Convert Date objects to millisecond timestamps for DateTime64(3)
-          const updates: Record<string, any> = { ...record.updates };
-          if (updates.startedAt instanceof Date) {
-            updates.startedAt = updates.startedAt.getTime();
-          }
-          if (updates.endedAt instanceof Date) {
-            updates.endedAt = updates.endedAt.getTime();
-          }
-
-          const updated = {
-            ...existing,
-            ...updates,
-            updatedAt: now,
-          };
-
-          await this.client.insert({
-            table: TABLE_SPANS,
-            values: [updated],
-            format: 'JSONEachRow',
-            clickhouse_settings: {
-              date_time_input_format: 'best_effort',
-              use_client_time_zone: 1,
-              output_format_json_quote_64bit_integers: 0,
-            },
-          });
+        // Convert Date objects to millisecond timestamps for DateTime64(3)
+        const updates: Record<string, any> = { ...record.updates };
+        if (updates.startedAt instanceof Date) {
+          updates.startedAt = updates.startedAt.getTime();
         }
+        if (updates.endedAt instanceof Date) {
+          updates.endedAt = updates.endedAt.getTime();
+        }
+
+        current.set(key, { ...existing, ...updates, updatedAt: now, __updated: true });
+      }
+
+      const updatedRows = Array.from(current.values())
+        .filter(row => row.__updated)
+        .map(({ __updated: _updated, ...row }) => row);
+      if (updatedRows.length > 0) {
+        await this.client.insert({
+          table: TABLE_SPANS,
+          values: updatedRows,
+          format: 'JSONEachRow',
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        });
       }
     } catch (error) {
       throw new MastraError(

@@ -8,7 +8,7 @@ import type { VolumeTab } from '@mastra/playground-ui/domains/metrics/components
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useTraceVolumeMetrics } from '@mastra/react/hooks';
+import { useTraceVolumeMetrics } from '@mastra/react/hooks/metrics';
 
 const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {
   agents: EntityType.AGENT,

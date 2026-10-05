@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, numbered pages, keyset cursors, and delta polling.'
+description: 'Query completed traces, thread identities, and spans with recursive predicates, numbered pages, keyset cursors, and delta polling.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -10,7 +10,9 @@ packages:
 
 Use `queryTraces()` or `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span, score, or feedback records. Use `queryTraceThreads()` or `POST /api/observability/threads/query` to find thread identities that qualify across multiple eligible traces.
 
-Both endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query or thread-query operation.
+Use `querySpans()` or `POST /api/observability/spans/query` to list the individual completed spans that match a span predicate.
+
+All three endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query, thread-query, or span-query operation.
 
 :::warning[Thread grouping is deprecated]
 
@@ -18,9 +20,68 @@ The `group` option remains supported until the next major release. Use [`queryTr
 
 :::
 
-## Query individual spans through storage
+## Query individual spans
 
-The observability domain in DuckDB and the PostgreSQL and ClickHouse v-next stores supports `querySpans(plan)`. It returns individual completed spans across traces, including matching child spans. Check `storage.getFeatures()?.includes('span-query')` before using this optional storage method. Server routes and client SDK support are separate from this storage API.
+`querySpans()` returns one row per matching completed span across traces, including matching child spans. Use it to list the spans themselves, for example every failed tool call in the last day.
+
+`queryTraces()` with a `spans.some` predicate answers a different question. It returns the traces that contain at least one matching span, and it doesn't identify which spans matched. Both use the same span fields and operators.
+
+```typescript
+const timeRange = {
+  from: '2026-10-01T00:00:00.000Z',
+  to: '2026-10-02T00:00:00.000Z',
+}
+const where = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+    { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  ],
+} as const
+
+const firstPage = await mastraClient.querySpans({
+  timeRange,
+  where,
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 50 },
+})
+
+if (firstPage.page.next) {
+  const secondPage = await mastraClient.querySpans({
+    timeRange,
+    where,
+    orderBy: [{ field: 'startedAt', direction: 'desc' }],
+    page: { limit: 50, after: firstPage.page.next },
+  })
+}
+```
+
+The HTTP route accepts the same body:
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/spans/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-10-01T00:00:00.000Z",
+      "to": "2026-10-02T00:00:00.000Z"
+    },
+    "where": { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+    "page": { "limit": 50 }
+  }'
+```
+
+Span queries are optional for observability stores. Call `mastraClient.getObservabilityCapabilities()` and check `capabilities.spanQuery` before showing a span list. Treat a missing `spanQuery` value as unsupported, because older servers don't report it. A server whose store or `@mastra/core` version doesn't support span queries returns `501` with code `SPAN_QUERY_UNSUPPORTED`.
+
+The other statuses match trace queries: `400` for malformed JSON or a malformed cursor, `409` for a cursor that doesn't match the query, `413` for a body over 256 KiB, `422` with code `TRACE_QUERY_INVALID` and structured `issues` for an invalid query, `503` with code `TRACE_QUERY_RESOURCE_LIMIT` when a page exceeds a resource limit, and `504` with code `TRACE_QUERY_EXECUTION_TIMEOUT` when the database deadline is exceeded.
+
+The server applies [trusted tenant scope](#trusted-tenant-scope) to span queries the same way it does for trace queries. A cursor created under one scope and reused under another returns `409`.
+
+### Query individual spans through storage
+
+The observability domain in DuckDB and the PostgreSQL and ClickHouse v-next stores supports `querySpans(plan)`. Check `storage.getFeatures()?.includes('span-query')` before using this optional storage method.
 
 Build the plan in trusted backend code:
 
@@ -776,7 +837,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
+Trace and thread queries consider completed traces only, and span queries consider completed spans only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
 
 ## Related
 

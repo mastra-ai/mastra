@@ -1,5 +1,5 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
-import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks';
+import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks/auth';
 
 /** The signed-in user that owns the seeded stored agent. */
 export const currentUser = {

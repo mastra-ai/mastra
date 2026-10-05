@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import type { StoredAgent } from '@mastra/react/hooks';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { ConversationPanelProvider } from '../components/agent-edit/conversation-panel';

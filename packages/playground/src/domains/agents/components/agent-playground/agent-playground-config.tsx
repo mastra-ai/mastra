@@ -10,7 +10,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
-import { useCompareAgentVersions } from '@mastra/react/hooks';
+import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
 import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
 

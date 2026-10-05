@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import type { SidebarNewLink } from '@mastra/playground-ui/new/sidebar';
-import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Ellipsis, Search, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation } from 'react-router';

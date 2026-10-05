@@ -33,6 +33,7 @@ import {
   planTraceQuery,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceStatus,
 } from '@mastra/core/storage';
 import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -3847,6 +3848,111 @@ LIMIT 1`,
       const result = await storage.listTraces({});
       expect(result.spans).toHaveLength(1);
       expect(result.spans[0]!.traceId).toBe('dedup-root-trace');
+    });
+
+    describe('unmerged versions in different endedAt partitions', () => {
+      // Tables partition by toDate(endedAt), so versions of one span that end on
+      // different days never merge. Each read must return a version that matches
+      // its filter, with payloads from that same version.
+      const base = {
+        traceId: 'split-version-trace',
+        spanId: 'split-version-root',
+        parentSpanId: null,
+        name: 'root-span',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityId: 'a-split',
+        entityName: 'splitAgent',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: 'test',
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        tags: null,
+        links: null,
+        output: null,
+        startedAt: new Date('2026-09-30T23:58:00Z'),
+      } as const;
+      const ok = {
+        ...base,
+        metadata: { version: 'ok' },
+        input: { version: 'ok' },
+        error: null,
+        endedAt: new Date('2026-09-30T23:59:00Z'),
+      };
+      const failed = {
+        ...base,
+        metadata: { version: 'failed' },
+        input: { version: 'failed' },
+        error: { message: 'boom' },
+        endedAt: new Date('2026-10-01T00:01:00Z'),
+      };
+
+      beforeEach(async () => {
+        await storage.createSpan({ span: ok });
+        await storage.createSpan({ span: failed });
+      });
+
+      it('listTraces returns the version that matches the status filter', async () => {
+        const success = await storage.listTraces({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.spans).toHaveLength(1);
+        expect(success.spans[0]!.error ?? null).toBeNull();
+        expect(success.spans[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listTraces({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.spans).toHaveLength(1);
+        expect(errored.spans[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.spans[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('listBranches returns the version that matches the status filter', async () => {
+        const success = await storage.listBranches({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.branches).toHaveLength(1);
+        expect(success.branches[0]!.error ?? null).toBeNull();
+        expect(success.branches[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listBranches({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.branches).toHaveLength(1);
+        expect(errored.branches[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.branches[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('queryTraces page rows carry payloads from the version they describe', async () => {
+        const response = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-09-30T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+              pagination: {},
+            }),
+          ),
+        );
+        if (!('traces' in response)) throw new Error('Expected trace results');
+        expect(response.traces).toHaveLength(1);
+        const trace = response.traces[0]!;
+        const version = trace.status === 'error' ? 'failed' : 'ok';
+        expect(trace.metadata).toEqual({ version });
+        expect(trace.inputPreview).toContain(version);
+      });
     });
   });
 
