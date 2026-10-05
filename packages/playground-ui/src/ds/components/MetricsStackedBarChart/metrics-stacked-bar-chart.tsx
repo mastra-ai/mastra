@@ -90,6 +90,8 @@ export function MetricsStackedBarChart({
   showLegend = true,
   referenceLine,
   variant = 'gradient',
+  showYAxis = true,
+  showTotal = series.length > 1,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
@@ -104,6 +106,13 @@ export function MetricsStackedBarChart({
    * value per column, e.g. cold starts.
    */
   variant?: 'gradient' | 'capped';
+  /**
+   * Set to `false` to drop the y-axis labels and let the plot span the card. The gridlines stay
+   * for relative scale; exact values come from the tooltip and the card's summary.
+   */
+  showYAxis?: boolean;
+  /** Adds a "Total" row (the column's height) to the tooltip. Defaults to on for stacks. */
+  showTotal?: boolean;
 }) {
   const id = useChartDefsId();
   const [hovered, setHovered] = useState<number | null>(null);
@@ -149,6 +158,7 @@ export function MetricsStackedBarChart({
               minTickGap={28}
             />
             <YAxis
+              hide={!showYAxis}
               tick={tick}
               tickLine={false}
               axisLine={false}
@@ -157,7 +167,10 @@ export function MetricsStackedBarChart({
               domain={yDomain}
               tickCount={3}
             />
-            <Tooltip cursor={false} content={<MetricsLineChartTooltip formatValue={valueFormatter} />} />
+            <Tooltip
+              cursor={false}
+              content={<MetricsLineChartTooltip formatValue={valueFormatter} showTotal={showTotal} />}
+            />
             {series.map((s, i) => (
               <Bar
                 key={s.dataKey}

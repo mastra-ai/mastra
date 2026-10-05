@@ -106,3 +106,11 @@ export const WithReferenceLine: Story = {
     referenceLine: { value: 3500, label: 'Rate limit', color: 'var(--chart-red)' },
   },
 };
+
+/**
+ * `showYAxis={false}`: no value labels, the plot spans the card. Gridlines keep relative scale;
+ * hover for exact values, with the column's total at the bottom of the tooltip.
+ */
+export const WithoutYAxis: Story = {
+  args: { data: requestsByHour, series: statusSeries, valueFormatter: count, height: 260, showYAxis: false },
+};

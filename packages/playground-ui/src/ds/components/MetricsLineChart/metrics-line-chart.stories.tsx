@@ -182,3 +182,13 @@ export const LongRange: Story = {
     </div>
   ),
 };
+
+/** `showYAxis={false}`: no value labels, the plot spans the card. Hover for exact values. */
+export const WithoutYAxis: Story = {
+  args: { data: requestsByHour, series: percentileSeries, valueFormatter: ms, showYAxis: false },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};

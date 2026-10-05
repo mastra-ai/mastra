@@ -7,14 +7,18 @@ export function MetricsLineChartTooltip({
   label,
   suffix,
   formatValue = value => value.toLocaleString('en-US'),
+  showTotal = false,
 }: {
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
   suffix?: string;
   formatValue?: (value: number) => string;
+  /** Adds a "Total" row under a hairline: the sum of every row, e.g. a stacked column's height. */
+  showTotal?: boolean;
 }) {
   if (!active || !payload?.length) return null;
+  const total = payload.reduce((sum, entry) => sum + (typeof entry.value === 'number' ? entry.value : 0), 0);
   return (
     <ChartTooltip>
       <Txt variant="column" tone="ink" className="mb-1">
@@ -33,6 +37,18 @@ export function MetricsLineChartTooltip({
             </span>
           </div>
         ))}
+        {showTotal && (
+          <div className="col-span-3 grid grid-cols-subgrid items-center border-t border-border pt-1">
+            <span />
+            <Txt as="span" variant="caption" tone="muted">
+              Total
+            </Txt>
+            <span className="text-right font-mono text-foreground tabular-nums">
+              {formatValue(total)}
+              {suffix}
+            </span>
+          </div>
+        )}
       </div>
     </ChartTooltip>
   );

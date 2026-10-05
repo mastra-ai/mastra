@@ -29,6 +29,24 @@ export const SeriesReadout: Story = {
   ),
 };
 
+/** Stacked columns add a Total row: with the y-axis hidden, it's the column's height. */
+export const WithTotal: Story = {
+  render: () => (
+    <MetricsLineChartTooltip
+      active
+      showTotal
+      label="Oct 1, 5 PM"
+      formatValue={count}
+      payload={[
+        { name: '2xx', value: 3420, color: 'var(--chart-green)' },
+        { name: '3xx', value: 74, color: 'var(--chart-blue)' },
+        { name: '4xx', value: 118, color: 'var(--chart-amber)' },
+        { name: '5xx', value: 311, color: 'var(--chart-red)' },
+      ]}
+    />
+  ),
+};
+
 /** Values right-align in tabular figures, so mixed widths still line up. */
 export const Percentiles: Story = {
   render: () => (

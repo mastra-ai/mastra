@@ -50,6 +50,7 @@ export function MetricsLineChart({
   showDots = false,
   showLegend = true,
   valueFormatter,
+  showYAxis = true,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
@@ -67,6 +68,11 @@ export function MetricsLineChart({
   showLegend?: boolean;
   /** Formats y-axis ticks and tooltip values (e.g. `ms`, `%`). Defaults to compact numbers. */
   valueFormatter?: (value: number) => string;
+  /**
+   * Set to `false` to drop the y-axis labels and let the plot span the card. The gridlines stay
+   * for relative scale; exact values come from the tooltip and the card's summary.
+   */
+  showYAxis?: boolean;
 }) {
   const isClickable = typeof onPointClick === 'function';
   const id = useChartDefsId();
@@ -97,6 +103,7 @@ export function MetricsLineChart({
               minTickGap={xAxisMinTickGap}
             />
             <YAxis
+              hide={!showYAxis}
               tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
