@@ -15,6 +15,7 @@ import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { filterObservedMessages } from '../message-utils';
 import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { ObservationalMemory } from '../observational-memory';
 
@@ -753,5 +754,84 @@ describe('observed messages that later receive OM markers', () => {
 
     expect(unobserved.map(m => m.id)).toEqual(['continued']);
     expect(JSON.stringify(unobserved[0]!.content.parts)).toContain('NEW_CONTENT');
+  });
+});
+
+describe('observation markers never cover content the cycle did not observe', () => {
+  it("resource scope: another thread's markers stay off the current thread's live response", async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { scope: 'resource', messageTokens: 100 });
+    const resourceId = randomUUID();
+    const current = await setupThread(storage, resourceId);
+    const other = await setupThread(storage, resourceId);
+    const at = (s: number) => new Date(current.t0.getTime() + s * 1_000);
+    // Both threads cross the threshold; the other thread is larger, so it alone fills the cycle and the
+    // current thread is left out.
+    await storage.saveMessages({
+      messages: [message(other.threadId, resourceId, 'other-q', 'other '.repeat(1_000), at(1))],
+    });
+    const prompt = message(current.threadId, resourceId, 'cur-q', 'hello '.repeat(150), at(2));
+    const response = message(current.threadId, resourceId, 'cur-a', 'CURRENT_LIVE_ANSWER', at(3), 'assistant');
+    const messageList = new MessageList({ threadId: current.threadId, resourceId });
+    messageList.add(prompt, 'input');
+    messageList.add(response, 'response');
+    vi.spyOn(om.observer, 'callMultiThread').mockResolvedValue({
+      results: new Map([[other.threadId, { observations: '- other thread observed' }]]),
+    } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
+
+    const result = await om.observe({
+      threadId: current.threadId,
+      resourceId,
+      messages: [prompt, response],
+      messageList,
+    });
+
+    expect(result.observed).toBe(true);
+    const live = messageList.get.all.db().find(m => m.id === response.id)!;
+    expect(live.content.parts.map(p => p.type).filter(t => t.startsWith('data-om-observation'))).toEqual([]);
+    const head = (await storage.getObservationalMemory(null, resourceId))!;
+    expect(om.getUnobservedMessages([live], head).map(m => m.id)).toEqual([response.id]);
+  });
+
+  it('a part added to the observed message while the Observer runs stays after the end marker and in live context', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 100 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const asked = message(ids.threadId, ids.resourceId, 'grow-q', 'question', at(1));
+    const answered = message(ids.threadId, ids.resourceId, 'grow-a', 'answer '.repeat(300), at(2), 'assistant');
+    await storage.saveMessages({ messages: [asked, answered] });
+    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      // Another instance's running turn appends a part to the same assistant message.
+      const stored = (await storage.listMessagesById({ messageIds: [answered.id] })).messages[0]!;
+      stored.content.parts.push({ type: 'text', text: 'GROWN_PART' });
+      await storage.saveMessages({ messages: [stored] });
+      return { observations: '- answered' } as Awaited<ReturnType<typeof om.observer.call>>;
+    });
+
+    const result = await om.observe({
+      threadId: ids.threadId,
+      resourceId: ids.resourceId,
+      messages: [asked, answered],
+    });
+
+    expect(result.observed).toBe(true);
+    const stored = (await storage.listMessages({ threadId: ids.threadId, perPage: false })).messages;
+    const grown = stored.find(m => m.id === answered.id)!;
+    expect(grown.content.parts.map(p => (p.type === 'text' ? p.text.slice(0, 6) : p.type))).toEqual([
+      'answer',
+      'data-om-observation-start',
+      'data-om-observation-end',
+      'GROWN_',
+    ]);
+    // The actor's context filter keeps parts after the end marker. (Whether the Observer later picks
+    // the part up is a separate, pre-existing whole-message id check — ARCHITECTURE.md H7.)
+    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+    const live = new MessageList({ threadId: ids.threadId, resourceId: ids.resourceId });
+    live.add(stored, 'memory');
+    filterObservedMessages({ messageList: live, record: head });
+    const kept = live.get.all.db().find(m => m.id === answered.id);
+    expect(JSON.stringify(kept?.content.parts)).toContain('GROWN_PART');
+    expect(JSON.stringify(kept?.content.parts)).not.toContain('answer answer');
   });
 });
