@@ -71,7 +71,7 @@ function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string;
 /** Shorten a path under the home directory to ~/… */
 function shortPath(path: string): string {
   const home = process.env.HOME;
-  return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+  return home && (path === home || path.startsWith(`${home}/`)) ? `~${path.slice(home.length)}` : path;
 }
 
 /**

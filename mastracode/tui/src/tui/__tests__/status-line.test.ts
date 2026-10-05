@@ -648,6 +648,17 @@ describe('updateStatusLine', () => {
     expect(state.memoryStatusLine.setText).toHaveBeenLastCalledWith(' ~/…/mastracode/tui (feat/mc-animation)');
   });
 
+  it('does not treat a sibling folder that starts with the home path as home', () => {
+    const state = createState();
+    state.projectInfo.rootPath = `${process.env.HOME}-old/app`;
+    state.projectInfo.gitBranch = 'main';
+    process.stdout.columns = 200;
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls.at(-1)?.[0]).toContain(`${process.env.HOME}-old/app (main)`);
+  });
+
   it('keeps the branch alone, then cuts it, when even the last directory does not fit', () => {
     const state = createState();
     process.stdout.columns = 24;
