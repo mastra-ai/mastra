@@ -99,7 +99,7 @@ describe('MessageRow chrome', () => {
   });
 
   describe('when a user message contains text and an attachment', () => {
-    it('copies only the text parts', async () => {
+    it('places attachments outside the bubble and copies only text parts', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
 
@@ -120,6 +120,12 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
+      const attachments = screen.getByRole('group', { name: 'Sent attachments' });
+      const bubble = screen.getByText('Please review this file.').closest('[data-slot="message-content"]');
+      expect(bubble).not.toBeNull();
+      if (!bubble) throw new Error('Expected a text bubble');
+      expect(bubble.contains(attachments)).toBe(false);
+      expect(attachments.compareDocumentPosition(bubble)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('Please review this file.\nKeep the formatting.'));
     });
@@ -163,7 +169,7 @@ describe('MessageRow chrome', () => {
   });
 
   describe('when a user message contains only an attachment', () => {
-    it('does not offer to copy the attachment as text', () => {
+    it('shows the attachment without an empty bubble or a text copy action', () => {
       render(
         <MessageRow
           message={baseMessage({
@@ -177,6 +183,8 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
+      const attachments = screen.getByRole('group', { name: 'Sent attachments' });
+      expect(attachments.closest('[data-slot="message"]')?.querySelector('[data-slot="message-content"]')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
     });
   });
