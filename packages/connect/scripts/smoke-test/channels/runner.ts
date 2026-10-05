@@ -16,16 +16,31 @@ import { mountChannelRoutes } from './server.js';
 type ApiRoute = ReturnType<ChannelProvider['getRoutes']>[number];
 
 /**
- * The three channel-capable integrations `channels()` registers today.
- *
- * TODO(#25332): when the Slack channel is rekeyed to the `slack-channels`
- * App Configuration integration (and `microsoft-teams` is registered),
- * update this list — otherwise the suite silently stops covering Slack.
- * The manifest flow below already runs the full mint + delete lifecycle
- * once the channel is backed by an App Configuration token.
+ * The four channel-capable integrations `channels()` registers today, keyed
+ * by platform integrationId (the resolved-map keys). Slack rides the
+ * `slack-channels` App Configuration integration (#25332) — the OAuth
+ * `slack` integration backs tools only and is deliberately not
+ * channel-capable.
  */
-export const CHANNEL_IDS = ['discord', 'slack', 'telegram'] as const;
+export const CHANNEL_IDS = ['discord', 'microsoft-teams', 'slack-channels', 'telegram'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
+
+/**
+ * integrationId → the provider's platform id, which is also the first
+ * segment of its mounted routes (`/{platform}/events/:webhookId`) and the
+ * value of `provider.id`.
+ */
+const PLATFORM_IDS: Record<ChannelId, string> = {
+  discord: 'discord',
+  'microsoft-teams': 'teams',
+  'slack-channels': 'slack',
+  telegram: 'telegram',
+};
+
+/** Integration overrides disabling every channel except `keep`. */
+function disableAllExcept(keep: ChannelId): Record<string, { disabled: true }> {
+  return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, { disabled: true as const }]));
+}
 
 export interface ChannelRunnerOptions {
   /** Only run checks for these channel ids. Omit to run every channel. */
@@ -49,9 +64,10 @@ export interface ChannelRunnerOptions {
  * providers consume the credential: `channels()` hands the resolved token to
  * the provider, which talks to the vendor API itself. Where the full flow is
  * reachable without external listeners it runs for real — Discord's
- * connect → signed-webhook → disconnect loop and Slack's manifest
- * mint + delete lifecycle — and everything created is torn down in the same
- * run. No messages are sent and nothing survives the process.
+ * connect → signed-webhook → disconnect loop, Slack's manifest mint + delete
+ * lifecycle, and Teams' Entra app + Dev Portal bot provision + delete
+ * lifecycle — and everything created is torn down in the same run. No
+ * messages are sent and nothing survives the process.
  */
 export async function runChannelSmokeTests(options: ChannelRunnerOptions = {}): Promise<RunResult> {
   const startedAt = new Date().toISOString();
@@ -173,7 +189,7 @@ async function resolverContractOutcome(
       const allDisabled = await channels({
         projectId,
         client: clientOptions,
-        integrations: { slack: { disabled: true }, telegram: { disabled: true }, discord: { disabled: true } },
+        integrations: Object.fromEntries(CHANNEL_IDS.map(id => [id, { disabled: true as const }])),
       });
       const disabledRoutes = allDisabled.getRoutes();
       const disabledMap = await allDisabled();
@@ -364,7 +380,7 @@ async function serverMountOutcome(projectId: string, client: ResolvedClient): Pr
     const app = await mountChannelRoutes(mastra);
     for (const id of CHANNEL_IDS) {
       try {
-        const response = await app.request(`/${id}/events/mastra-smoke-unknown-webhook`, {
+        const response = await app.request(`/${PLATFORM_IDS[id]}/events/mastra-smoke-unknown-webhook`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ probe: true }),
@@ -427,14 +443,27 @@ async function channelOutcome(
   steps.push(
     provider
       ? makeStep('present in resolved provider map', undefined, 'pass', `connection ${connection.id}`)
-      : makeStep('present in resolved provider map', undefined, 'fail', 'active connection did not resolve'),
+      : makeStep(
+          'present in resolved provider map',
+          undefined,
+          'fail',
+          id === 'microsoft-teams' && !process.env.MASTRA_ENCRYPTION_KEY
+            ? 'active connection did not resolve — the Teams channel requires MASTRA_ENCRYPTION_KEY ' +
+                '(its install store persists per-agent bot secrets); without it channels() warn-and-skips the provider'
+            : 'active connection did not resolve',
+        ),
   );
 
   if (provider) {
     steps.push(
-      provider.id === id
-        ? makeStep('provider id matches integration id', undefined, 'pass')
-        : makeStep('provider id matches integration id', undefined, 'fail', `provider.id is '${provider.id}'`),
+      provider.id === PLATFORM_IDS[id]
+        ? makeStep('provider id matches platform id', undefined, 'pass', PLATFORM_IDS[id])
+        : makeStep(
+            'provider id matches platform id',
+            undefined,
+            'fail',
+            `provider.id is '${provider.id}', expected '${PLATFORM_IDS[id]}'`,
+          ),
     );
 
     try {
@@ -484,8 +513,15 @@ async function channelOutcome(
   // Slack supports the manifest half of the flow without external listeners:
   // connect() mints a real Slack app via the manifest API (pending OAuth
   // install), disconnect() deletes the minted app again.
-  if (id === 'slack' && credential) {
+  if (id === 'slack-channels' && credential) {
     steps.push(...(await slackManifestFlow(projectId, client)));
+  }
+
+  // Teams supports the provisioning half of the flow without external
+  // listeners: connect() provisions a real Entra application + Dev Portal bot
+  // registration, disconnect() deletes both again.
+  if (id === 'microsoft-teams' && credential?.type === 'oauth2' && provider) {
+    steps.push(...(await teamsProvisionFlow(projectId, client, credential.accessToken)));
   }
 
   const status: ProviderOutcome['status'] = steps.some(s => s.status === 'fail') ? 'fail' : 'pass';
@@ -537,8 +573,7 @@ async function discordWebhookFlow(
       projectId,
       client: clientOptions,
       integrations: {
-        slack: { disabled: true },
-        telegram: { disabled: true },
+        ...disableAllExcept('discord'),
         discord: { providerOptions: { publicKey: publicKeyHex, gateway: false } },
       },
     });
@@ -662,13 +697,11 @@ async function discordWebhookFlow(
  * 3. `disconnect()` deletes the minted app via `apps.manifest.delete` and
  *    removes the record — nothing is left in the Slack workspace.
  *
- * Today the platform's `slack` integration serves a workspace bot token,
- * which Slack's manifest API rejects (`not_allowed_token_type`) — the
- * channel is being rekeyed to the `slack-channels` App Configuration
- * integration (PR #25332). Until that lands, the token-type rejection is
- * recorded as an explicit skip: it still proves the manifest path is wired
- * end-to-end up to Slack's token gate. Once a `slack-channels` connection
- * backs the channel, this same flow runs the real mint + delete lifecycle.
+ * The channel rides the platform's `slack-channels` integration (#25332),
+ * whose TWO_STEP credential carries a Slack App Configuration token — the
+ * token type `apps.manifest.*` requires. A token-type rejection here is a
+ * real failure: it means the connection's credential is not an App
+ * Configuration token.
  */
 async function slackManifestFlow(projectId: string, client: ResolvedClient): Promise<ScenarioStep[]> {
   const steps: ScenarioStep[] = [];
@@ -686,10 +719,7 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: {
-        discord: { disabled: true },
-        telegram: { disabled: true },
-      },
+      integrations: disableAllExcept('slack-channels'),
     });
     // The agent exists only so connect() can derive the app's display name;
     // its model is never invoked.
@@ -702,9 +732,11 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
     const mastra = new Mastra({ channels: resolver, agents: { [SMOKE_AGENT_ID]: agent }, logger: false });
 
     const resolved = await resolver();
-    provider = resolved.slack as ManifestProvider | undefined;
+    provider = resolved['slack-channels'] as ManifestProvider | undefined;
     if (!provider) {
-      steps.push(makeStep('manifest flow: resolve dedicated provider', undefined, 'fail', 'slack did not resolve'));
+      steps.push(
+        makeStep('manifest flow: resolve dedicated provider', undefined, 'fail', 'slack-channels did not resolve'),
+      );
       return steps;
     }
     // Programmatic connect() (not via a mounted route) needs the Mastra
@@ -728,19 +760,17 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
       });
     } catch (error) {
       const message = errorMessage(error);
-      if (/not_allowed_token_type|invalid_auth|missing_scope|token_revoked|account_inactive/i.test(message)) {
-        steps.push(
-          makeStep(
-            'manifest flow: mint app via connect()',
-            undefined,
-            'skip',
-            `Slack rejected the mint at the token gate (${message}). The connection's credential is not an App ` +
-              `Configuration token — pending the slack-channels rekey (PR #25332). The manifest path itself is wired.`,
-          ),
-        );
-      } else {
-        steps.push(makeStep('manifest flow: mint app via connect()', undefined, 'fail', message));
-      }
+      steps.push(
+        makeStep(
+          'manifest flow: mint app via connect()',
+          undefined,
+          'fail',
+          /not_allowed_token_type/i.test(message)
+            ? `Slack rejected the mint at the token gate (${message}) — the slack-channels connection's credential ` +
+                `is not an App Configuration token. Reconnect the integration on the platform.`
+            : message,
+        ),
+      );
       return steps;
     }
     connected = true;
@@ -801,11 +831,171 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
   return steps;
 }
 
+/**
+ * Full Teams provisioning lifecycle against the platform credential:
+ *
+ * 1. Build a dedicated resolver (Teams only) and point the provider at a
+ *    local baseUrl via `configure()` so the provisioned bot's messaging
+ *    endpoint is well-formed. The endpoint is never called — no external
+ *    listener exists in a smoke run, and Teams only delivers activities once
+ *    a human packages + installs the bot as a Teams app.
+ * 2. `connect()` provisions a real Entra application + client secret
+ *    (Microsoft Graph) and a Teams Dev Portal bot registration, persists the
+ *    installation as **active**, and returns a `deep_link` to the Dev Portal
+ *    (the remaining human step is packaging — out of scope here).
+ * 3. `disconnect()` deletes the Dev Portal registration and the Entra
+ *    application and removes the installation. Remote deletes are
+ *    best-effort inside the provider, so the flow then proves the Entra
+ *    application is really gone via Graph (`GET /applications/{id}` → 404).
+ *
+ * Requires MASTRA_ENCRYPTION_KEY (the install store persists the minted bot
+ * secret at rest) and a credential carrying the Dev Portal secondary token.
+ */
+async function teamsProvisionFlow(
+  projectId: string,
+  client: ResolvedClient,
+  graphToken: string,
+): Promise<ScenarioStep[]> {
+  const steps: ScenarioStep[] = [];
+  const clientOptions = { accessToken: client.accessToken };
+
+  type ProvisionProvider = ChannelProvider & {
+    configure?: (settings: { baseUrl?: string }) => Promise<void>;
+    getInstallation?: (agentId: string) => Promise<{ status: string; appId?: string; entraObjectId?: string } | null>;
+  };
+
+  let provider: ProvisionProvider | undefined;
+  let connected = false;
+  let entraObjectId: string | undefined;
+  let appId: string | undefined;
+  try {
+    const resolver = await channels({
+      projectId,
+      client: clientOptions,
+      integrations: disableAllExcept('microsoft-teams'),
+    });
+    const resolved = await resolver();
+    provider = resolved['microsoft-teams'] as ProvisionProvider | undefined;
+    if (!provider) {
+      steps.push(
+        makeStep('provision flow: resolve dedicated provider', undefined, 'fail', 'microsoft-teams did not resolve'),
+      );
+      return steps;
+    }
+    // Delegated connect() refuses to register a bot without a messaging
+    // endpoint; a local placeholder is fine because nothing ever calls it.
+    await provider.configure?.({ baseUrl: 'http://127.0.0.1:4111' });
+
+    if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
+      steps.push(
+        makeStep('provision flow: provision bot via connect()', undefined, 'fail', 'provider lacks connect/disconnect'),
+      );
+      return steps;
+    }
+
+    const result = await provider.connect(SMOKE_AGENT_ID, {
+      name: `mastra-smoke-${Date.now()}`,
+    });
+    connected = true;
+    steps.push(
+      result.type === 'deep_link'
+        ? makeStep(
+            'provision flow: provision bot via connect()',
+            undefined,
+            'pass',
+            'Entra app + Dev Portal bot provisioned',
+          )
+        : makeStep(
+            'provision flow: provision bot via connect()',
+            undefined,
+            'fail',
+            `expected a deep_link result, got '${result.type}'`,
+          ),
+    );
+
+    const installation = await provider.getInstallation?.(SMOKE_AGENT_ID);
+    entraObjectId = installation?.entraObjectId;
+    appId = installation?.appId;
+    steps.push(
+      installation?.status === 'active'
+        ? makeStep('provision flow: active installation recorded', undefined, 'pass', `app ${appId ?? '?'}`)
+        : makeStep(
+            'provision flow: active installation recorded',
+            undefined,
+            'fail',
+            `installation status: ${installation?.status ?? 'missing'}`,
+          ),
+    );
+  } catch (error) {
+    steps.push(makeStep('provision flow', undefined, 'fail', errorMessage(error)));
+  } finally {
+    if (provider && connected) {
+      try {
+        await provider.disconnect?.(SMOKE_AGENT_ID);
+        const remaining = await provider.getInstallation?.(SMOKE_AGENT_ID);
+        steps.push(
+          remaining == null
+            ? makeStep('provision flow: disconnect removes installation', undefined, 'pass')
+            : makeStep(
+                'provision flow: disconnect removes installation',
+                undefined,
+                'fail',
+                'installation still present',
+              ),
+        );
+      } catch (error) {
+        steps.push(
+          makeStep(
+            'provision flow: disconnect removes installation',
+            undefined,
+            'fail',
+            `LEAKED Teams bot for "${SMOKE_AGENT_ID}" (appId ${appId ?? '?'}, Entra object ${entraObjectId ?? '?'}): ${errorMessage(error)}`,
+          ),
+        );
+      }
+      // The provider deletes the remote resources best-effort (a
+      // control-plane failure never blocks local removal), so prove the
+      // Entra application is actually gone rather than trusting disconnect.
+      if (entraObjectId) {
+        try {
+          const gone = await fetchJson(`https://graph.microsoft.com/v1.0/applications/${entraObjectId}`, {
+            Authorization: `Bearer ${graphToken}`,
+          });
+          steps.push(
+            gone.status === 404
+              ? makeStep('provision flow: Entra application deleted (graph 404)', undefined, 'pass')
+              : makeStep(
+                  'provision flow: Entra application deleted (graph 404)',
+                  undefined,
+                  'fail',
+                  `LEAKED Entra application ${entraObjectId} (appId ${appId ?? '?'}): graph returned ${gone.status}`,
+                ),
+          );
+        } catch (error) {
+          steps.push(
+            makeStep('provision flow: Entra application deleted (graph 404)', undefined, 'fail', errorMessage(error)),
+          );
+        }
+      }
+    }
+  }
+  return steps;
+}
+
 const CHANNEL_SUMMARIES: Record<ChannelId, string> = {
   discord: 'Discord channel: bot-token late-binding + live credential check',
-  slack: 'Slack channel: token resolver path, live credential check + manifest mint/delete lifecycle',
+  'microsoft-teams':
+    'Teams channel: scope-aware token resolver + live credential check + bot provision/delete lifecycle',
+  'slack-channels': 'Slack channel: config-token resolver path, live credential check + manifest mint/delete lifecycle',
   telegram: 'Telegram channel: bot-token resolver path + live credential check',
 };
+
+/** Extract the token a channel provider would consume from a platform credential. */
+function credentialToken(credential: ConnectionCredential): string {
+  if (credential.type === 'oauth2') return credential.accessToken;
+  if (credential.type === 'two_step') return credential.token;
+  return credential.apiKey;
+}
 
 /**
  * Read-only whoami calls against each vendor API, using the credential the
@@ -814,7 +1004,7 @@ const CHANNEL_SUMMARIES: Record<ChannelId, string> = {
  * end-to-end path being smoked.
  */
 async function verifyCredentialLive(id: ChannelId, credential: ConnectionCredential): Promise<ScenarioStep[]> {
-  const token = credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
+  const token = credentialToken(credential);
   const steps: ScenarioStep[] = [];
 
   try {
@@ -856,13 +1046,46 @@ async function verifyCredentialLive(id: ChannelId, credential: ConnectionCredent
         );
         break;
       }
-      case 'slack': {
+      case 'slack-channels': {
         const auth = await fetchJson('https://slack.com/api/auth.test', { Authorization: `Bearer ${token}` }, 'POST');
-        const body = (auth.body as { ok?: boolean; error?: string; team?: string } | undefined) ?? {};
+        const body = (auth.body as { ok?: boolean; error?: string; team?: string; url?: string } | undefined) ?? {};
         steps.push(
           body.ok === true
-            ? makeStep('live credential: auth.test', undefined, 'pass', `team: ${body.team ?? '?'}`)
+            ? makeStep('live credential: auth.test', undefined, 'pass', `workspace: ${body.team ?? body.url ?? '?'}`)
             : makeStep('live credential: auth.test', undefined, 'fail', `slack error: ${body.error ?? auth.status}`),
+        );
+        break;
+      }
+      case 'microsoft-teams': {
+        // The primary oauth2 token is a delegated Microsoft Graph token —
+        // /me is the canonical read-only whoami for it.
+        const me = await fetchJson('https://graph.microsoft.com/v1.0/me', { Authorization: `Bearer ${token}` });
+        steps.push(
+          me.ok
+            ? makeStep(
+                'live credential: GET graph /me',
+                undefined,
+                'pass',
+                `user: ${asString(me.body, 'userPrincipalName') ?? asString(me.body, 'displayName') ?? '?'}`,
+              )
+            : makeStep('live credential: GET graph /me', undefined, 'fail', `status ${me.status}`),
+        );
+        // Delegated provisioning needs the secondary Dev Portal token the
+        // platform serves alongside the Graph token on the same credential.
+        const devPortalToken =
+          credential.type === 'oauth2'
+            ? credential.secondaryAccessTokens?.devPortalAccessToken?.accessToken
+            : undefined;
+        steps.push(
+          devPortalToken
+            ? makeStep('credential carries Dev Portal secondary token', undefined, 'pass')
+            : makeStep(
+                'credential carries Dev Portal secondary token',
+                undefined,
+                'fail',
+                'no secondaryAccessTokens.devPortalAccessToken — the integration must request the ' +
+                  'dev.teams.microsoft.com/AppDefinitions.ReadWrite scope',
+              ),
         );
         break;
       }

@@ -7,9 +7,11 @@
  * against the live platform, mounts the channel routes on a real Mastra
  * server and drives the webhook endpoints with HTTP requests, and for every
  * channel integration with an active connection verifies the end-to-end
- * credential flow (vendor whoami calls; for Discord, the complete
- * connect → signed-webhook → disconnect loop). Prints the same step-by-step
- * report as the tools smoke suite.
+ * credential flow (vendor whoami calls; for Discord the complete
+ * connect → signed-webhook → disconnect loop, for Slack the manifest
+ * mint + delete lifecycle, for Teams the Entra app + Dev Portal bot
+ * provision + delete lifecycle). Prints the same step-by-step report as the
+ * tools smoke suite.
  *
  * Exits non-zero when any check fails or errors. Channels without an active
  * connection are skipped, not failed.
@@ -52,6 +54,7 @@ function printHelp(): void {
       'Environment:',
       '  MASTRA_PLATFORM_SECRET_KEY   Platform access token (or MASTRA_PLATFORM_ACCESS_TOKEN)',
       '  MASTRA_PROJECT_ID            Platform project id to resolve against',
+      '  MASTRA_ENCRYPTION_KEY        Required for the microsoft-teams channel (32-byte, base64)',
       '',
       'Flags:',
       `  --channel / -c     Run only the named channel (${CHANNEL_IDS.join(', ')}). Pass multiple times.`,
@@ -60,10 +63,12 @@ function printHelp(): void {
       '',
       'The suite resolves channel providers through the public channels() API,',
       'mounts their routes on a real Mastra server, verifies each connected',
-      'credential with a vendor whoami call, and (Discord) runs the full flow:',
-      'connect an agent, deliver a signed webhook interaction, reject a forged',
-      'one, disconnect. It sends no messages and registers nothing with any',
-      'vendor; installations live in in-process storage only.',
+      'credential with a vendor whoami call, and runs each full flow that is',
+      'reachable without external listeners: Discord (connect, signed webhook,',
+      'forged-signature rejection, disconnect), Slack (manifest app mint +',
+      'delete), Teams (Entra app + Dev Portal bot provision + delete). It',
+      'sends no messages, and everything it creates is deleted in the same',
+      'run; installations live in in-process storage only.',
       '',
     ].join('\n'),
   );
