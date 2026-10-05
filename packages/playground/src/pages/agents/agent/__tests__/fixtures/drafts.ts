@@ -5,7 +5,7 @@ import type {
   McpServerListResponse,
 } from '@mastra/client-js';
 
-import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '@mastra/react/hooks';
+import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '@mastra/react/hooks/auth';
 
 export const draftAuthDisabled: PublicAuthCapabilities = { enabled: false, login: null };
 

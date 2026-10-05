@@ -1,5 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useMCPServerTool } from '@mastra/react/hooks';
+import { useMCPServerTool } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';

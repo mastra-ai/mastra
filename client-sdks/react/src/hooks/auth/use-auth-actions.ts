@@ -13,7 +13,7 @@ import type { LogoutResponse } from './types';
  *
  * @example
  * ```tsx
- * import { useSSOLogin } from '@mastra/react/hooks';
+ * import { useSSOLogin } from '@mastra/react/hooks/auth';
  *
  * function SSOLoginButton() {
  *   const { mutate: login, isPending } = useSSOLogin();
@@ -55,7 +55,7 @@ export function useSSOLogin({
  *
  * @example
  * ```tsx
- * import { useLogout } from '@mastra/react/hooks';
+ * import { useLogout } from '@mastra/react/hooks/auth';
  *
  * function LogoutButton({ userId }: { userId: string }) {
  *   const { mutate: logout, isPending } = useLogout();

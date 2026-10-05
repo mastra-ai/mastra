@@ -1,5 +1,6 @@
 import { useExpiringLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
-import { useWorkspaces, useMCPServers } from '@mastra/react/hooks';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
+import { useWorkspaces } from '@mastra/react/hooks/workspace';
 import { useEffect } from 'react';
 import { z } from 'zod/v4';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';

@@ -25,7 +25,7 @@ export type CredentialsSignUpResponse = {
  *
  * @example
  * ```tsx
- * import { useCredentialsSignUp } from '@mastra/react/hooks';
+ * import { useCredentialsSignUp } from '@mastra/react/hooks/auth';
  *
  * function SignUpForm() {
  *   const { mutate: signUp, isPending, error } = useCredentialsSignUp();
