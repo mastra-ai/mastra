@@ -54,17 +54,28 @@ describe('RedeliveryDriver', () => {
   it('captures a clone taken at publish time', async () => {
     const driver = new RedeliveryDriver();
     try {
-      const data = { workflowId: 'wf', runId: 'capture-run', executionPath: [0], nested: { n: 1 }, list: [{ n: 1 }] };
+      const at = new Date(1000);
+      const data = {
+        workflowId: 'wf',
+        runId: 'capture-run',
+        executionPath: [0],
+        nested: { n: 1 },
+        list: [{ n: 1 }],
+        at,
+      };
       await driver.pubsub.publish('workflows', { type: 'workflow.step.run', runId: 'capture-run', data });
 
       data.nested.n = 2;
       data.list[0]!.n = 2;
       data.executionPath.push(9);
+      at.setTime(2000);
 
       const [captured] = driver.stepRuns({ spec: 'wf@0', runId: 'capture-run' });
       expect(captured).toBeDefined();
       expect(captured!.data).not.toBe(data);
       expect(captured!.data).toMatchObject({ executionPath: [0], nested: { n: 1 }, list: [{ n: 1 }] });
+      expect(captured!.data.at).not.toBe(at);
+      expect(captured!.data.at.getTime()).toBe(1000);
       expect(captured!.id).toEqual(expect.any(String));
       expect(captured!.deliveryAttempt).toBe(1);
     } finally {
@@ -93,7 +104,11 @@ describe('RedeliveryDriver', () => {
       await expect(driver.redeliver({ spec: 'no-match-wf@0', runId: 'other-run' })).rejects.toThrow(
         /No captured workflow.step.run/,
       );
-      await expect(driver.redeliver({ spec: 'no-match-wf@' })).rejects.toThrow(/Invalid redelivery spec/);
+      for (const spec of ['no-match-wf@', 'no-match-wf@0,', 'no-match-wf@,0', 'no-match-wf@0,,1', '@0', 'wf@-1']) {
+        await expect(driver.redeliver({ spec })).rejects.toThrow(/Invalid redelivery spec/);
+      }
+      // A second live driver would fight over the global processor spy.
+      expect(() => new RedeliveryDriver()).toThrow(/Only one RedeliveryDriver/);
       expect(driver.deliveryCount({ spec: 'no-match-wf@0', runId: 'no-match-run' })).toBe(1);
       expect(execute).toHaveBeenCalledTimes(1);
     });
@@ -157,11 +172,12 @@ describe('RedeliveryDriver', () => {
       expect((await run.start({ inputData: {} })).status).toBe('suspended');
       await expect(driver.waitForStepEnd(match)).resolves.toMatchObject({ type: 'workflow.step.end' });
 
-      const { event, results } = await driver.redeliver(match);
+      const { event, handled } = await driver.redeliver(match);
       expect(event.deliveryAttempt).toBe(2);
       expect(event.id).toBe(driver.stepRuns(match)[0]!.id);
-      expect(results.length).toBeGreaterThan(0);
-      expect(results.every(r => r.ok)).toBe(true);
+      expect(handled.length).toBeGreaterThan(0);
+      expect(handled.map(h => h.event.deliveryAttempt)).toEqual(handled.map(() => 2));
+      expect(handled.every(h => h.event.id === event.id && h.result.ok)).toBe(true);
       expect(driver.deliveryCount(match)).toBe(2);
       expect(execute).toHaveBeenCalledTimes(1);
 
@@ -192,15 +208,20 @@ describe('RedeliveryDriver', () => {
       const match = { spec: 'driver-running-wf@0', runId };
       const run = await workflow.createRun({ runId });
       const result = run.start({ inputData: {} });
-      await started.promise;
+      try {
+        await started.promise;
 
-      const { results } = await driver.redeliver(match);
-      expect(results.length).toBeGreaterThan(0);
-      expect(results.every(r => r.ok)).toBe(true);
-      expect(driver.deliveryCount(match)).toBe(2);
-      expect(execute).toHaveBeenCalledTimes(1);
-
-      gate.resolve();
+        // The fence keys on the original event id. A non-default attempt proves
+        // the injected deliveryAttempt survives group delivery's own counter.
+        const { handled } = await driver.redeliver(match, { deliveryAttempt: 3 });
+        expect(handled.length).toBeGreaterThan(0);
+        expect(handled.map(h => h.event.deliveryAttempt)).toEqual(handled.map(() => 3));
+        expect(handled.every(h => h.result.ok)).toBe(true);
+        expect(driver.deliveryCount(match)).toBe(2);
+        expect(execute).toHaveBeenCalledTimes(1);
+      } finally {
+        gate.resolve();
+      }
       expect((await result).status).toBe('success');
       await driver.waitForStepEnd(match);
       expect(execute).toHaveBeenCalledTimes(1);
@@ -271,8 +292,8 @@ describe('RedeliveryDriver', () => {
           executionPath: [...TOOL_STEP_PATH],
         });
 
-        const { event, results } = await driver.redeliver(toolStep);
-        expect(results.length).toBeGreaterThan(0);
+        const { event, handled } = await driver.redeliver(toolStep);
+        expect(handled.length).toBeGreaterThan(0);
         expect(event.data).toMatchObject({ workflowId: 'durable-agentic-execution', executionPath: [3, 0] });
         expect(driver.deliveryCount(toolStep)).toBe(2);
         expect(driver.deliveryCount({ spec: 'durable-agentic-execution@3,0' })).toBe(2);

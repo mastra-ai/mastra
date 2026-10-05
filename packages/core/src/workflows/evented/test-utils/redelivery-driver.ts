@@ -3,8 +3,11 @@
  * workflow engine. Not exported from any package entry point.
  *
  * The driver owns an `EventEmitterPubSub` (`driver.pubsub`). Every event
- * published on the `workflows` topic is cloned the moment it is emitted, so
- * later mutations by the engine don't leak into the capture. A test then picks
+ * published on the `workflows` topic is snapshotted the moment it is emitted,
+ * before any engine subscriber runs: arrays, plain objects and dates are
+ * deep-copied, so later engine mutations of those don't leak into the capture.
+ * Functions and class instances are kept by reference (see `snapshotClone`).
+ * Only one driver may be live at a time. A test then picks
  * a `workflow.step.run` by `<workflowId>@<executionPath>` and re-delivers a
  * clone of it whenever it chooses — there are no timers involved.
  *
@@ -12,16 +15,19 @@
  * default engine never publishes `workflow.step.run`, so `redeliver()` would
  * throw "no captured step.run" anyway.
  *
- * Workflow step:
+ * Workflow step (here a step that suspends, so the duplicate hits the
+ * suspended-step guard):
  *
  *   const driver = new RedeliveryDriver();
  *   const mastra = new Mastra({ logger: false, storage, workflows: { wf }, pubsub: driver.pubsub });
  *   await mastra.startWorkers();
  *   driver.assertEvented(wf);
  *   const run = await wf.createRun({ runId: 'run-1' });
- *   await run.start({ inputData: {} });
- *   const { results } = await driver.redeliver({ runId: 'run-1', spec: 'my-wf@1' });
- *   expect(driver.deliveryCount({ runId: 'run-1', spec: 'my-wf@1' })).toBe(2);
+ *   await run.start({ inputData: {} }); // status 'suspended'
+ *   const { handled } = await driver.redeliver({ runId: 'run-1', spec: 'my-wf@0' });
+ *   expect(handled.map(h => h.event.deliveryAttempt)).toEqual([2]);
+ *   expect(driver.deliveryCount({ runId: 'run-1', spec: 'my-wf@0' })).toBe(2);
+ *   await mastra.stopWorkers();
  *   driver.dispose();
  *
  * Durable agent tool step (the tool-call step of `durable-agentic-execution`):
@@ -38,11 +44,10 @@
  *
  * `redeliver()` re-emits the captured event with its original id and
  * `deliveryAttempt` 2 (what a broker does after a missed ack) and resolves
- * with the `WorkflowEventProcessor.handle()` results for that delivery. It
- * throws when nothing matches the spec or no processor consumed the
- * duplicate, so a spec that never matched fails the test instead of passing
- * silently. Pass `{ freshId: true }` to republish under a new event id
- * instead (what the external validation harness does).
+ * with each `WorkflowEventProcessor.handle()` call for that delivery: the
+ * event the processor saw and its result. It throws when nothing matches the
+ * spec or no processor consumed the duplicate, so a spec that never matched
+ * fails the test instead of passing silently.
  *
  * Redelivering the step.run of a step that already *completed* re-executes it
  * today (F4). That is owned by COR-1307 and is red until that fix lands, so
@@ -84,8 +89,8 @@ type HandleResult = Awaited<ReturnType<WorkflowEventProcessor['handle']>>;
 export interface RedeliveryOutcome {
   /** The event that was re-delivered. */
   event: Event;
-  /** One result per `WorkflowEventProcessor.handle()` call that received it. */
-  results: HandleResult[];
+  /** One entry per `WorkflowEventProcessor.handle()` call that received it. */
+  handled: { event: Event; result: HandleResult }[];
 }
 
 /**
@@ -114,8 +119,9 @@ function parseSpec(spec: RedeliverySpec): ParsedSpec {
   const at = spec.lastIndexOf('@');
   const workflowId = at >= 0 ? spec.slice(0, at) : undefined;
   const pathText = at >= 0 ? spec.slice(at + 1) : spec;
-  const executionPath = pathText.split(',').map(part => Number(part.trim()));
-  if (pathText.trim() === '' || executionPath.some(n => !Number.isInteger(n) || n < 0)) {
+  const parts = pathText.split(',').map(part => part.trim());
+  const executionPath = parts.map(Number);
+  if (parts.some(part => !/^\d+$/.test(part)) || executionPath.some(n => !Number.isSafeInteger(n))) {
     throw new Error(`Invalid redelivery spec "${spec}"`);
   }
   if (workflowId === '') {
@@ -157,7 +163,15 @@ export class RedeliveryDriver {
   #injecting: Event | undefined;
   #disposed = false;
 
+  // The processor spy is global, so overlapping drivers would nest spies and
+  // restore each other's mocks.
+  static #live: RedeliveryDriver | undefined;
+
   constructor() {
+    if (RedeliveryDriver.#live) {
+      throw new Error('Only one RedeliveryDriver may be live at a time; dispose() the previous one first');
+    }
+    RedeliveryDriver.#live = this;
     // Registered before any subscriber, so the clone is taken before the
     // engine sees (and can mutate) the event.
     this.#emitter.on(WORKFLOWS_TOPIC, (event: Event) => this.#capture(event));
@@ -221,10 +235,7 @@ export class RedeliveryDriver {
    * matching `workflow.step.run` and resolves once every workflow event
    * processor that received it has finished handling it.
    */
-  async redeliver(
-    match: RedeliveryMatch,
-    options: { deliveryAttempt?: number; freshId?: boolean } = {},
-  ): Promise<RedeliveryOutcome> {
+  async redeliver(match: RedeliveryMatch, options: { deliveryAttempt?: number } = {}): Promise<RedeliveryOutcome> {
     if (this.#disposed) throw new Error('RedeliveryDriver is disposed');
     const original = this.stepRuns(match)
       .filter(e => e.deliveryAttempt === 1)
@@ -237,7 +248,7 @@ export class RedeliveryDriver {
 
     const event: Event = {
       ...snapshotClone(original),
-      id: options.freshId ? globalThis.crypto.randomUUID() : original.id,
+      id: original.id,
       createdAt: new Date(),
       deliveryAttempt: options.deliveryAttempt ?? 2,
     };
@@ -256,14 +267,15 @@ export class RedeliveryDriver {
         `Redelivered workflow.step.run for "${match.spec}" was not consumed by any workflow event processor (are workers started?)`,
       );
     }
-    const results = await Promise.all(calls.map(c => c.result));
-    return { event, results };
+    const handled = await Promise.all(calls.map(async c => ({ event: c.event, result: await c.result })));
+    return { event, handled };
   }
 
   /** Restores the processor spy and rejects any step-end wait that never matched. */
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    if (RedeliveryDriver.#live === this) RedeliveryDriver.#live = undefined;
     this.#handleSpy.mockRestore();
     const waits = this.#waits.splice(0);
     for (const wait of waits) {
