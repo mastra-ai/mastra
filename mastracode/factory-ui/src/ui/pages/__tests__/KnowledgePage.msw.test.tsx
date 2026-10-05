@@ -518,12 +518,10 @@ describe('KnowledgePage', () => {
     fireEvent.mouseLeave(rootNode);
     await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
 
-    // Selected scopes get a filled active pill matching aria-pressed.
+    // Exactly the selected scope reports as pressed.
     const features = within(scopes).getByRole('button', { name: /features feature/ });
     expect(features).toHaveAttribute('aria-pressed', 'true');
-    expect(features).toHaveClass('bg-surface4');
-    expect(features).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: /mastra org/ })).toHaveAttribute('aria-pressed', 'false');
 
     // Content placed into the structural scope renders alongside child scopes
     // and opens the record flyout (scoped by the node's own rung) on click.
@@ -608,7 +606,6 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).toContain('scope=11111111-1111-4111-8111-111111111111');
     await waitFor(() => expect(subgraphParams).toContain('11111111-1111-4111-8111-111111111111'));
     expect(orgScope).toHaveAttribute('aria-pressed', 'true');
-    expect(orgScope).toHaveClass('bg-surface4');
 
     // A project-scoped content node reached through the org lens must
     // load detail at the node's own rung, not the lens marker's org rung.
@@ -804,13 +801,11 @@ describe('KnowledgePage', () => {
     expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
 
-    // Merged entries get a filled active pill matching aria-pressed.
+    // Merged entries report as pressed only while selected.
     const project = within(scopes).getByRole('button', { name: /fp-1 project/ });
     await user.click(project);
     expect(project).toHaveAttribute('aria-pressed', 'true');
-    expect(project).toHaveClass('bg-surface4');
-    expect(project).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: /mastra org/ })).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('new record')).toBeInTheDocument();
