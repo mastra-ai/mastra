@@ -4,11 +4,12 @@ import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
+import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { TooltipProvider } from '@/ds/components/Tooltip';
-import { frameSurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 function SidebarBrand() {
@@ -86,14 +87,6 @@ const crumbs = (
   </Breadcrumb>
 );
 
-function Frame({ children }: { children: ReactNode }) {
-  return (
-    <div className={cn('relative min-h-0 flex-1 overflow-hidden rounded-studio-frame', frameSurfaceStyle)}>
-      {children}
-    </div>
-  );
-}
-
 function MainContent({ withHeader = true }: { withHeader?: boolean }) {
   return (
     <PageLayout breadcrumbs={withHeader ? crumbs : undefined}>
@@ -121,7 +114,7 @@ function MainContent({ withHeader = true }: { withHeader?: boolean }) {
 function FrameWithPanel({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1">
-      <Frame>{children}</Frame>
+      <MainCard>{children}</MainCard>
       <aside className="hidden w-72 shrink-0 border-l border-border bg-sidebar p-4 xl:block">
         <p className="text-column text-foreground">Details panel</p>
         <p className="mt-1 text-meta text-muted-foreground">
@@ -148,9 +141,9 @@ export const StandardDesktop: Story = {
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -171,9 +164,9 @@ export const CollapsedSidebar: Story = {
       >
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -188,9 +181,9 @@ export const Mobile: Story = {
       <MainSidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -204,9 +197,9 @@ export const WithoutRouteHeader: Story = {
       <MainSidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent withHeader={false} />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -245,9 +238,9 @@ export const LightTheme: Story = {
       <MainSidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -262,9 +255,9 @@ export const DarkTheme: Story = {
       <MainSidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
-            <Frame>
+            <MainCard>
               <MainContent />
-            </Frame>
+            </MainCard>
           </AppShell>
         </div>
       </MainSidebarProvider>
