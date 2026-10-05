@@ -2,6 +2,7 @@ import { abortFollowupScenario } from './abort-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentConnectionsCrossProjectScenario } from './agent-connections-cross-project.js';
 import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
 import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
@@ -240,6 +241,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agent-connections-cross-project': agentConnectionsCrossProjectScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
   'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
   'agent-connections-tool-flow': agentConnectionsToolFlowScenario,

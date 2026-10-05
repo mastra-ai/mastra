@@ -5,7 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import type { CardAction } from '../cardPrimaryAction';
 import { metadataLabelColors, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
@@ -76,13 +76,13 @@ export function WorkItemCardRows({
             </Txt>
           )}
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
+        <div className="flex min-w-0 items-center gap-1.5">
           {item.source === 'github-pr' ? (
             <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
           ) : (
             <SourceIcon source={item.source} />
           )}
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-[550]">
+          <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </Txt>
         </div>

@@ -311,16 +311,21 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 #### `observe(runId, options?)`
 
-Reconnects to an existing run, replaying cached events before delivering live ones. Use this after a network disconnection. Pass `offset` to start replay from a known position.
+Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
 ```typescript
-const { output, cleanup } = await durableAgent.observe(runId, {
-  offset: 0,
+const { output } = await durableAgent.observe(runId, {
   onChunk: chunk => console.log(chunk),
 })
 
 await output.text
 ```
+
+The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, so it isn't a chunk count. Public stream chunks and callbacks don't expose the PubSub index. Only pass an offset when another integration already tracks the transport position.
+
+A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.
+
+When the PubSub transport supports numeric offsets, an offset beyond the highest retained index replays nothing and also skips live events with lower indexes. The observer receives events only when the published index reaches the requested offset. If the index counter restarts below that offset, the observer can wait indefinitely. On a transport without numeric offset support, providing an offset starts with new live events and doesn't replay cached events. Replay is limited to events still available in the configured cache. Events can't be replayed when caching is disabled, `shouldCache` excludes the run topic, a cache write fails, or retained events have been cleared.
 
 By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
@@ -371,7 +376,7 @@ interface PrepareResult {
 
 #### `abortRunStream(runId)`
 
-Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the `finish` event carries reason `abort`, `onAbort` fires, and `observe()` consumers see the stream end.
+Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the stream emits an `abort` chunk, `onAbort` fires, and `observe()` consumers see the stream end.
 
 ```typescript
 const { runId } = await durableAgent.stream('Summarize the document')
@@ -751,7 +756,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'onFinish',
     type: '(result: AgentFinishEventData) => void | Promise<void>',
     isOptional: true,
-    description: 'Called when the run finishes.',
+    description: 'Called when the run completes successfully. Aborted runs call `onAbort`; failed runs call `onError`.',
   },
   {
     name: 'onError',
@@ -777,12 +782,12 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['onIterationComplete']",
     isOptional: true,
     description:
-      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Observation-only on durable agents: returning `continue: false` or feedback does not influence the loop.',
+      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Return `continue: true` to request another iteration or `continue: false` to stop. Feedback is added as a synthetic assistant message when the loop runs another iteration. If the model has stopped, feedback alone or `continue: false` with feedback does not start another iteration. When the loop was already going to continue, `continue: false` with feedback runs one final feedback-guided iteration before stopping.',
   },
 ]}
 />
 
-`resume()` and `observe()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
+`resume()`, `observe()`, and `recover()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onAbort`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
 
 ## DurableAgentStreamResult
 
