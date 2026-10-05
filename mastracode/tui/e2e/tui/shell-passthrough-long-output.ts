@@ -24,15 +24,15 @@ export const shellPassthroughLongOutputScenario: McE2eScenario = {
     runtime.printScreen('while shell passthrough is streaming', terminal);
 
     await runtime.waitForScreenText(/mc-shell-line-021/i, terminal, 8_000);
-    await runtime.waitForScreenText(/\.\.\. 2 more lines \(Ctrl\+E to expand\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/✓/i, terminal, 8_000);
+    await runtime.waitForScreenText(/… 2 earlier lines · ctrl\+e to expand/i, terminal, 8_000);
+    await runtime.waitForScreenText(/● \$ [\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b/, terminal, 8_000);
     expect(terminal.serialize().view).not.toMatch(/mc-shell-line-000/i);
     runtime.printScreen('after collapsed shell passthrough', terminal);
 
     terminal.write('\x05');
     await runtime.waitForScreenText(/mc-shell-line-000/i, terminal, 8_000);
     await runtime.waitForScreenText(/mc-shell-line-021/i, terminal, 8_000);
-    expect(terminal.serialize().view).not.toMatch(/Ctrl\+E to expand/i);
+    expect(terminal.serialize().view).not.toMatch(/ctrl\+e to expand/i);
     runtime.printScreen('after expanded shell passthrough', terminal);
 
     terminal.keyCtrlC();
