@@ -1,0 +1,57 @@
+---
+title: 'Channels | Connect'
+description: 'Use Slack, Microsoft Teams, Telegram, and Discord accounts connected to a Mastra platform project as agent channels with channels() from @mastra/connect.'
+packages:
+  - '@mastra/connect'
+---
+
+# Channels
+
+[`channels()`](/reference/connect/channels) turns the Slack, Microsoft Teams, Telegram, and Discord connections in your project into [channels](/docs/channels), so people can talk to your agents there. The platform stores each token, and your app fetches it when it needs it.
+
+Each platform needs a different credential:
+
+- **Slack**: A **Slack channels** (`slack-channels`) connection, which holds an app configuration token. Mastra creates a Slack app for each agent from it. This is a different connection from **Slack** (`slack`), which gives agents Slack tools.
+- **Microsoft Teams** (coming soon): A Microsoft Teams OAuth connection. Mastra registers a Teams bot for each agent, and the same connection also gives agents Teams tools.
+- **Telegram**: A bot token from BotFather.
+- **Discord**: A bot token from a Discord application you create. The same connection also gives agents Discord [tools](/docs/mastra-platform/connect/tools).
+
+## Add channels to Mastra
+
+Pass `channels()` to the `Mastra` constructor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+import { assistant } from './agents/assistant'
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  channels: await channels(),
+})
+```
+
+`channels()` returns a promise. It creates a provider for each channel before `Mastra` starts. Their webhook routes exist from the first request. A provider starts working when the project gets an active connection for it, without a redeploy.
+
+The providers come from `@mastra/slack`, `@mastra/teams`, `@mastra/telegram`, and `@mastra/discord`, which `@mastra/connect` installs for you.
+
+## Configure a channel
+
+Pass provider options under `integrations`. Credentials always come from the connection, so options like `botToken` are ignored:
+
+```typescript
+channels({
+  integrations: {
+    discord: {
+      providerOptions: { applicationId: process.env.DISCORD_APPLICATION_ID },
+    },
+    telegram: { disabled: true },
+  },
+})
+```
+
+See the [`channels()` reference](/reference/connect/channels) for every option.
+
+## Bring your own app instead
+
+To configure a Slack app, Teams bot, Telegram bot, or Discord bot yourself, skip Connect and follow the platform guides on [Channels](/docs/channels).

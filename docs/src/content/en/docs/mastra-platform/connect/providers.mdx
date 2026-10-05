@@ -1,0 +1,143 @@
+---
+title: 'Providers | Connect'
+description: 'Providers you can connect to a Mastra platform project, what each one gives your agents, and setup steps for providers that use an API key.'
+packages:
+  - '@mastra/connect'
+---
+
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
+
+# Providers
+
+A provider is a service you can connect to your project, identified by a provider ID such as `linear` or `google-mail`. Most providers give agents [tools](/docs/mastra-platform/connect/tools). Discord, Microsoft Teams, Slack channels, and Telegram work as [channels](/docs/mastra-platform/connect/channels).
+
+| Provider ID | Provider | Gives you |
+| - | - | - |
+| `anthropic` | <ProviderLogo slug="anthropic" mono /> Anthropic | Tools (coming soon) |
+| `clerk` | <ProviderLogo slug="clerk" mono /> Clerk | Tools |
+| `discord` | <ProviderLogo slug="discord" /> Discord | Tools, channel |
+| `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai | Tools |
+| `github` | <ProviderLogo slug="github" mono /> GitHub | Tools |
+| `google-analytics` | <ProviderLogo slug="google-analytics" /> Google Analytics | Tools (coming soon) |
+| `google-calendar` | <ProviderLogo slug="google-calendar" /> Google Calendar | Tools |
+| `google-docs` | <ProviderLogo slug="google-docs" /> Google Docs | Tools |
+| `google-drive` | <ProviderLogo slug="google-drive" /> Google Drive | Tools |
+| `google-mail` | <ProviderLogo slug="gmail" /> Gmail | Tools |
+| `google-sheet` | <ProviderLogo slug="google-sheets" /> Google Sheets | Tools |
+| `hubspot` | <ProviderLogo slug="hubspot" /> HubSpot | Tools |
+| `incident-io` | <ProviderLogo slug="incident" /> incident.io | Tools |
+| `jira` | <ProviderLogo slug="jira" /> Jira | Tools |
+| `linear` | <ProviderLogo slug="linear" /> Linear | Tools |
+| `microsoft-teams` | <ProviderLogo slug="microsoft-teams" /> Microsoft Teams | Tools, channel (coming soon) |
+| `notion` | <ProviderLogo slug="notion" mono /> Notion | Tools |
+| `openai` | <ProviderLogo slug="openai" mono /> OpenAI | Tools |
+| `posthog` | <ProviderLogo slug="posthog" /> PostHog | Tools |
+| `resend` | <ProviderLogo slug="resend" mono /> Resend | Tools |
+| `slack` | <ProviderLogo slug="slack" /> Slack | Tools |
+| `slack-channels` | <ProviderLogo slug="slack" /> Slack channels | Channel |
+| `snowflake` | <ProviderLogo slug="snowflake" /> Snowflake | Tools |
+| `supabase` | <ProviderLogo slug="supabase" /> Supabase | Tools |
+| `telegram` | <ProviderLogo slug="telegram" /> Telegram | Channel |
+| `workos` | <ProviderLogo slug="workos" mono /> WorkOS | Tools |
+
+Toolsets are part of `@mastra/connect`, so upgrading the package adds providers and tools. The [provider toolsets reference](/reference/connect/providers) lists every tool.
+
+## MCP providers
+
+These providers serve their tools from a hosted Model Context Protocol (MCP) server. The tools come from the provider at runtime, so check each provider's MCP documentation for what it offers. See [Use MCP providers](/docs/mastra-platform/connect/tools#use-mcp-providers) for tool keys and approval.
+
+| Provider ID | Provider | Provider MCP docs |
+| - | - | - |
+| `airtable-mcp` | <ProviderLogo slug="airtable" /> Airtable | [Airtable MCP server](https://airtable.com/developers/agents/mcp/getting-started) |
+| `attio-mcp` | <ProviderLogo slug="attio" mono /> Attio | [Attio MCP](https://docs.attio.com/mcp/overview) |
+| `canva-mcp` | <ProviderLogo slug="canva" /> Canva | [Canva MCP](https://www.canva.dev/docs/apps/mcp/) |
+| `clay-mcp` | <ProviderLogo src="https://app.nango.dev/images/template-logos/clay-mcp.svg" /> Clay | [MCP in Clay](https://university.clay.com/docs/mcp-settings) |
+| `granola-mcp` | <ProviderLogo slug="granola" /> Granola | [Granola MCP](https://docs.granola.ai/help-center/sharing/integrations/mcp) |
+| `neon-mcp` | <ProviderLogo slug="neon" /> Neon | [Neon MCP server](https://neon.com/docs/ai/neon-mcp-server) |
+| `render-mcp` | <ProviderLogo slug="render" mono /> Render | [Render MCP server](https://render.com/docs/mcp-server) |
+| `robinhood-mcp` | <ProviderLogo slug="robinhood" /> Robinhood | [Agentic Trading](https://robinhood.com/us/en/support/agentic-trading) |
+| `sanity-mcp` | <ProviderLogo slug="sanity" mono /> Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
+
+## Set up Resend
+
+The `resend` toolset sends and reads email and manages domains, contacts, segments, broadcasts, templates, and webhooks. Your Resend account needs a [verified domain](https://resend.com/docs/dashboard/domains/introduction), because Resend only sends from verified domains.
+
+1. In Resend, open [**API Keys**](https://resend.com/api-keys) and select **Create API Key**.
+1. Enter a name, such as `mastra-agents`, and set **Permission** to **Full access**.
+1. Select **Add** and copy the key. It starts with `re_`, and Resend shows it only once.
+1. Run `mastra connect add resend` and paste the key when it asks for **API Key**.
+
+A **Sending access** key fails to connect. Mastra checks a new key by listing your domains, which sending access keys can't do. To limit an agent to sending, filter its tools with `allowTools` instead:
+
+```typescript
+tools({
+  integrations: {
+    resend: { allowTools: ['resend_send_email', 'resend_get_email', 'resend_list_emails'] },
+  },
+})
+```
+
+`resend_send_email` retries a failed send up to three times only when the call includes an `idempotency_key`. Without one it doesn't retry, so a network error can't send the same email twice. Tell the agent to set a key, such as the order ID, when duplicates matter.
+
+If a send fails with a `proxy_error` and status `403`, check that the `from` address uses a domain verified in Resend.
+
+## Set up PostHog
+
+The `posthog` toolset runs HogQL queries and reads and edits insights, dashboards, feature flags, experiments, surveys, cohorts, and persons. It works with PostHog Cloud in either region. Self-hosted PostHog isn't supported.
+
+1. Check your region in PostHog's address bar: `us.posthog.com` or `eu.posthog.com`.
+1. Open [**Settings** > **Personal API keys**](https://us.posthog.com/settings/user-api-keys) on your region's host and select **Create personal API key**.
+1. Limit the key to the organization or projects the agent should see, and choose scopes from the following table.
+1. Create the key and copy it. It starts with `phx_`, and PostHog shows it only once.
+1. Run `mastra connect add posthog`. Choose `us` or `eu` for **Subdomain** and paste the key when it asks for **API Key**.
+
+| Scope | Read gives the agent | Write also allows |
+| - | - | - |
+| `project` | `posthog_list_projects`, `posthog_get_project` | |
+| `query` | `posthog_run_query`, `posthog_list_events`, `posthog_get_event` | |
+| `insight` | List and get insights | Create, update, delete insights |
+| `dashboard` | List and get dashboards | Create, update, delete dashboards |
+| `feature_flag` | List and get feature flags | Create, update, delete feature flags |
+| `experiment` | List and get experiments | Create and update experiments |
+| `survey` | List and get surveys | Create, update, delete surveys |
+| `cohort` | List and get cohorts | Create, update, delete cohorts |
+| `person` | List and get persons | Update and delete persons |
+| `session_recording` | `posthog_list_session_recordings` | |
+
+Most PostHog tools take a `project_id`, so give every key `project:read`. Agents call `posthog_list_projects` to find the ID. A read-only analytics agent needs `project:read`, `query:read`, `insight:read`, and `dashboard:read`.
+
+Avoid the `us.i` and `eu.i` subdomains. Those hosts only serve PostHog's event ingestion endpoints, so most tools fail with them. The form also rejects project API keys (`phc_`) and project secret API keys (`phs_`).
+
+`posthog_run_query` queries count against PostHog's hourly query budget for personal API keys, so ask the agent for aggregated results instead of raw event exports.
+
+## Set up incident.io
+
+The `incident-io` toolset reads and updates incidents, posts incident updates, manages actions and follow-ups, and reads alerts, schedules, the catalog, and postmortems. Tool keys start with `incident_io_`, with an underscore where the provider ID has a hyphen.
+
+1. In incident.io, open [**Settings** > **API keys**](https://app.incident.io/~/settings/api-keys) and create a key named `mastra-agents` or similar.
+1. Select permissions from the following table. You can only grant permissions you already have.
+1. Create the key and copy it. It starts with `inc_`, and incident.io shows it only once.
+1. Run `mastra connect add incident-io` and paste the key when it asks for **API Key**.
+
+| Agent task | Permission |
+| - | - |
+| Read incidents, updates, timelines, actions, follow-ups, users, and teams | **View data** |
+| Read private incidents too | **View all incident data** |
+| Read the catalog | **View catalog** |
+| Read alerts, schedules, and overrides | **View on-call resources** |
+| Open incidents | **Create incidents** |
+| Update incidents, post updates, and manage actions and follow-ups | **Edit incidents** |
+
+A triage agent that reads incidents and posts updates needs **View data** and **Edit incidents**, and the incident.io [permissions reference](https://docs.incident.io/admin/api-keys#permissions-reference) describes each permission.
+
+`incident_io_create_incident` requires an `idempotency_key`, and incident.io rejects a second incident with the same key. An API key can open 10 incidents an hour that create a Slack or Microsoft Teams channel. Listing incidents is limited to 60 requests a minute. If the agent hits `429` errors, tell it to filter incidents instead of paging through all of them.
+
+## Fix a failing provider
+
+A `proxy_error` carries the provider's response in its `status` and `detail` properties.
+
+- **Status `401` on every call:** The key was deleted or rotated in the provider. Create a new key, then [replace the connection](/docs/mastra-platform/connect/connections#fix-a-connection-that-needs-reauthorization).
+- **Status `403` on some tools:** The key is missing the scope or permission for those tools. Add it in the provider, or remove the tools with `allowTools`.
+- **No tools from a provider:** The project has no active connection for it, or a tool key in `allowTools` or `disallowTools` is misspelled. Run `mastra connect list`, and check your app's logs for a `[@mastra/connect] Skipping` warning.
+
+See [errors](/reference/connect/tools#errors) for every error code.

@@ -7,7 +7,7 @@ packages:
 
 # tools()
 
-Returns a live toolset resolver over the connections attached to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected provider and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
+Returns a resolver for the tools of every provider connected to a Mastra platform project. Pass it to an agent's `tools` option, and Mastra calls it on each `generate()` and `stream()`. The resolver caches the tools and checks the platform for changed connections every `ttlMs`.
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
@@ -22,7 +22,7 @@ export const opsAgent = new Agent({
 
 Returns: `ToolsResolver`, a resolver producing a flat tool record keyed by tool key (for example `linear_create_issue`). See [The resolver](#the-resolver).
 
-See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [Providers](/docs/mastra-platform/providers) for platform setup.
+See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools](/docs/mastra-platform/connect/tools) for usage.
 
 `connect()` is a deprecated drop-in alias for `tools()`, retained for one release cycle.
 
@@ -88,14 +88,14 @@ Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
     name: 'allowTools',
     type: 'string[]',
     description:
-      'Restrict the returned toolset to these tool keys. Unknown names throw at build time. Mutually exclusive with disallowTools.',
+      'Restrict the returned toolset to these tool keys. An unknown key skips the whole provider with a warning when its tools load. Mutually exclusive with disallowTools.',
     isOptional: true,
   },
   {
     name: 'disallowTools',
     type: 'string[]',
     description:
-      'Remove these tool keys from the returned toolset. Unknown names throw at build time. Mutually exclusive with allowTools.',
+      'Remove these tool keys from the returned toolset. An unknown key skips the whole provider with a warning when its tools load. Mutually exclusive with allowTools.',
     isOptional: true,
   },
   {
@@ -136,7 +136,7 @@ Every field falls back to an environment variable, so a fully env-configured app
     name: 'baseUrl',
     type: 'string',
     description:
-      'Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL, then the regional default from MASTRA_PLATFORM_REGION (us or eu), then https://integrations.mastra.ai.',
+      'Connect API base URL. Falls back to MASTRA_INTEGRATIONS_API_URL, then the regional default from MASTRA_PLATFORM_REGION (us or eu), then https://integrations.mastra.ai.',
     isOptional: true,
   },
   {
@@ -150,7 +150,7 @@ Every field falls back to an environment variable, so a fully env-configured app
 
 ## The resolver
 
-The returned `ToolsResolver` caches its toolset snapshot. Within `ttlMs` of the last fetch, resolutions return the cached snapshot. After that, the cached snapshot is served immediately while a background refresh runs (stale-while-revalidate). Connections attached to the project after startup become available within the TTL, and detached connections are dropped, with no restart or redeploy required.
+The returned `ToolsResolver` caches its tools. Within `ttlMs` of the last fetch, it returns the cache. After that, it still returns the cache right away and fetches from the platform in the background (stale-while-revalidate). Connections linked to the project after startup appear within one TTL, and unlinked ones disappear.
 
 Call the resolver directly when you need a plain tool record, for example for the `toolsets` option at generate time:
 
@@ -170,11 +170,12 @@ The resolver also exposes three methods for manual control:
 - `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
 - `disconnect()` closes MCP transports owned by this resolver and clears its cached snapshot.
 
-Failure handling favors keeping a long-running server up:
+Errors fall into three groups:
 
-- Configuration errors (missing project ID or token, unknown `integrations` keys or tool names, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw eagerly at `tools()` call time.
+- Configuration errors (missing project ID or token, a malformed provider ID, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw when you call `tools()`.
+- An `integrations` key that matches no provider logs a warning and is ignored. An unknown tool key in `allowTools` or `disallowTools` logs a warning and skips that provider when its tools load.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
-- Actionable per-provider problems during resolution (needs re-auth, ambiguity) are downgraded to warn-and-skip so one bad provider never takes down the whole toolset.
+- A problem with one provider, such as a connection that needs reauthorization, logs a warning and skips that provider. The other providers' tools still load.
 
 ## The `integrations` allowlist
 
@@ -190,7 +191,7 @@ For each provider present in the project's connections:
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
 
-Connections in `needs_reauth` status are skipped with a warning until reconnected on the platform, never mapped with dead credentials.
+Connections in `needs_reauth` status are skipped with a warning until someone [replaces them](/docs/mastra-platform/connect/connections#fix-a-connection-that-needs-reauthorization).
 
 ## MCP providers
 
@@ -198,7 +199,20 @@ Beyond the generated toolsets, the resolver discovers any connected provider tha
 
 The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the provider's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the provider is detached, or `disconnect()` is called.
 
-Every discovered MCP tool requires tool approval by default because a remote catalog cannot be trusted to classify its own tools. Use `autoApproveTools` to list the tool keys an agent may run unattended, for example `neon: { autoApproveTools: ['neon_list_projects'] }`.
+Every discovered MCP tool requires tool approval by default. The provider controls the tool list and the tool annotations, so Mastra doesn't trust annotations to mark a tool as safe. Use `autoApproveTools` to list the tool keys an agent may run unattended, for example `neon: { autoApproveTools: ['neon_list_projects'] }`.
+
+## Environment variables
+
+`tools()`, `channels()`, and `credential()` read these environment variables. Options passed in code take precedence.
+
+| Variable | Purpose |
+| - | - |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform access token used to authenticate every request |
+| `MASTRA_PLATFORM_SECRET_KEY` | Fallback token when `MASTRA_PLATFORM_ACCESS_TOKEN` is unset |
+| `MASTRA_PROJECT_ID` | Project whose connections to use |
+| `MASTRA_ORG_ID` | Organization ID, sent as the `x-organization-id` header when set |
+| `MASTRA_PLATFORM_REGION` | `us` or `eu`. Selects `https://integrations.us.mastra.ai` or `https://integrations.eu.mastra.ai` instead of the default `https://integrations.mastra.ai` |
+| `MASTRA_INTEGRATIONS_API_URL` | Connect API base URL. Overrides the region |
 
 ## Errors
 
@@ -208,7 +222,7 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_project_id` | No project ID configured |
 | `missing_access_token` | No platform token configured |
-| `invalid_options` | Unknown provider ID or tool name, conflicting filters, or invalid `ttlMs` |
+| `invalid_options` | Malformed provider ID, conflicting filters, duplicate tool keys, or invalid `ttlMs` |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `proxy_error` | A proxied provider request failed, with `status` and `detail` carrying the provider response |
 | `unknown_connection` | A tool call supplied a `connection_name` that matches no active connection |

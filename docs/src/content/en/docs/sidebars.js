@@ -762,19 +762,33 @@ const sidebars = {
       type: 'category',
       label: 'Connect',
       collapsed: true,
+      link: {
+        type: 'doc',
+        id: 'mastra-platform/connect/overview',
+      },
       customProps: {
         tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastra-platform/providers',
-          label: 'Providers',
+          id: 'mastra-platform/connect/connections',
+          label: 'Connections',
         },
         {
           type: 'doc',
-          id: 'mastra-platform/connect',
-          label: 'Use in your app',
+          id: 'mastra-platform/connect/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/channels',
+          label: 'Channels',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/providers',
+          label: 'Providers',
         },
       ],
     },
