@@ -537,8 +537,6 @@ export type AgentEditorConfig =
  * thread state overrides them when it carries a value. A judge model is required
  * at runtime (resolved from the objective record or `judge` here) — without one
  * the goal step is a no-op.
- *
- * @experimental Agent goals are experimental and may change in a future release.
  */
 export interface GoalConfig {
   /**
@@ -994,8 +992,6 @@ interface AgentConfigBase<
    * Native goal configuration. When set, an objective set via
    * {@link Agent.setObjective} is judged in the execution loop and the agent
    * keeps working until the objective is complete or the budget is exhausted.
-   *
-   * @experimental Agent goals are experimental and may change in a future release.
    */
   goal?: GoalConfig;
   /**

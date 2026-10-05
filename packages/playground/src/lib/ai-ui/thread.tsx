@@ -422,12 +422,12 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-ui-sm">
+        <p role="alert" className="text-caption">
           {preparationError || draftStatus?.error}
         </p>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-ui-sm">
+        <p role="status" className="text-caption">
           Restoring draft…
         </p>
       )}

@@ -62,12 +62,12 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
 
 const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
-  orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-indicator/5' },
-  cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-indicator/5' },
-  info: { icon: 'text-info-indicator', tint: 'bg-info-indicator/5' },
-  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-indicator/5' },
-  success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-indicator/5' },
-  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-indicator/5' },
+  orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-subtle' },
+  cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-subtle' },
+  info: { icon: 'text-info-indicator', tint: 'bg-info-subtle' },
+  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-subtle' },
+  success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-subtle' },
+  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle' },
 };
 
 function MaskedArt({ source, className }: { source: string; className: string }) {
