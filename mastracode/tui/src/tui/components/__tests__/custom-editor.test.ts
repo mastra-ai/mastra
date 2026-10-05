@@ -344,7 +344,7 @@ describe('CustomEditor image paste handling', () => {
     });
   });
 
-  it('renders an arrow prompt when no animator is active', () => {
+  it('renders a static arrow prompt in the mode color', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => 'hello');
     editor.getModeColor = vi.fn(() => '#16c858');
@@ -352,121 +352,10 @@ describe('CustomEditor image paste handling', () => {
     expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]→');
   });
 
-  it('fades the chevron out, fades the pulsing bullet in, then fades back to the chevron on exit', () => {
-    const editor = new CustomEditor({} as any, {} as any);
-    editor.getText = vi.fn(() => 'hello');
-    editor.getModeColor = vi.fn(() => '#16c858');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.8,
-          getOffset: () => 0,
-        }) as any,
-    );
-    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:59,148,94]→');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.5,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const invisibleOutput = noBg(editor.render(20).join('\n'));
-    expect(invisibleOutput).not.toContain('→');
-    expect(invisibleOutput).not.toContain('•');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.2,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const transitionedOutput = noBg(editor.render(20).join('\n'));
-    expect(transitionedOutput).toContain('[rgb:59,148,94]•');
-    expect(transitionedOutput).not.toContain('→');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0,
-          getOffset: () => 0.5,
-        }) as any,
-    );
-    const pulsingOutput = noBg(editor.render(20).join('\n'));
-    expect(pulsingOutput).toContain('[rgb:49,123,79]•');
-    expect(pulsingOutput).not.toContain('→');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.2,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const fadingOutDotOutput = noBg(editor.render(20).join('\n'));
-    expect(fadingOutDotOutput).toContain('[rgb:59,148,94]•');
-    expect(fadingOutDotOutput).not.toContain('→');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.5,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const fadingOutGapOutput = noBg(editor.render(20).join('\n'));
-    expect(fadingOutGapOutput).not.toContain('→');
-    expect(fadingOutGapOutput).not.toContain('•');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.8,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const returnedChevronOutput = noBg(editor.render(20).join('\n'));
-    expect(returnedChevronOutput).toContain('[rgb:59,148,94]→');
-    expect(returnedChevronOutput).not.toContain('•');
-  });
-
-  it('keeps slash prompts unanimated while showing the slash character', () => {
+  it('shows the slash character as the prompt for slash commands', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => '/help');
     editor.getModeColor = vi.fn(() => '#16c858');
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          getOffset: () => 0.75,
-        }) as any,
-    );
-
-    const output = noBg(editor.render(20).join('\n'));
 
     expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]/');
   });
@@ -879,7 +768,7 @@ describe('CustomEditor voice push-to-talk', () => {
     editor.getModeColor = vi.fn(() => '#16c858');
 
     editor.setVoiceListening(true);
-    const output = noBg(editor.render(20).join('\n'));
+    const output = editor.render(20).join('\n');
     const waveBars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     expect(waveBars.some(bar => output.includes(bar))).toBe(true);
   });
