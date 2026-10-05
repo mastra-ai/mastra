@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useChat } from '@mastra/react';
+import { useChat } from '@mastra/react/hooks/agents';
 import { Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 

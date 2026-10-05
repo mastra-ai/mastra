@@ -36,14 +36,15 @@
         "default": "./dist/ui/index.cjs"
       }
     },
-    "./hooks": {
+    "./hooks/shared": null,
+    "./hooks/*": {
       "import": {
-        "types": "./dist/hooks/index.d.ts",
-        "default": "./dist/hooks/index.js"
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.js"
       },
       "require": {
-        "types": "./dist/hooks/index.d.ts",
-        "default": "./dist/hooks/index.cjs"
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.cjs"
       }
     },
     "./styles.css": "./dist/react.css"

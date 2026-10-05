@@ -1,4 +1,4 @@
-import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks';
+import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';

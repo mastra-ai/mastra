@@ -6,7 +6,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks';
+import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks/agents';
 import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';

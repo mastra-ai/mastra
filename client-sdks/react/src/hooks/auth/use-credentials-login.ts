@@ -24,7 +24,7 @@ export type CredentialsLoginResponse = {
  *
  * @example
  * ```tsx
- * import { useCredentialsLogin } from '@mastra/react/hooks';
+ * import { useCredentialsLogin } from '@mastra/react/hooks/auth';
  *
  * function LoginForm() {
  *   const { mutate: login, isPending, error } = useCredentialsLogin();

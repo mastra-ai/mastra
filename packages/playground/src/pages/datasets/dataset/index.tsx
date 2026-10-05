@@ -8,7 +8,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDataset, useDatasetItems } from '@mastra/react/hooks';
+import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';

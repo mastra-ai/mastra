@@ -1,5 +1,5 @@
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useConnectChannel } from '@mastra/react/hooks';
+import { useConnectChannel } from '@mastra/react/hooks/agents';
 import { useCallback } from 'react';
 
 /**

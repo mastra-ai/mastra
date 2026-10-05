@@ -6,7 +6,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

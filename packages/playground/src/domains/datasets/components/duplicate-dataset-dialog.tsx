@@ -15,7 +15,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState, useEffect } from 'react';
 
 export interface DuplicateDatasetDialogProps {

@@ -3,12 +3,8 @@ import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { MastraReactProvider } from '@mastra/react';
-import {
-  useAgentMessages,
-  useMemoryThreadMessages,
-  useObservationalMemory,
-  useMemoryConfig,
-} from '@mastra/react/hooks';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

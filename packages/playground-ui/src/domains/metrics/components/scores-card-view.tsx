@@ -1,4 +1,4 @@
-import type { ScorerSummary, ScoresOverTimePoint } from '@mastra/react/hooks';
+import type { ScorerSummary, ScoresOverTimePoint } from '@mastra/react/hooks/metrics';
 import { useMemo } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';

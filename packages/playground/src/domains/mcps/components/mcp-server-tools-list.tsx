@@ -5,7 +5,7 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useMCPServerTools } from '@mastra/react/hooks';
+import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';

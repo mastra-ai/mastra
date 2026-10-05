@@ -1,4 +1,4 @@
-import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks';
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import type { ComponentProps } from 'react';
 import { Panel } from 'react-resizable-panels';
 

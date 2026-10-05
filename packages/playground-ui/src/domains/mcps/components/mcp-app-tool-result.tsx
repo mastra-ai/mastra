@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import type { McpAppToolInfo } from '@mastra/react/hooks';
+import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { McpAppViewer } from './mcp-app-viewer';
