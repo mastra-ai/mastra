@@ -1175,14 +1175,14 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     const lines = renderInChat([component]);
     expect(lines).toEqual([
-      expect.stringMatching(/^▄+$/),
-      expect.stringMatching(/^  line 15 *$/),
-      expect.stringMatching(/^  line 16 *$/),
-      expect.stringMatching(/^ *$/),
-      expect.stringMatching(/^  \$ \/tmp\/w *$/),
-      expect.stringMatching(/^ *$/),
-      expect.stringMatching(/^  ✓ Running the tests +\d+ms$/),
-      expect.stringMatching(/^▀+$/),
+      expect.stringMatching(/^╭─+╮$/),
+      expect.stringMatching(/^│ line 15 +│$/),
+      expect.stringMatching(/^│ line 16 +│$/),
+      expect.stringMatching(/^├─+┤$/),
+      expect.stringMatching(/^│ \$ \/tmp\/w +│$/),
+      expect.stringMatching(/^├─+┤$/),
+      expect.stringMatching(/^│ ✓ Running the tests +\d+ms │$/),
+      expect.stringMatching(/^╰─+╯$/),
     ]);
   });
 
@@ -1202,14 +1202,17 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     // Until the running call prints something, the preview keeps the last output
     let lines = renderInChat([first, second]);
-    expect(lines.filter(line => line.startsWith('▄'))).toHaveLength(1);
-    expect(lines.slice(1, 3)).toEqual([expect.stringMatching(/^  built 2 *$/), expect.stringMatching(/^  built 3 *$/)]);
+    expect(lines.filter(line => line.startsWith('╭'))).toHaveLength(1);
+    expect(lines.slice(1, 3)).toEqual([
+      expect.stringMatching(/^│ built 2 +│$/),
+      expect.stringMatching(/^│ built 3 +│$/),
+    ]);
 
     second.appendStreamingOutput('stream 1\nstream 2\nstream 3');
     lines = renderInChat([first, second]);
     expect(lines.slice(1, 3)).toEqual([
-      expect.stringMatching(/^  stream 2 *$/),
-      expect.stringMatching(/^  stream 3 *$/),
+      expect.stringMatching(/^│ stream 2 +│$/),
+      expect.stringMatching(/^│ stream 3 +│$/),
     ]);
     expect(lines.join('\n')).not.toContain('built');
     expect(lines).toHaveLength(9);
@@ -1240,9 +1243,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const after = stripAnsi(chat.render(80).join('\n')).split('\n');
     expect(after).toHaveLength(before + 1);
     expect(after.slice(1, 4)).toEqual([
-      expect.stringMatching(/^  done */),
-      expect.stringMatching(/^  */),
-      expect.stringMatching(/^  */),
+      expect.stringMatching(/^│ done +│/),
+      expect.stringMatching(/^│ +│/),
+      expect.stringMatching(/^│ +│/),
     ]);
   });
 
@@ -1256,8 +1259,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
 
     const visible = stripAnsi(component.render(60).join('\n'));
-    expect(visible).toMatch(/  ✓ seq 1 5 +\d+ms/);
-    expect(visible).not.toMatch(/^ {2}[1-5] *$/m);
+    expect(visible).toMatch(/│ ✓ seq 1 5 +\d+ms │/);
+    expect(visible).not.toMatch(/^\s*│ [1-5]/m);
     expect(visible).not.toContain('⋯ (+');
     // top, header, divider, row, bottom
     expect(visible.split('\n')).toHaveLength(5);
@@ -1346,15 +1349,15 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       second.setCompactToolContinuation(true, first.getCompactToolGroupSummary());
 
       const top = lines(first);
-      expect(top[0]).toMatch(/^▄+$/);
-      expect(top[1]).toMatch(/^  \$ \S+ *$/);
-      expect(top[2]).toMatch(/^ *$/);
-      expect(top[3]).toMatch(/^  ✓ Listing later commits +\d+ms$/);
+      expect(top[0]).toMatch(/^╭─+╮$/);
+      expect(top[1]).toMatch(/^│ \$ \S+ +│$/);
+      expect(top[2]).toMatch(/^├─+┤$/);
+      expect(top[3]).toMatch(/^│ ✓ Listing later commits +\d+ms │$/);
       expect(top).toHaveLength(4);
 
       const bottom = lines(second);
-      expect(bottom[0]).toMatch(/^  ✓ Reading the changesets +\d+ms$/);
-      expect(bottom[1]).toMatch(/^▀+$/);
+      expect(bottom[0]).toMatch(/^│ ✓ Reading the changesets +\d+ms │$/);
+      expect(bottom[1]).toMatch(/^╰─+╯$/);
       expect(bottom).toHaveLength(2);
     });
 
@@ -1370,7 +1373,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       expect(sub.getCompactToolGroupKey()).toBe('$ ./src');
       expect(cd.getCompactToolGroupKey()).toBe('$ /opt/elsewhere');
       expect(tilde.getCompactToolGroupKey()).toBe('$ ~/code/project');
-      expect(lines(sub, 400)[1]).toContain('  $ ./src');
+      expect(lines(sub, 400)[1]).toContain('│ $ ./src ');
 
       expect(getSpacingBetweenComponents(root, root2)).toBe(0);
       // A new directory closes one box and opens the next, with no blank line between their borders
@@ -1434,11 +1437,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     it('shows run time recovered from history, and no fake time when it is unknown', () => {
       const recorded = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
       recorded.setRecordedTiming(1_000, 4_078);
-      expect(lines(recorded).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +3\.1s$/);
+      expect(lines(recorded).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +3\.1s │$/);
 
       const unknown = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
       unknown.setRecordedTiming(undefined, undefined);
-      expect(lines(unknown).find(line => line.includes('Sleeping'))).toMatch(/Sleeping *$/);
+      expect(lines(unknown).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +│$/);
     });
 
     it('marks a call failed from its sandbox exit record when the result text does not say', () => {
@@ -1449,12 +1452,12 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ];
       for (const text of cases) {
         const withoutRecord = make({ command: 'ls', description: 'Listing files' }, { text });
-        expect(lines(withoutRecord).find(line => line.includes('Listing files'))).toMatch(/^  ✓ /);
+        expect(lines(withoutRecord).find(line => line.includes('Listing files'))).toMatch(/^│ ✓ /);
 
         const component = make({ command: 'ls', description: 'Listing files' }, { text });
         component.setCommandExit({ exitCode: -1, success: false });
         const rendered = lines(component);
-        expect(rendered.find(line => line.includes('Listing files'))).toMatch(/^  ✗ /);
+        expect(rendered.find(line => line.includes('Listing files'))).toMatch(/^│ ✗ /);
         expect(rendered).toContainEqual(expect.stringMatching(/└▸ Error: (Sandbox failed to start|connection reset)/));
       }
 
@@ -1471,8 +1474,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       failed.setCompactToolContinuation(true);
       failed.setCompactToolHasFollowingContinuation(true);
       expect(lines(failed)).toEqual([
-        expect.stringMatching(/^  ✗ Searching for stdin changes +\d+ms$/),
-        expect.stringMatching(/^ {4}└▸ fatal: ambiguous argument 'v1\.\.HEAD': unknown revision *$/),
+        expect.stringMatching(/^│ ✗ Searching for stdin changes +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ fatal: ambiguous argument 'v1\.\.HEAD': unknown revision +│$/),
       ]);
 
       // Nonzero exits come back as ordinary output ending in "Exit code: N", not as error results
@@ -1483,8 +1486,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       exited.setCompactToolContinuation(true);
       exited.setCompactToolHasFollowingContinuation(true);
       expect(lines(exited)).toEqual([
-        expect.stringMatching(/^  ✗ Running a command that fails on purpose +\d+ms$/),
-        expect.stringMatching(/^ {4}└▸ ls: \/nope: No such file or directory *$/),
+        expect.stringMatching(/^│ ✗ Running a command that fails on purpose +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ ls: \/nope: No such file or directory +│$/),
       ]);
 
       // Without stderr or an error-looking line, the last output line is unrelated to the failure
@@ -1498,27 +1501,27 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       quietFailure.setCompactToolContinuation(true);
       quietFailure.setCompactToolHasFollowingContinuation(true);
       expect(lines(quietFailure)).toEqual([
-        expect.stringMatching(/^  ✗ Listing threads +\d+ms$/),
-        expect.stringMatching(/^ {4}└▸ exit code 1 *$/),
+        expect.stringMatching(/^│ ✗ Listing threads +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ exit code 1 +│$/),
       ]);
 
       const background = make({ command: 'pnpm dev', description: 'Starting the dev server', background: true });
       background.setBackgroundTaskId('bg-1');
       background.setCompactToolContinuation(true, background.getCompactToolGroupSummary());
       background.setCompactToolHasFollowingContinuation(true);
-      expect(lines(background)).toEqual([expect.stringMatching(/^  ◷ Starting the dev server +started$/)]);
+      expect(lines(background)).toEqual([expect.stringMatching(/^│ ◷ Starting the dev server +started │$/)]);
     });
 
     it('ticks a running row every second and stops when the run ends', () => {
       vi.useFakeTimers();
       try {
         const running = make({ command: 'sleep 5', description: 'Waiting for the build' });
-        expect(lines(running)[3]).toMatch(/^  [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Waiting for the build +0s$/);
+        expect(lines(running)[3]).toMatch(/^│ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Waiting for the build +0s │$/);
         vi.advanceTimersByTime(2_100);
-        expect(lines(running)[3]).toMatch(/ 2s$/);
+        expect(lines(running)[3]).toMatch(/ 2s │$/);
 
         running.stopLiveUpdates();
-        expect(lines(running)[3]).toMatch(/^  ■ Waiting for the build +stopped$/);
+        expect(lines(running)[3]).toMatch(/^│ ■ Waiting for the build +stopped │$/);
         vi.advanceTimersByTime(5_000);
         expect(vi.getTimerCount()).toBe(0);
       } finally {
@@ -1546,8 +1549,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       rejected.setCompactToolContinuation(true);
       rejected.setCompactToolHasFollowingContinuation(true);
       expect(lines(rejected)).toEqual([
-        expect.stringMatching(/^  ✗ sed -i '' 's\/a\/b\/' file\.ts +\d+ms$/),
-        expect.stringMatching(/^ {4}└▸ Tool input validation failed for execute_command\. *$/),
+        expect.stringMatching(/^│ ✗ sed -i '' 's\/a\/b\/' file\.ts +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ Tool input validation failed for execute_command\. +│$/),
       ]);
     });
 
@@ -1612,7 +1615,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
 
-    expect(renderInChat([component])).toContainEqual(expect.stringMatching(/^  ✓ git status +\d+ms$/));
+    expect(renderInChat([component])).toContainEqual(expect.stringMatching(/^│ ✓ git status +\d+ms │$/));
   });
 
   it('strips a leading cd prefix separated by a bare newline and shows the path in the footer', () => {
@@ -1723,8 +1726,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
 
     const lines = renderInChat([component]);
-    expect(lines).toContainEqual(expect.stringMatching(/^  ✗ Listing a missing path +\d+ms$/));
-    expect(lines).toContainEqual(expect.stringMatching(/^ {4}└▸ ls: .*No such file or directory *$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing a missing path +\d+ms │$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ ls: .*No such file or directory +│$/));
   });
 
   it('never passes escape sequences from a description, command, cwd, output, or error to the terminal', () => {
@@ -1776,9 +1779,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
     const lines = renderBox(described);
-    expect(lines).toContainEqual(expect.stringMatching(/^  ✗ Listing files +\d+ms$/));
-    expect(lines).toContainEqual(expect.stringMatching(/^  error: bad *$/));
-    expect(lines).toContainEqual(expect.stringMatching(/^ {4}└▸ error: bad *$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing files +\d+ms │$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ error: bad +│$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ error: bad +│$/));
 
     // Without a description the row shows the command, and the header shows the cwd argument.
     const bare = new ToolExecutionComponentEnhanced(
@@ -1789,11 +1792,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     bare.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
     const bareLines = renderBox(bare);
-    expect(bareLines).toContainEqual(expect.stringMatching(/^  \$ \/tmp\/workdir *$/));
-    expect(bareLines).toContainEqual(expect.stringMatching(/^  ✓ ls -la +\d+ms$/));
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ \$ \/tmp\/workdir +│$/));
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ ✓ ls -la +\d+ms │$/));
   });
 
-  it('keeps quiet shell panel rows one width for long git output', () => {
+  it('keeps quiet shell box borders aligned for long git output', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'git remote -v' },
@@ -1810,12 +1813,13 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
 
-    const rendered = component.render(80).filter(line => stripAnsi(line).trim() !== '');
-    const width = visibleWidth(rendered[0]!);
+    const rendered = component.render(80);
+    const topWidth = visibleWidth(rendered[0]!);
+    const boxLines = rendered.filter(line => /^[╭│├╰]/.test(stripAnsi(line)));
 
-    expect(stripAnsi(rendered[0]!)).toMatch(/^▄+$/);
-    expect(rendered.length).toBeGreaterThan(2);
-    expect(rendered.every(line => visibleWidth(line) === width)).toBe(true);
+    expect(boxLines.length).toBeGreaterThan(1);
+    expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
+    expect(boxLines.every(line => /[╮│┤╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
   });
 
   it('wraps multiline command input in the title without truncating it', () => {

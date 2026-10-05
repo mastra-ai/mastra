@@ -24,7 +24,7 @@ import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import { fillBg, panelEdge, toolBlock, toolSurface } from './surface.js';
+import { toolBlock } from './surface.js';
 import type {
   CommandExitRecord,
   CompactToolLabelColor,
@@ -1771,16 +1771,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const fullWidth = Math.max(20, this.renderWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
     const naturalWidth = this.quietShellGroupWidth ?? this.getQuietShellNaturalWidth() ?? 0;
     const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
-    // The group is one shaded panel: ▄ edge on the first call, ▀ edge after the last, plain shaded rows
-    // between (same row count as the old box, so updates never shift what is below).
-    const surface = toolSurface();
-    const panelWidth = contentWidth + 4;
-    const rule = (left: string, _right: string) =>
-      left === '╭'
-        ? panelEdge('▄', panelWidth, surface)
-        : left === '╰'
-          ? panelEdge('▀', panelWidth, surface)
-          : fillBg('', panelWidth, surface);
+    // A bordered box rather than a shaded panel: the frame keeps grouped calls readable at a glance.
+    const border = (char: string) =>
+      theme.bold(chalk.hex(ensureTerminalGlyphContrast(theme.getTheme().toolBorderSuccess))(char));
+    const rule = (left: string, right: string) =>
+      `${border(left)}${border('─'.repeat(contentWidth + 2))}${border(right)}`;
     // Every row must stay on one terminal line: a row that wraps adds a line that disappears again
     // on the next update, jumping everything below it. Tabs and other control characters would make
     // the measured width disagree with what the terminal draws, so they become plain spaces.
@@ -1795,7 +1790,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       const rightWidth = visibleWidth(right);
       const leftText = truncateAnsi(left, Math.max(1, contentWidth - (rightWidth ? rightWidth + 1 : 0)));
       const padding = ' '.repeat(Math.max(rightWidth ? 1 : 0, contentWidth - visibleWidth(leftText) - rightWidth));
-      return fillBg(`  ${leftText}${padding}${right}`, panelWidth, surface);
+      return `${border('│')} ${leftText}${padding}${right} ${border('│')}`;
     };
 
     const headerPath = singleLine(this.getShellHeaderPath());

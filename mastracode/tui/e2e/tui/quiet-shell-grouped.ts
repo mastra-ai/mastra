@@ -98,7 +98,7 @@ values
     // The nested directory gets its own box and header.
     const nestedHeader = lineIndex(lines, '$ ./packages/core');
     expect(nestedHeader).toBeGreaterThan(missing + 1);
-    expect(lines[nestedHeader - 1]).toMatch(/^\s*▄+\s*$/);
+    expect(lines[nestedHeader - 1]).toMatch(/╭─+╮/);
     expect(lines[lineIndex(lines, 'Listing the nested package')]).toMatch(/✓ Listing the nested package/);
     expect(terminal.serialize().view).not.toMatch(/\$ printf|\$ ls \/definitely/);
 
