@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
-import type { EngineParityScenario, ParityEngine } from './parity-harness';
+import type { EngineParityScenario, ParityEngine, ParitySnapshot } from './parity-harness';
 import { expectEngineParity, lastUserText, textOnlyTape } from './parity-harness';
 
 const THREAD = 'thread-t29';
@@ -19,52 +19,55 @@ const RESOURCE = 'resource-t29';
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const TURN_OPTIONS = { maxSteps: 2, memory: { thread: THREAD, resource: RESOURCE } };
 
-const memories = new Map<ParityEngine, MockMemory>();
+/** Runs the T29 scenario; returns each engine's results and persisted message roles. */
+async function runT29(run: EngineParityScenario['run']) {
+  const memories = new Map<ParityEngine, MockMemory>();
+  const results = await expectEngineParity({
+    model: { respond: request => textOnlyTape(`answer to: ${lastUserText(request)}`) },
+    buildAgent: ({ engine, model }) => {
+      const memory = new MockMemory();
+      memories.set(engine, memory);
+      return new Agent({ id: 't29-agent', name: 'T29 Agent', instructions: 'Answer briefly.', model, memory });
+    },
+    run,
+  });
+  const persistedRoles = async (engine: ParityEngine) => {
+    const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+    return messages.map(m => m.role);
+  };
+  return { results, persistedRoles };
+}
 
-const scenario = (run: EngineParityScenario['run']): EngineParityScenario => ({
-  model: { respond: request => textOnlyTape(`answer to: ${lastUserText(request)}`) },
-  buildAgent: ({ engine, model }) => {
-    const memory = new MockMemory();
-    memories.set(engine, memory);
-    return new Agent({ id: 't29-agent', name: 'T29 Agent', instructions: 'Answer briefly.', model, memory });
-  },
-  run,
-});
-
-async function persistedRoles(engine: ParityEngine): Promise<string[]> {
-  const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
-  return messages.map(m => m.role);
+/** Checks the harness applies to turn 1 in both variants. */
+function expectTurnOneAnswered(turn: ParitySnapshot | undefined) {
+  expect(turn!.chunks.filter(c => c.endsWith(':finish'))).toHaveLength(1);
+  expect(turn!.streamedText).toBe('answer to: First question');
+  expect(turn!.fullOutput.text).toBe(turn!.streamedText);
 }
 
 describe('T29 text-only multistep (plain, durable, evented)', () => {
   it('single turn: one finish, one model call, persisted user+assistant', async () => {
-    const results = await expectEngineParity(
-      scenario(async handle => {
-        await handle.turn('First question', TURN_OPTIONS);
-      }),
-    );
+    const { results, persistedRoles } = await runT29(async handle => {
+      await handle.turn('First question', TURN_OPTIONS);
+    });
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
-      const [turn] = turns;
-      expect(turn!.chunks.filter(c => c.endsWith(':finish'))).toHaveLength(1);
-      expect(turn!.streamedText).toBe('answer to: First question');
-      expect(turn!.fullOutput.text).toBe(turn!.streamedText);
+      expectTurnOneAnswered(turns[0]);
       expect(requests).toHaveLength(1);
       expect(await persistedRoles(engine)).toEqual(['user', 'assistant']);
     }
   });
 
   it('multi turn: second turn mirrors the first and sends the full history', async () => {
-    const results = await expectEngineParity(
-      scenario(async handle => {
-        await handle.turn('First question', TURN_OPTIONS);
-        await handle.turn('Second question', TURN_OPTIONS);
-      }),
-    );
+    const { results, persistedRoles } = await runT29(async handle => {
+      await handle.turn('First question', TURN_OPTIONS);
+      await handle.turn('Second question', TURN_OPTIONS);
+    });
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
+      expectTurnOneAnswered(turns[0]);
       expect(turns.map(t => t.streamedText)).toEqual(['answer to: First question', 'answer to: Second question']);
       expect(turns[1]!.chunks).toEqual(turns[0]!.chunks);
       expect(requests).toHaveLength(2);

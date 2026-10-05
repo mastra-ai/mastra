@@ -15,7 +15,7 @@
  * - `stepCount`      → loop-iteration count (catches stopWhen drift)
  * - `chunks`         → `from:type` sequence of `fullStream`
  * - `streamedText`   → concatenated `text-delta` payloads
- * - `finishChunk`    → payload keys and usage of the last `finish` chunk
+ * - `finishChunk`    → payload keys, reason and usage of the last `finish` chunk
  * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
  * Plus, across the whole run:
  * - `requests`       → every request sent to the model, with per-message
@@ -96,8 +96,8 @@ export interface ParitySnapshot {
   chunks: string[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
-  /** Sorted defined payload keys and usage of the last `finish` chunk. */
-  finishChunk: { payloadKeys: string[]; usage: unknown };
+  /** Sorted defined payload keys, reason and usage of the last `finish` chunk. */
+  finishChunk: { payloadKeys: string[]; reason: unknown; usage: unknown };
   /** `getFullOutput()` as a non-streaming consumer reads it. */
   fullOutput: { text: string | undefined; finishReason: string | undefined; usage: unknown; keys: string[] };
 }
@@ -160,6 +160,7 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
       payloadKeys: Object.keys(finishPayload ?? {})
         .filter(k => finishPayload[k] !== undefined)
         .sort(),
+      reason: finishPayload?.stepResult?.reason ?? finishPayload?.finishReason,
       usage: finishPayload?.usage ?? finishPayload?.output?.usage,
     },
     fullOutput: {
@@ -215,6 +216,12 @@ export function createRecordingModel(script: ModelScript): RecordingModel {
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
+    // Agents stream even for generate(), so a doGenerate call is itself a
+    // behaviour change worth seeing. Record it, then fail loudly.
+    doGenerate: async (options: LanguageModelV2CallOptions) => {
+      record(options);
+      throw new Error('parity recording model: doGenerate was called; scripts only support doStream');
+    },
   }) as unknown as LanguageModelV2;
 
   return { model, requests };
@@ -227,27 +234,30 @@ export function lastUserText(request: CapturedRequest): string {
   return lastUser.content.map(part => (part.type === 'text' ? part.text : '')).join('');
 }
 
-/** Strips values that legitimately differ between engines or runs. */
-function normalizeRequest(request: CapturedRequest): unknown {
-  const strip = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(strip);
-    if (!value || typeof value !== 'object' || value instanceof Uint8Array || value instanceof Date) return value;
-    const out: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value)) {
-      if (key === 'providerOptions' && child && typeof child === 'object' && 'mastra' in child) {
-        const { mastra, ...others } = child as Record<string, unknown>;
-        const { createdAt: _createdAt, ...mastraRest } = (mastra ?? {}) as Record<string, unknown>;
-        out[key] = strip({ ...others, mastra: mastraRest });
-      } else {
-        out[key] = strip(child);
-      }
-    }
-    return out;
+/**
+ * Strips values that legitimately differ between engines or runs: the
+ * `providerOptions.mastra.createdAt` stamp Mastra puts on each prompt message
+ * and part, and `includeRawChunks: false` (plain sends `false`, durable and
+ * evented leave it unset; providers treat both as off, `true` is still
+ * compared). Nothing else, and nowhere else, is touched.
+ */
+export function normalizeRequest(request: CapturedRequest): unknown {
+  const withoutCreatedAt = <T extends { providerOptions?: unknown }>(node: T): T => {
+    const providerOptions = node.providerOptions as Record<string, any> | undefined;
+    if (!providerOptions?.mastra || !('createdAt' in providerOptions.mastra)) return node;
+    const { createdAt: _createdAt, ...mastra } = providerOptions.mastra;
+    return { ...node, providerOptions: { ...providerOptions, mastra } };
   };
-  // Plain sends `includeRawChunks: false`, durable/evented leave it undefined;
-  // providers treat both as off. `true` is still compared.
   const { includeRawChunks, ...rest } = request;
-  return strip(includeRawChunks ? request : rest);
+  return {
+    ...(includeRawChunks ? request : rest),
+    prompt: request.prompt.map(message => {
+      const normalized = withoutCreatedAt(message);
+      return Array.isArray(normalized.content)
+        ? { ...normalized, content: (normalized.content as Array<{ providerOptions?: unknown }>).map(withoutCreatedAt) }
+        : normalized;
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -344,10 +354,8 @@ export interface EngineParityScenario {
   options?: ParityStreamOptions;
   /** Drives the scenario on one engine. Defaults to one turn of `input`/`options`. */
   run?: (handle: EngineHandle) => Promise<void>;
-  /** Engines to run. Defaults to all three; must include `plain`. */
+  /** Engines to run. Defaults to all three; must include `plain` and one other. */
   engines?: readonly ParityEngine[];
-  /** Fields not compared on any engine, e.g. a value that's random by design. */
-  ignore?: ParityField[];
   /** Documented differences from plain, per engine. */
   differences?: Partial<Record<Exclude<ParityEngine, 'plain'>, EngineDifference>>;
   /** Storage for the evented engine's Mastra host. Defaults to a fresh `InMemoryStore`. */
@@ -367,24 +375,26 @@ export type EngineParityResults = Partial<Record<ParityEngine, EngineRunResult>>
  * for scenario-specific assertions.
  */
 export async function expectEngineParity(scenario: EngineParityScenario): Promise<EngineParityResults> {
-  const engines = scenario.engines ?? PARITY_ENGINES;
-  if (!engines.includes('plain')) throw new Error('expectEngineParity: engines must include "plain"');
+  const requested = scenario.engines ?? PARITY_ENGINES;
+  const compared = [...new Set(requested)].filter((e): e is Exclude<ParityEngine, 'plain'> => e !== 'plain');
+  if (!requested.includes('plain') || compared.length === 0 || new Set(requested).size !== requested.length) {
+    throw new Error('expectEngineParity: engines must list "plain" and at least one other engine, each once');
+  }
   if (!scenario.run && scenario.input === undefined) {
     throw new Error('expectEngineParity: provide `input` or `run`');
   }
 
-  const results: EngineParityResults = {};
   // Plain first, so it's the reference regardless of the order given.
-  for (const engine of ['plain', ...engines.filter(e => e !== 'plain')] as ParityEngine[]) {
-    results[engine] = await runOnEngine(engine, scenario);
-  }
-
+  const results: EngineParityResults = { plain: await runOnEngine('plain', scenario) };
   const plain = results.plain!;
-  const failures: string[] = [];
-  for (const engine of engines) {
-    if (engine === 'plain') continue;
-    failures.push(...checkEngine(engine, plain, results[engine]!, scenario));
+  // Equal empty observations would compare as parity.
+  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0)) {
+    throw new Error('expectEngineParity: the scenario produced no turns or no stream chunks on plain');
   }
+  for (const engine of compared) results[engine] = await runOnEngine(engine, scenario);
+
+  const failures: string[] = [];
+  for (const engine of compared) failures.push(...checkEngine(engine, plain, results[engine]!, scenario));
   if (failures.length > 0) throw new Error(`Engine parity failed:\n\n${failures.join('\n\n')}`);
 
   return results;
@@ -434,11 +444,24 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
     },
   };
 
+  let scenarioFailed = false;
   try {
     if (scenario.run) await scenario.run(handle);
     else await handle.turn(scenario.input!, scenario.options);
+  } catch (error) {
+    scenarioFailed = true;
+    throw error;
   } finally {
-    for (const cleanup of cleanups) cleanup();
+    // Every cleanup runs even if one throws; a scenario error takes precedence.
+    const errors: unknown[] = [];
+    for (const cleanup of cleanups) {
+      try {
+        cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0 && !scenarioFailed) throw errors[0];
   }
 
   return { engine, agent, turns, requests };
@@ -447,8 +470,11 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
 /**
  * Keys plain's `finish` chunk payload carries that durable and evented omit.
  * Found by harness case T29 (engine comparison FAIL, batch
- * 2026-09-25T16-30-32.791Z); no ticket yet. Applies to every scenario, so it
- * lives here instead of in each case's `differences`.
+ * 2026-09-25T16-30-32.791Z); no ticket yet. Every scenario hits it, so it is
+ * declared once here instead of in each case's `differences`. Which of these
+ * keys plain emits depends on the scenario (`response` only appears with
+ * memory), so only the keys plain emits on a turn are excused, and the check
+ * fails once a wrapped engine emits one of them or plain emits none.
  */
 const FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES = ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'];
 
@@ -465,17 +491,26 @@ function withKnownEngineDifferences(plain: EngineObservation): EngineObservation
   };
 }
 
-export function staleKnownDifferences(engine: string, actual: EngineObservation): string[] {
-  const fixed = new Set(
-    actual.turns.flatMap(t =>
-      t.finishChunk.payloadKeys.filter(k => FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.includes(k)),
-    ),
-  );
-  return fixed.size === 0
-    ? []
-    : [
-        `${engine}: finish payload now includes ${[...fixed].join(', ')}; remove them from FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`,
-      ];
+/** Failures when the built-in finish-key difference no longer reproduces. */
+export function staleKnownDifferences(engine: string, plain: EngineObservation, actual: EngineObservation): string[] {
+  const failures: string[] = [];
+  plain.turns.forEach((turn, i) => {
+    if (turn.finishChunk.payloadKeys.length === 0) return;
+    const wrappedKeys = actual.turns[i]?.finishChunk.payloadKeys ?? [];
+    const onPlain = FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.filter(k => turn.finishChunk.payloadKeys.includes(k));
+    const nowOnWrapped = onPlain.filter(k => wrappedKeys.includes(k));
+    if (onPlain.length === 0) {
+      failures.push(
+        `${engine}: turns[${i}] plain's finish payload has none of FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES; update it`,
+      );
+    }
+    if (nowOnWrapped.length > 0) {
+      failures.push(
+        `${engine}: turns[${i}] finish payload now includes ${nowOnWrapped.join(', ')}; remove them from FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`,
+      );
+    }
+  });
+  return failures;
 }
 
 function checkEngine(
@@ -484,24 +519,25 @@ function checkEngine(
   actual: EngineObservation,
   scenario: EngineParityScenario,
 ): string[] {
-  const stale = staleKnownDifferences(engine, actual);
+  const stale = staleKnownDifferences(engine, reference, actual);
   if (stale.length > 0) return stale;
 
   const plain = withKnownEngineDifferences(reference);
   const difference = scenario.differences?.[engine];
-  const sharedIgnore = new Set(scenario.ignore ?? []);
-  const raw = compareObservations(plain, actual, sharedIgnore);
+  const raw = compareObservations(plain, actual, new Set());
 
   if (!difference) return raw.map(m => `${engine} differs from plain at ${m.path}:\n${m.message}`);
 
   if (!difference.reason?.trim()) return [`${engine}: declared difference has no reason`];
 
-  // A declared difference must still reproduce, or it hides a fixed bug.
+  // A declared difference must still reproduce, piece by piece, or it hides a fixed bug.
   const failures: string[] = [];
+  const stillDiffers = new Set(raw.map(m => m.path));
   if (raw.length === 0) {
     failures.push(`${engine}: declared difference no longer reproduces; remove it (reason: ${difference.reason})`);
   }
-  for (const field of difference.ignore ?? []) {
+  const ignore = new Set(difference.ignore ?? []);
+  for (const field of ignore) {
     if (!raw.some(m => m.field === field)) {
       failures.push(`${engine}: ignored field '${field}' matches plain; remove it (reason: ${difference.reason})`);
     }
@@ -510,7 +546,13 @@ function checkEngine(
   const expected = difference.expect
     ? difference.expect(structuredClone({ turns: plain.turns, requests: plain.requests }))
     : plain;
-  const ignore = new Set([...sharedIgnore, ...(difference.ignore ?? [])]);
+  for (const m of compareObservations(plain, expected, ignore)) {
+    if (!stillDiffers.has(m.path)) {
+      failures.push(
+        `${engine}: declared expectation at ${m.path} no longer differs from plain; remove it (reason: ${difference.reason})`,
+      );
+    }
+  }
   for (const m of compareObservations(expected, actual, ignore)) {
     failures.push(
       `${engine} differs from its declared expectation at ${m.path} (reason: ${difference.reason}):\n${m.message}`,
@@ -575,7 +617,9 @@ function compareObservations(
   check('turns', 'turns.length', actual.turns.length, expected.turns.length);
   const turnCount = Math.min(actual.turns.length, expected.turns.length);
   for (let i = 0; i < turnCount; i++) {
-    for (const field of Object.keys(expected.turns[i]!) as Array<keyof ParitySnapshot>) {
+    // Union of both sides' fields, so an `expect` that drops a field still compares it.
+    const fields = new Set([...Object.keys(actual.turns[i]!), ...Object.keys(expected.turns[i]!)]);
+    for (const field of [...fields].sort() as Array<keyof ParitySnapshot>) {
       if (ignore.has(field)) continue;
       check(field, `turns[${i}].${field}`, actual.turns[i]![field], expected.turns[i]![field]);
     }
