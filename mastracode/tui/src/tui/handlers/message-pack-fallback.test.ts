@@ -66,9 +66,13 @@ describe('handlePackFallbackState', () => {
       { id: 'anthropic', name: 'Anthropic' },
       { id: 'openai', name: 'OpenAI' },
     ]);
-    mocks.applyPackToSession.mockResolvedValue({
-      modelId: 'openai/gpt-5.6-sol',
-      modelRoute: { entries: [{ id: 'openai', modelId: 'openai/gpt-5.6-sol' }] },
+    mocks.applyPackToSession.mockImplementation(async (_ctx, _packId, options) => {
+      const selection = {
+        modelId: 'openai/gpt-5.6-sol',
+        modelRoute: { entries: [{ id: 'openai', modelId: 'openai/gpt-5.6-sol' }] },
+      };
+      await options?.afterApply?.(selection);
+      return { ...selection, applied: true };
     });
   });
 
@@ -110,7 +114,6 @@ describe('handlePackFallbackState', () => {
     await handlePackFallbackState(ectx, { state: { [KEY]: pending() }, changedKeys: [KEY] });
 
     expect(threadSetSetting.mock.calls).toEqual([
-      [{ threadId: 'thread-1', key: 'activeModelPackId', value: 'openai' }],
       [
         {
           threadId: 'thread-1',
@@ -120,9 +123,28 @@ describe('handlePackFallbackState', () => {
       ],
       [{ threadId: 'thread-1', key: KEY, value: undefined }],
     ]);
-    expect(mocks.applyPackToSession).toHaveBeenCalledWith(ectx, 'openai');
+    expect(mocks.applyPackToSession).toHaveBeenCalledWith(
+      ectx,
+      'openai',
+      expect.objectContaining({ clearPendingFallback: false, afterApply: expect.any(Function) }),
+    );
     expect(stateSet).toHaveBeenLastCalledWith({ [KEY]: null });
     expect(ectx.state.fallbackStatus).toEqual({ usingPack: 'OpenAI', failedPack: 'Anthropic' });
+  });
+
+  it('does not finalize a fallback when pack application is superseded', async () => {
+    const { ectx, stateSet, threadSetSetting } = makeContext();
+    mocks.applyPackToSession.mockResolvedValueOnce({
+      modelId: 'openai/gpt-5.6-sol',
+      modelRoute: { entries: [{ id: 'openai', modelId: 'openai/gpt-5.6-sol' }] },
+      applied: false,
+    });
+
+    await handlePackFallbackState(ectx, { state: { [KEY]: pending() }, changedKeys: [KEY] });
+
+    expect(threadSetSetting).not.toHaveBeenCalled();
+    expect(stateSet).not.toHaveBeenCalled();
+    expect(ectx.state.fallbackStatus).toBeUndefined();
   });
 
   it('clears a marker whose target entry is no longer a pack', async () => {

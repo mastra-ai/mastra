@@ -32,6 +32,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const previousFallbackStatus = thread?.metadata?.[THREAD_FALLBACK_STATUS_KEY];
   const previousPendingFallback = thread?.metadata?.[MODEL_FALLBACK_STATE_KEY];
   const previousSessionState = ctx.state.session.state.get() as Record<string, unknown>;
+  const previousFallbackUi = ctx.state.fallbackStatus;
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
   const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
   const customPack = activePackId?.startsWith('custom:')
@@ -80,36 +81,58 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     nextSettings.models.modeDefaults = modeModels;
   }
 
-  try {
-    saveSettings(nextSettings);
-    await applyPackToSession(ctx, nextPackId, { modeId });
-    const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
-    if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
-    await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-    await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
-    await ctx.state.session.state.set({ [MODEL_FALLBACK_STATE_KEY]: null });
-  } catch (error) {
-    try {
-      saveSettings(settings);
-    } catch {
-      // Keep the original failure while restoring the live thread below.
-    }
-    await Promise.allSettled([
-      ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: previousPackSetting }),
-      ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: previousFallbackStatus }),
-      ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: previousPendingFallback }),
-      ctx.state.session.model.switch({ modelId: previousModelId }),
-      ctx.state.session.state.set({
-        modelRoute: previousSessionState.modelRoute,
-        [MODEL_FALLBACK_STATE_KEY]: previousSessionState[MODEL_FALLBACK_STATE_KEY] ?? null,
-      }),
-    ]);
-    throw error;
-  }
-
-  ctx.state.fallbackStatus = undefined;
-  ctx.updateStatusLine();
-  ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);
+  await applyPackToSession(ctx, nextPackId, {
+    modeId,
+    settings: nextSettings,
+    expectedThreadId: threadId,
+    afterApply: async () => {
+      saveSettings(nextSettings);
+      const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
+      if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
+      await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+      ctx.state.fallbackStatus = undefined;
+      ctx.updateStatusLine();
+      ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);
+    },
+    onError: async () => {
+      try {
+        saveSettings(settings);
+      } catch {
+        // Keep the original failure while restoring the live thread below.
+      }
+      await Promise.allSettled([
+        ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: previousPackSetting }),
+        ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: previousFallbackStatus }),
+        ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: previousPendingFallback }),
+        ctx.state.session.thread.setSetting({
+          key: 'subagentModelId_explore',
+          value: previousSessionState.subagentModelId_explore,
+        }),
+        ctx.state.session.thread.setSetting({
+          key: 'subagentModelId_plan',
+          value: previousSessionState.subagentModelId_plan,
+        }),
+        ctx.state.session.thread.setSetting({
+          key: 'subagentModelId_execute',
+          value: previousSessionState.subagentModelId_execute,
+        }),
+        ctx.state.session.thread.setSetting({ key: 'observerModelId', value: previousSessionState.observerModelId }),
+        ctx.state.session.thread.setSetting({ key: 'reflectorModelId', value: previousSessionState.reflectorModelId }),
+        ctx.state.session.model.switch({ modelId: previousModelId }),
+        ctx.state.session.state.set({
+          modelRoute: previousSessionState.modelRoute,
+          [MODEL_FALLBACK_STATE_KEY]: previousSessionState[MODEL_FALLBACK_STATE_KEY] ?? null,
+          subagentModelId_explore: previousSessionState.subagentModelId_explore,
+          subagentModelId_plan: previousSessionState.subagentModelId_plan,
+          subagentModelId_execute: previousSessionState.subagentModelId_execute,
+          observerModelId: previousSessionState.observerModelId,
+          reflectorModelId: previousSessionState.reflectorModelId,
+        }),
+      ]);
+      ctx.state.fallbackStatus = previousFallbackUi;
+      ctx.updateStatusLine();
+    },
+  });
 }
 
 export async function handleModelCommand(ctx: SlashCommandContext): Promise<void> {

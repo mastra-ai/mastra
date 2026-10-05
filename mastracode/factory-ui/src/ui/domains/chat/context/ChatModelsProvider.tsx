@@ -33,7 +33,7 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
     activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
     defaultModelId,
     isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
-    error: factoryProjectQuery.error ?? undefined,
+    error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
       return Promise.resolve();

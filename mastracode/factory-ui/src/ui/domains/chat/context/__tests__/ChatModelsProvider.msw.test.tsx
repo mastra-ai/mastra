@@ -38,6 +38,11 @@ function LoadingProbe() {
   return <div>{isLoading ? 'loading' : 'ready'}</div>;
 }
 
+function ErrorProbe() {
+  const { error } = useChatModels();
+  return <div>{error ? 'error' : 'ok'}</div>;
+}
+
 describe('ChatModelsProvider', () => {
   it('uses the personal default model ahead of the Factory default for a new chat', async () => {
     server.use(
@@ -89,7 +94,7 @@ describe('ChatModelsProvider', () => {
     expect(screen.getByText('ready')).toBeVisible();
   });
 
-  it('falls back to the Factory model when personal default loading fails', async () => {
+  it('surfaces personal default loading failures instead of treating them as no default', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
         HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
@@ -103,11 +108,13 @@ describe('ChatModelsProvider', () => {
       <ChatSessionContext.Provider value={draftSession}>
         <ChatModelsProvider>
           <ActiveModelProbe />
+          <ErrorProbe />
         </ChatModelsProvider>
       </ChatSessionContext.Provider>,
     );
 
     expect(await screen.findByText('openrouter/fable-5')).toBeVisible();
+    expect(await screen.findByText('error')).toBeVisible();
   });
 
   it('uses the live session state model', async () => {

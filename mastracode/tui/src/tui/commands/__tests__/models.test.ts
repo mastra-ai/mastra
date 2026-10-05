@@ -83,7 +83,15 @@ describe('handleModelCommand', () => {
     mocks.promptForApiKeyIfNeeded.mockReset();
     mocks.showModalOverlay.mockReset();
     mocks.applyPackToSession.mockReset();
-    mocks.applyPackToSession.mockResolvedValue({});
+    mocks.applyPackToSession.mockImplementation(async (_ctx, _packId, options) => {
+      try {
+        await options?.afterApply?.();
+        return { applied: true };
+      } catch (error) {
+        await options?.onError?.(error);
+        throw error;
+      }
+    });
     mocks.selectorOptions = undefined;
   });
 
@@ -407,9 +415,12 @@ describe('handleModelCommand', () => {
         }),
       }),
     );
-    expect(mocks.applyPackToSession).toHaveBeenCalledWith(ctx, 'openai', { modeId: 'build' });
-    expect(setSetting).toHaveBeenCalledWith({ key: 'mastracodePendingModelFallback', value: undefined });
-    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingModelFallback: null });
+    expect(mocks.applyPackToSession).toHaveBeenCalledWith(
+      ctx,
+      'openai',
+      expect.objectContaining({ modeId: 'build', afterApply: expect.any(Function) }),
+    );
+    expect(setSetting).toHaveBeenCalledWith({ key: 'mastracodeFallbackStatus', value: undefined });
     expect(Object.keys(threadSettings).some(key => key.startsWith('modeModelId_'))).toBe(false);
   });
 
@@ -477,7 +488,11 @@ describe('handleModelCommand', () => {
         ],
       }),
     );
-    expect(mocks.applyPackToSession).toHaveBeenCalledWith(ctx, 'custom:Team', { modeId: 'plan' });
+    expect(mocks.applyPackToSession).toHaveBeenCalledWith(
+      ctx,
+      'custom:Team',
+      expect.objectContaining({ modeId: 'plan', afterApply: expect.any(Function) }),
+    );
     expect(setSetting.mock.calls.some(([setting]) => String(setting.key).startsWith('modeModelId_'))).toBe(false);
   });
 
@@ -496,7 +511,11 @@ describe('handleModelCommand', () => {
     };
     mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-    mocks.applyPackToSession.mockRejectedValueOnce(new Error('apply failed'));
+    mocks.applyPackToSession.mockImplementationOnce(async (_ctx, _packId, options) => {
+      const error = new Error('apply failed');
+      await options?.onError?.(error);
+      throw error;
+    });
     const switchModel = vi.fn(async () => undefined);
     const ctx = {
       authStorage: {},

@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +11,13 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   return { ...actual, loadSettings: mocks.loadSettings };
 });
 
-import { applyPackToSession, reconcilePackAfterModeChange, resolvePackSelection, switchModeWithPack } from './apply.js';
+import {
+  applyCurrentThreadPack,
+  applyPackToSession,
+  reconcilePackAfterModeChange,
+  resolvePackSelection,
+  switchModeWithPack,
+} from './apply.js';
 
 function makeSettings() {
   return {
@@ -58,6 +65,10 @@ function makeContext(modelId = 'provider/old') {
   const modeSwitch = vi.fn(async ({ modeId }: { modeId: string }) => {
     currentModeId = modeId;
   });
+  let sessionState: Record<string, unknown> = {};
+  const stateSet = vi.fn(async (nextState: Record<string, unknown>) => {
+    sessionState = { ...sessionState, ...nextState };
+  });
   return {
     ctx: {
       state: {
@@ -80,7 +91,7 @@ function makeContext(modelId = 'provider/old') {
             observer: { switchModel: vi.fn(async () => undefined) },
             reflector: { switchModel: vi.fn(async () => undefined) },
           },
-          state: { set: vi.fn(async () => undefined) },
+          state: { get: vi.fn(() => sessionState), set: stateSet },
         },
       },
     } as any,
@@ -134,6 +145,7 @@ describe('model pack application', () => {
     expect(ctx.state.session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'provider/memory-primary' });
     expect(ctx.state.session.state.set).toHaveBeenCalledWith({
       modelRoute: expect.objectContaining({ entries: expect.any(Array) }),
+      mastracodePendingModelFallback: null,
     });
   });
 
@@ -157,10 +169,97 @@ describe('model pack application', () => {
   });
 
   it('uses the mode-change listener as a no-op safety net when already applied', async () => {
-    const { ctx, modelSwitch } = makeContext('provider/plan-primary');
+    const { ctx, modeSwitch, modelSwitch } = makeContext();
+    await modeSwitch({ modeId: 'plan' });
+    await applyPackToSession(ctx, 'custom:Primary', { modeId: 'plan' });
+    modelSwitch.mockClear();
 
     await reconcilePackAfterModeChange(ctx, 'plan');
 
     expect(modelSwitch).not.toHaveBeenCalled();
+  });
+
+  it('clears a pending fallback when applying the pack for a new mode', async () => {
+    const { ctx } = makeContext('provider/build-fallback');
+
+    await switchModeWithPack(ctx, 'plan');
+
+    expect(ctx.state.session.thread.setSetting).toHaveBeenCalledWith({
+      key: 'mastracodePendingModelFallback',
+      value: undefined,
+    });
+    expect(ctx.state.session.state.set).toHaveBeenLastCalledWith({
+      modelRoute: expect.objectContaining({
+        entries: expect.arrayContaining([
+          expect.objectContaining({ id: 'custom:Fallback', modelId: 'provider/plan-fallback' }),
+        ]),
+      }),
+      mastracodePendingModelFallback: null,
+    });
+  });
+
+  it('ignores a delayed mode-change reconciliation after a newer switch', async () => {
+    const { ctx, modeSwitch, modelSwitch } = makeContext('provider/build-primary');
+    let resolveThreads = (_threads: Array<{ id: string; metadata: Record<string, unknown> }>) => {};
+    ctx.state.session.thread.list.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveThreads = resolve;
+        }),
+    );
+    await modeSwitch({ modeId: 'plan' });
+    modelSwitch.mockClear();
+
+    const reconciliation = reconcilePackAfterModeChange(ctx, 'plan');
+    await modeSwitch({ modeId: 'fast' });
+    resolveThreads([{ id: 'thread-1', metadata: { activeModelPackId: 'custom:Primary' } }]);
+    await reconciliation;
+
+    expect(modelSwitch).not.toHaveBeenCalled();
+  });
+
+  it('serializes overlapping applications so the newer pack wins', async () => {
+    const { ctx, modeSwitch, modelSwitch } = makeContext('provider/build-primary');
+    await modeSwitch({ modeId: 'plan' });
+    let releaseSetting = () => {};
+    ctx.state.session.thread.setSetting.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseSetting = resolve;
+        }),
+    );
+
+    const primaryApplication = applyPackToSession(ctx, 'custom:Primary', { modeId: 'plan' });
+    await vi.waitFor(() => expect(ctx.state.session.thread.setSetting).toHaveBeenCalled());
+    const fallbackApplication = applyPackToSession(ctx, 'custom:Fallback', { modeId: 'plan' });
+    releaseSetting();
+
+    await expect(primaryApplication).resolves.toMatchObject({ applied: false });
+    await expect(fallbackApplication).resolves.toMatchObject({ applied: true });
+    expect(modelSwitch).toHaveBeenCalledTimes(1);
+    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/plan-fallback' });
+    expect(ctx.state.session.thread.setSetting).toHaveBeenLastCalledWith({
+      key: MODEL_FALLBACK_STATE_KEY,
+      value: undefined,
+    });
+  });
+
+  it('does not apply a resolved pack after the active thread changes', async () => {
+    const { ctx, modelSwitch } = makeContext();
+    let resolveThreads = (_threads: Array<{ id: string; metadata: Record<string, unknown> }>) => {};
+    ctx.state.session.thread.list.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveThreads = resolve;
+        }),
+    );
+
+    const application = applyCurrentThreadPack(ctx, { modeId: 'build' });
+    ctx.state.session.thread.getId.mockReturnValue('thread-2');
+    resolveThreads([{ id: 'thread-1', metadata: { activeModelPackId: 'custom:Primary' } }]);
+    await application;
+
+    expect(modelSwitch).not.toHaveBeenCalled();
+    expect(ctx.state.session.thread.setSetting).not.toHaveBeenCalled();
   });
 });

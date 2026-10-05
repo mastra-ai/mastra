@@ -1,7 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { MODEL_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -748,13 +748,8 @@ export function upsertCustomPackInSettings(
   }
 }
 
-async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
+async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<boolean> {
   const modes = ctx.state.controller.listModes();
-  await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-  // A manual switch supersedes any queued route hop.
-  await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
-  await ctx.state.session.state.set({ [MODEL_FALLBACK_STATE_KEY]: null });
-  ctx.state.fallbackStatus = undefined;
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -788,14 +783,23 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     // Bump the active global fallback so OpenAI models don't silently run
     // without reasoning, while preserving explicit session and mode defaults.
     s.preferences.thinkingLevel = 'low';
-  } else if (currentModeModel?.startsWith('openai/') && effectiveThinking === 'max') {
-    // OpenAI API-key models do not accept the Codex-only `max` effort.
-    await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
   }
+  const shouldSetXhigh = currentModeModel?.startsWith('openai/') && effectiveThinking === 'max';
 
-  await applyPackToSession(ctx, pack.id, { settings: s });
-  saveSettings(s);
-  updateStatusLine(ctx.state);
+  const application = await applyPackToSession(ctx, pack.id, {
+    settings: s,
+    afterApply: async () => {
+      await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+      if (shouldSetXhigh) {
+        // OpenAI API-key models do not accept the Codex-only `max` effort.
+        await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
+      }
+      saveSettings(s);
+      ctx.state.fallbackStatus = undefined;
+      updateStatusLine(ctx.state);
+    },
+  });
+  return application.applied;
 }
 
 export function getOverriddenPackModes(pack: ModePack, builtinPack: ModePack): Array<'plan' | 'build' | 'fast'> {
@@ -1389,8 +1393,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           // collision === 'overwrite' falls through
         }
 
-        await applyPack(ctx, imported);
-        ctx.showInfo(`Imported and activated ${imported.name} pack`);
+        if (await applyPack(ctx, imported)) {
+          ctx.showInfo(`Imported and activated ${imported.name} pack`);
+        }
         resolve();
         return;
       }
@@ -1493,8 +1498,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         return;
       }
 
-      await applyPack(ctx, pack, previousPackId);
-      ctx.showInfo(resetBuiltinPack ? `Reset and switched to ${pack.name} pack` : `Switched to ${pack.name} pack`);
+      if (await applyPack(ctx, pack, previousPackId)) {
+        ctx.showInfo(resetBuiltinPack ? `Reset and switched to ${pack.name} pack` : `Switched to ${pack.name} pack`);
+      }
       resolve();
     };
 
