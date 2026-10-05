@@ -3,6 +3,7 @@ import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-b
 import { isValid } from 'date-fns';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
+import type { LinkedRepositoryPayload } from '../workspaces/services/github';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
@@ -39,6 +40,29 @@ export function metadataLabelColors(metadata: Record<string, unknown>): Record<s
         (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(entry[1]) || /^[a-z]+$/i.test(entry[1])),
     ),
   );
+}
+
+/** Resolve persisted source details against their repository, including polled cards. */
+export function repositoryIdForItem(
+  item: Pick<WorkItem, 'metadata' | 'source' | 'url'>,
+  repositories: readonly LinkedRepositoryPayload[],
+): string | undefined {
+  // A working repository override is not the GitHub source repository.
+  if (item.source === 'github-issue' || item.source === 'github-pr') {
+    if (!item.url) return undefined;
+    try {
+      const slug = new URL(item.url).pathname.match(/^\/([^/]+\/[^/]+)\/(?:issues|pull)\/\d+(?:\/|$)/)?.[1];
+      return repositories.find(
+        repository => repository.provider !== 'gitlab' && repository.slug.toLowerCase() === slug?.toLowerCase(),
+      )?.projectRepositoryId;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof item.metadata.repository === 'string') {
+    return repositories.find(repository => repository.slug === item.metadata.repository)?.projectRepositoryId;
+  }
+  return repositories[0]?.projectRepositoryId;
 }
 
 export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {

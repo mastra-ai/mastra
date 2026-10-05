@@ -69,7 +69,7 @@ export function WorkItemCard({
   /** Cards linked to this one, resolved once for the whole board. */
   relatedItems: WorkItem[];
   /** Repository id resolving GitHub descriptions in the detail panel. */
-  projectRepositoryId: string;
+  projectRepositoryId: string | undefined;
   activityPage?: AuditEventPage;
   /** Status text while a session start is resolving, before its mutation starts. */
   preparing?: string;

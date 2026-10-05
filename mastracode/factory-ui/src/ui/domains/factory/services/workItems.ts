@@ -94,7 +94,7 @@ interface ExternalWorkItemSource {
   url?: string;
 }
 
-interface WireWorkItem extends Omit<
+export interface WireWorkItem extends Omit<
   WorkItem,
   | 'githubProjectId'
   | 'source'

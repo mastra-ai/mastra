@@ -24,7 +24,7 @@ export function WorkItemTray({
 }: {
   item: WorkItem;
   factoryId: string;
-  projectRepositoryId: string;
+  projectRepositoryId: string | undefined;
   /** Mounted only once the panel opens, so closed cards run no feed queries. */
   enabled: boolean;
   currentUser?: FeedUser;

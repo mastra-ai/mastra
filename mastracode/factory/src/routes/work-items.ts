@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { githubIntakeSourceKey } from '../integrations/github/source-identity.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
@@ -31,6 +32,7 @@ import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.j
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
@@ -57,6 +59,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
+  /** Linked GitHub repositories used to scope manual intake identities. */
+  githubSourceControl?: SourceControlStorageHandle;
   /** Boards installed for this Factory instance. */
   boardRegistry?: BoardRegistry;
   /** Comments domain — backs the mention attention provider. */
@@ -533,6 +537,35 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
           await workItems.ensureReady();
           try {
+            const source = input.externalSource;
+            const github = this.deps.githubSourceControl;
+            const match =
+              source?.integrationId === 'github' &&
+              /^github-(?:issue|pr):\d+$/.test(source.externalId) &&
+              (source.type === 'issue' || source.type === 'pull-request') &&
+              source.url
+                ? /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/(\d+)(?:[/?#]|$)/.exec(source.url)
+                : null;
+            if (match && github && source) {
+              const connections = await github.connections.list(resolved);
+              for (const connection of connections) {
+                const links = await github.projectRepositories.list({
+                  orgId: resolved.orgId,
+                  connectionId: connection.id,
+                });
+                for (const link of links) {
+                  const repository = await github.repositories.get({ orgId: resolved.orgId, id: link.repositoryId });
+                  if (!repository || repository.slug.toLowerCase() !== match[1]!.toLowerCase()) continue;
+                  source.externalId = await githubIntakeSourceKey(workItems, {
+                    ...resolved,
+                    repositoryId: Number(repository.externalId),
+                    repositoryFullName: repository.slug,
+                    kind: source.type === 'issue' ? 'issue' : 'pull-request',
+                    number: Number(match[2]),
+                  });
+                }
+              }
+            }
             const result = await workItems.upsert({
               orgId: resolved.orgId,
               userId: resolved.userId,
