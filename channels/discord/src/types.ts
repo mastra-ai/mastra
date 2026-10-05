@@ -302,4 +302,12 @@ export interface DiscordInstallation {
    * activation.
    */
   guildSnapshot?: string[];
+  /**
+   * The guild `connect()` explicitly targeted (`options.guildId`) when the
+   * pending invite was issued, if any. Reconciliation only auto-activates this
+   * install on that guild — a different guild appearing in the bot's
+   * membership contradicts the caller's intent and waits for an authoritative
+   * first interaction instead. Cleared on activation.
+   */
+  targetGuildId?: string;
 }

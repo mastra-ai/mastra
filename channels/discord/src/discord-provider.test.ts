@@ -150,6 +150,15 @@ function stubGuildCommands(guildId: string, appId: string = APP.applicationId): 
   return () => calls;
 }
 
+/** Stub one guild command PUT that only resolves after `ms` (in-flight races). */
+function stubDelayedGuildCommands(guildId: string, ms: number, appId: string = APP.applicationId) {
+  mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: `/api/v10/applications/${appId}/guilds/${guildId}/commands`, method: 'PUT' })
+    .reply(200, [])
+    .delay(ms);
+}
+
 /** Persistently stub the global command PUT, capturing every payload. */
 function stubGlobalCommands(appId: string = APP.applicationId): () => Record<string, unknown>[] {
   const calls: Record<string, unknown>[] = [];
@@ -505,6 +514,93 @@ describe('DiscordProvider — pending-install reconcile (invite completed in ano
     const installs = await provider.listInstallations();
     expect(installs[0]).toMatchObject({ status: 'active' });
   });
+
+  it('defers to first-interaction activation when any pending install lacks a baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds({ status: 500 }); // snapshot fails — agent-1 is pending with NO baseline
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // baseline: no guilds
+
+    // One new guild appears. Counted against agent-2's baseline alone it looks
+    // unambiguous — but it could just as well be agent-1's invite landing, and
+    // agent-1 has no baseline to say otherwise. Nobody may claim it.
+    stubBotGuilds([GUILD]);
+    const installs = await provider.listInstallations();
+
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('does not auto-activate an explicitly targeted install on a different guild', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false); // target requested, bot not a member → invite flow
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    // A different guild appears — not what the caller asked for. It can still
+    // activate through a real first interaction, never from membership alone.
+    stubBotGuilds([OTHER_GUILD]);
+    const installs = await provider.listInstallations();
+
+    expect(installs[0]).toMatchObject({ status: 'pending' });
+  });
+
+  it('auto-activates an explicitly targeted install once its target appears', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false);
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const installs = await provider.listInstallations();
+
+    expect(installs[0]).toMatchObject({ status: 'active' });
+    expect((await provider.getInstallation('agent-1'))?.guildIds).toEqual([GUILD]);
+  });
+
+  it('re-connecting while pending preserves the original reconcile baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // baseline: no guilds
+
+    // The operator completes the invite, then clicks connect again before any
+    // list ran. A fresh snapshot would now include the new guild and hide it
+    // from the diff forever — the original baseline must survive. (No
+    // stubBotGuilds here: a re-snapshot would throw under disableNetConnect.)
+    stubValidateApp();
+    await provider.connect('agent-1');
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const installs = await provider.listInstallations();
+
+    expect(installs[0]).toMatchObject({ status: 'active' });
+  });
+
+  it('activates a completed invite exactly once across concurrent list calls', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    // ONE membership stub: concurrent lists must share a single reconcile
+    // pass (a second fetch would throw under disableNetConnect).
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const [a, b] = await Promise.all([provider.listInstallations(), provider.listInstallations()]);
+
+    expect(a[0]).toMatchObject({ status: 'active' });
+    expect(b[0]).toMatchObject({ status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+  });
 });
 
 describe('DiscordProvider.disconnect', () => {
@@ -523,6 +619,26 @@ describe('DiscordProvider.disconnect', () => {
 
   it('throws when no installation exists', async () => {
     await expect(makeProvider().provider.disconnect('ghost')).rejects.toThrow(/no discord installation/i);
+  });
+
+  it('cannot be resurrected by an activation whose command PUT is still in flight', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    const pending = await provider.getInstallation('agent-1');
+
+    // The activation's command PUT is still in flight when disconnect lands.
+    // The delete must serialize behind the activation — otherwise the post-PUT
+    // command-version save re-creates the row disconnect just removed.
+    stubDelayedGuildCommands(GUILD, 50);
+    const activation = provider.activateGuild(pending!.webhookId, GUILD);
+    await new Promise(resolve => setTimeout(resolve, 10)); // let it reach the PUT
+    await provider.disconnect('agent-1');
+    await activation;
+
+    expect(await provider.getInstallation('agent-1')).toBeNull();
+    expect(await provider.listInstallations()).toHaveLength(0);
   });
 });
 

@@ -23,11 +23,18 @@ import { useCallback } from 'react';
  * blocked popup would be indistinguishable from an open one); the opener link is
  * severed manually instead.
  *
+ * The result is handled through plain promise continuations on `mutateAsync` —
+ * NOT React Query's per-call `mutate(vars, { onSuccess })` callbacks, which are
+ * skipped when the component unmounts before the request settles (e.g. the user
+ * closes the publish dialog). The closure outlives the component, so the
+ * pre-opened tab is always navigated or closed and never stranded on
+ * `about:blank`.
+ *
  * Errors surface as toasts. Pass `onClose` if the calling surface should close itself
  * after a `deep_link` or `immediate` result (used by the publish dialog).
  */
 export const useConnectChannelAction = (platform: string, opts: { onClose?: () => void } = {}) => {
-  const { mutate, isPending } = useConnectChannel({ platform: platform });
+  const { mutateAsync, isPending } = useConnectChannel({ platform: platform });
   const { onClose } = opts;
 
   const connect = useCallback(
@@ -37,36 +44,32 @@ export const useConnectChannelAction = (platform: string, opts: { onClose?: () =
         tab.opener = null;
       }
 
-      mutate(
-        { agentId },
-        {
-          onSuccess: result => {
-            switch (result.type) {
-              case 'oauth':
-              case 'deep_link': {
-                const url = result.type === 'oauth' ? result.authorizationUrl : result.url;
-                if (tab) {
-                  tab.location.href = url;
-                } else {
-                  toast.error('Popup blocked — please allow popups and try again');
-                }
-                onClose?.();
-                return;
+      void mutateAsync({ agentId })
+        .then(result => {
+          switch (result.type) {
+            case 'oauth':
+            case 'deep_link': {
+              const url = result.type === 'oauth' ? result.authorizationUrl : result.url;
+              if (tab) {
+                tab.location.href = url;
+              } else {
+                toast.error('Popup blocked — please allow popups and try again');
               }
-              case 'immediate':
-                tab?.close();
-                onClose?.();
-                return;
+              onClose?.();
+              return;
             }
-          },
-          onError: (err: Error & { body?: { error?: string } }) => {
-            tab?.close();
-            toast.error(err.body?.error || err.message || 'Failed to connect channel');
-          },
-        },
-      );
+            case 'immediate':
+              tab?.close();
+              onClose?.();
+              return;
+          }
+        })
+        .catch((err: Error & { body?: { error?: string } }) => {
+          tab?.close();
+          toast.error(err.body?.error || err.message || 'Failed to connect channel');
+        });
     },
-    [mutate, onClose],
+    [mutateAsync, onClose],
   );
 
   return { connect, isConnecting: isPending };

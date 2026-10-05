@@ -204,4 +204,47 @@ describe('ConnectChannelMessage', () => {
     expect(tab.location.href).toBe('about:blank'); // never navigated
     await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
   });
+
+  it('navigates the pre-opened tab even when the surface unmounts before connect resolves', async () => {
+    const tab = stubOpenTab();
+    let releaseConnect!: () => void;
+    const gate = new Promise<void>(resolve => {
+      releaseConnect = resolve;
+    });
+
+    server.use(
+      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      installationsHandler({}),
+      http.post('*/api/channels/slack/connect', async () => {
+        await gate;
+        return HttpResponse.json({
+          type: 'oauth',
+          authorizationUrl: 'https://slack.example/oauth',
+          installationId: 'inst-1',
+        });
+      }),
+    );
+
+    const { unmount } = render(
+      <Wrapper>
+        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+      </Wrapper>,
+    );
+
+    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+    fireEvent.click(button);
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+
+    // The surface goes away while the request is in flight (e.g. the user
+    // closes the dialog). React Query's per-call mutate callbacks are skipped
+    // after unmount — the tab must still be navigated, not stranded on
+    // about:blank with authorization never starting.
+    unmount();
+    releaseConnect();
+
+    await waitFor(() => {
+      expect(tab.location.href).toBe('https://slack.example/oauth');
+    });
+    expect(tab.close).not.toHaveBeenCalled();
+  });
 });

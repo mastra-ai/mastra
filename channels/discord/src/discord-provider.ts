@@ -367,11 +367,18 @@ export class DiscordProvider implements ChannelProvider {
     // #reconcilePendingInstallations) — without it, activation waits for the
     // first inbound interaction. Best-effort: a failed listing (or a bot in
     // more guilds than we page) just falls back to lazy activation.
-    let guildSnapshot: string[] | undefined;
-    try {
-      guildSnapshot = (await listBotGuildIds(app.botToken, this.#apiBaseUrl())) ?? undefined;
-    } catch (err) {
-      console.warn('[Discord] Could not snapshot guild membership for pending install:', err);
+    //
+    // A re-connect while pending keeps the ORIGINAL baseline: the operator may
+    // have already completed the previous invite (the bot joined between the
+    // two connect calls), and a fresh snapshot would include that guild and
+    // hide it from the reconcile diff forever.
+    let guildSnapshot: string[] | undefined = existing?.guildSnapshot;
+    if (!guildSnapshot) {
+      try {
+        guildSnapshot = (await listBotGuildIds(app.botToken, this.#apiBaseUrl())) ?? undefined;
+      } catch (err) {
+        console.warn('[Discord] Could not snapshot guild membership for pending install:', err);
+      }
     }
     const pending: DiscordInstallation = {
       id: installationId,
@@ -384,6 +391,9 @@ export class DiscordProvider implements ChannelProvider {
       commandVersions: existing?.commandVersions,
       installedAt,
       guildSnapshot,
+      // Remember an explicit target so reconciliation never auto-activates
+      // this install on some other guild the bot happens to join.
+      targetGuildId: options.guildId,
     };
     await store.save(pending);
     // Global commands don't need a guild — register once now (best-effort).
@@ -440,6 +450,7 @@ export class DiscordProvider implements ChannelProvider {
     if (!known) installation.guildIds.push(guildId);
     installation.status = 'active';
     delete installation.guildSnapshot; // the reconcile baseline is spent once a guild is confirmed
+    delete installation.targetGuildId;
     await store.save(installation);
     // Register this newly-seen guild's commands (best-effort, hash-skipped).
     const app = await store.getAppConfig();
@@ -464,8 +475,24 @@ export class DiscordProvider implements ChannelProvider {
     if (!existing) {
       throw new Error(`No Discord installation found for agent "${agentId}"`);
     }
-    this.#adapters.delete(existing.id);
-    await store.deleteByAgent(agentId);
+    // Serialize the delete behind any in-flight activation for this webhook.
+    // An activation's post-HTTP persistence (the command-version save in
+    // #registerCommands) would otherwise land AFTER the delete and resurrect
+    // the disconnected row.
+    const webhookId = existing.webhookId;
+    const prev = this.#activationChains.get(webhookId) ?? Promise.resolve();
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        this.#adapters.delete(existing.id);
+        await store.deleteByAgent(agentId);
+      });
+    this.#activationChains.set(webhookId, next);
+    try {
+      await next;
+    } finally {
+      if (this.#activationChains.get(webhookId) === next) this.#activationChains.delete(webhookId);
+    }
     this.#configured = (await store.getAppConfig()) != null || (await store.list()).some(i => i.status === 'active');
   }
 
@@ -502,14 +529,42 @@ export class DiscordProvider implements ChannelProvider {
    * path remains the authoritative fallback.
    */
   async #reconcilePendingInstallations(store: DiscordInstallStore): Promise<void> {
+    // Single-flight: concurrent listInstallations() calls share one pass.
+    // Without the gate, a second pass can see the same pending install, get the
+    // (already-active) row back from the serialized activateGuild, and run
+    // #activateInstallation a second time — a duplicate AgentChannels init and
+    // a second gateway loop.
+    if (this.#reconcileInflight) return this.#reconcileInflight;
+    const run = this.#reconcilePendingInstallationsNow(store).finally(() => {
+      this.#reconcileInflight = null;
+    });
+    this.#reconcileInflight = run;
+    return run;
+  }
+
+  #reconcileInflight: Promise<void> | null = null;
+
+  async #reconcilePendingInstallationsNow(store: DiscordInstallStore): Promise<void> {
     try {
-      const all = await store.list();
-      const pending = all.filter(i => i.status === 'pending' && i.guildSnapshot);
-      if (!pending.length) return;
+      // Cheap pre-check: skip the membership fetch when nothing can reconcile.
+      if (!(await store.list()).some(i => i.status === 'pending' && i.guildSnapshot)) return;
       const app = await store.getAppConfig();
       if (!app) return;
       const current = await listBotGuildIds(app.botToken, this.#apiBaseUrl());
       if (!current) return; // membership unknown (too many guilds to page) — stay pending
+
+      // Read the claimant inventory AFTER the slow membership fetch. A
+      // connect() landing during the fetch must be counted — computed against
+      // a pre-fetch list, its invite's guild would look uncontested and could
+      // be attributed to an older pending install.
+      const all = await store.list();
+      const allPending = all.filter(i => i.status === 'pending');
+      const pending = allPending.filter(i => i.guildSnapshot);
+      if (!pending.length) return;
+      // A pending install with no baseline (the membership listing failed at
+      // connect time) makes every diff unattributable: any new guild might be
+      // ITS invite landing. Leave everything to first-interaction activation.
+      if (pending.length !== allPending.length) return;
 
       // A guild any install already lists is owned. It can still look "new"
       // relative to a stale snapshot (joined after the snapshot was taken and
@@ -527,10 +582,32 @@ export class DiscordProvider implements ChannelProvider {
       for (const { installation, newGuilds } of diffs) {
         const guildId = newGuilds.length === 1 ? newGuilds[0]! : undefined;
         if (!guildId || claims.get(guildId)! > 1) continue; // ambiguous — wait for an interaction
-        const activated = await this.activateGuild(installation.webhookId, guildId);
-        // Bring the adapter (and gateway, if enabled) up now rather than on the
-        // first webhook hit, matching the eager-bind path.
-        if (activated) await this.#activateInstallation(activated);
+        // connect() was given an explicit target — honor it. Activating on a
+        // different guild from membership alone would contradict the caller's
+        // intent; that guild can still activate via a real first interaction.
+        if (installation.targetGuildId && installation.targetGuildId !== guildId) continue;
+        try {
+          const activated = await this.activateGuild(installation.webhookId, guildId);
+          // Bring the adapter (and gateway, if enabled) up now rather than on
+          // the first webhook hit, matching the eager-bind path. Skip when an
+          // adapter already exists — the runtime is already up (e.g. a
+          // concurrent first interaction), and re-initializing would start a
+          // second gateway loop.
+          if (activated && !this.#adapters.has(activated.id)) {
+            try {
+              await this.#activateInstallation(activated);
+            } catch (err) {
+              // The guild IS confirmed (row saved active) but the runtime
+              // didn't come up. Drop the half-built adapter so the first
+              // webhook hit — or a provider restart — rebuilds it cleanly.
+              this.#adapters.delete(activated.id);
+              throw err;
+            }
+          }
+        } catch (err) {
+          // Per-install: one failed activation must not block the others.
+          console.error(`[Discord] Failed to activate pending install "${installation.id}" on ${guildId}:`, err);
+        }
       }
     } catch (err) {
       console.warn('[Discord] Pending-install reconcile failed (will retry on next list):', err);
@@ -662,7 +739,13 @@ export class DiscordProvider implements ChannelProvider {
       }
       installation.commandVersions = { ...versions, [key]: hash };
       const store = await this.#getStore();
-      await store.save(installation);
+      // The PUT above is a long await — the installation may have been
+      // disconnected meanwhile. Persist the version onto the LIVE row only;
+      // saving the closed-over object would resurrect a deleted installation.
+      const fresh = await store.getByWebhookId(installation.webhookId);
+      if (!fresh) return;
+      fresh.commandVersions = { ...fresh.commandVersions, [key]: hash };
+      await store.save(fresh);
     } catch (err) {
       console.warn(`[Discord] command registration failed (${scope}${guildId ? `, guild ${guildId}` : ''}):`, err);
     }
