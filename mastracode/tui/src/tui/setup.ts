@@ -10,8 +10,9 @@ import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader'
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
-import { renderBanner } from './components/banner.js';
+import { HeaderComponent } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
+import { keyHint } from './components/surface.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -280,30 +281,24 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   const appName = state.options.appName || 'Mastra Code';
   const version = state.options.version || '0.1.0';
 
-  const banner = renderBanner(version, appName);
-
-  // Project frontmatter
-  const frontmatter = [
+  // Project info shown beside the logo
+  const info = [
     `Project: ${state.projectInfo.name}`,
     `Resource ID: ${state.projectInfo.resourceId}`,
     state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
     state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-  ]
-    .filter(Boolean)
-    .map(line => theme.fg('muted', line as string))
-    .join('\n');
+  ].filter((line): line is string => Boolean(line));
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.controller.listModes().length > 1) {
-    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
+    hintParts.push(keyHint('shift+tab', 'cycle modes'));
   }
-  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
+  hintParts.push(keyHint('/help', 'info & shortcuts'));
   const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(banner, 1, 0));
-  state.ui.addChild(new Text(frontmatter, 1, 0));
+  state.ui.addChild(new HeaderComponent({ version, appName, info }));
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(new Text(instructions, 0, 0));
   state.ui.addChild(new Spacer(1));

@@ -10,8 +10,9 @@ import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
-import { mastra, theme } from '../theme.js';
+import { displayModeColor, mastra, theme } from '../theme.js';
 import type { GradientAnimator } from './obi-loader.js';
+import { halfBlockPanel, promptSurface } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
 
 // Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
@@ -226,7 +227,7 @@ export class CustomEditor extends Editor {
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
     const isBang = text.startsWith('!');
-    const color = this.getModeColor?.() || mastra.green;
+    const color = displayModeColor(this.getModeColor?.() || mastra.green);
     const promptAnimator = this.getPromptAnimator?.();
     const shouldAnimatePrompt = !isSlash && !isAt && !isBang;
     const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
@@ -280,7 +281,7 @@ export class CustomEditor extends Editor {
         : isBang
           ? '!'
           : chevronBrightness > 0.05
-            ? '›'
+            ? '→'
             : dotBrightness > 0.05
               ? this.promptIcon
               : ' ';
@@ -315,10 +316,10 @@ export class CustomEditor extends Editor {
       )(promptChar);
     }
 
-    // Box structure: "│ > content │" or "│   content │"
-    // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
-    const promptWidth = 4; // "│ > " or "│   "
-    const contentWidth = width - 6;
+    // Slim panel: " → content " on a shaded background, framed by half blocks (no border).
+    // Left: " → " (3), right padding (1) = 4 chars total
+    const promptWidth = 3;
+    const contentWidth = width - 4;
     // Slash, mention and shell markers are rendered in the prompt chrome, so remove them
     // from the editor's layout state before wrapping and restore the state after.
     const editorState = (
@@ -376,20 +377,9 @@ export class CustomEditor extends Editor {
       contentLines.push(line);
     }
 
-    // Build rounded box
     const result: string[] = [];
-    const hBarLen = width - 2;
-
-    // Solid mode-color border
-    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
-    const leftBorder = b('│');
-    const rightBorder = b('│');
-    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
-
-    // Assemble box
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
     const textColorClose = '\x1b[39m';
-    result.push(top);
 
     // How many trailing characters are dictated and should render greyed-out.
     const fullText = this.getText();
@@ -408,18 +398,13 @@ export class CustomEditor extends Editor {
       }
     }
 
-    for (let i = 0; i < contentLines.length; i++) {
-      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
-      if (i === 0) {
-        result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
-      } else {
-        result.push(`${leftBorder}${' '.repeat(promptWidth - 1)}${line} ${rightBorder}`);
-      }
-    }
+    const rows = contentLines.map((content, i) => {
+      const line = `${textColorOpen}${content}${textColorClose}`;
+      return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
+    });
+    result.push(...halfBlockPanel(rows, width, promptSurface()));
 
-    result.push(bottom);
-
-    // Scroll indicators below the box
+    // Scroll indicators below the panel
     for (const ind of scrollIndicators) {
       result.push(ind);
     }

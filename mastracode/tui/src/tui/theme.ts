@@ -161,6 +161,7 @@ const textThemeKeys: (keyof ThemeColors)[] = [
   'muted',
   'dim',
   'text',
+  'secondary',
   'thinkingText',
   'userMessageText',
   'toolTitle',
@@ -233,6 +234,46 @@ export const mastra: MastraPalette = new Proxy({} as MastraPalette, {
   },
 });
 
+/**
+ * A surface shade derived from the terminal's own background (detected via OSC 11), so panels match the
+ * user's theme instead of a fixed grey. Same idea as opencode's "system" theme: each step moves the
+ * background's luminance 1/30 of the way toward white (dark) or black (light) while keeping its hue.
+ * Step 1 = tool output panels, step 2 = the prompt and sent messages.
+ */
+export function surfaceShade(step: number): string {
+  const bg = getContrastBg();
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(bg.slice(i, i + 2), 16));
+  const lum = 0.299 * r! + 0.587 * g! + 0.114 * b!;
+  const f = (step / 12) * 0.4;
+  let out: number[];
+  if (currentThemeMode === 'light') {
+    out = lum > 245 ? [255 - f * 255, 255 - f * 255, 255 - f * 255] : [r!, g!, b!].map(c => c * (1 - f));
+  } else if (lum < 10) {
+    out = [f * 255, f * 255, f * 255];
+  } else {
+    const ratio = (lum + (255 - lum) * f) / lum;
+    out = [r!, g!, b!].map(c => Math.min(255, c * ratio));
+  }
+  return `#${out.map(c => Math.floor(c).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Mode colors (build / plan / fast) as displayed. On dark backgrounds the deep brand colors are lifted
+ * toward white the same way the accent is (brand green maps exactly to the accent), so mode-colored text
+ * never reads darker than the accent. Light mode uses them as-is.
+ */
+export function displayModeColor(hex: string): string {
+  if (currentThemeMode !== 'dark') return hex;
+  if (hex.toLowerCase() === mastraBrand.green.toLowerCase()) return darkTheme.accent;
+  const mix = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16);
+    return Math.round(c + (255 - c) * 0.35)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`;
+}
+
 /** Tint a hex color by a brightness factor (0–1). e.g. tintHex("#ff8800", 0.15) → near-black orange */
 export function tintHex(hex: string, factor: number): string {
   const r = Math.floor(parseInt(hex.slice(1, 3), 16) * factor);
@@ -256,6 +297,7 @@ export type ThemeColor =
   | 'muted'
   | 'dim'
   | 'text'
+  | 'secondary'
   | 'thinkingText'
   | 'userMessageText'
   | 'toolTitle'
@@ -291,6 +333,8 @@ export interface ThemeColors {
   muted: string;
   dim: string;
   text: string;
+  /** A step softer than `text`: tool calls, tool output, status line, answered prompts. */
+  secondary: string;
   thinkingText: string;
   // User messages
   userMessageBg: string;
@@ -325,16 +369,18 @@ export interface ThemeColors {
 
 export const darkTheme: ThemeColors = {
   // Core UI
-  accent: '#16c858', // Brand green
+  accent: '#62f69d', // Mint: brand green lifted for dark backgrounds
   border: '#3f3f46',
-  borderAccent: '#16c858',
+  borderAccent: '#62f69d',
   borderMuted: '#27272a',
-  success: '#22c55e',
+  success: '#62f69d', // Same as accent so checkmarks never read darker than the accent
+
   error: '#ef4444',
   warning: '#f59e0b',
   muted: '#8c8c94',
   dim: '#84848c',
   text: '#fafafa',
+  secondary: '#d9d9dc',
   thinkingText: '#a1a1aa',
   // User messages
   userMessageBg: '#0f172a', // Slate blue
@@ -379,6 +425,7 @@ export const lightTheme: ThemeColors = {
   muted: '#595961',
   dim: '#67676f',
   text: '#18181b',
+  secondary: '#38383e',
   thinkingText: '#595961',
   // User messages
   userMessageBg: '#f0fdf4', // Light green tint

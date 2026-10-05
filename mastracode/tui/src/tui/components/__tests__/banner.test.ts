@@ -1,73 +1,72 @@
+import { visibleWidth } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
-import { describe, it, expect, afterEach } from 'vitest';
-import { renderBanner } from '../banner.js';
+import { describe, it, expect } from 'vitest';
+import { HeaderComponent, LOGO_HEADER, LOGO_LARGE, renderHeader } from '../banner.js';
 
-describe('renderBanner', () => {
-  const originalColumns = process.stdout.columns;
+const INFO = ['Project: mastra', 'Resource ID: mastra-c597b1a88f39', 'Branch: main', 'Worktree of: /dev/mastra'];
+const plain = (lines: string[]) => lines.map(l => stripAnsi(l));
 
-  afterEach(() => {
-    // Restore original columns
-    Object.defineProperty(process.stdout, 'columns', {
-      value: originalColumns,
-      writable: true,
-      configurable: true,
-    });
+describe('renderHeader', () => {
+  it('puts the logo beside the title and info on wide terminals', () => {
+    const lines = plain(renderHeader(100, { version: '1.2.3', info: INFO }));
+    expect(lines).toHaveLength(LOGO_HEADER.length);
+    expect(lines[0]).toContain('⣠⣶⣶⣄');
+    expect(lines[0]).toContain('Mastra Code v1.2.3');
+    expect(lines[4]).toContain('Worktree of: /dev/mastra');
   });
 
-  function setColumns(n: number) {
-    Object.defineProperty(process.stdout, 'columns', {
-      value: n,
-      writable: true,
-      configurable: true,
-    });
-  }
-
-  it('renders multi-line block art for wide terminals', () => {
-    setColumns(80);
-    const result = renderBanner('0.2.0');
-    const plain = stripAnsi(result);
-    const lines = plain.split('\n');
-    // 3 lines of art + 1 version line
-    expect(lines.length).toBe(4);
-    expect(plain).toContain('█');
-    expect(plain).toContain('▀');
+  it('pads the info block to the logo height when there is no worktree line', () => {
+    const lines = plain(renderHeader(100, { version: '1.2.3', info: INFO.slice(0, 3) }));
+    expect(lines).toHaveLength(LOGO_HEADER.length);
+    expect(lines[0]).toContain('Mastra Code v1.2.3');
+    // Blank row under the title, then the three info lines down to the logo's last row.
+    expect(lines[1]!.trimEnd()).toBe(LOGO_HEADER[1]!.trimEnd());
+    expect(lines[2]).toContain('Project: mastra');
+    expect(lines[4]).toContain('Branch: main');
   });
 
-  it('includes the version string', () => {
-    setColumns(80);
-    const result = renderBanner('1.2.3');
-    const plain = stripAnsi(result);
-    expect(plain).toContain('v1.2.3');
+  it('stacks the logo above the info when there is no room beside it', () => {
+    const lines = plain(renderHeader(44, { version: '0.2.0', info: INFO }));
+    expect(lines.slice(0, LOGO_HEADER.length).join('\n')).toContain('⣠⣶⣶⣄');
+    expect(lines).toContain('Mastra Code v0.2.0');
+    expect(lines.at(-1)).toBe('Worktree of: /dev/mastra');
   });
 
-  it('uses short MASTRA art for medium terminals (30-49 cols)', () => {
-    setColumns(40);
-    const result = renderBanner('0.2.0');
-    const plain = stripAnsi(result);
-    const lines = plain.split('\n');
-    // Short art is 24 chars wide, should not contain CODE letters
-    expect(lines.length).toBe(4);
-    // First line of short art is 24 chars; full art is 42
-    expect(lines[0]!.length).toBeLessThan(30);
+  it('falls back to a single text line on very narrow terminals', () => {
+    const lines = plain(renderHeader(25, { version: '0.2.0', info: INFO }));
+    expect(lines).toEqual(['◆ Mastra Code v0.2.0']);
   });
 
-  it('falls back to compact single line for narrow terminals', () => {
-    setColumns(25);
-    const result = renderBanner('0.2.0');
-    const plain = stripAnsi(result);
-    expect(plain).toContain('Mastra Code');
-    expect(plain).toContain('v0.2.0');
-    // Should be a single line (no block art)
-    expect(plain.split('\n').length).toBe(1);
+  it('uses the compact format without the logo for a custom appName', () => {
+    const lines = plain(renderHeader(100, { version: '1.0.0', appName: 'My Custom App', info: INFO }));
+    expect(lines).toEqual(['◆ My Custom App v1.0.0']);
   });
+});
 
-  it('uses compact format for custom appName', () => {
-    setColumns(80);
-    const result = renderBanner('1.0.0', 'My Custom App');
-    const plain = stripAnsi(result);
-    expect(plain).toContain('My Custom App');
-    expect(plain).toContain('v1.0.0');
-    // Should NOT contain block art characters
-    expect(plain).not.toContain('█');
+describe('logo', () => {
+  it.each([
+    ['header', LOGO_HEADER],
+    ['large', LOGO_LARGE],
+  ])('%s logo rows are mirror-symmetric around the middle circle', (_name, rows) => {
+    // Braille dot columns: flip each cell's two columns and reverse the row (the right-hand bridge from
+    // the top-right blob down to the bottom-right circle is the only intentionally asymmetric part).
+    const width = Math.max(...rows.map(r => visibleWidth(r)));
+    const toDots = (row: string) =>
+      [...row.padEnd(width, ' ')].flatMap(ch => {
+        const bits = ch === ' ' ? 0 : ch.codePointAt(0)! - 0x2800;
+        const left = [0x01, 0x02, 0x04, 0x40].map(b => (bits & b ? 1 : 0)).join('');
+        const right = [0x08, 0x10, 0x20, 0x80].map(b => (bits & b ? 1 : 0)).join('');
+        return [left, right];
+      });
+    const bottom = toDots(rows.at(-1)!);
+    expect(bottom).toEqual([...bottom].reverse());
+  });
+});
+
+describe('HeaderComponent', () => {
+  it('re-lays out for the width it is rendered at', () => {
+    const header = new HeaderComponent({ version: '1.0.0', info: INFO });
+    expect(plain(header.render(120))).toHaveLength(LOGO_HEADER.length);
+    expect(plain(header.render(24))).toEqual([' ◆ Mastra Code v1.0.0']);
   });
 });
