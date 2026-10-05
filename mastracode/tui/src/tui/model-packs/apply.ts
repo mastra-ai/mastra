@@ -231,8 +231,12 @@ export async function applyCurrentThreadPack(
       ? await resolveActivePackId(ctx, settings)
       : { packId: options.packId, threadId: ctx.state.session.thread.getId() };
   if (!resolution) return undefined;
-  if (resolution.packId) {
-    return applyPackToSession(ctx, resolution.packId, { modeId, expectedThreadId: resolution.threadId });
+  if (resolution.packId && resolvePackSelection(settings, resolution.packId, modeId)) {
+    return applyPackToSession(ctx, resolution.packId, {
+      modeId,
+      settings,
+      expectedThreadId: resolution.threadId,
+    });
   }
 
   const application = beginPackApplication(ctx, modeId, resolution.threadId);

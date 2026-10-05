@@ -159,6 +159,25 @@ describe('model pack application', () => {
     expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-primary' });
   });
 
+  it('falls back to the mode default when the active pack is incomplete', async () => {
+    mocks.settings.customModelPacks = [
+      {
+        name: 'Primary',
+        models: { plan: 'provider/plan-primary' },
+        createdAt: '2026-10-05T00:00:00.000Z',
+      },
+    ];
+    const { ctx, modelSwitch } = makeContext();
+
+    await expect(applyCurrentThreadPack(ctx, { packId: 'custom:Primary' })).resolves.toBeUndefined();
+
+    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-default' });
+    expect(ctx.state.session.state.set).toHaveBeenCalledWith({
+      modelRoute: undefined,
+      mastracodePendingModelFallback: null,
+    });
+  });
+
   it('re-applies the pack model after switching modes', async () => {
     const { ctx, modeSwitch, modelSwitch } = makeContext();
 

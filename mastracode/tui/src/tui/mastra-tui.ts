@@ -1648,25 +1648,31 @@ export class MastraTUI {
       if (modelId) modeDefaults[mode.id] = modelId;
     }
 
-    let activeModePackId = modePack.id;
-    if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
-      const customName =
-        modePack.id === 'custom' ? modePack.name?.trim() || 'Custom' : modePack.id.slice('custom:'.length) || 'Custom';
-      activeModePackId = `custom:${customName}`;
-      const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
-      const idx = settings.customModelPacks.findIndex(p => p.name === customName);
-      if (idx >= 0) {
-        settings.customModelPacks[idx] = entry;
+    let activeModePackId = settings.models.activeModelPackId;
+    const hasCompleteModePack = modes.every(mode => Boolean(modeDefaults[mode.id]));
+    if (hasCompleteModePack) {
+      activeModePackId = modePack.id;
+      if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
+        const customName =
+          modePack.id === 'custom'
+            ? modePack.name?.trim() || 'Custom'
+            : modePack.id.slice('custom:'.length) || 'Custom';
+        activeModePackId = `custom:${customName}`;
+        const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
+        const idx = settings.customModelPacks.findIndex(p => p.name === customName);
+        if (idx >= 0) {
+          settings.customModelPacks[idx] = entry;
+        } else {
+          settings.customModelPacks.push(entry);
+        }
+        settings.models.modeDefaults = modeDefaults;
       } else {
-        settings.customModelPacks.push(entry);
+        settings.models.modeDefaults = {};
       }
-      settings.models.modeDefaults = modeDefaults;
-    } else {
-      settings.models.modeDefaults = {};
-    }
 
-    settings.onboarding.modePackId = activeModePackId;
-    settings.models.activeModelPackId = activeModePackId;
+      settings.onboarding.modePackId = activeModePackId;
+      settings.models.activeModelPackId = activeModePackId;
+    }
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
