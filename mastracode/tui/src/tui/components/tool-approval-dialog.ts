@@ -6,6 +6,7 @@
  *   n / Esc — decline this call
  *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
+ *   Ctrl+E  — show / hide long arguments in full (when the card lists them)
  */
 import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, Focusable } from '@earendil-works/pi-tui';
@@ -15,7 +16,7 @@ import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 import { card } from './surface.js';
 
-/** Long argument values (e.g. file contents) in the approval card stop after this many lines. */
+/** Long argument values (e.g. file contents) stop after this many lines until expanded with Ctrl+E. */
 const TARGET_MAX_LINES = 40;
 
 export type ApprovalAction =
@@ -36,6 +37,8 @@ export interface ToolApprovalDialogOptions {
    */
   showTarget?: boolean;
   onAction: (action: ApprovalAction) => void;
+  /** Re-render after the card changes on its own (Ctrl+E). */
+  requestRender?: () => void;
 }
 
 export class ToolApprovalDialogComponent implements Component, Focusable {
@@ -44,6 +47,8 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
   private categoryLabel: string | undefined;
   private showTarget: boolean;
   private onAction: (action: ApprovalAction) => void;
+  private requestRender?: () => void;
+  private expanded = false;
   private resolved = false;
 
   // Focusable implementation
@@ -61,6 +66,7 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     this.categoryLabel = options.categoryLabel;
     this.showTarget = options.showTarget ?? false;
     this.onAction = options.onAction;
+    this.requestRender = options.requestRender;
   }
 
   invalidate(): void {}
@@ -108,7 +114,7 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
 
   /**
    * Every argument in full, wrapped to `width`: this is what gets approved, so nothing is cut to one line.
-   * Only very long values (file contents and the like) stop after TARGET_MAX_LINES with a count.
+   * Very long values (file contents and the like) stop after TARGET_MAX_LINES until Ctrl+E shows the rest.
    */
   private targetArgRows(width: number): string[] {
     const args = this.args;
@@ -119,8 +125,12 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     for (const [key, value] of entries) {
       const text = `${key}: ${typeof value === 'string' ? value : safeStringify(value)}`;
       const wrapped = text.split('\n').flatMap(line => (line ? wrapTextWithAnsi(line, Math.max(10, width)) : ['']));
-      rows.push(...wrapped.slice(0, TARGET_MAX_LINES));
-      if (wrapped.length > TARGET_MAX_LINES) rows.push(`… ${wrapped.length - TARGET_MAX_LINES} more lines`);
+      if (this.expanded || wrapped.length <= TARGET_MAX_LINES) {
+        rows.push(...wrapped);
+      } else {
+        rows.push(...wrapped.slice(0, TARGET_MAX_LINES));
+        rows.push(`… ${wrapped.length - TARGET_MAX_LINES} more lines · ctrl+e to show all`);
+      }
     }
     return rows;
   }
@@ -177,6 +187,13 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
     // Escape to decline
     if (kb.matches(data, 'tui.select.cancel')) {
       this.emit({ type: 'decline' });
+      return;
+    }
+
+    // Ctrl+E shows long arguments in full, so nothing has to be approved unseen.
+    if (data === '\x05' && this.showTarget) {
+      this.expanded = !this.expanded;
+      this.requestRender?.();
       return;
     }
 

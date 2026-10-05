@@ -239,6 +239,34 @@ describe('ToolApprovalDialogComponent.render', () => {
     expect(lines.every(line => line.length <= 60)).toBe(true);
   });
 
+  it('cuts very long arguments with a count and shows them in full on Ctrl+E', () => {
+    const content = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
+    const requestRender = vi.fn();
+    const onAction = vi.fn();
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'notes.md', content },
+      showTarget: true,
+      onAction,
+      requestRender,
+    });
+    const visible = () =>
+      dialog
+        .render(100)
+        .map(line => line.replace(/\x1b\[[0-9;]*m/g, ''))
+        .join('\n');
+
+    expect(visible()).toContain('… 20 more lines · ctrl+e to show all');
+    expect(visible()).not.toContain('line 60');
+
+    dialog.handleInput('\x05');
+    expect(requestRender).toHaveBeenCalled();
+    expect(visible()).toContain('line 60');
+    expect(visible()).not.toContain('more lines');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
   it('never renders wider than the terminal', () => {
     const { dialog } = makeDialog();
     for (const line of dialog.render(20)) {

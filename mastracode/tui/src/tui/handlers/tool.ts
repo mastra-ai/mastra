@@ -386,6 +386,7 @@ export function handleToolApprovalRequired(
     args,
     categoryLabel,
     showTarget,
+    requestRender: () => state.ui.requestRender(),
     onAction: (action: ApprovalAction) => {
       removeApproval();
       state.pendingApprovalDismiss = null;
