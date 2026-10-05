@@ -52,11 +52,11 @@ function AttachmentFocusChat({ factory = false, hiddenPanel = false }: { factory
             </ChatShell.Dock>
           </ChatShell.Viewport>
           {hiddenPanel && (
-            // Match the closed WorkspaceFilesSurface geometry: opacity and inert do not contain overflow.
+            // Match WorkspaceFilesSurface's closed geometry: fade and shrink inside the stage.
             <div
               aria-hidden
               inert
-              className="pointer-events-none absolute top-3 right-3 h-80 w-72 translate-x-[calc(100%+0.75rem)] scale-98 opacity-0"
+              className="pointer-events-none absolute top-3 right-3 h-80 max-h-[calc(100%-1.5rem)] w-72 origin-top-right scale-98 opacity-0"
             />
           )}
         </ChatShell.Stage>
@@ -111,7 +111,16 @@ export const FactoryHiddenPanel: Story = {
     const document = context.canvasElement.ownerDocument;
     const stage = context.canvasElement.querySelector<HTMLDivElement>('[data-slot="message-scroller"]');
     if (!stage) throw new Error('Chat must render inside a stage');
+    const panel = stage.querySelector(':scope > [aria-hidden]');
+    if (!panel) throw new Error('Factory chat must include its closed files panel');
+    const stageBounds = stage.getBoundingClientRect();
+    const panelBounds = panel.getBoundingClientRect();
+    await expect(panelBounds.left).toBeGreaterThanOrEqual(stageBounds.left);
+    await expect(panelBounds.right).toBeLessThanOrEqual(stageBounds.right);
+    await expect(panelBounds.top).toBeGreaterThanOrEqual(stageBounds.top);
+    await expect(panelBounds.bottom).toBeLessThanOrEqual(stageBounds.bottom);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    await expect(getComputedStyle(stage).overflow).toBe('visible');
     stage.scrollLeft = 100;
     await expect(stage.scrollLeft).toBe(0);
   },
