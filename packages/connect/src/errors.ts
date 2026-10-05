@@ -20,6 +20,15 @@ export class MastraConnectError extends Error {
   readonly code: MastraConnectErrorCode;
   readonly status?: number;
   readonly detail?: string;
+  /**
+   * Axios-compatible alias for {@link status}. Generated provider tools come
+   * from upstream Nango templates whose error handlers check
+   * `error.response.status` (the axios/Nango SDK shape). Exposing the HTTP
+   * status under `response.status` as well lets that generated code work
+   * unchanged against the errors this package throws. Only set when the error
+   * carries an HTTP status.
+   */
+  readonly response?: { status: number };
 
   constructor(code: MastraConnectErrorCode, message: string, options?: { status?: number; detail?: string }) {
     super(message);
@@ -27,6 +36,9 @@ export class MastraConnectError extends Error {
     this.code = code;
     this.status = options?.status;
     this.detail = options?.detail ? truncate(options.detail) : undefined;
+    if (typeof options?.status === 'number') {
+      this.response = { status: options.status };
+    }
   }
 }
 
@@ -49,12 +61,31 @@ function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }
 
+/**
+ * Pulls the first human-readable message from an array of error entries. Many
+ * providers (Clerk, Linear's GraphQL envelope, Nango v2) return
+ * `{ errors: [{ message, long_message, code }] }`; surfacing the first message
+ * is the most useful detail without echoing the whole payload.
+ */
+function extractFirstArrayMessage(errors: unknown[]): string | undefined {
+  for (const entry of errors) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as { message?: unknown; long_message?: unknown };
+    const message = typeof record.long_message === 'string' ? record.long_message : record.message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return undefined;
+}
+
 interface ProblemJson {
   title?: string;
   status?: number;
   detail?: string;
   code?: string;
   error?: string | { message?: unknown };
+  // Many providers (Clerk, Nango v2, Linear's GraphQL envelope) surface
+  // errors as an array of objects with a `message` / `long_message` field.
+  errors?: unknown;
 }
 
 /**
@@ -87,6 +118,10 @@ export async function extractProblemDetail(
             return { detail: truncate(message), code, isProblemJson };
           }
         }
+      }
+      if (Array.isArray(data.errors)) {
+        const message = extractFirstArrayMessage(data.errors);
+        if (message) return { detail: truncate(message), code, isProblemJson };
       }
       return { code, isProblemJson };
     }
