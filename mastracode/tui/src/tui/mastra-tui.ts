@@ -1655,7 +1655,13 @@ export class MastraTUI {
       });
 
       this.state.activeOnboarding = component;
-      showModalOverlay(this.state.ui, component, { maxHeight: '80%' });
+      // Setup takes over the whole terminal (the component centers itself and fills every row).
+      showModalOverlay(this.state.ui, component, {
+        widthPercent: 1,
+        maxWidth: 10_000,
+        maxHeight: '100%',
+        minHeightPercent: 1,
+      });
       component.focused = true;
     });
   }
