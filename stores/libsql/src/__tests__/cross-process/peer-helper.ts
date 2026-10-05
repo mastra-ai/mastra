@@ -19,8 +19,11 @@
  * - `env.cleanup()`: kills stragglers (resuming paused ones first), closes the
  *   test process's pubsub and removes the temp directory.
  * - Every failure message carries each process's config (role, pid, socket,
- *   db) and the peer's stderr, so a misconfigured peer is distinguishable from
- *   a real cross-process failure.
+ *   db, workers) and the peer's stderr, so a misconfigured peer is
+ *   distinguishable from a real cross-process failure.
+ * - A per-process worker setting (`env.workers`, `peer.workers`): pass it to
+ *   `bootWorkers` (see ./process-workers.ts) and to `Mastra({ workers })` so a
+ *   test can run a producer with workers off next to a separate worker process.
  *
  * Coordination is explicit: IPC signals and gate promises, never sleeps. Every
  * wait takes a bounded `timeoutMs` that only exists as a hang guard and fails
@@ -44,6 +47,8 @@ import { DEFAULT_HANG_GUARD_MS, XPROC_PEER_ENV } from './peer-runtime';
 import type { MainToPeer, PeerEnv, PeerToMain, SerializedError, XprocConfig } from './peer-runtime';
 
 export { DEFAULT_HANG_GUARD_MS };
+export { bootWorkers } from './process-workers';
+export type { WorkerHost } from './process-workers';
 export type { XprocConfig };
 
 export interface PeerExit {
@@ -54,6 +59,8 @@ export interface PeerExit {
 export interface PeerHandle {
   readonly config: XprocConfig;
   readonly pid: number;
+  /** This peer's worker setting. A peer with `workers: false` is a producer. */
+  readonly workers: boolean;
   /** Send a named signal to the peer's `peer.waitFor(name)`. */
   send(name: string, data?: unknown): void;
   /** Wait for a named signal from the peer. Rejects if the peer exits first or the hang guard fires. */
@@ -74,6 +81,13 @@ export interface PeerHandle {
 
 export interface SpawnPeerOptions {
   role?: string;
+  /** Whether the peer boots its event workers. Defaults to the test process's setting. */
+  workers?: boolean;
+}
+
+export interface XprocEnvOptions {
+  /** Whether the test process boots its event workers. Defaults to `true`. */
+  workers?: boolean;
 }
 
 export interface XprocEnv {
@@ -82,6 +96,8 @@ export interface XprocEnv {
   readonly dbPath: string;
   /** `file:` URL for `LibSQLStore` / `LibSQLVector`. */
   readonly dbUrl: string;
+  /** This test process's worker setting. Pass to `bootWorkers` and `Mastra({ workers })`. */
+  readonly workers: boolean;
   /** The test process's config, as recorded in failure messages. */
   readonly config: XprocConfig;
   /** The test process's client of the shared socket. Created on first use, closed by `cleanup()`. */
@@ -126,12 +142,12 @@ async function waitForStopState(pid: number, stopped: boolean, timeoutMs: number
   }
 }
 
-export async function createXprocEnv(): Promise<XprocEnv> {
+export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): Promise<XprocEnv> {
   // Unix socket paths are capped at ~104 bytes on macOS; keep the prefix short.
   const dir = await mkdtemp(path.join(tmpdir(), 'xp-'));
   const socketPath = path.join(dir, 'events.sock');
   const dbPath = path.join(dir, 'shared.db');
-  const config: XprocConfig = { role: 'main', pid: process.pid, dir, socketPath, dbPath };
+  const config: XprocConfig = { role: 'main', pid: process.pid, dir, socketPath, dbPath, workers };
   const peers: Array<{ handle: PeerHandle; child: ChildProcess }> = [];
   let pubsub: UnixSocketPubSub | undefined;
   const tsx = import.meta.resolve('tsx');
@@ -146,10 +162,14 @@ export async function createXprocEnv(): Promise<XprocEnv> {
     return lines.join('\n');
   };
 
-  const spawnPeer = async (fixture: string | URL, args?: unknown, { role }: SpawnPeerOptions = {}) => {
+  const spawnPeer = async (
+    fixture: string | URL,
+    args?: unknown,
+    { role, workers: peerWorkers = workers }: SpawnPeerOptions = {},
+  ) => {
     const fixturePath = fixture instanceof URL || fixture.startsWith('file:') ? fileURLToPath(fixture) : fixture;
     const peerRole = role ?? `peer-${peers.length + 1}`;
-    const peerEnv: PeerEnv = { role: peerRole, dir, socketPath, dbPath, args };
+    const peerEnv: PeerEnv = { role: peerRole, dir, socketPath, dbPath, workers: peerWorkers, args };
     const child = fork(fixturePath, [], {
       execArgv: ['--import', tsx],
       env: { ...process.env, [XPROC_PEER_ENV]: JSON.stringify(peerEnv) },
@@ -170,7 +190,7 @@ export async function createXprocEnv(): Promise<XprocEnv> {
     let exitInfo: PeerExit | undefined;
     void exited.then(info => (exitInfo = info));
 
-    let peerConfig: XprocConfig = { role: peerRole, pid, dir, socketPath, dbPath };
+    let peerConfig: XprocConfig = { role: peerRole, pid, dir, socketPath, dbPath, workers: peerWorkers };
     const inbox = new Map<string, unknown[]>();
     const waiters = new Map<string, Array<(data: unknown) => void>>();
     let resolveConfig!: () => void;
@@ -214,6 +234,9 @@ export async function createXprocEnv(): Promise<XprocEnv> {
         return peerConfig;
       },
       pid,
+      get workers() {
+        return peerConfig.workers;
+      },
       get stdout() {
         return stdout;
       },
@@ -290,6 +313,7 @@ export async function createXprocEnv(): Promise<XprocEnv> {
     dbPath,
     dbUrl: `file:${dbPath}`,
     config,
+    workers,
     pubsub: () => (pubsub ??= new UnixSocketPubSub(socketPath)),
     spawnPeer,
     describe,

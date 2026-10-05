@@ -1,16 +1,35 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { globalRunRegistry } from '@mastra/core/agent/durable';
 import type { Event } from '@mastra/core/events';
+import { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LibSQLStore } from '../../storage';
+import { createMarkerWorkflow } from './fixtures/marker-workflow';
 import type { SelfTestArgs } from './fixtures/self-test-peer';
-import { createXprocEnv } from './peer-helper';
+import { createXprocEnv, DEFAULT_HANG_GUARD_MS } from './peer-helper';
 import type { XprocEnv } from './peer-helper';
+import { bootWorkers } from './process-workers';
 import { gate } from './step-agent';
 
 const FIXTURE = new URL('./fixtures/self-test-peer.ts', import.meta.url);
+
+function hangGuard<T>(promise: Promise<T>, what: string, describeEnv: () => string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${what} within ${DEFAULT_HANG_GUARD_MS}ms (hang guard)\n${describeEnv()}`)),
+        DEFAULT_HANG_GUARD_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 describe('cross-process peer helper', () => {
   let env: XprocEnv;
@@ -102,10 +121,66 @@ describe('cross-process peer helper', () => {
     const parked = await peer.waitFor<{ pid: number; present: boolean }>('parked');
     expect(parked.pid).toBe(peer.pid);
     expect(parked.present, `run missing from the peer's registry\n${env.describe()}`).toBe(true);
-    expect(globalRunRegistry.get(runId), `peer run leaked into main's registry\n${env.describe()}`).toBeUndefined();
+    // `has` rather than `get`: the run must not be visible here at all.
+    expect(globalRunRegistry.has(runId), `peer run leaked into main's registry\n${env.describe()}`).toBe(false);
 
     peer.send('release');
     expect(await peer.result<{ text: string }>()).toEqual({ text: 'finished 1 steps' });
     expect(await peer.exit()).toEqual({ code: 0, signal: null });
   });
+
+  it(
+    'runs a producer peer with workers off: only main executes the workflow event',
+    async () => {
+      const workflowId = `xproc-marker-${randomUUID()}`;
+      const logPath = path.join(env.dir, 'executions.log');
+      const executed = gate<void>();
+      const workflow = createMarkerWorkflow({ id: workflowId, logPath, onExecute: () => executed.resolve() });
+
+      const storage = new LibSQLStore({ id: 'self-test-marker-main', url: env.dbUrl });
+      await storage.init();
+      const mastra = new Mastra({
+        workflows: { [workflowId]: workflow },
+        storage,
+        pubsub: env.pubsub(),
+        logger: false,
+        workers: env.workers ? undefined : false,
+      });
+
+      try {
+        await bootWorkers(mastra, env.workers);
+
+        const peer = await env.spawnPeer(
+          FIXTURE,
+          { mode: 'workflow-producer', workflowId, logPath } satisfies SelfTestArgs,
+          { workers: false },
+        );
+        expect(peer.workers, env.describe()).toBe(false);
+
+        // The producer owns no local run: it only published the start event.
+        const started = await peer.waitFor<{ runId: string; pid: number }>('started');
+        expect(started.pid).toBe(peer.pid);
+
+        // Main's push subscription consumes the event and runs the step.
+        await hangGuard(executed.promise, 'main never executed the workflow event', () => {
+          let log = 'no executions.log yet';
+          try {
+            log = `executions.log: ${readFileSync(logPath, 'utf8').trim() || '(empty)'}`;
+          } catch {}
+          return `${log}\n${env.describe()}`;
+        });
+
+        peer.send('finish');
+        await peer.result();
+        expect(await peer.exit()).toEqual({ code: 0, signal: null });
+
+        const lines = (await readFile(logPath, 'utf8')).trim().split('\n').filter(Boolean);
+        expect(lines, `expected exactly one execution by main\n${env.describe()}`).toEqual([String(process.pid)]);
+      } finally {
+        await mastra.shutdown();
+        await storage.close();
+      }
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
 });

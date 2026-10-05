@@ -18,6 +18,8 @@ export interface XprocConfig {
   dir: string;
   socketPath: string;
   dbPath: string;
+  /** Whether this process boots its event workers (`mastra.startWorkers()`). */
+  workers: boolean;
 }
 
 export interface SerializedError {
@@ -41,6 +43,7 @@ export interface PeerEnv {
   dir: string;
   socketPath: string;
   dbPath: string;
+  workers: boolean;
   args: unknown;
 }
 
@@ -51,6 +54,8 @@ export interface Peer<TArgs = unknown> {
   readonly args: TArgs;
   /** `file:` URL of the LibSQL database shared with the test process. */
   readonly dbUrl: string;
+  /** This process's worker setting. Pass to `bootWorkers` and `Mastra({ workers })`. */
+  readonly workers: boolean;
   /** This process's client of the shared socket. Created on first use. */
   pubsub(): UnixSocketPubSub;
   /** Send a named signal (with optional data) to the test process. */
@@ -89,6 +94,7 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
     dir: env.dir,
     socketPath: env.socketPath,
     dbPath: env.dbPath,
+    workers: env.workers,
   };
 
   const inbox = new Map<string, unknown[]>();
@@ -113,6 +119,7 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
     config,
     args: env.args as TArgs,
     dbUrl: `file:${env.dbPath}`,
+    workers: env.workers,
     pubsub: () => (pubsub ??= new UnixSocketPubSub(env.socketPath)),
     signal: (name, data) => send({ kind: 'signal', name, data }),
     waitFor: <T>(name: string, { timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) =>

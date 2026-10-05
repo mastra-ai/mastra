@@ -5,14 +5,17 @@ import { Mastra } from '@mastra/core/mastra';
 
 import { LibSQLStore } from '../../../storage';
 import { runPeer } from '../peer-runtime';
+import { bootWorkers } from '../process-workers';
 import { createStepAgent, gate } from '../step-agent';
+import { createMarkerWorkflow } from './marker-workflow';
 
 export type SelfTestArgs =
   | { mode: 'publish'; topic: string; payload: string }
   | { mode: 'db-write'; threadId: string }
   | { mode: 'silent' }
   | { mode: 'heard'; topic: string }
-  | { mode: 'registry'; runId: string };
+  | { mode: 'registry'; runId: string }
+  | { mode: 'workflow-producer'; workflowId: string; logPath: string };
 
 runPeer<SelfTestArgs>(async peer => {
   const { args } = peer;
@@ -84,6 +87,28 @@ runPeer<SelfTestArgs>(async peer => {
       const text = await result.output.text;
       await storage.close();
       return { text };
+    }
+
+    case 'workflow-producer': {
+      // Producer side: this process must never boot its workers, so the
+      // workflow event it publishes is only executed by the other process.
+      const storage = new LibSQLStore({ id: 'self-test-producer', url: peer.dbUrl });
+      await storage.init();
+      const workflow = createMarkerWorkflow({ id: args.workflowId, logPath: args.logPath });
+      const mastra = new Mastra({
+        workflows: { [args.workflowId]: workflow },
+        storage,
+        pubsub: peer.pubsub(),
+        logger: false,
+        workers: peer.workers ? undefined : false,
+      });
+      await bootWorkers(mastra, peer.workers);
+      const run = await workflow.createRun();
+      await run.startAsync({ inputData: {} });
+      await peer.signal('started', { runId: run.runId, pid: process.pid });
+      await peer.waitFor('finish');
+      await storage.close();
+      return { runId: run.runId, pid: process.pid };
     }
   }
 });
