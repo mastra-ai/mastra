@@ -346,7 +346,7 @@ describe('AttentionPage', () => {
 
     await screen.findByText('Routine failure 0');
     expect(screen.queryByText('Needle on page two')).not.toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: 'Search attention items' }), 'Needle');
+    await user.type(screen.getByRole('searchbox', { name: 'Search attention items' }), 'Needle');
     expect(await screen.findByText('Needle on page two')).toBeVisible();
   });
 

@@ -143,7 +143,7 @@ function traceQueryFixtureForWriteModel(
   };
 }
 
-async function writeTraceQueryFixture(
+export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
@@ -172,6 +172,7 @@ async function writeTraceQueryFixture(
       organizationId: span.organizationId,
       serviceName: span.serviceName ?? null,
       executionSource: span.executionSource ?? null,
+      runId: span.runId ?? null,
       userId: span.userId ?? null,
       sessionId: span.sessionId ?? null,
       experimentId: span.experimentId ?? null,

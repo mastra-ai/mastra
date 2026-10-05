@@ -667,3 +667,79 @@ describe('pruneAgentLoopSnapshot terminal payload iteration state', () => {
     });
   });
 });
+
+describe('pruneAgentLoopSnapshot agentSpanData instructions strip', () => {
+  const prompt = 'p'.repeat(2000);
+  function agentSpanData() {
+    return {
+      id: 'span-1',
+      traceId: 'trace-1',
+      type: 'agent_run',
+      attributes: { instructions: prompt, availableTools: ['a'] },
+    };
+  }
+  const withoutInstructions = {
+    id: 'span-1',
+    traceId: 'trace-1',
+    type: 'agent_run',
+    attributes: { availableTools: ['a'] },
+  };
+
+  it('strips instructions from step payload, output and prevOutput but keeps span identity', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        step: {
+          status: 'success',
+          payload: { agentSpanData: agentSpanData(), runId: 'r' },
+          output: { agentSpanData: agentSpanData() },
+          prevOutput: { agentSpanData: agentSpanData() },
+        },
+      }),
+    });
+    const step = (pruned.context as Record<string, any>).step;
+    expect(step.payload.agentSpanData).toEqual(withoutInstructions);
+    expect(step.payload.runId).toBe('r');
+    expect(step.output.agentSpanData).toEqual(withoutInstructions);
+    expect(step.prevOutput.agentSpanData).toEqual(withoutInstructions);
+  });
+
+  it('keeps instructions in context.input, which rebuildSpan reads', () => {
+    const snapshot = {
+      context: { input: { agentSpanData: agentSpanData() } },
+    } as unknown as WorkflowRunState;
+    const pruned = pruneAgentLoopSnapshot({ snapshot });
+    expect((pruned.context as Record<string, any>).input.agentSpanData).toEqual(agentSpanData());
+  });
+
+  it('strips instructions from the active step of a running snapshot', () => {
+    const snapshot = {
+      status: 'running',
+      activePaths: [0],
+      activeStepsPath: { current: [0] },
+      context: {
+        input: {},
+        current: { status: 'running', payload: { agentSpanData: agentSpanData(), messageListState: { m: 1 } } },
+      },
+    } as unknown as WorkflowRunState;
+    const current = (pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>).current;
+    expect(current.payload.agentSpanData).toEqual(withoutInstructions);
+    expect(current.payload.messageListState).toEqual({ m: 1 });
+  });
+
+  it('does not mutate the caller snapshot', () => {
+    const original = snapshotWith({
+      step: { status: 'success', payload: { agentSpanData: agentSpanData() } },
+    });
+    const before = structuredClone(original);
+    pruneAgentLoopSnapshot({ snapshot: original });
+    expect(original).toEqual(before);
+  });
+
+  it('leaves payloads without agentSpanData instructions unchanged', () => {
+    const payload = { agentSpanData: withoutInstructions };
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({ step: { status: 'suspended', payload } }),
+    });
+    expect((pruned.context as Record<string, any>).step.payload.agentSpanData).toBe(withoutInstructions);
+  });
+});

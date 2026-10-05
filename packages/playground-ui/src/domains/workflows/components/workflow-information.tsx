@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { useWorkflow } from '@mastra/react/hooks';
 import { ChevronRight, Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
@@ -12,10 +13,9 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import type { WorkflowRunActionsContext } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -122,11 +122,10 @@ function WorkflowInformationTopSection({
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
-            className="min-h-0 flex-1 border-t border-border/50"
-            viewPortClassName="h-full"
+            className="min-h-0 flex-1 border-t border-border"
             mask={{ top: false, bottom: false }}
           >
-            {children}
+            <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
@@ -168,7 +167,15 @@ export function WorkflowInformation({
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   const {
     createWorkflowRun,

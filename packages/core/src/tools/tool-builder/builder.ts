@@ -47,6 +47,7 @@ import type {
   VercelToolV5,
 } from '../types';
 import {
+  createStandardSchemaIssuesError,
   registerToolOutputValidationSchema,
   validateToolInput,
   validateToolOutput,
@@ -755,6 +756,7 @@ export class CoreToolBuilder extends MastraBase {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
+                getMessages: execOptions.getMessages,
                 suspend,
                 resumeData,
                 suspendedToolRunId: execOptions.suspendedToolRunId,
@@ -1097,7 +1099,7 @@ export class CoreToolBuilder extends MastraBase {
                   if ('issues' in r && r.issues) {
                     return {
                       success: false as const,
-                      error: new Error(r.issues.map((i: any) => i.message).join(', ')),
+                      error: createStandardSchemaIssuesError(r.issues),
                     };
                   }
                   return { success: true as const, value: (r as { value: unknown }).value };
@@ -1108,7 +1110,7 @@ export class CoreToolBuilder extends MastraBase {
               if ('issues' in result && result.issues) {
                 return {
                   success: false as const,
-                  error: new Error(result.issues.map((i: any) => i.message).join(', ')),
+                  error: createStandardSchemaIssuesError(result.issues),
                 };
               }
               return { success: true as const, value: (result as { value: unknown }).value };

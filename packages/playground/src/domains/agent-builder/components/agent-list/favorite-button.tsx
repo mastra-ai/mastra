@@ -1,11 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
 import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { useToggleStoredAgentFavorite } from '@/domains/agent-builder/hooks/use-stored-agent-favorite';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
 
 export interface FavoriteButtonProps {
   agentId: string;
@@ -63,13 +62,14 @@ export const FavoriteButton = ({
         if (!signedIn) return;
         toggle.mutate({ favorited: !isFavorited });
       }}
-      className={cn('shrink-0', signedIn ? 'cursor-pointer' : 'cursor-not-allowed', className)}
+      className={cn(
+        'shrink-0',
+        signedIn ? 'cursor-pointer' : 'cursor-not-allowed',
+        isFavorited && '[&_svg]:text-badge-amber-indicator',
+        className,
+      )}
     >
-      <Star
-        size={iconSizes[size]}
-        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-300')}
-        aria-hidden
-      />
+      <Star size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
         <span className="leading-none whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}

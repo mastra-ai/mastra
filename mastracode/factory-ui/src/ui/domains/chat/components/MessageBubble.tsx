@@ -5,6 +5,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
+import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
+import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -13,7 +17,6 @@ import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
-import { parseSkillActivation, SkillMessage } from './SkillMessage';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
@@ -32,6 +35,7 @@ import {
   TimeGap,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -63,14 +67,16 @@ export function MessageBubble({
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
-  const message = { ...entry.message, content: { ...entry.message.content, parts } };
+  const { attachments, content } =
+    entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
+  const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
-  const prose = messageText(written);
+  const prose = messageText(entry.message.role === 'user' ? content : written);
   const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
@@ -86,23 +92,27 @@ export function MessageBubble({
       <Message
         from="user"
         pending={steeringPending}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
         avatar={sender && <SenderAvatar author={sender} />}
         footer={
           <>
             {steeringStatus && (
-              <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                className={cn(steeringFailed && 'text-destructive-foreground')}
                 aria-live="polite"
               >
                 {steeringStatus}
-              </span>
+              </Txt>
             )}
             {origin && <ChannelOriginBadge origin={origin} />}
             {messageActions}
           </>
         }
       >
-        {children}
+        {(attachments.length === 0 || content.length > 0) && children}
       </Message>
     ),
     Assistant: ({ children }) => (
@@ -183,16 +193,7 @@ export function MessageBubble({
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
       : undefined;
-  if (skillActivation) {
-    return skillActivation.feed === undefined ? (
-      <SkillMessage activation={skillActivation} />
-    ) : (
-      <div className="flex flex-col">
-        <SkillMessage activation={skillActivation} />
-        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
-      </div>
-    );
-  }
+  if (skillActivation) return <SkillMessage activation={skillActivation} />;
   if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);
@@ -217,9 +218,7 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return (
-        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
-      );
+      return <SignalRow kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
     if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {

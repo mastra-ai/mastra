@@ -842,6 +842,35 @@ describe('CustomEditor voice push-to-talk', () => {
     expect(editor.render(40).join('\n')).not.toContain(greySeq);
   });
 
+  it('does not grey typed text on earlier lines when dictation contains an emoji', async () => {
+    const { theme } = await import('../../theme.js');
+    const [r, g, b] = theme
+      .getTheme()
+      .muted.match(/\w\w/g)!
+      .map(h => parseInt(h, 16));
+    const greySeq = `\x1b[38;2;${r};${g};${b}m`;
+
+    const editor = new CustomEditor({ requestRender: vi.fn() } as any, {} as any);
+    let text = 'hello world!';
+    editor.getText = vi.fn(() => text);
+    editor.setText = vi.fn((t: string) => {
+      text = t;
+    });
+    (editor as any).insertTextAtCursor = undefined;
+
+    mocks.superRender.mockImplementation(() => ['────', 'hello world!', ' 😀hi', '────']);
+
+    editor.setVoiceListening(true);
+    editor.replaceVoiceTranscript('😀hi');
+    expect(text).toBe('hello world! 😀hi');
+    const lines = editor.render(14);
+    editor.setVoiceListening(false);
+    const typedLine = lines.find(l => stripAnsi(l).includes('hello world!'))!;
+    expect(typedLine).not.toContain(greySeq);
+    const dictatedLine = lines.find(l => stripAnsi(l).includes('😀hi'))!;
+    expect(dictatedLine).toContain(`${greySeq} 😀hi`);
+  });
+
   it('renders an animated soundwave bar while listening', () => {
     const editor = new CustomEditor({ requestRender: vi.fn() } as any, {} as any);
     editor.getText = vi.fn(() => 'hello');

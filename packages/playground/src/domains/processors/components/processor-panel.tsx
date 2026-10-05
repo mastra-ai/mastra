@@ -3,21 +3,17 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { FieldBlock, TextareaFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import type { ProcessorDetail, ProcessorPhase, MastraDBMessage, ExecuteProcessorResponse } from '@mastra/react/hooks';
+import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks';
 import CodeMirror from '@uiw/react-codemirror';
 import { Play } from 'lucide-react';
-import { useState, useId, useEffect } from 'react';
-import type {
-  ProcessorDetail,
-  ProcessorPhase,
-  MastraDBMessage,
-  ExecuteProcessorResponse,
-} from '../hooks/use-processors';
-import { useProcessor, useExecuteProcessor } from '../hooks/use-processors';
+import { useState, useEffect } from 'react';
 
 export interface ProcessorPanelProps {
   processorId: string;
@@ -34,10 +30,15 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputResult: 'Output Result - Process complete output after streaming',
   outputStep: 'Output Step - Process after each LLM response (before tools)',
   toolResult: 'Tool Result - Process tool output before it is added to the message list',
+  llmRequest: 'LLM Request - Transform the provider prompt before each LLM call',
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
-  const { data: processor, isLoading, error } = useProcessor(processorId);
+  const {
+    data: processor,
+    isLoading,
+    error,
+  } = useProcessor({ processorId: processorId, queryOptions: { enabled: !!processorId } });
 
   useEffect(() => {
     if (error) {
@@ -71,9 +72,6 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
 function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
   const theme = useCodemirrorTheme();
-  const formId = useId();
-  const phaseId = useId();
-  const agentConfigurationId = useId();
 
   const [selectedPhase, setSelectedPhase] = useState<ProcessorPhase>(processor.phases[0] || 'input');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(processor.configurations[0]?.agentId || '');
@@ -130,33 +128,37 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
-              Phase
-            </FieldBlock.Label>
-            <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
-              <SelectTrigger id={phaseId} className="w-full">
-                <SelectValue placeholder="Select phase" />
-              </SelectTrigger>
-              <SelectContent>
-                {processor.phases.map(phase => (
-                  <SelectItem key={phase} value={phase}>
-                    {phase}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Field>
+              <FieldLabel>Phase</FieldLabel>
+              <Select
+                value={selectedPhase}
+                onValueChange={value => {
+                  const phase = processor.phases.find(phase => phase === value);
+                  if (phase) setSelectedPhase(phase);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select phase" />
+                </SelectTrigger>
+                <SelectContent>
+                  {processor.phases.map(phase => (
+                    <SelectItem key={phase} value={phase}>
+                      {phase}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
             <Txt variant="meta" tone="muted">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
 
           {processor.configurations.length > 1 && (
-            <div className="space-y-2">
-              <FieldBlock.Label name={agentConfigurationId} htmlFor={agentConfigurationId}>
-                Agent Configuration
-              </FieldBlock.Label>
+            <Field>
+              <FieldLabel>Agent Configuration</FieldLabel>
               <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-                <SelectTrigger id={agentConfigurationId} className="w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select agent" />
                 </SelectTrigger>
                 <SelectContent>
@@ -167,30 +169,37 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
           )}
 
-          <TextareaFieldBlock
-            name={formId}
-            label="Test Message"
-            value={testMessage}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-            placeholder="Enter a test message..."
-            rows={4}
-          />
+          <Field>
+            <FieldLabel>Test Message</FieldLabel>
+            <Textarea
+              value={testMessage}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
+              placeholder="Enter a test message..."
+              rows={4}
+            />
+          </Field>
 
           <Button
             icon={<Play />}
             onClick={handleExecute}
-            disabled={executeProcessor.isPending || selectedPhase === 'outputStream'}
+            disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
           >
             {executeProcessor.isPending ? 'Running...' : 'Run Processor'}
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-accent6">
+            <Txt variant="meta" className="text-warning-foreground">
               Output Stream phase cannot be executed directly. Use streaming instead.
+            </Txt>
+          )}
+
+          {selectedPhase === 'llmRequest' && (
+            <Txt variant="meta" className="text-warning-foreground">
+              LLM Request phase cannot be executed directly. It runs on the provider prompt during an agent call.
             </Txt>
           )}
 
@@ -200,12 +209,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'success' : 'destructive'}>
+                  {result.success ? 'Success' : 'Failed'}
+                </Badge>
+                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="mt-2 rounded-md border border-accent6/20 bg-accent6Dark p-3">
-                  <Txt variant="column" className="text-accent6">
+                <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">
+                  <Txt variant="column" className="text-warning-subtle-foreground">
                     Tripwire Reason
                   </Txt>
                   <Txt variant="caption" tone="muted" className="mt-1">

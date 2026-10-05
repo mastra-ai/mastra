@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldContent, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
@@ -41,27 +44,37 @@ export function TemplateForm({
   return (
     <Container>
       <div className="mx-auto my-4 grid max-w-[40rem] gap-5 p-4 lg:p-5">
-        <h2
-          className={cn(
-            'flex items-center gap-2 text-heading text-muted-foreground',
-            '[&_svg]:h-[1.2em] [&_svg]:opacity-70 [&>svg]:w-[1.2em]',
-          )}
+        <Txt
+          as="h2"
+          variant="heading"
+          tone="muted"
+          className={cn('flex items-center gap-2', '[&_svg]:h-[1.2em] [&_svg]:opacity-70 [&>svg]:w-[1.2em]')}
         >
           Install Template <PackageOpenIcon />
-        </h2>
-        <SelectFieldBlock
-          name="template-provider"
-          options={providerOptions}
-          label="Template AI Model Provider"
-          onValueChange={onProviderChange}
-          value={selectedProvider}
-          placeholder="Select"
-          layout="horizontal"
-        />
+        </Txt>
+        <Field orientation="horizontal">
+          <FieldLabel>Template AI Model Provider</FieldLabel>
+          <FieldContent className="flex-1">
+            <Select name="template-provider" value={selectedProvider} onValueChange={onProviderChange}>
+              <SelectTrigger size="md">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                {providerOptions.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldContent>
+        </Field>
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
-            <h3 className="text-body text-muted-foreground">Set required Environmental Variables</h3>
+            <Txt as="h3" tone="muted">
+              Set required Environmental Variables
+            </Txt>
             <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
               {isLoadingEnvVars ? (
                 <div
@@ -76,24 +89,21 @@ export function TemplateForm({
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
-                    <TextFieldBlock
-                      name={`env-${key}`}
-                      labelIsHidden={true}
-                      label="Key"
-                      value={key}
-                      disabled
-                      className="w-full"
-                    />
-                    <TextFieldBlock
-                      name={key}
-                      labelIsHidden={true}
-                      label="Value"
-                      value={value}
-                      onChange={handleVariableChange}
-                      errorMsg={errors.includes(key) ? `Value is required.` : ''}
-                      autoComplete="off"
-                      className="w-full"
-                    />
+                    <Field className="w-full">
+                      <FieldLabel className="sr-only">Key</FieldLabel>
+                      <Input name={`env-${key}`} value={key} disabled className="w-full" />
+                    </Field>
+                    <Field invalid={errors.includes(key)} className="w-full">
+                      <FieldLabel className="sr-only">Value</FieldLabel>
+                      <Input
+                        name={key}
+                        value={value}
+                        onChange={handleVariableChange}
+                        autoComplete="off"
+                        className="w-full"
+                      />
+                      <FieldError>{errors.includes(key) ? 'Value is required.' : undefined}</FieldError>
+                    </Field>
                   </Fragment>
                 ))
               )}
@@ -103,10 +113,12 @@ export function TemplateForm({
                 And
               </div>
 
-              <h3 className="text-body text-muted-foreground">Set AI Model for Template Installation</h3>
-              <p className="mt-2 mb-5 text-body text-muted-foreground">
+              <Txt as="h3" tone="muted">
+                Set AI Model for Template Installation
+              </Txt>
+              <Txt tone="muted" className="mt-2 mb-5">
                 This model will be used by the workflow to process and install the template
-              </p>
+              </Txt>
 
               <AgentMetadataModelSwitcher
                 defaultProvider={defaultModelProvider || ''}

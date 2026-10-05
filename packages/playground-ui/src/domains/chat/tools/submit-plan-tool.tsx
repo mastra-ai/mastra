@@ -1,13 +1,12 @@
-import { X, Check } from 'lucide-react';
-import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
+import { useAgentPlan } from '@mastra/react/hooks';
+import { Check, MessageSquareText, X } from 'lucide-react';
+import { useState } from 'react';
 import type { MessageMetadata } from '@/domains/chat';
 import { useToolCall } from '@/domains/chat/context/tool-call-context';
 import {
   Plan,
-  PlanActionGroup,
   PlanBody,
   PlanContent,
-  PlanControls,
   PlanCopyButton,
   PlanExpandButton,
   PlanHeader,
@@ -16,14 +15,17 @@ import {
   PlanLabel,
   PlanMain,
   PlanPath,
+  PlanStatus,
   PlanTitle,
 } from '@/ds/components/ai/plan';
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 
 export interface SubmitPlanToolProps {
-  agentId: string;
+  /** Omitted for read-only history (e.g. traces): submitted plans still render, pending ones can't be answered. */
+  agentId?: string;
   agentVersionId?: string;
   requestContext?: Record<string, any>;
   toolName: string;
@@ -36,6 +38,8 @@ interface SubmittedPlan {
   title: string;
   path?: string;
   content: string;
+  action?: 'approved' | 'rejected';
+  feedback?: string;
 }
 
 interface PlanDocument {
@@ -72,12 +76,22 @@ function getSubmittedPlan(output: unknown): SubmittedPlan | undefined {
   if (!content) return undefined;
 
   const document = getPlanDocument(content);
+  const action = output.submittedPlan.action;
 
   return {
     title: getString(output.submittedPlan.title) ?? document.title,
     path: getString(output.submittedPlan.path),
     content,
+    action: action === 'approved' || action === 'rejected' ? action : undefined,
+    feedback: getString(output.submittedPlan.feedback),
   };
+}
+
+function PlanDecision({ action, feedback }: Pick<SubmittedPlan, 'action' | 'feedback'>) {
+  if (action === 'approved') return <PlanStatus variant="green">Approved</PlanStatus>;
+  if (action !== 'rejected') return null;
+  if (feedback) return <PlanStatus variant="orange">Changes requested</PlanStatus>;
+  return <PlanStatus variant="red">Rejected</PlanStatus>;
 }
 
 function getSuspendedPlanPath(
@@ -99,6 +113,7 @@ function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
       <PlanHeader>
         <PlanLabel />
         <PlanHeaderActions>
+          <PlanDecision action={plan.action} feedback={plan.feedback} />
           <PlanCopyButton content={plan.content} />
         </PlanHeaderActions>
       </PlanHeader>
@@ -109,7 +124,20 @@ function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
         </PlanIntro>
         <PlanMain>
           <PlanContent>{document.body}</PlanContent>
-          <PlanControls />
+          <div data-slot="plan-controls" className="relative z-10 mt-4 flex items-center gap-2 empty:hidden">
+            <PlanExpandButton variant="ghost" />
+          </div>
+          {plan.feedback ? (
+            <div className="mt-5 space-y-3">
+              <div role="separator" aria-orientation="horizontal" className="-mx-5 h-px bg-border/40" />
+              <Txt as="p" variant="label" tone="muted" className="pt-1">
+                Requested changes
+              </Txt>
+              <Txt as="p" variant="body-sm" tone="ink" className="whitespace-pre-wrap">
+                {plan.feedback}
+              </Txt>
+            </div>
+          ) : null}
         </PlanMain>
       </PlanBody>
     </Plan>
@@ -132,9 +160,14 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
   const isAnswered = toolCallApprovals[toolCallId] !== undefined;
   const controlsDisabled = isLoading || isRunning || isAnswered;
 
-  const resume = (action: 'approved' | 'rejected') => {
+  const [isRequestingChanges, setIsRequestingChanges] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const trimmedFeedback = feedback.trim();
+
+  const resume = (action: 'approved' | 'rejected', feedback?: string) => {
     approveToolcall(toolCallId, {
       action,
+      ...(feedback ? { feedback } : {}),
       path,
       ...(document ? { title: document.title, plan: content } : {}),
     });
@@ -165,37 +198,86 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
             </Txt>
           ) : null}
           {document ? <PlanContent>{document.body}</PlanContent> : null}
-          <PlanControls>
-            <PlanActionGroup>
-              <Button
-                icon={<Check />}
-                type="button"
-                size="sm"
-                variant="primary"
-                aria-label="Approve the plan and switch to build"
-                className="shrink-0 whitespace-nowrap"
+          <div
+            data-slot="plan-controls"
+            className="relative z-10 mt-4 flex flex-wrap items-center justify-between gap-2"
+          >
+            <PlanExpandButton variant="ghost" />
+            {isRequestingChanges ? null : (
+              <div data-slot="plan-decisions" className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  icon={<X />}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 whitespace-nowrap"
+                  aria-label="Reject the plan"
+                  disabled={controlsDisabled}
+                  onClick={() => resume('rejected')}
+                >
+                  Reject
+                </Button>
+                <Button
+                  icon={<MessageSquareText />}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 whitespace-nowrap"
+                  aria-expanded={isRequestingChanges}
+                  disabled={controlsDisabled}
+                  onClick={() => setIsRequestingChanges(true)}
+                >
+                  Request changes
+                </Button>
+                <Button
+                  icon={<Check />}
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  aria-label="Approve the plan"
+                  className="shrink-0 whitespace-nowrap"
+                  disabled={controlsDisabled}
+                  onClick={() => resume('approved')}
+                >
+                  Approve
+                </Button>
+              </div>
+            )}
+          </div>
+          {isRequestingChanges ? (
+            <form
+              className="mt-5 space-y-3"
+              onSubmit={event => {
+                event.preventDefault();
+                if (trimmedFeedback) resume('rejected', trimmedFeedback);
+              }}
+            >
+              <div role="separator" aria-orientation="horizontal" className="-mx-5 h-px bg-border/40" />
+              <Textarea
+                aria-label="Requested changes"
+                placeholder="Describe what should change in the plan"
+                value={feedback}
                 disabled={controlsDisabled}
-                onClick={() => resume('approved')}
-              >
-                Approve &amp; build
-              </Button>
-            </PlanActionGroup>
-            <span className="flex justify-center">
-              <PlanExpandButton />
-            </span>
-            <PlanActionGroup>
-              <Button
-                icon={<X />}
-                type="button"
-                size="sm"
-                aria-label="Reject the plan"
-                disabled={controlsDisabled}
-                onClick={() => resume('rejected')}
-              >
-                Reject
-              </Button>
-            </PlanActionGroup>
-          </PlanControls>
+                onChange={event => setFeedback(event.target.value)}
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setIsRequestingChanges(false);
+                    setFeedback('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" variant="primary" disabled={controlsDisabled || !trimmedFeedback}>
+                  Send feedback
+                </Button>
+              </div>
+            </form>
+          ) : null}
         </PlanMain>
       </PlanBody>
     </Plan>
@@ -214,6 +296,7 @@ export function SubmitPlanTool({
   const submittedPlan = getSubmittedPlan(output);
   if (submittedPlan) return <SubmittedPlanCard plan={submittedPlan} />;
 
+  if (!agentId) return null;
   const path = getSuspendedPlanPath(metadata, toolName, toolCallId);
   if (!path) return null;
 

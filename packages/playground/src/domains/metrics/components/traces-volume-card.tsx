@@ -6,8 +6,9 @@ import {
 import { TracesVolumeCardView } from '@mastra/playground-ui/domains/metrics/components/traces-volume-card-view';
 import type { VolumeTab } from '@mastra/playground-ui/domains/metrics/components/traces-volume-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
-import { useTraceVolumeMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-trace-volume-metrics';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useTraceVolumeMetrics } from '@mastra/react/hooks';
 
 const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {
   agents: EntityType.AGENT,
@@ -16,7 +17,7 @@ const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {
 };
 
 export function TracesVolumeCard() {
-  const { data, isLoading, isError } = useTraceVolumeMetrics();
+  const { data, isLoading, isError } = useTraceVolumeMetrics(useMetricsFilters());
   const { getTracesHref, getLogsHref } = useDrilldown();
   const { Link } = useLinkComponent();
 

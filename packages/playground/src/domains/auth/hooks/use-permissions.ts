@@ -22,8 +22,7 @@
  * ```
  */
 
-import { isAuthenticated } from '../types';
-import { useAuthCapabilities } from './use-auth-capabilities';
+import { isAuthenticated, useAuthCapabilities } from '@mastra/react/hooks';
 import { useRoleImpersonation } from './use-role-impersonation';
 
 /**

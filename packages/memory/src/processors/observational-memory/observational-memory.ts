@@ -15,7 +15,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
-import { resolveActivationTTL } from './activation-ttl';
+import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -217,6 +217,71 @@ function parseActivationTTL(
   return amount * multiplier;
 }
 
+/**
+ * Parse an `activateAfterIdle` config value: a scalar TTL, or a per-provider map
+ * like `{ default: 'auto', anthropic: '1h' }`.
+ */
+function parseActivationTTLConfig(
+  value: ActivationTTL | undefined,
+  fieldPath: string,
+): ResolvedActivationTTL | ParsedActivationTTLMap | undefined {
+  if (typeof value !== 'object') {
+    return parseActivationTTL(value, fieldPath);
+  }
+
+  if (value === null || Array.isArray(value)) {
+    throw new Error(
+      `${fieldPath} must be a TTL value or an object of per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  if (entries.length === 0) {
+    throw new Error(
+      `${fieldPath} must set at least one provider or "default" when using per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  // Null prototype so a JSON-sourced "__proto__" key is stored as a provider, not swallowed by the prototype setter.
+  const parsed: ParsedActivationTTLMap = { providers: Object.create(null) };
+  const seenKeys = new Set<string>();
+
+  for (const [rawKey, entryValue] of entries) {
+    const key = rawKey.trim().toLowerCase();
+    const entryPath = `${fieldPath}.${rawKey}`;
+
+    if (!key) {
+      throw new Error(`${fieldPath} contains an empty provider key.`);
+    }
+    if (key.includes('.') || key.includes('/')) {
+      throw new Error(
+        `${entryPath} is not a valid provider key. Use the provider name before the first ".", e.g. "anthropic" instead of "anthropic.messages".`,
+      );
+    }
+    if (seenKeys.has(key)) {
+      throw new Error(`${entryPath} duplicates another key in ${fieldPath}. Provider keys are case-insensitive.`);
+    }
+    seenKeys.add(key);
+
+    if (entryValue !== false && typeof entryValue !== 'number' && typeof entryValue !== 'string') {
+      throw new Error(
+        `${entryPath} must be a non-negative number of milliseconds, a duration string like "5m" or "1hr", "auto", or false.`,
+      );
+    }
+
+    const ttl = entryValue === false ? false : parseActivationTTL(entryValue, entryPath)!;
+    if (key === 'default') {
+      if (ttl !== false) {
+        parsed.default = ttl;
+      }
+    } else {
+      parsed.providers[key] = ttl;
+    }
+  }
+
+  return parsed;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import {
@@ -274,6 +339,9 @@ import type {
   ThresholdRange,
   ObservationMarkerConfig,
   ObservationModelContext,
+  ActivationTTL,
+  ParsedActivationTTLMap,
+  ResolvedActivationTTL,
 } from './types';
 
 let hasWarnedResourceScopeDeprecation = false;
@@ -338,6 +406,7 @@ export class ObservationalMemory {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
   /** Config-level lifecycle hooks fired for every observation/reflection cycle. */
   readonly hooks?: ObserveHooks;
@@ -640,7 +709,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateAfterIdle: parseActivationTTLConfig(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
@@ -682,7 +751,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateAfterIdle: parseActivationTTLConfig(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
       activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
@@ -1305,7 +1374,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
-      activateAfterIdle: this.observationConfig.activateAfterIdle,
+      activateAfterIdle: getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
     };
   }
 
@@ -1803,7 +1872,8 @@ export class ObservationalMemory {
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
-      ? (renderObservationGroupsForReflection(observations) ?? optimizeObservationsForContext(observations))
+      ? (renderObservationGroupsForReflection(observations, { includeReflectionKind: true }) ??
+        optimizeObservationsForContext(observations))
       : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
@@ -1812,7 +1882,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
+      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch, this.storage.supportsObservationalMemoryHistorySearch === true)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -2715,7 +2785,8 @@ ${formattedMessages}
    *
    * Loads thread metadata (currentTask, suggestedResponse), formats observations
    * with context prompts and instructions, and returns the fully-formed string.
-   * Returns undefined if no observations exist.
+   * Returns recall guidance even without observations when retrieval is enabled;
+   * otherwise returns undefined when no observations exist.
    *
    * This is the public entry point for context formatting — used by both
    * Memory.getContext() (standalone) and the processor (via injectObservationsIntoMessages).
@@ -2731,7 +2802,7 @@ ${formattedMessages}
   async buildContextSystemMessage(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string | undefined> {
@@ -2748,18 +2819,25 @@ ${formattedMessages}
   async buildContextSystemMessages(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
-    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    // null means the read-only caller already checked storage; do not create a record.
+    const record = opts.record === undefined ? await this.getOrCreateRecord(threadId, resourceId) : opts.record;
 
-    if (!record.activeObservations) {
-      // Resource-scoped recall can browse and search other threads even before any
-      // observation group exists, so the actor still needs to know how to use it.
-      if (this.retrieval && this.retrievalScope === 'resource') {
-        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+    if (!record?.activeObservations) {
+      // Recall can browse raw history even before the first observation exists.
+      if (this.retrieval) {
+        return [
+          getRetrievalInstructions(
+            this.retrievalScope,
+            this.retrievalInstructions,
+            this.retrievalSearch,
+            this.storage.supportsObservationalMemoryHistorySearch === true,
+          ),
+        ];
       }
       return undefined;
     }
@@ -3459,6 +3537,12 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /**
+     * Live pending message token count (e.g. from `getStatus()`), used to size the
+     * activation. Falls back to the persisted pending count, which can lag behind
+     * messages added since it was last written.
+     */
+    pendingTokens?: number;
     /** Pre-loaded record to skip the initial storage read. */
     record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
@@ -3508,6 +3592,7 @@ ${formattedMessages}
     let activateAfterIdleExpiredMs: number | undefined;
     let previousModel: string | undefined;
     let currentModel: string | undefined;
+    let livePendingTokens = opts.pendingTokens;
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
@@ -3544,6 +3629,7 @@ ${formattedMessages}
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }
+        livePendingTokens ??= status.pendingTokens;
       }
     }
 
@@ -3582,13 +3668,21 @@ ${formattedMessages}
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-    // Estimate current pending tokens from chunks
+    // Prefer the live pending count; the persisted one is written at the end of the
+    // previous step and misses anything added since (e.g. a large tool-result batch).
     const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentPendingTokens = freshRecord.pendingMessageTokens || totalChunkMessageTokens;
+    const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
 
     const forceMaxActivation = !!(
       this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
     );
+
+    // Storage adapters decrement the persisted pending count during the swap. Keep
+    // that base aligned with the live count used to select chunks so the returned
+    // record reflects the unactivated tail rather than the previous step's count.
+    if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
+      await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
+    }
 
     // Perform the swap
     const activationResult = await this.storage.swapBufferedToActive({
@@ -3630,7 +3724,8 @@ ${formattedMessages}
           currentModel,
           config: {
             ...this.getObservationMarkerConfig(),
-            activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,
+            activateAfterIdle:
+              activationActivateAfterIdle ?? getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
           },
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.

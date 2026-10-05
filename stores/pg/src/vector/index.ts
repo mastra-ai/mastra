@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -504,7 +503,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const state = await this.getNamespaceSchemaState(tableName, client);
     if (!state.composite_index) {
-      const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
       );
@@ -525,12 +524,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private getNamespaceIndexName(parsedIndexName: string): string {
+  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
     const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
     if (fullName.length <= 63) {
       return fullName;
     }
-    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const hash = Buffer.from(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(parsedIndexName)),
+    )
+      .toString('hex')
+      .slice(0, 32);
     const suffix = `_ns_${hash}_idx`;
     return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
@@ -734,6 +737,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let client;
       try {
         await this.ensureNamespaceReady(indexName);
+        // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+        const indexInfo = includeVector ? await this.getIndexMetadata({ indexName }) : undefined;
+        const ops = indexInfo && this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
         client = await this.pool.connect();
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -757,7 +763,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           id,
           score: 0,
           metadata,
-          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+          ...(ops && embedding && { vector: ops.parseEmbedding(embedding) }),
         }));
       } catch (error) {
         if (error instanceof MastraError) {

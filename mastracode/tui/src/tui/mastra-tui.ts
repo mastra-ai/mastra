@@ -4,7 +4,6 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
@@ -45,8 +44,8 @@ import {
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
-import { startGoalWithDefaults } from './commands/goal.js';
-
+import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
+import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { BackgroundActivitySelectorComponent } from './components/background-activity-selector.js';
@@ -87,13 +86,13 @@ import {
   refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToAgentController,
-  promptForThreadSelection,
   renderExistingTasks,
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 
 // =============================================================================
@@ -324,6 +323,7 @@ export class MastraTUI {
           }
         : {}),
     });
+    this.installUserInputHandler();
   }
 
   private getCurrentThreadBackgroundActivities(): BackgroundActivity[] {
@@ -651,6 +651,11 @@ export class MastraTUI {
     flushRender(this.state);
   }
 
+  /** The thread to suggest resuming on exit, or null while waiting for a new thread. */
+  getResumeThreadId(): string | null {
+    return this.state.pendingNewThread ? null : this.state.session.thread.getId();
+  }
+
   /**
    * Stop the TUI and clean up.
    */
@@ -765,8 +770,9 @@ export class MastraTUI {
     // Start the UI before thread selection so resource-drift prompts can render.
     this.state.ui.start();
 
-    // Check for existing threads and prompt for resume
-    await promptForThreadSelection(this.state);
+    // Resume the latest unlocked thread for this directory.
+    const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    await this.syncThreadActivePackMetadata();
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
@@ -787,7 +793,7 @@ export class MastraTUI {
     await this.state.controller.loadOMProgress(this.state.session);
 
     // Sync current thread metadata — the thread_changed event from
-    // promptForThreadSelection fired before we subscribed above.
+    // Initial thread setup ran before we subscribed above.
     await syncInitialThreadState(this.state);
 
     this.state.isInitialized = true;
@@ -823,6 +829,20 @@ export class MastraTUI {
     }
 
     await this.showQuietModePreferencePromptIfNeeded();
+
+    if (startupResumeIssue?.kind === 'missing') {
+      showError(
+        this.state,
+        `Thread not found: ${startupResumeIssue.threadId}. Started a new thread; use /threads to pick an existing one.`,
+      );
+    } else if (startupResumeIssue?.kind === 'locked') {
+      showThreadLockPrompt(
+        this.buildCommandContext(),
+        startupResumeIssue.title,
+        startupResumeIssue.ownerPid,
+        startupResumeIssue.threadId,
+      );
+    }
 
     // Check for updates after first render so network latency never blocks startup.
     void this.checkForUpdate().catch(() => {});
@@ -1172,7 +1192,7 @@ export class MastraTUI {
     // PermissionRequest hook fired before the queued agent_start carries the
     // same id as subsequent hooks in this run.
     if (!hookMgr.getRunId()) {
-      hookMgr.setRunId(randomUUID());
+      hookMgr.setRunId(globalThis.crypto.randomUUID());
     }
     hookMgr.runAgentStart().catch(() => {});
   }
@@ -1275,6 +1295,63 @@ export class MastraTUI {
   // User Input
   // ===========================================================================
 
+  private installUserInputHandler(): void {
+    this.state.editor.onSubmit = (text: string) => {
+      if (isGoalJudgeInputLocked(this.state)) {
+        this.state.editor.setText(text);
+        showGoalJudgeInputLockInfo(this.state);
+        flushRender(this.state);
+        return;
+      }
+
+      // Add to history for arrow up/down navigation (skip empty)
+      if (text.trim()) {
+        this.state.editor.addToHistory(text);
+      }
+      this.state.editor.setText('');
+
+      if (this.state.session.run.isRunning()) {
+        if (text.startsWith('/')) {
+          // Run slash commands immediately — they are either settings
+          // commands (no agent interaction) or agent-facing commands the
+          // user explicitly chose to run mid-stream.  Use Ctrl+F to
+          // queue instead.
+          this.handleSlashCommand(text).catch(error => {
+            showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
+          });
+          return;
+        }
+
+        if (text.startsWith('!')) {
+          // Shell passthrough runs locally and never touches the agent, so
+          // run it immediately instead of steering the active run with it.
+          void handleShellPassthrough(this.state, text.slice(1).trim());
+          return;
+        }
+
+        const { content, images } = consumePendingImages(text, this.state.pendingImages);
+        this.state.pendingImages = [];
+        if (images?.length) {
+          this.state.pendingImages = images;
+          this.queueFollowUpMessage(text);
+          return;
+        }
+
+        this.signalMessage(content);
+        return;
+      }
+
+      const pending = this.pendingUserInputResolve;
+      if (!pending) {
+        // The loop is busy elsewhere; hand the text over on its next turn.
+        this.queuedUserInput.push(text);
+        return;
+      }
+      this.pendingUserInputResolve = undefined;
+      pending(text);
+    };
+  }
+
   private getUserInput(): Promise<string> {
     const queued = this.queuedUserInput.shift();
     if (queued !== undefined) {
@@ -1282,60 +1359,7 @@ export class MastraTUI {
     }
     return new Promise(resolve => {
       this.pendingUserInputResolve = resolve;
-      this.state.editor.onSubmit = (text: string) => {
-        if (isGoalJudgeInputLocked(this.state)) {
-          this.state.editor.setText(text);
-          showGoalJudgeInputLockInfo(this.state);
-          flushRender(this.state);
-          return;
-        }
-
-        // Add to history for arrow up/down navigation (skip empty)
-        if (text.trim()) {
-          this.state.editor.addToHistory(text);
-        }
-        this.state.editor.setText('');
-
-        if (this.state.session.run.isRunning()) {
-          if (text.startsWith('/')) {
-            // Run slash commands immediately — they are either settings
-            // commands (no agent interaction) or agent-facing commands the
-            // user explicitly chose to run mid-stream.  Use Ctrl+F to
-            // queue instead.
-            this.handleSlashCommand(text).catch(error => {
-              showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
-            });
-            return;
-          }
-
-          if (text.startsWith('!')) {
-            // Shell passthrough runs locally and never touches the agent, so
-            // run it immediately instead of steering the active run with it.
-            void handleShellPassthrough(this.state, text.slice(1).trim());
-            return;
-          }
-
-          const { content, images } = consumePendingImages(text, this.state.pendingImages);
-          this.state.pendingImages = [];
-          if (images?.length) {
-            this.state.pendingImages = images;
-            this.queueFollowUpMessage(text);
-            return;
-          }
-
-          this.signalMessage(content);
-          return;
-        }
-
-        const pending = this.pendingUserInputResolve;
-        if (!pending) {
-          // The loop is busy elsewhere; hand the text over on its next turn.
-          this.queuedUserInput.push(text);
-          return;
-        }
-        this.pendingUserInputResolve = undefined;
-        pending(text);
-      };
+      if (!this.state.editor.onSubmit) this.installUserInputHandler();
     });
   }
 
@@ -1370,6 +1394,7 @@ export class MastraTUI {
       authStorage: this.state.authStorage,
       processMemoryDiagnostics: this.state.options.processMemoryDiagnostics,
       knowledgeInspector: this.state.options.knowledgeInspector,
+      threadScheduler: this.state.options.threadScheduler,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
@@ -1396,8 +1421,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      setGoal: (objective, cancelMessage) => setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      sendGoalReminder: (goal, options) => sendGoalReminder(this.buildCommandContext(), goal, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>

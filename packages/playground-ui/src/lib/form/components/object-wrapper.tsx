@@ -4,6 +4,7 @@ import { useContext } from 'react';
 import { FieldPathContext, ROOT_FIELD_KEY } from '../field-context';
 import { useSectionDisclosure } from '../use-section-disclosure';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
 
 export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
   if (label === ROOT_FIELD_KEY || label === '') return <div className="flex flex-col gap-2">{children}</div>;
@@ -27,7 +28,11 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
           <Braces aria-hidden className="size-3.5" />
           {label}
         </span>
-        {invalid && <span className="ml-auto shrink-0 text-meta text-accent2">Needs input</span>}
+        {invalid && (
+          <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-foreground">
+            Needs input
+          </Txt>
+        )}
       </CollapsibleTrigger>
       <CollapsibleContent keepMounted className="border-l border-border pt-2 pl-4">
         {children}

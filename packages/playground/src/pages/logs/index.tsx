@@ -9,7 +9,6 @@ import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
 import { LogsToolbar } from '@mastra/playground-ui/domains/logs/components/logs-toolbar';
 import { NoLogsInfo } from '@mastra/playground-ui/domains/logs/components/no-logs-info';
-import { useLogs } from '@mastra/playground-ui/domains/logs/hooks/use-logs';
 import { useLogsFilterPersistence } from '@mastra/playground-ui/domains/logs/hooks/use-logs-filter-persistence';
 import { useLogsListNavigation } from '@mastra/playground-ui/domains/logs/hooks/use-logs-list-navigation';
 import { useLogsUrlState } from '@mastra/playground-ui/domains/logs/hooks/use-logs-url-state';
@@ -19,12 +18,8 @@ import {
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
 import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
-import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
+import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans, useLogs } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -120,7 +115,10 @@ export default function LogsPage() {
     url.featuredTraceId,
   );
 
-  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
+  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans({
+    traceId: url.featuredTraceId ?? null,
+    queryOptions: { enabled: !!url.featuredTraceId },
+  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),

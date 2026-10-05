@@ -1,7 +1,7 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
+import { useTraceSpanScores } from '@mastra/react/hooks';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useTraceSpanScores } from '../hooks/use-trace-span-scores';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -29,7 +29,12 @@ export type TraceScoresTabProps = {
  */
 export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTabProps) {
   const [page, setPage] = useState(0);
-  const { data: scoresData, isLoading } = useTraceSpanScores({ traceId, spanId, page });
+  const { data: scoresData, isLoading } = useTraceSpanScores({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
 
   if (isLoading) {
     return (
@@ -59,6 +64,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
   const createdAt = new Date(score.createdAt);
   const scorerName = String(score.scorer?.name || score.scorer?.id || 'Scorer');
   const { Link, paths } = useLinkComponent();
+  const scorerHref = paths.scorerLink(score.scorerId, { scoreId: score.id });
 
   return (
     <MetricsKpiCard className="min-w-0">
@@ -70,23 +76,25 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       >
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
-        <span className="text-meta text-muted-foreground tabular-nums">
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
           <Txt as="span" variant="meta" font="mono">
             {getShortId(score.id)}
           </Txt>{' '}
           · {formatDate(createdAt, 'date-time-seconds')}
-        </span>
+        </Txt>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}
-      <Button
-        render={<Link href={`${paths.scorerLink(score.scorerId)}?scoreId=${score.id}`} />}
-        variant="ghost"
-        size="sm"
-        className="-ml-2 justify-self-start"
-        icon={<ExternalLinkIcon />}
-      >
-        Open scorer run
-      </Button>
+      {scorerHref && (
+        <Button
+          render={<Link href={scorerHref} />}
+          variant="ghost"
+          size="sm"
+          className="-ml-2 justify-self-start"
+          icon={<ExternalLinkIcon />}
+        >
+          Open scorer run
+        </Button>
+      )}
     </MetricsKpiCard>
   );
 }
@@ -97,7 +105,7 @@ function TraceScoreReason({ reason }: { reason: string }) {
   const text = isLong && !expanded ? `${reason.slice(0, REASON_PREVIEW_LENGTH).trimEnd()}…` : reason;
 
   return (
-    <p className="text-caption text-placeholder">
+    <Txt variant="caption" tone="faint">
       {text}
       {isLong && (
         <>
@@ -111,7 +119,7 @@ function TraceScoreReason({ reason }: { reason: string }) {
           </button>
         </>
       )}
-    </p>
+    </Txt>
   );
 }
 

@@ -1,10 +1,6 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
@@ -98,9 +94,9 @@ function ExperimentRow({
   const linkRef = useRef<HTMLAnchorElement>(null);
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={onSelect ?? (() => linkRef.current?.click())}>
+    <DataList.RowWrapper {...rowProps} onSelectRow={onSelect ?? (() => linkRef.current?.click())}>
       {onSelect ? (
-        <EntityList.RowButton
+        <DataList.RowButton
           colEnd={-2}
           featured={featured}
           tabIndex={-1}
@@ -110,9 +106,9 @@ function ExperimentRow({
           }}
         >
           {children}
-        </EntityList.RowButton>
+        </DataList.RowButton>
       ) : (
-        <EntityList.RowLink
+        <DataList.RowLink
           ref={linkRef}
           colEnd={-2}
           to={paths.experimentLink(exp.id)}
@@ -121,9 +117,9 @@ function ExperimentRow({
           onClick={stopPropagation}
         >
           {children}
-        </EntityList.RowLink>
+        </DataList.RowLink>
       )}
-      <EntityList.ActionsCell className="pl-2">
+      <DataList.ActionsCell className="pl-2">
         <Button
           type="button"
           variant="ghost"
@@ -137,8 +133,8 @@ function ExperimentRow({
         >
           <Trash2 className="size-4" />
         </Button>
-      </EntityList.ActionsCell>
-    </EntityList.RowWrapper>
+      </DataList.ActionsCell>
+    </DataList.RowWrapper>
   );
 }
 
@@ -197,13 +193,13 @@ export function ExperimentsList({
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 
   if (isLoading) {
-    return <EntityListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={COLUMNS} />;
   }
 
   const gridColumns = isSelectionActive ? `auto ${BASE_COLUMNS}` : COLUMNS;
   const headerCells = columnHeaders.map(col =>
     col.sortKey && onSortChange ? (
-      <EntityList.SortableTopCell
+      <DataList.SortableTopCell
         key={col.label}
         className={col.className}
         sortKey={col.sortKey}
@@ -211,29 +207,29 @@ export function ExperimentsList({
         onSortChange={onSortChange}
       >
         {col.label}
-      </EntityList.SortableTopCell>
+      </DataList.SortableTopCell>
     ) : (
-      <EntityList.TopCell key={col.label} className={col.className}>
+      <DataList.TopCell key={col.label} className={col.className}>
         {col.label}
-      </EntityList.TopCell>
+      </DataList.TopCell>
     ),
   );
 
   return (
-    <EntityList columns={gridColumns} scrollRef={containerRef}>
-      <EntityList.Top hasLeadingCell={isSelectionActive}>
+    <DataList columns={gridColumns} scrollRef={containerRef}>
+      <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive ? (
           <>
-            <EntityList.TopCell>&nbsp;</EntityList.TopCell>
-            <EntityList.TopCells colStart={2}>{headerCells}</EntityList.TopCells>
+            <DataList.TopCell>&nbsp;</DataList.TopCell>
+            <DataList.TopCells colStart={2}>{headerCells}</DataList.TopCells>
           </>
         ) : (
           <>
             {headerCells}
-            <EntityList.TopCell aria-hidden>{null}</EntityList.TopCell>
+            <DataList.TopCell aria-hidden>{null}</DataList.TopCell>
           </>
         )}
-      </EntityList.Top>
+      </DataList.Top>
 
       {filteredData.map((exp, index) => {
         const dsName = exp.datasetId
@@ -262,16 +258,16 @@ export function ExperimentsList({
         const toggle = () => selection.onToggleSelection(exp.id);
 
         return (
-          <EntityList.RowWrapper key={exp.id} {...getRowProps(index)} onSelectRow={toggle}>
-            <EntityList.SelectCell checked={isSelected} onToggle={toggle} aria-label={`Select experiment ${exp.id}`} />
-            <EntityList.RowButton colStart={2} featured={isSelected} tabIndex={-1} onClick={stopPropagation}>
+          <DataList.RowWrapper key={exp.id} {...getRowProps(index)} onSelectRow={toggle}>
+            <DataList.SelectCell checked={isSelected} onToggle={toggle} aria-label={`Select experiment ${exp.id}`} />
+            <DataList.RowButton colStart={2} featured={isSelected} tabIndex={-1} onClick={stopPropagation}>
               {rowCells}
-            </EntityList.RowButton>
-          </EntityList.RowWrapper>
+            </DataList.RowButton>
+          </DataList.RowWrapper>
         );
       })}
 
-      <EntityList.NextPageLoading
+      <DataList.NextPageLoading
         isLoading={isFetchingNextPage}
         hasMore={hasNextPage}
         setEndOfListElement={setEndOfListElement}
@@ -287,6 +283,6 @@ export function ExperimentsList({
           experimentName={experimentToDelete.name ?? undefined}
         />
       )}
-    </EntityList>
+    </DataList>
   );
 }

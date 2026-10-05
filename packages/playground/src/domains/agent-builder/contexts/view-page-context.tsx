@@ -1,3 +1,4 @@
+import type { StoredAgent } from '@mastra/react/hooks';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -5,7 +6,6 @@ import { AgentChatPanelProvider } from '../components/agent-edit/agent-chat-pane
 import { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
 import type { AgentConfig } from '../services/stored-agent-to-agent-config';
 import { storedAgentToAgentConfig } from '../services/stored-agent-to-agent-config';
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 
 export interface ViewPageContextValue {
   agentId: string;

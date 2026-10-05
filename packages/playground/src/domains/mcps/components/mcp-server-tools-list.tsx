@@ -5,9 +5,9 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useMCPServerTools } from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
-import { useMCPServerTools } from '../hooks/useMCPServerTools';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 
 const COLUMNS = 'auto 1fr auto';
@@ -25,7 +25,7 @@ function ToolTypeIcon({ type }: { type: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span aria-label={known} className="text-neutral3 inline-flex [&>svg]:size-4">
+        <span aria-label={known} className="inline-flex text-muted-foreground [&>svg]:size-4">
           <Icon />
         </span>
       </TooltipTrigger>
@@ -49,7 +49,7 @@ function hasAppUi(meta: McpToolInfo['_meta']): boolean {
 
 export function McpServerToolsList({ server }: { server: McpServerInfo }) {
   const [search, setSearch] = useState('');
-  const { data: tools = {}, isLoading } = useMCPServerTools(server);
+  const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
   const { Link, paths } = useLinkComponent();
 
   const filteredTools = useMemo(() => {

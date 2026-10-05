@@ -8,7 +8,7 @@ import { SpanType, createObservabilityContext, resolveObservabilityContext } fro
 import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getStepResult } from '../step';
@@ -427,7 +427,7 @@ export async function executeConditional(
             getStepResult: getStepResult.bind(null, stepResults),
             bail: (() => {}) as () => InnerOutput,
             abort: () => {
-              abortController?.abort();
+              abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
             },
             [PUBSUB_SYMBOL]: pubsub,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
@@ -850,7 +850,7 @@ export async function executeLoop(
           getStepResult: getStepResult.bind(null, stepResults),
           bail: (() => {}) as () => InnerOutput,
           abort: () => {
-            abortController?.abort();
+            abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
           },
           [PUBSUB_SYMBOL]: pubsub,
           [STREAM_FORMAT_SYMBOL]: executionContext.format,

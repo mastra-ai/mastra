@@ -1,6 +1,26 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { MastraAuthStudio, MastraRBACStudio } from './index';
 import type { StudioUser } from './index';
+
+// Run every test from a scratch cwd so an ambient `.mastra-project.json`
+// (present at the repo root in CI) can't leak into the constructor's new
+// project-config fallback and set `organizationId` behind the tests' backs.
+let __originalCwd: string;
+let __scratchCwd: string;
+
+beforeAll(() => {
+  __originalCwd = process.cwd();
+  __scratchCwd = mkdtempSync(join(tmpdir(), 'mastra-auth-studio-tests-'));
+  process.chdir(__scratchCwd);
+});
+
+afterAll(() => {
+  process.chdir(__originalCwd);
+  rmSync(__scratchCwd, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,6 +127,89 @@ describe('MastraAuthStudio', () => {
       const headers = a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
       expect(headers['Set-Cookie']).not.toContain('Domain=');
       expect(headers['Set-Cookie']).not.toContain('Secure');
+    });
+
+    // Local-dev fallback: `.mastra-project.json` in cwd carries the linked
+    // org id, so `pnpm mastra dev` should pin AuthKit to the deployment org
+    // without requiring `MASTRA_ORGANIZATION_ID` to also be exported.
+    describe('organizationId fallback to .mastra-project.json', () => {
+      let tmpDir: string;
+      let originalCwd: string;
+
+      beforeEach(() => {
+        originalCwd = process.cwd();
+        tmpDir = mkdtempSync(join(tmpdir(), 'mastra-auth-studio-'));
+        process.chdir(tmpDir);
+        delete process.env.MASTRA_ORGANIZATION_ID;
+      });
+
+      afterEach(() => {
+        process.chdir(originalCwd);
+        rmSync(tmpDir, { recursive: true, force: true });
+      });
+
+      it('reads organizationId from .mastra-project.json when neither option nor env is set', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-config');
+      });
+
+      it('prefers the explicit constructor option over .mastra-project.json', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-from-option' });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-option');
+      });
+
+      it('prefers MASTRA_ORGANIZATION_ID over .mastra-project.json', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+        process.env.MASTRA_ORGANIZATION_ID = 'org-from-env';
+
+        try {
+          const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+          const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+          expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-env');
+        } finally {
+          delete process.env.MASTRA_ORGANIZATION_ID;
+        }
+      });
+
+      it('omits organization_id when .mastra-project.json is missing', () => {
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
+
+      it('ignores .mastra-project.json when the file is malformed JSON', () => {
+        writeFileSync(join(tmpDir, '.mastra-project.json'), '{ not json ');
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
+
+      it('ignores .mastra-project.json when organizationId is missing or wrong type', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 42 }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
     });
   });
 

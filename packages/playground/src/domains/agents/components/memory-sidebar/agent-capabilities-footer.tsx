@@ -3,17 +3,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMemory, useAgent, useAgentVersions } from '@mastra/react/hooks';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 
@@ -24,22 +22,22 @@ type CapabilityCollection =
 
 const toneClassName: Record<CapabilityTone, { icon: string }> = {
   purple: {
-    icon: 'text-purple-700 dark:text-purple-300',
+    icon: 'text-badge-purple-indicator',
   },
   amber: {
-    icon: 'text-amber-700 dark:text-amber-300',
+    icon: 'text-badge-amber-indicator',
   },
   emerald: {
-    icon: 'text-emerald-700 dark:text-emerald-300',
+    icon: 'text-badge-green-indicator',
   },
   sky: {
-    icon: 'text-sky-700 dark:text-sky-300',
+    icon: 'text-badge-blue-indicator',
   },
   cyan: {
-    icon: 'text-cyan-700 dark:text-cyan-300',
+    icon: 'text-badge-cyan-indicator',
   },
   orange: {
-    icon: 'text-orange-700 dark:text-orange-300',
+    icon: 'text-badge-orange-indicator',
   },
 };
 
@@ -103,7 +101,8 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       rel="noopener noreferrer"
       className={cn(
         'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
-        'hover:bg-fill-subtle focus-visible:ring-1 focus-visible:ring-border-strong focus-visible:outline-none',
+        'hover:bg-fill-subtle',
+        focusRing,
         quietTextHover,
         controlStateColorTransition,
       )}
@@ -137,7 +136,11 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
 // Each capability component owns its data and loading state; React Query
 // dedupes the underlying requests across instances — see client-request-dedupe.
 function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: memory, isLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory, isLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const enabled = hasConfiguredMemory(memory);
 
   const settledStatus = enabled ? (memory?.memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off';
@@ -162,14 +165,18 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function EditorCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading: isAgentLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const enabled = isEditorAvailable(agent, isCmsAvailable);
   const locked = agent?.editor === false;
   const versionsQuery = useAgentVersions({
-    agentId,
+    agentId: agentId,
     params: { orderBy: { field: 'createdAt', direction: 'DESC' } },
-    enabled,
+    queryOptions: { enabled: Boolean(agentId) && enabled },
   });
   const versionCount = versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
   const isLoading = isAgentLoading || isCmsAvailabilityLoading || (enabled && versionsQuery.isLoading);
@@ -198,7 +205,11 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.tools);
 
   return (
@@ -216,7 +227,11 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.workflows);
 
   return (
@@ -236,7 +251,11 @@ function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.agents);
 
   return (
@@ -258,7 +277,11 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getProcessorCount(agent);
 
   return (
@@ -280,8 +303,16 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function CapabilitiesSummary({ agentId }: { agentId: string }) {
-  const { data: memory } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memory } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable } = useIsCmsAvailable();
 
   const enabledFlags = [
@@ -306,13 +337,14 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="shrink-0 border-t border-border/50">
+      <div className="shrink-0 border-t border-border">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"
             data-testid="agent-capabilities-footer"
             className={cn(
-              'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-1 focus-visible:ring-border-strong focus-visible:outline-none focus-visible:ring-inset active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
+              'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
+              focusRingInset,
               quietTextHover,
               controlStateColorTransition,
             )}

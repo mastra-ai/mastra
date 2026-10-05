@@ -11,10 +11,10 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useDatasetVersions } from '@mastra/react/hooks';
+import type { DatasetVersion } from '@mastra/react/hooks';
 import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetVersions } from '../../hooks/use-dataset-versions';
-import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -32,7 +32,13 @@ export function DatasetVersionsPanel({
   onCompareVersionsClick,
   activeVersion,
 }: DatasetVersionsPanelProps) {
-  const { data: versions, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useDatasetVersions(datasetId);
+  const {
+    data: versions,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -135,7 +141,7 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-caption">
+                      <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2">
                         <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
@@ -143,7 +149,7 @@ export function DatasetVersionsPanel({
                           </span>
                         )}
                         {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
-                      </span>
+                      </Txt>
                     </span>
                   </ThreadListItem>
                 );

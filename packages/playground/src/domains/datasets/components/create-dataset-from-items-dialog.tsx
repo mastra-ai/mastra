@@ -1,14 +1,22 @@
 'use client';
 
 import type { AddDatasetItemParams, DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
-import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { X } from 'lucide-react';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { useState } from 'react';
 
 type ExpectedTrajectory = AddDatasetItemParams['expectedTrajectory'];
@@ -135,74 +143,70 @@ export function CreateDatasetFromItemsDialog({
     }
   };
 
-  const handleCancel = () => {
-    if (isCreating) return;
-    setName('');
-    setDescription('');
-    onOpenChange(false);
-  };
-
   const progressPercent = items.length > 0 ? (progress / items.length) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={isCreating ? undefined : onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isCreating}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Create Dataset from Items</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">Name *</Label>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="dataset-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter dataset name"
                 autoFocus
                 disabled={isCreating}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="dataset-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="dataset-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter dataset description (optional)"
                 disabled={isCreating}
               />
-            </div>
+            </Field>
 
-            <p className="text-body text-muted-foreground">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
-            </p>
+            </Txt>
 
             {isCreating && (
               <div className="space-y-2">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="h-full bg-success-indicator transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">
+                <Txt tone="muted">
                   Copying items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isCreating}>
-                Cancel
-              </Button>
-              <Button icon={<DatasetsIcon />} type="submit" variant="primary" disabled={isCreating || !name.trim()}>
-                {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel
+              onClick={() => {
+                setName('');
+                setDescription('');
+              }}
+            >
+              Cancel
+            </DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
+              {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
       </DialogContent>
     </Dialog>
   );

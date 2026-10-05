@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '../../types';
 import { AuthRequired } from '../auth-required';
 import { RoutePermissionsGate } from '../route-permissions-gate';
 import {

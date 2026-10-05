@@ -97,8 +97,9 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
+import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
+import { computeNextFire } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -145,12 +146,22 @@ function createUndefinedPrimitiveError(
 }
 
 /**
- * Reads the declarative schedule configs off a workflow. Supports both the
- * new `getScheduleConfigs(): WorkflowScheduleConfig[]` accessor on the evented
- * engine and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
+ * Whether the Mastra scheduler fires this workflow's declared schedules.
+ * Only the default and evented engines are dispatched by it; other engines
+ * (Inngest, Temporal) own their scheduling natively.
+ */
+function runsOnMastraScheduler(workflow: unknown): boolean {
+  const engineType = (workflow as { engineType?: string }).engineType;
+  return engineType === 'default' || engineType === 'evented';
+}
+
+/**
+ * Reads the declarative schedule configs off a workflow, regardless of its
+ * engine. Supports both the `getScheduleConfigs(): WorkflowScheduleConfig[]`
+ * accessor and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
  * fallback used in tests that inject a fake getter.
  */
-function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+function readWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
   const w = workflow as {
     getScheduleConfigs?: () => WorkflowScheduleConfig[] | undefined;
     getScheduleConfig?: () => WorkflowScheduleConfig | WorkflowScheduleConfig[] | undefined;
@@ -164,6 +175,14 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
     return Array.isArray(cfg) ? cfg : [cfg];
   }
   return [];
+}
+
+/**
+ * The declarative schedule configs the Mastra scheduler should register for a
+ * workflow. Empty for engines the scheduler does not dispatch.
+ */
+function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+  return runsOnMastraScheduler(workflow) ? readWorkflowScheduleConfigs(workflow) : [];
 }
 
 /**
@@ -2220,14 +2239,25 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
+        // A declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed). Compute the timing before
+        // writing: the row is registered as `completed` rather than skipped, so
+        // the deployment stays self-consistent instead of retrying a doomed
+        // write on every boot.
+        const computeTiming = () => {
+          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        };
+
         if (!existing) {
+          const timing = computeTiming();
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
             cron: cfg.cron,
             timezone: cfg.timezone,
-            status: 'active',
-            nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+            status: timing.status,
+            nextFireAt: timing.nextFireAt,
             createdAt: now,
             updatedAt: now,
             metadata: cfg.metadata,
@@ -2237,7 +2267,9 @@ export class Mastra<
 
         // Diff config fields and patch the existing row if anything changed.
         // We deliberately leave `status` alone — a row may have been paused
-        // out-of-band via storage, and a redeploy shouldn't unpause it.
+        // out-of-band via storage, and a redeploy shouldn't unpause it. A
+        // recomputed cadence is the exception: it re-arms a completed row when
+        // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
         const cronChanged = existing.cron !== cfg.cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
@@ -2250,7 +2282,10 @@ export class Mastra<
         // Cron or timezone change invalidates the stored nextFireAt — recompute
         // from now so we don't fire on the old schedule.
         if (cronChanged || timezoneChanged) {
-          patch.nextFireAt = computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now });
+          const timing = computeTiming();
+          patch.nextFireAt = timing.nextFireAt;
+          if (timing.status === 'completed') patch.status = 'completed';
+          else if (existing.status === 'completed') patch.status = 'active';
         }
 
         if (Object.keys(patch).length > 0) {
@@ -5211,13 +5246,16 @@ export class Mastra<
       return;
     }
 
-    // Note on schedules: a workflow declaring a `schedule` is auto-promoted to
-    // the evented engine by the `createWorkflow` factory. We don't reject default-
-    // engine workflows that happen to carry schedule configs — those would only
-    // exist if a user constructed `Workflow` directly, in which case they've
-    // explicitly opted out of the factory's promotion behavior and we trust them.
-    const scheduleConfigs = collectWorkflowScheduleConfigs(workflow);
-    const hasSchedule = scheduleConfigs.length > 0;
+    // The Mastra scheduler only dispatches default and evented workflows. A
+    // `schedule` on any other engine is ignored so it can't double-fire next
+    // to that engine's own scheduling.
+    const hasSchedule = collectWorkflowScheduleConfigs(workflow).length > 0;
+    if (!runsOnMastraScheduler(workflow) && readWorkflowScheduleConfigs(workflow).length > 0) {
+      this.#logger?.warn(
+        `Workflow "${workflow.id}" declares \`schedule\` but runs on the ${workflow.engineType} engine; the Mastra scheduler only fires default and evented workflows. Use the engine's native scheduling (Inngest \`cron\`).`,
+        { workflowId: workflow.id, engineType: workflow.engineType },
+      );
+    }
 
     // Initialize the workflow with Mastra and primitives
     workflow.__registerMastra(this);

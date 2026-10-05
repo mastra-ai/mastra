@@ -1,14 +1,14 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
+import { useToolkits } from '@mastra/react/hooks';
 import { memo, useMemo, useState } from 'react';
-import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { ToolkitConnectionControl } from './toolkit-connection-control';
 import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-groups';
@@ -37,41 +37,42 @@ const ToolkitFilterRow = memo(
     const agentColor = useAgentColor();
     const checkboxStyle = checked
       ? {
-          backgroundColor: agentColor.background,
-          borderColor: agentColor.background,
-          color: agentColor.foreground,
+          backgroundColor: agentColor.tint,
+          borderColor: agentColor.tint,
+          color: 'var(--background)',
         }
       : undefined;
 
     return (
       <li className="flex items-center gap-1">
-        <label
-          data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
-          data-checked={checked ? 'true' : 'false'}
-          className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
-            disabled && 'cursor-not-allowed opacity-60',
-          )}
-        >
-          <Checkbox
-            checked={checked}
-            disabled={disabled}
-            onCheckedChange={() => onToggle(item.id)}
-            style={checkboxStyle}
-            data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-            className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-          />
-          {item.icon && (
-            <img
-              src={item.icon}
-              alt=""
-              aria-hidden
-              data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
-              className="h-4 w-4 shrink-0 rounded object-contain"
+        <Field disabled={disabled} className="min-w-0 flex-1">
+          <FieldLabel
+            data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
+            data-checked={checked ? 'true' : 'false'}
+            className={cn(
+              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+              disabled && 'opacity-60',
+            )}
+          >
+            <Checkbox
+              checked={checked}
+              onCheckedChange={() => onToggle(item.id)}
+              style={checkboxStyle}
+              data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
+              className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
             />
-          )}
-          <span className="truncate">{item.label}</span>
-        </label>
+            {item.icon && (
+              <img
+                src={item.icon}
+                alt=""
+                aria-hidden
+                data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
+                className="h-4 w-4 shrink-0 rounded object-contain"
+              />
+            )}
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          </FieldLabel>
+        </Field>
         {providerId && (
           <div className="shrink-0">
             <ToolkitConnectionControl
@@ -114,7 +115,10 @@ const ProviderToolkitSection = ({
   disabled,
   multipleAllowed,
 }: ProviderToolkitSectionProps) => {
-  const { data, isLoading } = useToolkits(provider.providerId);
+  const { data, isLoading } = useToolkits({
+    providerId: provider.providerId,
+    queryOptions: { enabled: !!provider.providerId },
+  });
 
   const toolkits = useMemo<ToolkitRow[]>(() => {
     const names = new Map<string, string>();
@@ -215,17 +219,15 @@ export const ToolkitFilterPane = ({
       className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <InputGroup size="md" className="flex-none" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroupAddon align="inline-start">
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          type="search"
-          aria-label="Filter toolkits"
-          placeholder="Filter toolkits..."
-          onChange={event => setSearch(event.target.value)}
-        />
-      </InputGroup>
+      <SearchInput
+        label="Filter toolkits"
+        size="md"
+        className="flex-none"
+        data-testid={`${TEST_ID_PREFIX}-filter-search`}
+        placeholder="Filter toolkits..."
+        value={search}
+        onValueChange={setSearch}
+      />
 
       <div className="flex shrink-0 items-center gap-2 text-meta">
         <button
@@ -251,44 +253,44 @@ export const ToolkitFilterPane = ({
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
-        <div className="flex flex-col gap-3">
-          {/* Built-in group renders immediately; it needs no async fetch. */}
-          {filteredBuiltIn.length > 0 && (
-            <ul className="flex flex-col gap-0.5">
-              {filteredBuiltIn.map(item => (
-                <ToolkitFilterRow
-                  key={item.id}
-                  item={item}
-                  checked={isChecked(item.id)}
-                  disabled={disabled}
-                  onToggle={onToggle}
-                />
-              ))}
-            </ul>
-          )}
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="pr-2">
+          <div className="flex flex-col gap-3">
+            {filteredBuiltIn.length > 0 && (
+              <ul className="flex flex-col gap-0.5">
+                {filteredBuiltIn.map(item => (
+                  <ToolkitFilterRow
+                    key={item.id}
+                    item={item}
+                    checked={isChecked(item.id)}
+                    disabled={disabled}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </ul>
+            )}
 
-          {/* Each provider fetches and renders its own toolkits independently. */}
-          {providers.map(provider => (
-            <ProviderToolkitSection
-              key={provider.providerId}
-              provider={provider}
-              term={term}
-              isChecked={isChecked}
-              onToggle={onToggle}
-              disabled={disabled}
-              multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
-            />
-          ))}
+            {providers.map(provider => (
+              <ProviderToolkitSection
+                key={provider.providerId}
+                provider={provider}
+                term={term}
+                isChecked={isChecked}
+                onToggle={onToggle}
+                disabled={disabled}
+                multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
+              />
+            ))}
 
-          {isProvidersLoading && (
-            <div className="flex flex-col gap-1 px-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-full" />
-              ))}
-            </div>
-          )}
-        </div>
+            {isProvidersLoading && (
+              <div className="flex flex-col gap-1 px-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-7 w-full" />
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );

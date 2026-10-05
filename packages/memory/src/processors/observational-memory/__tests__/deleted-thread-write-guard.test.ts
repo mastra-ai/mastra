@@ -206,6 +206,8 @@ describe('deleted-thread write guards', () => {
       const indexed = onIndexObservations.mock.calls.map(call => call[0]);
       expect(indexed.every(entry => entry.threadId === threadId && entry.resourceId === resourceId)).toBe(true);
       expect(indexed.some(entry => String(entry.text).includes('deploy-key'))).toBe(true);
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(indexed.every(entry => entry.recordId === record!.id)).toBe(true);
     });
   });
 
@@ -249,6 +251,8 @@ describe('deleted-thread write guards', () => {
       expect(updateBuffered).toHaveBeenCalled();
       const status = await om.getStatus({ threadId, resourceId });
       expect(status.bufferedChunkCount).toBe(1);
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(onIndexObservations.mock.calls.every(([entry]) => entry.recordId === record!.id)).toBe(true);
     });
   });
 });

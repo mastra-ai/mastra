@@ -5,15 +5,19 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useAgent } from '@mastra/react/hooks';
 import { CopyIcon, Check } from 'lucide-react';
-import { useAgent } from '../hooks/use-agent';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
 }
 
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });
   const agentName = agent?.name || '';
 

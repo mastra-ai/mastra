@@ -54,6 +54,7 @@ export interface RawTraceQuerySpan {
   rootEntityVersionId: string | null;
   environment: string | null;
   organizationId: string | null;
+  runId: string | null;
   tags: string[] | null;
   serviceName?: string | null;
   executionSource?: string | null;
@@ -131,6 +132,7 @@ const span = (
   rootEntityVersionId: null,
   environment: 'production',
   organizationId: null,
+  runId: null,
   tags: null,
   serviceName: null,
   executionSource: null,
@@ -815,6 +817,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-org-a',
       organizationId: 'org-a',
       resourceId: 'project-1',
+      sessionId: 'session-123',
+      userId: 'user-1',
       startedAt: '2026-09-02T10:00:00.000Z',
       endedAt: '2026-09-02T10:00:01.000Z',
     }),
@@ -824,6 +828,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       spanType: 'tool_call',
       organizationId: 'org-a',
       resourceId: 'project-1',
+      runId: 'run-42',
+      sessionId: 'session-123',
+      userId: 'user-1',
       startedAt: '2026-09-02T10:00:00.100Z',
       endedAt: '2026-09-02T10:00:00.500Z',
     }),
@@ -841,6 +848,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-org-b',
       organizationId: 'org-b',
       resourceId: 'project-9',
+      sessionId: 'session-123',
+      userId: 'user-2',
       startedAt: '2026-09-03T10:00:00.000Z',
       endedAt: '2026-09-03T10:00:01.000Z',
     }),
@@ -1393,6 +1402,17 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     name: 'unscoped thread queries read every tenant',
     request: { traces: { timeRange: scopedRange } },
     expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
+  },
+  {
+    name: 'thread queries qualify threads through context identifiers',
+    request: {
+      traces: {
+        timeRange: scopedRange,
+        where: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+      },
+      where: { traces: { some: { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-2' } } } },
+    },
+    expected: [{ threadId: 'thread-org-b' }],
   },
 ];
 
@@ -2321,6 +2341,116 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-org-a' }],
   },
   {
+    name: 'filters roots by organization and session with a span from one run',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+          { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+          { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'matches context identifiers through membership and inequality',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'in', value: { path: 'sessionId' }, set: ['session-123', 'session-999'] },
+          { op: 'ne', left: { path: 'userId' }, right: { literal: 'user-1' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-b' }],
+  },
+  {
+    name: 'context identifier presence checks match roots that never recorded them',
+    request: { timeRange: scopedRange, where: { op: 'notExists', path: 'userId' } },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'run predicates find a run recorded only on a child span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'exists', path: 'runId' } } },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifiers bind to one related span',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
+              { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+              { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifier absence excludes traces with one matching span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { none: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } } } },
+    },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'unscoped span organization predicates see leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    expected: [{ traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped span organization predicates cannot reach leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'organization predicates narrow inside the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'organization predicates cannot widen the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } },
+          { op: 'notExists', path: 'organizationId' },
+        ],
+      },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
     name: 'includes matches traces whose current root carries the tag',
     request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
@@ -2398,7 +2528,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
 ];
 
 /** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
-function matchesScope(
+export function matchesScope(
   record: { organizationId?: string | null; resourceId?: string | null },
   scope: TraceQueryTenantScope | undefined,
 ): boolean {
@@ -2414,7 +2544,7 @@ export interface TraceQueryRootSelection {
 }
 
 /**
- * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * The candidate population shared by every trace-scoped read: current, completed,
  * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
  */
 export function selectTraceQueryRoots(
@@ -2773,6 +2903,10 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     entityVersionId: span.entityVersionId,
     parentEntityVersionId: span.parentEntityVersionId,
     rootEntityVersionId: span.rootEntityVersionId,
+    runId: span.runId,
+    sessionId: span.sessionId,
+    userId: span.userId,
+    organizationId: span.organizationId,
   };
 }
 
@@ -2828,6 +2962,10 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     traceId: root.traceId,
     threadId: traceQueryDimensionValue(root, 'threadId'),
     resourceId: traceQueryDimensionValue(root, 'resourceId'),
+    runId: root.runId,
+    sessionId: root.sessionId,
+    userId: root.userId,
+    organizationId: root.organizationId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),

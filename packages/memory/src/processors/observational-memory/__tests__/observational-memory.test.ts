@@ -138,6 +138,7 @@ import {
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
+import type { ActivationTTL } from '../types';
 
 // =============================================================================
 // Test Helpers
@@ -2425,6 +2426,81 @@ describe('Observer Agent Helpers', () => {
       BufferingCoordinator.reflectionBufferCycleIds.clear();
     }
   });
+
+  it.each([
+    { idleMinutes: 10, expectActivated: false },
+    { idleMinutes: 61, expectActivated: true },
+  ])(
+    'passes a per-provider activateAfterIdle map from Memory options to the OM engine ($idleMinutes min idle)',
+    async ({ idleMinutes, expectActivated }) => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+        const threadId = `memory-map-thread-${idleMinutes}`;
+        const resourceId = 'memory-map-resource';
+        const store = new InMemoryStore();
+        const memory = new Memory({
+          storage: store,
+          options: {
+            observationalMemory: {
+              enabled: true,
+              scope: 'thread',
+              model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }) as any,
+              activateAfterIdle: { default: 'auto', anthropic: '1h' },
+              observation: { messageTokens: 50_000, bufferTokens: 5_000 },
+            },
+          },
+        });
+        const om = (await memory.omEngine)!;
+        const memoryStore = (await store.getStore('memory'))!;
+
+        const assistantPartTime = now.getTime() - idleMinutes * 60_000;
+        const messages: MastraDBMessage[] = [
+          {
+            ...createTestMessage('Earlier question', 'user', 'map-user-1', new Date(assistantPartTime - 1000)),
+            threadId,
+            resourceId,
+          },
+          {
+            ...createTestMessage('Earlier answer', 'assistant', 'map-assistant-1', new Date(assistantPartTime)),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Earlier answer', createdAt: assistantPartTime }],
+            } as MastraMessageContentV2,
+          },
+          { ...createTestMessage('Latest user follow-up', 'user', 'map-user-2', now), threadId, resourceId },
+        ];
+        await memoryStore.saveMessages({ messages });
+        const record = await om.getOrCreateRecord(threadId, resourceId);
+        await memoryStore.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['map-user-1', 'map-assistant-1'],
+            cycleId: 'map-cycle-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(assistantPartTime),
+          },
+        });
+
+        const result = await om.activate({
+          threadId,
+          resourceId,
+          checkThreshold: true,
+          messages,
+          currentModel: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+        });
+
+        expect(result.activated).toBe(expectActivated);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   describe('buildObserverHistoryMessage', () => {
     it('should preserve image attachments and image-like file attachments in observer input order', () => {
@@ -5044,7 +5120,7 @@ describe('ObservationalMemory Integration', () => {
       // Fallback guidance: irrelevant search results should lead to thread discovery
       expect(instructions).toContain('If search results look irrelevant, do not give up');
       // Threads without observations may still hold the answer in raw history
-      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
     });
 
     it('omits search routing for browsing-only resource retrieval', () => {
@@ -5111,6 +5187,11 @@ describe('ObservationalMemory Integration', () => {
       expect(threadText).toContain('limited to the current conversation thread');
     });
 
+    it('only skips recall when visible evidence is not contradicted', () => {
+      const text = getRetrievalInstructions('thread');
+      expect(text).toContain('already visible, unambiguous, and not contradicted by other observations');
+    });
+
     it('injects appended custom instructions into actor context', () => {
       const custom = 'Use a small limit with detail="low" for an initial scan.';
       const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
@@ -5135,13 +5216,14 @@ describe('ObservationalMemory Integration', () => {
       expect(text).toContain('Avoid historical tool calls.');
     });
 
-    it('returns undefined without observations for thread-scoped retrieval', async () => {
+    it('returns recall guidance without observations for thread-scoped retrieval', async () => {
       const retrievalOm = makeRetrievalOm({ scope: 'thread' });
       const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
 
       const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
 
-      expect(messages).toBeUndefined();
+      expect(messages!.join('\n')).toContain('limited to the current conversation thread');
+      expect(messages!.join('\n')).toContain('mode: "messages"');
     });
 
     it('returns undefined without observations when retrieval is disabled', async () => {
@@ -7610,9 +7692,9 @@ describe('Locking Behavior', () => {
 
   describe('early reflection activation overshoot guard', () => {
     const setupBufferedReflectionEnv = async (opts: {
-      activateAfterIdle?: string | number;
+      activateAfterIdle?: ActivationTTL;
       activateOnProviderChange?: boolean;
-      reflectionActivateAfterIdle?: string | number;
+      reflectionActivateAfterIdle?: ActivationTTL;
       reflectionActivateOnProviderChange?: boolean;
       reflectionObservationTokens?: number;
     }) => {
@@ -8176,6 +8258,80 @@ describe('Locking Behavior', () => {
         vi.useRealTimers();
       }
     });
+
+    it.each([
+      { idleMinutes: 10, expectActivated: false, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: true, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: false, inheritOnly: true },
+    ])(
+      'should resolve a per-provider reflection.activateAfterIdle map for the current model ($idleMinutes min idle, top-level map only: $inheritOnly)',
+      async ({ idleMinutes, expectActivated, inheritOnly }) => {
+        vi.useFakeTimers();
+        try {
+          const now = new Date('2026-04-14T12:00:00.000Z');
+          vi.setSystemTime(now);
+          const idleMs = idleMinutes * 60_000;
+
+          const { storage, om } = await setupBufferedReflectionEnv(
+            inheritOnly
+              ? { activateAfterIdle: { default: '1m', anthropic: '1m' }, reflectionObservationTokens: 500 }
+              : { reflectionActivateAfterIdle: { default: false, anthropic: '1h' }, reflectionObservationTokens: 500 },
+          );
+
+          const threadId = 'thread-overshoot';
+          const resourceId = 'resource-overshoot';
+          const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+          const reflectedLines = ['- 🔴 Reflected line 1', '- 🟡 Reflected line 2'];
+          const tailLines = Array.from({ length: 40 }, (_, i) => `- 🟢 Tail observation line ${i + 1}`);
+          const activeObservations = [...reflectedLines, ...tailLines].join('\n');
+          await storage.updateActiveObservations({
+            id: record.id,
+            observations: activeObservations,
+            tokenCount: om.getTokenCounter().countObservations(activeObservations),
+            lastObservedAt: new Date(now.getTime() - idleMs),
+          });
+
+          const reflection = '- 🔴 Condensed reflection';
+          const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+          await storage.updateBufferedReflection({
+            id: record.id,
+            reflection,
+            tokenCount: reflectionTokens,
+            inputTokenCount: reflectionTokens * 3,
+            reflectedObservationLineCount: reflectedLines.length,
+          });
+
+          const { writer, customCalls } = makeCapturingWriter();
+
+          const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+          await om.reflector.maybeReflect({
+            record: freshRecord,
+            observationTokens: freshRecord.observationTokenCount ?? 0,
+            lastActivityAt: now.getTime() - idleMs,
+            threadId,
+            writer,
+            currentModel: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+          });
+
+          const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+          const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+          if (expectActivated) {
+            expect(afterRecord.bufferedReflection).toBeFalsy();
+            expect(activationMarkers).toHaveLength(1);
+            expect(activationMarkers[0]?.data).toMatchObject({
+              triggeredBy: 'ttl',
+              config: { activateAfterIdle: 3_600_000 },
+            });
+          } else {
+            expect(afterRecord.bufferedReflection).toBe(reflection);
+            expect(activationMarkers).toHaveLength(0);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
 
     it('should prefer a real threshold activation over TTL metadata when observations already crossed the threshold', async () => {
       vi.useFakeTimers();

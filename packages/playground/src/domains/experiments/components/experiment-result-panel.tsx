@@ -8,11 +8,11 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
-import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useTraceFeedback } from '@mastra/react/hooks';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -127,7 +127,10 @@ function ExperimentResultPanelBody({
   const { Link } = useLinkComponent();
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
   // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
-  const { data: traceFeedback } = useTraceFeedback({ traceId: feedbackTraceId });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: feedbackTraceId,
+    queryOptions: { enabled: !!feedbackTraceId },
+  });
   const usage = useExperimentResultUsage(result.traceId);
 
   const details = (

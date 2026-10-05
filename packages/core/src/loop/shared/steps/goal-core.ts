@@ -505,7 +505,8 @@ export async function evaluateGoal(deps: {
   // NOT change the persisted status — the record stays `active` so the next
   // agent turn is still judged; only `isContinued` is set to false (below)
   // to stop the auto-loop and give the user a chance to provide input.
-  const runsUsed = record.runsUsed + 1;
+  // A failed judge produced no verdict, so it does not consume the run budget.
+  const runsUsed = judgeFailed ? record.runsUsed : record.runsUsed + 1;
   const maxRunsReached = runsUsed >= effective.maxRuns;
   let status: GoalObjectiveRecord['status'] = record.status;
   let pausedReason: string | undefined;
@@ -579,12 +580,16 @@ export async function evaluateGoal(deps: {
   const continuation = shouldContinue
     ? `[Goal attempt ${runsUsed}/${effective.maxRuns}] The goal is not yet complete. Judge feedback: ${feedback}\n\nContinue working toward the goal: ${record.objective}`
     : `${status} (${runsUsed}/${effective.maxRuns})\n${goalEvaluationPayload.reason ?? ''}`;
-  await sendSignal({
-    type: 'system-reminder',
-    contents: continuation,
-    attributes: { type: 'goal-judge' },
-    metadata: { goalEvaluation: goalEvaluationPayload },
-  });
+  try {
+    await sendSignal({
+      type: 'system-reminder',
+      contents: continuation,
+      attributes: { type: 'goal-judge' },
+      metadata: { goalEvaluation: goalEvaluationPayload },
+    });
+  } catch {
+    // Best-effort — the signal is already in the transcript; only the transport write failed.
+  }
 
   // Emit the final goal chunk for external observers.
   try {

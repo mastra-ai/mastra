@@ -48,7 +48,7 @@ const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
 
 ## Listing traces for a list view
 
-`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt.
+`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt, plus `threadId` and `resourceId` for the memory context columns.
 
 Prefer it whenever you are rendering many traces at once, and fetch the full record only when a row is opened:
 

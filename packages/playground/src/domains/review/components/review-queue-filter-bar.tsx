@@ -1,20 +1,19 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
-import { themedHueColor } from '@mastra/playground-ui/utils/colors';
+import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
+import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import {
   DATASET_TARGET_TYPES,
   isDatasetTargetType,
   type DatasetTargetType,
 } from '@/domains/datasets/components/target-type-options';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';
@@ -36,19 +35,19 @@ const STATUS_OPTIONS: Array<{ value: ReviewListStatus; label: string }> = [
 ];
 
 // Same hues as the matching trace filter fields so a "Tag" or "Experiment" chip reads alike across pages.
-const FIELD_META: Record<string, { icon: LucideIcon; hue: number }> = {
-  [TARGET_TYPE_FIELD_ID]: { icon: BoxIcon, hue: 265 },
-  [TARGET_ID_FIELD_ID]: { icon: FingerprintIcon, hue: 315 },
-  [EXPERIMENT_FIELD_ID]: { icon: FlaskConicalIcon, hue: 160 },
-  [STATUS_FIELD_ID]: { icon: CheckCircleIcon, hue: 0 },
-  [TAG_FIELD_ID]: { icon: TagIcon, hue: 340 },
+const FIELD_META: Record<string, { icon: LucideIcon; hue: CategoricalHue }> = {
+  [TARGET_TYPE_FIELD_ID]: { icon: BoxIcon, hue: 'purple' },
+  [TARGET_ID_FIELD_ID]: { icon: FingerprintIcon, hue: 'pink' },
+  [EXPERIMENT_FIELD_ID]: { icon: FlaskConicalIcon, hue: 'pink' },
+  [STATUS_FIELD_ID]: { icon: CheckCircleIcon, hue: 'orange' },
+  [TAG_FIELD_ID]: { icon: TagIcon, hue: 'pink' },
 };
 
 const fieldBase = (id: string, label: string) => ({
   id,
   label,
   icon: FIELD_META[id].icon,
-  color: themedHueColor(FIELD_META[id].hue),
+  color: hueAccentColor(FIELD_META[id].hue),
   strict: true,
 });
 
@@ -114,12 +113,10 @@ export function ReviewQueueFilterBar({
   tagOptions,
   onChange,
 }: ReviewQueueFilterBarProps) {
-  const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({
-    enabled: targetType === 'workflow',
-  });
+  const { data: agents } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
+  const { data: workflows } = useWorkflows({ queryOptions: { enabled: targetType === 'workflow' } });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors } = useProcessors({ queryOptions: { enabled: targetType === 'processor' } });
 
   const fields = useMemo<FilterBarField[]>(() => {
     const targetOptions =

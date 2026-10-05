@@ -2,6 +2,8 @@ import { useId, useState } from 'react';
 import type { FocusEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ChartTooltip } from '@/ds/components/ChartTooltip';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 /** A theme-presence point with an instant portal tooltip. */
 export function LifelinePoint({
@@ -46,7 +48,10 @@ export function LifelinePoint({
       {onSelect ? (
         <button
           aria-label={title}
-          className="absolute bottom-px w-1.5 -translate-x-1/2 cursor-pointer rounded-xs hover:brightness-125"
+          className={cn(
+            'absolute bottom-px w-1.5 -translate-x-1/2 cursor-pointer rounded-xs hover:brightness-125',
+            focusRing,
+          )}
           onClick={onSelect}
           style={style}
           type="button"
@@ -55,7 +60,7 @@ export function LifelinePoint({
       ) : (
         <span
           aria-label={title}
-          className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={cn('absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs', focusRing)}
           role="img"
           style={style}
           tabIndex={0}

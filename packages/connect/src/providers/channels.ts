@@ -32,7 +32,7 @@ function credentialToken(credential: ConnectionCredential): string {
  * inlineMedia, etc.) is forwarded to the provider constructor unchanged.
  */
 const SLACK_RESERVED_KEYS = ['baseUrl', 'refreshToken', 'token', 'tokenResolver', 'encryptionKey'] as const;
-const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'encryptionKey'] as const;
+const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'tokenResolver', 'encryptionKey'] as const;
 const DISCORD_RESERVED_KEYS = ['baseUrl', 'encryptionKey'] as const;
 
 /** Reserved (credential + framework-managed) `providerOptions` keys per integration. */
@@ -108,18 +108,25 @@ const slackChannel: ChannelProviderRegistration = {
 };
 
 /**
- * Telegram: wraps `@mastra/telegram`'s `TelegramProvider`. The provider is
- * constructed credential-less (so its routes can mount before a connection
- * exists); the platform-stored BotFather bot token is pushed in via
- * `configure({ botToken })` on every resolution while a connection is active.
- * It becomes the default the provider's `connect(agentId)` call falls back to
- * (per-agent `connect()` may override with a different token, but with
- * `channels()` most apps won't need to).
+ * Telegram: wraps `@mastra/telegram`'s `TelegramProvider` in delegated
+ * credential mode. The provider is constructed with a `tokenResolver` that
+ * fetches the platform-stored BotFather bot token (the connection's `api_key`
+ * credential) on demand — the token is never persisted in the provider's
+ * install store and is re-resolved per Bot API call, so a token re-pasted on
+ * the platform takes effect without a restart or `sync()`.
+ *
+ * The resolver returns whatever token the current connection holds — it does
+ * not know which installation is asking. If the platform connection is
+ * repointed at a *different* bot, `TelegramProvider` catches that on the next
+ * lifecycle step (init/connect/disconnect) by comparing the resolved token's
+ * bot user id against the stored installation and refuses to retarget the
+ * existing agent's webhook. Adopting a new bot is an intentional operator
+ * action: disconnect the agent, then reconnect.
  *
  * Reserved `providerOptions` fields (`baseUrl`, `apiBaseUrl`, `botToken`,
- * `encryptionKey`) are rejected at the type level and stripped at runtime.
- * Non-reserved provider config (`mode`, `commands`, `streaming`,
- * `typingStatus`, handlers, etc.) is forwarded unchanged. See
+ * `tokenResolver`, `encryptionKey`) are rejected at the type level and
+ * stripped at runtime. Non-reserved provider config (`mode`, `commands`,
+ * `streaming`, `typingStatus`, handlers, etc.) is forwarded unchanged. See
  * `@mastra/telegram`'s `TelegramProviderConfig` for the full option surface.
  */
 const telegramChannel: ChannelProviderRegistration = {
@@ -129,16 +136,13 @@ const telegramChannel: ChannelProviderRegistration = {
       TelegramProvider: new (config: Record<string, unknown>) => ChannelProvider;
     };
     const safeOptions = stripReservedOptions('telegram', options);
-    const provider = new mod.TelegramProvider({ ...(safeOptions ?? {}) });
-    return {
-      provider,
-      // `configure()` merges the token into provider config and is cheap when
-      // nothing changed, so re-applying on every resolution is safe.
-      async sync() {
-        const botToken = credentialToken(await runtime.getCredential());
-        await provider.configure?.({ botToken });
-      },
+    // Fetch the current credential on every call — the platform owns the
+    // token, so a swap there is picked up on the next Bot API request.
+    const tokenResolver = async (): Promise<string> => {
+      const fresh = await runtime.getCredential();
+      return credentialToken(fresh);
     };
+    return { provider: new mod.TelegramProvider({ tokenResolver, ...(safeOptions ?? {}) }) };
   },
 };
 
@@ -148,17 +152,25 @@ interface DiscordProviderOptions extends Record<string, unknown> {
 }
 
 /**
- * Discord: wraps `@mastra/discord`'s `DiscordProvider`. The bot token lives in
- * the connection's Nango **metadata** (`botToken`), not in the OAuth
- * credential — Discord's token exchange only yields a user Bearer token, so
- * Nango's Discord convention (shared by NangoHQ's integration-templates, and
- * by our generated Discord tools) stores the bot token on the connection via
- * `setMetadata`. The oauth2 `accessToken` is used only as a fallback for
- * setups where the credential itself is a bot token (e.g. an API-key style
- * integration). The bot token alone is enough: `DiscordProvider` backfills
- * `applicationId` and `publicKey` from `GET /applications/@me` (the
- * application object carries the id and the Ed25519 `verify_key`). Connection
- * metadata (`applicationId`/`publicKey`, camelCase or snake_case) or a
+ * Discord: wraps `@mastra/discord`'s `DiscordProvider`, matched to the
+ * platform's `discord` integration — an API-key connection whose credential
+ * is the bot token, so a single connection powers **both** the channel
+ * (Ed25519 signature verification, per-guild command registration,
+ * invite-URL install flow) and the generated Discord tools
+ * (`packages/connect/src/providers/discord/`) from the same credential. The
+ * bot token comes from the connection's `/credentials` endpoint on every
+ * sync, so it lives on the platform's encrypted, audited secrets path —
+ * never in connection metadata (which the platform treats as non-secret).
+ *
+ * The channel deliberately requires API-key credentials: Discord's OAuth
+ * flow only yields a user Bearer token which Discord rejects for bot auth,
+ * and Discord has no API to mint applications programmatically (unlike
+ * Slack's manifest API).
+ *
+ * The bot token alone is enough: `DiscordProvider` backfills `applicationId`
+ * and `publicKey` from `GET /applications/@me` (the application object
+ * carries the id and the Ed25519 `verify_key`). Connection metadata
+ * (`applicationId`/`publicKey`, camelCase or snake_case) or a
  * `providerOptions` override take precedence over the backfilled values when
  * present. `DiscordProvider` handles per-guild command registration, Ed25519
  * signature verification, and the invite-URL install flow. Note that
@@ -191,24 +203,32 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
     return {
       provider,
       async sync() {
-        const metadata = ((await runtime.getConnectionContext())?.metadata ?? {}) as Record<string, unknown>;
-        // The bot token comes from connection metadata (Nango's Discord
-        // convention — the same `botToken` metadata contract the generated
-        // Discord tools consume). The OAuth credential is a user Bearer
-        // token that Discord always rejects for bot auth, so there is no
-        // credential fallback: without metadata the provider stays
-        // unconfigured rather than failing later with a misleading 401.
-        const botToken =
-          (typeof metadata.botToken === 'string' && metadata.botToken) ||
-          (typeof metadata.bot_token === 'string' && metadata.bot_token) ||
-          undefined;
-        if (!botToken) {
+        // The `discord` integration is API-key auth: the credential is
+        // the bot token itself. An oauth2 credential here means the
+        // connection belongs to a different integration flavor — its user
+        // Bearer token would fail every bot call with a misleading 401, so
+        // skip loudly instead of configuring the provider with it.
+        const credential = await runtime.getCredential();
+        if (credential.type !== 'api_key') {
           throw new MastraConnectError(
-            'no_active_connection',
-            `Discord connection ${runtime.getConnectionId()} has no botToken in its metadata. ` +
-              `Store the bot token on the connection (Nango setMetadata) to activate the Discord channel.`,
+            'unsupported_credential_type',
+            `Discord connection ${runtime.getConnectionId()} returned a '${credential.type}' credential, but the ` +
+              `Discord channel requires the bot token as an API-key credential (the 'discord' integration). ` +
+              `OAuth Discord connections yield user Bearer tokens, which Discord rejects for bot auth.`,
           );
         }
+        const botToken = credential.apiKey;
+        // `DiscordProvider.configure()` marks itself configured on any
+        // non-null `botToken`, including `""`. An empty string would later
+        // surface as a mystery 401 at every tool call, so treat it as no
+        // connection at all here.
+        if (typeof botToken !== 'string' || botToken.length === 0) {
+          throw new MastraConnectError(
+            'no_active_connection',
+            `Discord connection ${runtime.getConnectionId()} has no bot token on its credential.`,
+          );
+        }
+        const metadata = ((await runtime.getConnectionContext())?.metadata ?? {}) as Record<string, unknown>;
         const applicationId =
           optionsAppId ??
           (typeof metadata.applicationId === 'string' ? metadata.applicationId : undefined) ??

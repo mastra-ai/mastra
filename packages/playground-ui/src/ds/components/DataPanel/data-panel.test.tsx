@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from '../Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -9,11 +9,6 @@ import { DataPanel } from './data-panel';
 
 // Base UI's Select synthesizes PointerEvents on interaction, which jsdom does
 // not implement. Polyfill it with the available MouseEvent constructor.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => cleanup());
 
@@ -283,7 +278,7 @@ describe('DataPanel', () => {
       expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
-    it('renders a vertical separator between the heading and the metadata', () => {
+    it('keeps the divider between the heading and the metadata out of the accessibility tree', () => {
       render(
         <TooltipProvider>
           <DataPanel open title="Trace">
@@ -299,9 +294,10 @@ describe('DataPanel', () => {
         </TooltipProvider>,
       );
       const heading = screen.getByRole('heading', { name: 'Trace' });
-      const separator = screen.getByRole('separator');
       const list = screen.getByRole('list');
-      expect(separator.getAttribute('aria-orientation')).toBe('vertical');
+      expect(screen.queryByRole('separator')).toBeNull();
+      const separator = heading.parentElement?.querySelector('[aria-hidden="true"]');
+      if (!separator) throw new Error('decorative divider not rendered');
       expect(heading.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(separator.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });

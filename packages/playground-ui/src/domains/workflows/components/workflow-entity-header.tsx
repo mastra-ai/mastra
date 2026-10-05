@@ -1,10 +1,12 @@
+import { useWorkflow } from '@mastra/react/hooks';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { cn } from '@/utils/cn';
 
 export interface WorkflowEntityHeaderProps {
   requestContext?: Record<string, any>;
@@ -12,7 +14,11 @@ export interface WorkflowEntityHeaderProps {
 }
 
 export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEntityHeaderProps) => {
-  const { data: workflow, isLoading } = useWorkflow(workflowId, requestContext);
+  const { data: workflow, isLoading } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const workflowName = workflow?.name || workflowId;
@@ -48,7 +54,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 role="note"
                 tabIndex={0}
                 aria-label="Dynamic workflow"
-                className="rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                className={cn('rounded-[7px]', focusRing)}
               >
                 <Badge icon={<Database />} variant="blue">
                   Dynamic
