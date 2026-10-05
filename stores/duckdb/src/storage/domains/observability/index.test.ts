@@ -17,6 +17,7 @@ import {
   planThreadQuery,
   planTraceAggregate,
   planTraceQuery,
+  TraceStatus,
 } from '@mastra/core/storage';
 import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -3318,6 +3319,117 @@ describe('ObservabilityStorageDuckDB', () => {
   // post-agg set has its columns wired up in POSTAGG_FILTER_COLUMNS and that
   // page rows still carry full span payloads.
   // ==========================================================================
+
+  describe('page reconstruction bounds', () => {
+    // Pages are reconstructed only within the time range of their own events.
+    // These spans end long after newer traces start, so a range taken from
+    // the page's start times alone would drop their end events.
+    const at = (time: string) => new Date(`2026-03-01T${time}Z`);
+    const span = (
+      traceId: string,
+      spanId: string,
+      parentSpanId: string | null,
+      startedAt: string,
+      endedAt: string,
+    ) => ({
+      traceId,
+      spanId,
+      parentSpanId,
+      name: spanId,
+      spanType: parentSpanId ? SpanType.TOOL_CALL : SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: parentSpanId ? EntityType.TOOL : EntityType.AGENT,
+      entityId: spanId,
+      entityName: spanId,
+      userId: null,
+      organizationId: null,
+      resourceId: null,
+      runId: null,
+      sessionId: null,
+      threadId: null,
+      requestId: null,
+      environment: null,
+      source: null,
+      serviceName: null,
+      scope: null,
+      attributes: null,
+      metadata: null,
+      tags: null,
+      links: null,
+      input: { from: spanId },
+      output: { done: spanId },
+      error: null,
+      startedAt: at(startedAt),
+      endedAt: at(endedAt),
+    });
+
+    beforeEach(async () => {
+      await storage.batchCreateSpans({
+        records: [
+          // Oldest trace: root and a tool call that both end after the newer traces.
+          span('trace-long', 'root-long', null, '10:00:00', '15:00:00'),
+          span('trace-long', 'tool-long', 'root-long', '10:05:00', '14:00:00'),
+          span('trace-mid', 'root-mid', null, '11:00:00', '11:01:00'),
+          span('trace-new', 'root-new', null, '12:00:00', '12:01:00'),
+        ],
+      });
+    });
+
+    it('listTraces returns complete spans on the oldest page (fast path)', async () => {
+      const result = await storage.listTraces({
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 2 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long', 'trace-mid']);
+      const long = result.spans[0]!;
+      expect(long.endedAt).toEqual(at('15:00:00'));
+      expect(long.output).toEqual({ done: 'root-long' });
+    });
+
+    it('listTraces returns complete spans on the oldest page (post-aggregation path)', async () => {
+      const result = await storage.listTraces({
+        filters: { status: TraceStatus.SUCCESS },
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 1 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long']);
+      expect(result.spans[0]!.endedAt).toEqual(at('15:00:00'));
+      expect(result.spans[0]!.output).toEqual({ done: 'root-long' });
+    });
+
+    it('listTracesLight returns complete spans on a startedAt-bounded page', async () => {
+      const result = await storage.listTracesLight({
+        filters: { startedAt: { end: at('10:30:00') } },
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(result.spans.map(s => s.traceId)).toEqual(['trace-long']);
+      expect(result.spans[0]!.endedAt).toEqual(at('15:00:00'));
+    });
+
+    it('listBranches returns complete spans on the oldest page', async () => {
+      const result = await storage.listBranches({
+        filters: { spanType: SpanType.TOOL_CALL },
+        orderBy: { field: 'startedAt', direction: 'ASC' },
+        pagination: { page: 0, perPage: 1 },
+      });
+      expect(result.branches.map(b => b.spanId)).toEqual(['tool-long']);
+      expect(result.branches[0]!.endedAt).toEqual(at('14:00:00'));
+      expect(result.branches[0]!.output).toEqual({ done: 'tool-long' });
+    });
+
+    it('queryTraces keeps root events that fall after the time range', async () => {
+      const plan = planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: { from: at('09:00:00').toISOString(), to: at('10:30:00').toISOString() },
+          where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'tool-long' } } } },
+          page: { limit: 10 },
+        }),
+      );
+      const result = await storage.queryTraces(plan);
+      expect(result.traces.map(t => t.traceId)).toEqual(['trace-long']);
+      expect(new Date(result.traces[0]!.endedAt as string)).toEqual(at('15:00:00'));
+    });
+  });
 
   describe('slow-path trace listing', () => {
     const slowBase = {

@@ -205,29 +205,66 @@ function buildPostAggReconstructSelect(postAgg: Record<string, unknown>, orderBy
 }
 
 /**
- * Reconstruct spans for the `(traceId, spanId)` pairs selected by `anchorCte`,
- * scanning only events at/after the CTE's earliest `anchorStartedAt`.
+ * Reconstruct the spans of one list page, reading payload columns only for
+ * the page's own events.
  *
- * The `(traceId, spanId) IN (subquery)` semi-join alone cannot be pushed into
- * the table scan, so without a bound DuckDB decompresses every column of the
- * entire table just to emit one page of spans. The time bound is a plain range
- * predicate that zone maps can prune on (insertion order tracks event time).
+ * Two queries:
+ *   1. `anchorSql` (a `WITH ...` prefix defining `anchorCte`) picks the page's
+ *      `(traceId, spanId)` anchors, and a narrow pass over `traceId`, `spanId`
+ *      and `timestamp` finds the exact time range of their events.
+ *   2. Reconstruction scans only that range for exactly those anchors.
  *
- * Correctness: span events are only 'start' (timestamp = startedAt) and 'end'
- * (timestamp = endedAt >= startedAt), so every event of an anchored span has
- * timestamp >= its start-row timestamp >= min(anchorStartedAt). An empty
- * anchor set makes the bound NULL, which matches the empty IN-list result.
+ * The `(traceId, spanId) IN (...)` semi-join cannot be pushed into the table
+ * scan, so without a range DuckDB decompresses every payload column of every
+ * row it reads. A lower bound alone (the earliest anchor) prunes nothing for
+ * the oldest pages, which then read the whole table and can run out of memory.
+ * Both bounds are passed as literal parameters so they always reach the scan
+ * as plain range filters that zone maps can prune on.
+ *
+ * Anchors and bounds are frozen after the first query, so spans written in
+ * between cannot change which rows are on the page. An event a page span
+ * receives in between is left for the next read, as if the page had been
+ * read a moment earlier.
  */
-function reconstructForAnchors(reconstructSelect: string, anchorCte: string): string {
-  return `
-    ${reconstructSelect}
-    WHERE timestamp >= (SELECT min(anchorStartedAt) FROM ${anchorCte})
-      AND (traceId, spanId) IN (SELECT traceId, spanId FROM ${anchorCte})
-    GROUP BY traceId, spanId`;
+async function reconstructAnchoredPage(
+  db: DuckDBConnection,
+  anchorSql: string,
+  anchorCte: string,
+  params: unknown[],
+  reconstructSelect: string,
+  orderBySql: string,
+): Promise<Record<string, unknown>[]> {
+  const anchors = await db.query<{ traceId: string; spanId: string; minTs: Date; maxTs: Date }>(
+    `
+      ${anchorSql}
+      SELECT anchors.traceId, anchors.spanId, bounds.minTs, bounds.maxTs
+      FROM ${anchorCte} AS anchors,
+        (
+          SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+          FROM span_events
+          WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM ${anchorCte})
+        ) AS bounds
+    `,
+    params,
+  );
+  if (anchors.length === 0) return [];
+
+  const { minTs, maxTs } = anchors[0]!;
+  const anchorValues = anchors.map(() => '(?, ?)').join(', ');
+  return db.query(
+    `
+      ${reconstructSelect}
+      WHERE timestamp >= ? AND timestamp <= ?
+        AND (traceId, spanId) IN (SELECT * FROM (VALUES ${anchorValues}))
+      GROUP BY traceId, spanId
+      ${orderBySql}
+    `,
+    [minTs, maxTs, ...anchors.flatMap(anchor => [anchor.traceId, anchor.spanId])],
+  );
 }
 
 /**
- * Same time-bound trick as {@link reconstructForAnchors}, but with the bound
+ * Same time-bound trick as {@link reconstructAnchoredPage}, but with the bound
  * precomputed in JS and passed as a `?` parameter. The delta-poll query shape
  * references its candidate CTE multiple times, which makes DuckDB materialize
  * it and lose the dynamic-filter pushdown a scalar subquery bound relies on —
@@ -840,7 +877,7 @@ async function listTraceRows<TSpan>(
       return { pagination: { total, page, perPage, hasMore: false }, spans: [] };
     }
 
-    const pageSql = `
+    const anchorSql = `
       WITH page_roots AS (
         SELECT traceId, spanId, min(timestamp) AS anchorStartedAt
         FROM span_events AS ${outerAlias}
@@ -849,11 +886,16 @@ async function listTraceRows<TSpan>(
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
       )
-      ${reconstructForAnchors(reconstructSelect, 'page_roots')}
-      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
-    const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
-    const spans = rows.map(row => mapRow(row as Record<string, unknown>));
+    const rows = await reconstructAnchoredPage(
+      db,
+      anchorSql,
+      'page_roots',
+      [...prefilterParams, perPage, offset],
+      reconstructSelect,
+      `${buildOrderByClause(orderBy)}, traceId, spanId`,
+    );
+    const spans = rows.map(row => mapRow(row));
 
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
@@ -897,17 +939,22 @@ async function listTraceRows<TSpan>(
     return { pagination: { total, page, perPage, hasMore: false }, spans: [] };
   }
 
-  const dataSql = `
+  const anchorSql = `
     ${cteSql},
     page_roots AS (
       SELECT traceId, spanId, startedAt AS anchorStartedAt
       FROM root_spans ${postAggWhere} ${orderByClause} ${paginationClause}
     )
-    ${reconstructForAnchors(reconstructSelect, 'page_roots')}
-    ${orderByClause}
   `;
-  const rows = await db.query(dataSql, [...prefilterParams, ...postAggParams, ...paginationParams]);
-  const spans = rows.map(row => mapRow(row as Record<string, unknown>));
+  const rows = await reconstructAnchoredPage(
+    db,
+    anchorSql,
+    'page_roots',
+    [...prefilterParams, ...postAggParams, ...paginationParams],
+    reconstructSelect,
+    orderByClause,
+  );
+  const spans = rows.map(row => mapRow(row));
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
@@ -1265,7 +1312,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
       };
     }
 
-    const pageSql = `
+    const anchorSql = `
       WITH page_anchors AS (
         SELECT traceId, spanId, min(timestamp) AS anchorStartedAt
         FROM span_events AS ${outerAlias}
@@ -1274,11 +1321,16 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
       )
-      ${reconstructForAnchors(SPAN_RECONSTRUCT_SELECT, 'page_anchors')}
-      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
-    const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
-    const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+    const rows = await reconstructAnchoredPage(
+      db,
+      anchorSql,
+      'page_anchors',
+      [...prefilterParams, perPage, offset],
+      SPAN_RECONSTRUCT_SELECT,
+      `${buildOrderByClause(orderBy)}, traceId, spanId`,
+    );
+    const spans = rows.map(row => rowToSpanRecord(row));
 
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
@@ -1322,17 +1374,22 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     };
   }
 
-  const dataSql = `
+  const anchorSql = `
     ${cteSql},
     page_anchors AS (
       SELECT traceId, spanId, startedAt AS anchorStartedAt
       FROM branch_anchors ${postAggWhere} ${orderByClause} ${paginationClause}
     )
-    ${reconstructForAnchors(SPAN_RECONSTRUCT_SELECT, 'page_anchors')}
-    ${orderByClause}
   `;
-  const rows = await db.query(dataSql, [...prefilterParams, ...postAggParams, ...paginationParams]);
-  const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+  const rows = await reconstructAnchoredPage(
+    db,
+    anchorSql,
+    'page_anchors',
+    [...prefilterParams, ...postAggParams, ...paginationParams],
+    SPAN_RECONSTRUCT_SELECT,
+    orderByClause,
+  );
+  const spans = rows.map(row => rowToSpanRecord(row));
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
