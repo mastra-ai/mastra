@@ -1,3 +1,4 @@
+import stripAnsi from 'strip-ansi';
 import { vi } from 'vitest';
 
 import { updateStatusLine } from '../../src/tui/status-line.js';
@@ -154,10 +155,15 @@ export const workIdleStatusScenario: McE2eScenario = {
       throw new Error(`Expected rates ${expectedRates.join(', ')} after each step, got ${ratesAfterSteps.join(', ')}`);
     }
     // Live throughput shows in the Working row above the prompt while a run is active.
+    // Checked on the row itself: the run is already over, so other updates can clear it before a frame lands.
     state.agentRunStartedAt = Date.now();
     updateStatusLine(state);
-    await runtime.waitForScreenText(/\b65 tok\/s\b/, terminal);
+    const workingRow = stripAnsi(state.activityLine.render(120).join('\n'));
     state.agentRunStartedAt = undefined;
+    updateStatusLine(state);
+    if (!/\b65 tok\/s\b/.test(workingRow)) {
+      throw new Error(`Expected the Working row to show 65 tok/s, got ${JSON.stringify(workingRow)}`);
+    }
 
     state.lastAgentRunDurationMs = 61_000;
     state.lastAgentRunEndReason = 'done';
