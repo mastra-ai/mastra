@@ -76,6 +76,22 @@ export const myProviderScenario: Scenario = {
 
 Every scenario receives a `runId` like `mastra-smoke-k7fx3`. Embed it in every record title so a concurrent run never collides and any leaked record is visibly tagged.
 
+## Channels suite
+
+`smoke-test:channels` is a sibling suite for the `channels()` resolver — the channel-provider path (Slack, Discord, Telegram) that the tools suite doesn't touch:
+
+```bash
+# every channel (channels without an active connection are skipped)
+pnpm --filter @mastra/connect smoke-test:channels
+
+# one channel
+pnpm --filter @mastra/connect smoke-test:channels --channel discord
+```
+
+It checks the resolver contract (construction guards, route mounting before any connection exists, TTL cache + `invalidate()`/`refresh()`, `disabled` and bogus `connectionId` overrides) and, for each connected channel, the end-to-end credential flow: presence in the resolved map (which proves credential late-binding, e.g. Discord's `sync()` → `configure()`), provider `id`/routes/`getInfo()`, a platform credential fetch, and a read-only vendor whoami call (Discord `GET /users/@me` + `/applications/@me`, Slack `auth.test`, Telegram `getMe`). The whoami calls deliberately bypass the proxy — channel providers call vendor APIs directly with the resolved token, so that direct path is what gets smoked.
+
+All checks are read-only: no webhooks registered, no agents installed, no messages sent.
+
 ## Cross-provider cleanup
 
 Scenarios see their own provider's tools in `tools` and the full project toolset in `allTools`. Use `allTools` when another provider owns the delete endpoint (e.g. `google_drive_delete_file` cleans up a sheet created by `google-sheet`). Prefer `tools` for everything else.
