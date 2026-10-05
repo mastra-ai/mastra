@@ -3,10 +3,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToolCallProvider } from '../../../context/tool-call-context';
 import type { ToolCallContextValue } from '../../../context/tool-call-context';
-import { ToolApprovalButtons } from '../tool-approval-buttons';
+import { ToolApprovalBadge, ToolApprovalButtons } from '../tool-approval-buttons';
 import type { ToolApprovalButtonsProps } from '../tool-approval-buttons';
 
-function renderApproval(props: Partial<ToolApprovalButtonsProps> = {}, overrides: Partial<ToolCallContextValue> = {}) {
+function renderApproval(
+  props: Partial<ToolApprovalButtonsProps> = {},
+  overrides: Partial<ToolCallContextValue> = {},
+  framed = false,
+) {
   const callbacks = {
     approveToolcall: vi.fn(),
     declineToolcall: vi.fn(),
@@ -14,6 +18,14 @@ function renderApproval(props: Partial<ToolApprovalButtonsProps> = {}, overrides
     declineToolcallGenerate: vi.fn(),
     approveNetworkToolcall: vi.fn(),
     declineNetworkToolcall: vi.fn(),
+  };
+  const approvalProps = {
+    toolCallId: 'call-1',
+    toolName: 'write_file',
+    toolCalled: false,
+    toolApprovalMetadata: { toolCallId: 'call-1', toolName: 'write_file', args: {}, runId: 'run-1' },
+    isNetwork: false,
+    ...props,
   };
   render(
     <ToolCallProvider
@@ -23,14 +35,13 @@ function renderApproval(props: Partial<ToolApprovalButtonsProps> = {}, overrides
       networkToolCallApprovals={{}}
       {...overrides}
     >
-      <ToolApprovalButtons
-        toolCallId="call-1"
-        toolName="write_file"
-        toolCalled={false}
-        toolApprovalMetadata={{ toolCallId: 'call-1', toolName: 'write_file', args: {}, runId: 'run-1' }}
-        isNetwork={false}
-        {...props}
-      />
+      {framed ? (
+        <ToolApprovalBadge approval={approvalProps} title="Write file" initialCollapsed>
+          <p>Review the requested change</p>
+        </ToolApprovalBadge>
+      ) : (
+        <ToolApprovalButtons {...approvalProps} />
+      )}
     </ToolCallProvider>,
   );
   return callbacks;
@@ -66,7 +77,7 @@ describe('ToolApprovalButtons', () => {
     ] satisfies Partial<ToolCallContextValue>[])('prevents another decision for %j', context => {
       const callbacks = renderApproval({}, context);
 
-      for (const button of screen.getAllByRole<HTMLButtonElement>('button')) {
+      for (const button of screen.queryAllByRole<HTMLButtonElement>('button')) {
         expect(button.disabled).toBe(true);
         fireEvent.click(button);
       }
@@ -89,7 +100,7 @@ describe('ToolApprovalButtons', () => {
       expect(callbacks.approveNetworkToolcall).toHaveBeenCalledExactlyOnceWith('write_file', 'run-1');
     });
 
-    it('disables a decision belonging to this run', () => {
+    it('shows the decision belonging to this run', () => {
       renderApproval(
         { isNetwork: true },
         {
@@ -97,7 +108,8 @@ describe('ToolApprovalButtons', () => {
         },
       );
 
-      expect(screen.getAllByRole<HTMLButtonElement>('button').every(button => button.disabled)).toBe(true);
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Approved');
     });
 
     it('preserves tool-name approval keys for metadata without a run ID', () => {
@@ -109,7 +121,8 @@ describe('ToolApprovalButtons', () => {
         { networkToolCallApprovals: { write_file: { status: 'declined' } } },
       );
 
-      expect(screen.getAllByRole<HTMLButtonElement>('button').every(button => button.disabled)).toBe(true);
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Declined');
     });
   });
 
@@ -118,5 +131,55 @@ describe('ToolApprovalButtons', () => {
       renderApproval(props);
       expect(screen.queryByRole('button')).toBeNull();
     });
+  });
+});
+
+describe('ToolApprovalBadge', () => {
+  it('keeps pending requests expanded and prevents hiding the decision controls', () => {
+    const callbacks = renderApproval({}, {}, true);
+
+    expect(screen.getByText('Review the requested change')).not.toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Approval required');
+    expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+    expect(screen.queryByRole('button', { expanded: false })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve write_file' }));
+    expect(callbacks.approveToolcall).toHaveBeenCalledExactlyOnceWith('call-1');
+  });
+
+  it.each(['approved', 'declined'] as const)('keeps %s visible when the details collapse', status => {
+    renderApproval({}, { toolCallApprovals: { 'call-1': { status } } }, true);
+
+    expect(screen.getByRole('status').textContent?.toLowerCase()).toBe(status);
+    const trigger = screen.getByRole('button', { expanded: false });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('button', { expanded: true })).toBe(trigger);
+    fireEvent.click(trigger);
+    expect(screen.getByRole('status').textContent?.toLowerCase()).toBe(status);
+    expect(screen.queryByRole('button', { name: 'Approve write_file' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Decline write_file' })).toBeNull();
+  });
+
+  it('keeps a decided status in the header after execution', () => {
+    renderApproval({ toolCalled: true }, { toolCallApprovals: { 'call-1': { status: 'approved' } } }, true);
+    expect(screen.getByRole('status').textContent).toBe('Approved');
+    expect(screen.queryByRole('button', { name: 'Approve write_file' })).toBeNull();
+  });
+
+  it('leaves ordinary tools usable without an approval provider', () => {
+    render(
+      <ToolApprovalBadge
+        title="Read file"
+        approval={{
+          toolCallId: 'call-1',
+          toolName: 'read_file',
+          toolCalled: true,
+          toolApprovalMetadata: undefined,
+          isNetwork: false,
+        }}
+      />,
+    );
+    expect(screen.getByText('Read file')).not.toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

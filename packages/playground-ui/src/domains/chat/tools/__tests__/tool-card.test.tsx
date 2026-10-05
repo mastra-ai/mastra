@@ -529,7 +529,10 @@ describe('ToolCard dispatch', () => {
         />,
         { wrapper: Providers },
       );
-      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+      expect(screen.queryByRole('button', { expanded: false })).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Approval required');
       expect(screen.getByRole('button', { name: 'Approve agent-head' })).not.toBeNull();
     });
   });

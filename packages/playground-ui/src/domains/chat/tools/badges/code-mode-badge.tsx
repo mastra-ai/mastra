@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BadgeWrapper } from '../../components/badge-wrapper';
 import { SectionLabel } from '../../components/section-label';
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { CodeModeResult } from '../code-mode';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
+import { ToolApprovalBadge } from './tool-approval-buttons';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
@@ -54,7 +53,15 @@ export const CodeModeBadge = ({
   }, [code]);
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="code-mode-badge"
       icon={<ToolCoinIcon className="text-span-tool" />}
       title={toolName}
@@ -109,16 +116,7 @@ export const CodeModeBadge = ({
             </pre>
           </div>
         )}
-
-        <ToolApprovalButtons
-          toolCalled={toolCalled}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          isGenerateMode={metadata?.mode === 'generate'}
-        />
       </div>
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

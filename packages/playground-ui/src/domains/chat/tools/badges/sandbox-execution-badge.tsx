@@ -3,10 +3,9 @@ import type { DataMessagePart } from '../tool-card';
 import { parseToolArgs, toolDataParts, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { ActivityHeadline } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { presentTool, ToolCallCommand, ToolCallMono } from '@/ds/components/ai/tool-call';
@@ -93,16 +92,25 @@ export const SandboxExecutionBadge = ({
   }, [output]);
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="sandbox-execution-badge"
-      header={
+      header={badges => (
         <ActivityHeadline
+          badges={badges}
           icon={<ToolIcon aria-hidden />}
           label={label}
           detail={originalCommand ?? detail}
           description={description}
         />
-      }
+      )}
       status={status}
       extraInfo={
         <>
@@ -140,16 +148,8 @@ export const SandboxExecutionBadge = ({
               {output}
             </ToolCallMono>
           )}
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

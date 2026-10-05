@@ -21,6 +21,41 @@ export function SaveButton() {
 }
 ```
 
+### Tool approvals
+
+`ToolApproval` owns the approval prompt, actions, and decision status in both Factory and Studio.
+The default presentation uses the shared activity layout and renders full tool arguments, including
+file previews. Use `variant="inline"` when the tool already has a detail container.
+
+```tsx
+import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<ToolApproval
+  toolName="write_file"
+  args={{ path: 'src/agent.ts', content: 'export const name = "Assistant";' }}
+  disabled={isSubmitting}
+  status={decision}
+  onApprove={approve}
+  onDecline={decline}
+/>;
+
+// Inside an existing tool detail body; omit args when they are already displayed.
+<ToolApproval variant="inline" toolName="write_file" onApprove={approve} onDecline={decline} />;
+```
+
+The consumer owns submission, error feedback, and the optional `approved` or `declined` status.
+Status appears beside the tool name. Pending requests stay expanded so their controls remain visible.
+A decision removes the actions; Studio details can then collapse while retaining the status in the header.
+Clearing the decision restores the controls for retry. `ToolApproval.Status` is the shared header slot
+for existing tool activities; pair it with `showStatus={false}` on the inline body.
+`disabled` blocks both decisions without implying server confirmation. `autoFocus` opts into
+focusing Approve on mount. Custom `children` replace the default argument preview.
+
+All variants and Studio integration examples live under **AI / Tool Approval** in Storybook.
+`ToolApprovalActions` is deprecated; use `ToolApproval` with `variant="inline"` instead.
+Studio's internal `ToolApprovalBadge` adapter selects the streaming, generate, or network callback
+and keeps all tool kinds expanded while a decision is pending.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.

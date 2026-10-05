@@ -5,13 +5,12 @@ import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
 
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import {
   WorkflowGraph,
@@ -85,7 +84,15 @@ export const WorkflowBadge = ({
     awaitsToolApproval({ toolApprovalMetadata, toolCalled: toolCalledOrFinished });
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled: toolCalledOrFinished,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="workflow-badge"
       icon={<WorkflowIcon className="text-span-workflow" />}
       title={workflow.name}
@@ -117,18 +124,9 @@ export const WorkflowBadge = ({
               {suspendPayloadSlot}
             </div>
           )}
-
-          <ToolApprovalButtons
-            toolCalled={toolCalledOrFinished}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };
 

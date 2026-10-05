@@ -22,7 +22,9 @@ export interface BadgeWrapperProps {
   /** Interactive trailing extras (dialog triggers), kept outside the collapse trigger. */
   extraInfo?: React.ReactNode;
   /** Replaces the assembled icon/title/detail line — the tool path passes its presented headline. */
-  header?: React.ReactNode;
+  header?: React.ReactNode | ((badges: React.ReactNode) => React.ReactNode);
+  /** Status badges remain visible when details are collapsed. */
+  badges?: React.ReactNode;
   status?: ActivityStatus;
   'data-testid'?: string;
 }
@@ -36,6 +38,7 @@ export const BadgeWrapper = ({
   collapsible = true,
   extraInfo,
   header: headerOverride,
+  badges,
   status = 'idle',
   'data-testid': dataTestId,
 }: BadgeWrapperProps) => {
@@ -48,7 +51,10 @@ export const BadgeWrapper = ({
     setOpen(!initialCollapsed);
   }, [initialCollapsed]);
 
-  const header = headerOverride ?? <ActivityHeadline icon={icon} label={title} detail={detail} />;
+  const header =
+    typeof headerOverride === 'function'
+      ? headerOverride(badges)
+      : (headerOverride ?? <ActivityHeadline icon={icon} label={title} detail={detail} badges={badges} />);
 
   const hasBody = Boolean(children);
   const bodyOpen = !collapsible || open;

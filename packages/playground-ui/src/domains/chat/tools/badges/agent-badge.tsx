@@ -3,12 +3,11 @@ import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
@@ -112,7 +111,15 @@ export const AgentBadge = ({
     );
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="agent-badge"
       icon={<AgentIcon className="text-span-agent" />}
       title={agentId}
@@ -186,17 +193,8 @@ export const AgentBadge = ({
               {suspendPayloadSlot}
             </div>
           )}
-
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

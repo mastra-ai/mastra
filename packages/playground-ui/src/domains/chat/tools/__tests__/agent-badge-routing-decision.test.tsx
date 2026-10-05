@@ -11,7 +11,7 @@ vi.mock('@/domains/chat/components/network-choice-metadata-dialog', () => ({
 }));
 
 vi.mock('@/domains/chat/tools/badges/tool-approval-buttons', () => ({
-  ToolApprovalButtons: mockToolApprovalButtons,
+  ToolApprovalBadge: ({ extraInfo }: { extraInfo: ReactNode }) => extraInfo,
 }));
 
 vi.mock('@/ds/components/CodeEditor', () => ({
