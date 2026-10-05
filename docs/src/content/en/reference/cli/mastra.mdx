@@ -440,7 +440,7 @@ mastra deploy --env staging --yes
 
 Manages environments on Mastra platform. Environments are deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. The current organization is resolved from stored credentials.
 
-Every subcommand resolves its project in a fixed order. It first checks the `MASTRA_PROJECT_ID` environment variable and the `--project <name|slug|id>` flag. It then reads the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
+Every subcommand resolves its project in a fixed order. It first checks the `--project <name|slug|id>` flag, then the `MASTRA_PROJECT_ID` environment variable. It then reads the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
 
 ### `mastra env list`
 
@@ -810,7 +810,7 @@ Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
 
 #### `--project`
 
-Project ID or slug when `MASTRA_PROJECT_ID` isn't set. Slugs are resolved against projects in the current organization.
+Project ID or slug. Takes precedence over `MASTRA_PROJECT_ID`. Slugs are resolved against projects in the current organization.
 
 #### `-c, --config`
 
@@ -878,7 +878,7 @@ The file defaults to `.env` when no argument is given. All values are double-quo
 
 #### `--project`
 
-Project ID or slug. Overrides the linked project when `MASTRA_PROJECT_ID` isn't set.
+Project ID or slug. Takes precedence over `MASTRA_PROJECT_ID` and the linked project.
 
 #### CI usage
 
@@ -937,7 +937,7 @@ mastra auth tokens revoke <token-id>
 
 Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
 
-The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <project>` to select a project when `MASTRA_PROJECT_ID` isn't set.
+The target project resolves from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <name|slug|id>`.
 
 ### `mastra connect list`
 
@@ -1138,7 +1138,7 @@ See [Import existing traces](/docs/mastra-platform/observability#import-existing
 
 #### `--project <name|slug|id>`
 
-Selects the destination Mastra Platform project. `MASTRA_PROJECT_ID` takes precedence when set. Without either value, the command uses the project linked in `.mastra-project.json`.
+Selects the destination Mastra Platform project. Takes precedence over `MASTRA_PROJECT_ID`. Without either value, the command uses the project linked in `.mastra-project.json`.
 
 #### `--from <date>`
 
@@ -1174,7 +1174,7 @@ The command loads `.env` and `.env.local` from the current directory.
 | `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
 | `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
-| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. The `--project` flag takes precedence over it. |
 
 ### Examples
 
