@@ -835,3 +835,38 @@ describe('observation markers never cover content the cycle did not observe', ()
     expect(JSON.stringify(kept?.content.parts)).not.toContain('answer answer');
   });
 });
+
+describe('concurrent buffer() calls', () => {
+  it('queued behind the same op run one after another, so new messages are buffered once', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 1_000, bufferTokens: 200 });
+    const ids = await setupThread(storage);
+    const at = (s: number) => new Date(ids.t0.getTime() + s * 1_000);
+    const first = message(ids.threadId, ids.resourceId, 'cb-1', 'buffer me '.repeat(60), at(1));
+    const second = message(ids.threadId, ids.resourceId, 'cb-2', 'and me '.repeat(60), at(2));
+    await storage.saveMessages({ messages: [first, second] });
+    // The processor passes the record it cached at turn start, before any buffering flag was set.
+    const turnRecord = { ...(await om.getOrCreateRecord(ids.threadId, ids.resourceId)) };
+    const firstObserverCall = deferred();
+    const observerCall = vi.spyOn(om.observer, 'call').mockImplementation(async (_existing, messages) => {
+      if (observerCall.mock.calls.length === 1) await firstObserverCall.promise;
+      return { observations: `- obs ${messages.map(m => m.id).join(',')}` } as Awaited<
+        ReturnType<typeof om.observer.call>
+      >;
+    });
+
+    // The first op buffers cb-1; two more calls arrive while it runs and both cover cb-2.
+    const running = om.buffer({ ...ids, messages: [first], skipMinimumTokenCheck: true });
+    await vi.waitFor(() => expect(observerCall).toHaveBeenCalledTimes(1));
+    const queued = [1, 2].map(() =>
+      om.buffer({ ...ids, record: { ...turnRecord }, messages: [first, second], skipMinimumTokenCheck: true }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 10));
+    firstObserverCall.resolve();
+    await Promise.all([running, ...queued]);
+
+    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+    expect(observerCall).toHaveBeenCalledTimes(2);
+    expect((head.bufferedObservationChunks ?? []).map(c => c.messageIds)).toEqual([['cb-1'], ['cb-2']]);
+  });
+});

@@ -3442,14 +3442,21 @@ ${formattedMessages}
     // This MUST happen before the first await when buffer() is called fire-and-forget.
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
+    // Queue behind any existing buffering operation (mutex behavior). Reading the previous op and
+    // registering this one happen before any await, so concurrent calls form a chain instead of
+    // all seeing the same predecessor and then observing the same messages in parallel.
+    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
+    let resolveOp: () => void;
+    const opPromise = new Promise<void>(resolve => {
+      resolveOp = resolve;
+    });
+    BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
+
     // Clear stale flag if it was set by a crashed process (non-blocking)
     if (record.isBufferingObservation) {
       await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
     }
 
-    // Wait for any existing buffering operation to complete first (mutex behavior).
-    // IMPORTANT: read the existing op BEFORE overwriting the map entry.
-    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (existingOp) {
       try {
         await existingOp;
@@ -3466,16 +3473,6 @@ ${formattedMessages}
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
-    // Register in asyncBufferingOps so callers (and tests) can await completion
-    let resolveOp: () => void;
-    const opPromise = new Promise<void>(resolve => {
-      resolveOp = resolve;
-    });
-    BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
-
-    // Keep the caller's turn-scoped record current while using a fresh storage snapshot
-    // for the asynchronous write path.
-    record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
     const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
       inMemoryRecord.isBufferingObservation = isBufferingObservation;
       record.isBufferingObservation = isBufferingObservation;
@@ -3488,6 +3485,10 @@ ${formattedMessages}
     let flagCleared = false;
 
     try {
+      // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+      // for the asynchronous write path.
+      record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+
       // Load messages: use provided or load from storage
       let candidateMessages: MastraDBMessage[];
       if (opts.messages) {
@@ -3624,7 +3625,10 @@ ${formattedMessages}
       return { buffered: false, record };
     } finally {
       unregisterOp(record.id, 'bufferingObservation');
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      // A later call may already have registered itself behind this op; keep its entry.
+      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      }
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
