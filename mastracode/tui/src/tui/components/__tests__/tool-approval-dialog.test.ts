@@ -51,8 +51,10 @@ vi.mock('../../theme.js', () => ({
   theme: {
     bg: (_token: string, text: string) => text,
     fg: (_token: string, text: string) => text,
-    getTheme: () => ({ dim: '#888888', text: '#ffffff' }),
+    bold: (text: string) => text,
+    getTheme: () => ({ dim: '#888888', text: '#ffffff', warning: '#f59e0b', secondary: '#d9d9dc' }),
   },
+  surfaceShade: () => '#252538',
 }));
 
 import { ToolApprovalDialogComponent } from '../tool-approval-dialog.js';
@@ -181,5 +183,20 @@ describe('ToolApprovalDialogComponent.handleInput', () => {
       dialog.handleInput(input);
       expect(onAction).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ToolApprovalDialogComponent.render', () => {
+  it('renders one inline row with the four key choices', () => {
+    const { dialog } = makeDialog();
+    const lines = dialog.render(120).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBe('▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no');
+  });
+
+  it('never renders wider than the terminal', () => {
+    const { dialog } = makeDialog();
+    const line = dialog.render(30)[0]!.replace(/\x1b\[[0-9;]*m/g, '');
+    expect(line.length).toBeLessThanOrEqual(30);
   });
 });

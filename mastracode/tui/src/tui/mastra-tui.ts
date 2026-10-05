@@ -275,7 +275,13 @@ export class MastraTUI {
       // process SIGINT never fires), so the inline component would otherwise
       // swallow it and leave the suspended submit_plan run parked. Fall through
       // to the editor's Ctrl+C handler (which clears inline state and aborts).
-      if (this.state.activeInlinePlanApproval) {
+      if (this.state.activeInlineApproval) {
+        // Inline tool approval: y / a / Y / n / Esc. Ctrl+C falls through (declines via the editor).
+        if (data !== '\x03') {
+          this.state.activeInlineApproval.handleInput(data);
+          return;
+        }
+      } else if (this.state.activeInlinePlanApproval) {
         if (data !== '\x03') {
           this.state.activeInlinePlanApproval.handleInput(data);
           return;

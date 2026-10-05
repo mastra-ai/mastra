@@ -22,7 +22,6 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
-import { showModalOverlay } from '../overlay.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
@@ -377,7 +376,7 @@ export function handleToolApprovalRequired(
     args,
     categoryLabel,
     onAction: (action: ApprovalAction) => {
-      state.ui.hideOverlay();
+      removeApproval();
       state.pendingApprovalDismiss = null;
       // Every response carries the call id of the dialog's own tool call, so it
       // can only release that gate — never a different pending approval.
@@ -398,16 +397,24 @@ export function handleToolApprovalRequired(
     },
   });
 
+  // The prompt lives inline in the chat; keys reach it through the editor (see activeInlineApproval).
+  const removeApproval = () => {
+    if (state.activeInlineApproval === dialog) state.activeInlineApproval = undefined;
+    state.chatContainer.removeChild(dialog);
+    state.ui.requestRender();
+  };
+
   // Set up dismissal to decline
   state.pendingApprovalDismiss = declineContext => {
-    state.ui.hideOverlay();
+    removeApproval();
     state.pendingApprovalDismiss = null;
     firePermissionResult('dismissed');
     state.session.respondToToolApproval({ decision: 'decline', toolCallId, declineContext });
   };
 
-  // Show the dialog as an overlay
-  showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
+  // Show the prompt inline, right under the pending tool call
+  ctx.addChildBeforeFollowUps(dialog);
+  state.activeInlineApproval = dialog;
   dialog.focused = true;
   flushRender(state);
 }

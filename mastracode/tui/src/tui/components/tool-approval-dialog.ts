@@ -1,6 +1,5 @@
 /**
- * Tool approval dialog component.
- * Shows tool details and prompts user to approve or decline execution.
+ * Tool approval prompt: one inline row in the chat, directly under the pending tool call.
  *
  * Keyboard shortcuts:
  *   y       — approve this one call
@@ -8,12 +7,13 @@
  *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
  */
-import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable } from '@earendil-works/pi-tui';
+import { getKeybindings, truncateToWidth } from '@earendil-works/pi-tui';
+import type { Component, Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
+import { card } from './surface.js';
 
 export type ApprovalAction =
   | { type: 'approve' }
@@ -30,7 +30,7 @@ export interface ToolApprovalDialogOptions {
   onAction: (action: ApprovalAction) => void;
 }
 
-export class ToolApprovalDialogComponent extends Box implements Focusable {
+export class ToolApprovalDialogComponent implements Component, Focusable {
   private toolName: string;
   private args: unknown;
   private categoryLabel: string | undefined;
@@ -47,60 +47,35 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: ToolApprovalDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
-
     this.toolName = options.toolName;
     this.args = options.args;
     this.categoryLabel = options.categoryLabel;
     this.onAction = options.onAction;
-
-    this.buildUI();
   }
 
-  private buildUI(): void {
-    // Title
-    this.addChild(new Text(theme.fg('warning', '⚠ Tool Approval Required'), 0, 0));
-    this.addChild(new Spacer(1));
+  invalidate(): void {}
 
-    // Tool name
-    this.addChild(new Text(theme.fg('accent', `Tool: `) + theme.fg('text', this.toolName), 0, 0));
-    if (this.categoryLabel) {
-      this.addChild(new Text(theme.fg('accent', `Category: `) + theme.fg('text', this.categoryLabel), 0, 0));
-    }
-    this.addChild(new Spacer(1));
+  /**
+   * One inline row under the pending tool call (which already shows the command / path):
+   *   ▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no
+   * Tools without a visible call row (e.g. MCP tools) get the tool name in front.
+   */
+  render(width: number): string[] {
+    const warning = theme.getTheme().warning;
+    const key = (k: string, label: string) => `${chalk.bold.hex(warning)(k)} ${theme.fg('muted', label)}`;
+    const always = this.categoryLabel ? `always allow ${this.categoryLabel}` : 'always allow category';
+    const keys = [key('y', 'yes'), key('a', always), key('Y', 'YOLO'), key('n', 'no')].join(theme.fg('dim', '  ·  '));
+    const line = `${theme.bold(theme.fg('text', 'Allow?'))}   ${keys}`;
+    return card(warning, [line]).map(l => truncateToWidth(l, width));
+  }
 
-    // Arguments (formatted)
-    this.addChild(new Text(theme.fg('muted', 'Arguments:'), 0, 0));
-    const argsText = this.formatArgs(this.args);
-    for (const line of argsText.split('\n').slice(0, 10)) {
-      this.addChild(new Text(theme.fg('text', '  ' + line), 0, 0));
-    }
-    if (argsText.split('\n').length > 10) {
-      this.addChild(new Text(theme.fg('muted', '  ... (truncated)'), 0, 0));
-    }
+  /** Arguments as "key: value" lines (used by tests and for tools without a call row). */
+  describeArgs(): string {
+    return this.formatArgs(this.args);
+  }
 
-    this.addChild(new Spacer(1));
-    // Prompt text with keyboard shortcuts
-    const categoryHint = this.categoryLabel
-      ? `lways allow ${this.categoryLabel.toLowerCase()}`
-      : 'lways allow category';
-    const dimColor = chalk.hex(theme.getTheme().dim);
-    const key = chalk.hex(theme.getTheme().text).bold;
-    this.addChild(
-      new Text(
-        theme.fg('accent', 'Allow? ') +
-          key('y') +
-          dimColor('es  ') +
-          key('n') +
-          dimColor('o  ') +
-          key('a') +
-          dimColor(categoryHint + '  ') +
-          key('Y') +
-          dimColor('olo'),
-        0,
-        0,
-      ),
-    );
+  get tool(): string {
+    return this.toolName;
   }
 
   private formatArgs(args: unknown): string {
@@ -163,9 +138,5 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
         this.emit({ type: 'yolo' });
         break;
     }
-  }
-
-  render(maxWidth: number): string[] {
-    return super.render(maxWidth);
   }
 }

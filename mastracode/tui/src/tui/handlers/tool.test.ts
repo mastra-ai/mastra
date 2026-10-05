@@ -14,6 +14,7 @@ import {
   handleToolInputStart,
   handleShellOutput,
   handleToolStart,
+  handleToolApprovalRequired,
 } from './tool.js';
 import type { EventHandlerContext } from './types.js';
 
@@ -403,5 +404,45 @@ describe('quiet shell description streaming', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('✗');
     expect(output).not.toContain('✓');
+  });
+});
+
+describe('inline tool approval', () => {
+  it('shows the prompt inline in the chat and removes it once answered', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+    (ctx.state as any).pendingApprovalDismiss = null;
+
+    handleToolApprovalRequired(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
+
+    const approval = ctx.state.activeInlineApproval;
+    expect(approval).toBeDefined();
+    expect(visibleChildren(ctx)).toContain(approval);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('Allow?');
+
+    approval!.handleInput('y');
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({ decision: 'approve', toolCallId: 'call-1' });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(visibleChildren(ctx)).not.toContain(approval);
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
+  });
+
+  it('declines and removes the prompt when dismissed', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+
+    handleToolApprovalRequired(ctx, 'call-2', 'execute_command', { command: 'rm -rf build' });
+    ctx.state.pendingApprovalDismiss?.();
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({
+      decision: 'decline',
+      toolCallId: 'call-2',
+      declineContext: undefined,
+    });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('Allow?');
   });
 });
