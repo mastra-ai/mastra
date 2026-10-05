@@ -97,8 +97,8 @@ describe('T53 evented workflow agent suspend recovery in a fresh module graph', 
     const storage = new core.InMemoryStore();
     const workflow = build(core, 2);
     const mastra = new core.Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
-    await mastra.startWorkers();
     try {
+      await mastra.startWorkers();
       const workflows = await mastra.getStorage()!.getStore('workflows');
       for (const row of checkpoint.rows) await workflows!.persistWorkflowSnapshot(structuredClone(row) as any);
       const run = await mastra.getWorkflowById('t53-wf').createRun({ runId });

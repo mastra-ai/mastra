@@ -17,8 +17,9 @@ import type { Checkpoint, Gate } from './restart-harness';
 const gates: Gate[] = [];
 const scenarios: { stop(): Promise<void> }[] = [];
 afterEach(async () => {
-  await Promise.all(scenarios.splice(0).map(s => s.stop()));
+  // Release graph 1's gates first: a parked step must not be stopped mid-flight.
   for (const gate of gates.splice(0)) gate.release();
+  await Promise.all(scenarios.splice(0).map(s => s.stop()));
 });
 
 const N = z.object({ n: z.number() });

@@ -177,30 +177,38 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
   const core = await loadGraph();
   const storage = new core.InMemoryStore();
   const built = options.build({ core, generation } as BuildContext);
+  let mastra: any;
+  try {
+    if (options.kind === 'workflow') {
+      mastra = new core.Mastra({ logger: false, storage, workflows: { [built.id]: built } });
+      if (built.engineType === 'evented') await mastra.startWorkers();
+      const workflows = await mastra.getStorage()!.getStore('workflows');
+      return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
+    }
 
-  if (options.kind === 'workflow') {
-    const mastra = new core.Mastra({ logger: false, storage, workflows: { [built.id]: built } });
-    if (built.engineType === 'evented') await mastra.startWorkers();
+    const agent =
+      options.kind === 'durable'
+        ? core.createDurableAgent({ agent: built })
+        : core.createEventedAgent({ agent: built });
+    // Before `new Mastra(...)`: the engine resolves during agent registration.
+    if (options.kind === 'evented-fallback') {
+      vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
+    }
+    mastra = new core.Mastra({
+      logger: false,
+      storage,
+      agents: { [built.id]: agent as any },
+      recovery: { durableAgents: 'auto' },
+    });
+    const expectedEngine = options.kind === 'evented' ? 'evented' : 'default';
+    expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe(expectedEngine);
     const workflows = await mastra.getStorage()!.getStore('workflows');
-    return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
+    return { core, mastra, storage, workflows, generation, agent };
+  } catch (error) {
+    // A graph that fails to build must not leak the event workers it already started.
+    await mastra?.stopWorkers?.();
+    throw error;
   }
-
-  const agent =
-    options.kind === 'durable' ? core.createDurableAgent({ agent: built }) : core.createEventedAgent({ agent: built });
-  // Before `new Mastra(...)`: the engine resolves during agent registration.
-  if (options.kind === 'evented-fallback') {
-    vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
-  }
-  const mastra = new core.Mastra({
-    logger: false,
-    storage,
-    agents: { [built.id]: agent as any },
-    recovery: { durableAgents: 'auto' },
-  });
-  const expectedEngine = options.kind === 'evented' ? 'evented' : 'default';
-  expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe(expectedEngine);
-  const workflows = await mastra.getStorage()!.getStore('workflows');
-  return { core, mastra, storage, workflows, generation, agent };
 }
 
 async function copyRows(workflows: any): Promise<SnapshotRow[]> {
