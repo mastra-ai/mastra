@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { runReadProcess } from "../read-process.ts";
 import type { SourceExecutionContext, SourceOperation } from "../source.ts";
 import type {
@@ -207,11 +210,21 @@ export class SalesSource implements DataSource {
       queryId: "inspection",
       traceId: "inspection",
     };
+    const adjacentWorker = new URL(
+      import.meta.url.endsWith(".ts") ? "./read-worker.ts" : "./read-worker.js",
+      import.meta.url,
+    );
+    // Native Mastra bundles modules; compiled read workers remain isolated template assets.
+    const worker = existsSync(adjacentWorker)
+      ? adjacentWorker
+      : pathToFileURL(
+          resolve(
+            process.env.TEMPLATE_DIRECTORY ?? process.cwd(),
+            "dist/data-sources/sales/read-worker.js",
+          ),
+        );
     return runReadProcess(
-      new URL(
-        import.meta.url.endsWith(".ts") ? "./read-worker.ts" : "./read-worker.js",
-        import.meta.url,
-      ),
+      worker,
       { path: this.#path, request, maxRows: execution.maxRows, maxBytes: execution.maxBytes },
       execution,
     );

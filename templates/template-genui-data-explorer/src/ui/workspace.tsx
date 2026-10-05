@@ -98,12 +98,15 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   });
   const { copilotkit } = useCopilotKit();
   const [notice, setNotice] = useState<string>();
+  const [correction, setCorrection] = useState<{ componentId: string; reason: string }>();
   useEffect(() => {
     const subscription = agent.subscribe({
       onStateChanged: ({ state }) => {
         const parsed = snapshotSchema.safeParse(state);
-        if (parsed.success)
+        if (parsed.success) {
           copilotkit.setProperties({ baseRevision: parsed.data.workspace.revision });
+          setCorrection(undefined);
+        }
       },
     });
     if (isReady) {
@@ -126,6 +129,27 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
     ),
   });
   useRenderTool({ name: "*", render: () => <p>Reading and verifying source data…</p> });
+  useEffect(() => {
+    if (snapshot.status !== "saved") return;
+    const frame = requestAnimationFrame(() => {
+      for (const binding of snapshot.workspace.components) {
+        const card = document.querySelector<HTMLElement>(
+          `[data-result="${CSS.escape(binding.resultId)}"]`,
+        );
+        if (!card || !card.getBoundingClientRect().width) continue;
+        void fetch("/api/workspace", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            revision: snapshot.workspace.revision,
+            resultId: binding.resultId,
+            componentId: binding.id,
+          }),
+        });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [snapshot]);
   const act = async (action: WorkspaceAction) => {
     setNotice(undefined);
     try {
@@ -138,6 +162,11 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
     } catch {
       setNotice("The interaction did not save. Reload the last accepted revision or retry.");
     }
+  };
+  const correct = (componentId: string, reason: string) => {
+    const correction = { componentId, reason };
+    setCorrection(correction);
+    copilotkit.setProperties({ baseRevision: snapshot.workspace.revision, correction });
   };
   const declaration = (id: string): ComponentDeclaration | undefined => {
     const registered = components.find((entry) => entry.id === id);
@@ -164,6 +193,21 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
               {snapshot.status === "saved" ? "Saved locally" : "Last complete revision preserved"}
             </p>
             <button onClick={() => location.reload()}>Reload saved workspace</button>
+            {correction && (
+              <label>
+                Correction reason
+                <input
+                  aria-label="Correction reason"
+                  maxLength={300}
+                  value={correction.reason}
+                  onChange={(event) => correct(correction.componentId, event.target.value)}
+                />
+                <p>
+                  Ask a follow-up that replaces this accepted view. The reason is saved with an
+                  accepted correction.
+                </p>
+              </label>
+            )}
           </div>
           {snapshot.status === "recovery-required" ? (
             <p role="alert">
@@ -199,6 +243,7 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
                   className="card"
                   key={`${binding.id}-${binding.resultId}`}
                   data-component={binding.component}
+                  data-result={binding.resultId}
                 >
                   <h2>{binding.properties.title}</h2>
                   {binding.properties.scenario && (
@@ -213,6 +258,13 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
                     }}
                   />
                   <div className="controls">
+                    <button
+                      onClick={() =>
+                        correct(binding.id, "Correct the interpretation of this accepted view.")
+                      }
+                    >
+                      Correct this view
+                    </button>
                     {entry.actions.includes("filter") && (
                       <label>
                         Segment filter

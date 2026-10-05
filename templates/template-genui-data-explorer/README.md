@@ -46,7 +46,7 @@ storage. This candidate has not been accepted or published in the Mastra templat
    - Run `cp .env.example .env` and fill in the key described under Prerequisites.
 3. **Start the local workspace**
    - Run `npm run dev`. The launcher initializes the synthetic dataset once, starts both local
-     services and stops them together on exit. Anonymous Next/CopilotKit telemetry is disabled.
+     services and stops them together on exit. Anonymous Mastra/Next/CopilotKit telemetry is disabled.
    - Open [the workspace](http://127.0.0.1:3000), ask “Show monthly bookings over the last twelve
      complete months”, and inspect the agent-selected trend or table and verified source explanation.
 
@@ -72,20 +72,22 @@ storage. This candidate has not been accepted or published in the Mastra templat
 - Replace the source registration under `data-sources/`, or configure/extend the component catalog
   and React renderers under `src/ui/`. The registration contracts below describe both paths.
 
-## Ask an analytical question
+## Native runtime and analytical authority
 
-The separate analytical CLI endpoint remains available for transport inspection: initialize with
-`npm run data:init`, set `OPENAI_API_KEY` in `.env` and run `npm start`. This launches the
-local NDJSON endpoint at `http://127.0.0.1:4111/analysis`; it does not call the provider until a question arrives.
-The default model is `openai/gpt-4.1-mini`, configurable with `ANALYSIS_MODEL` as an OpenAI model ID.
-Ordinary interactive questions incur provider usage. Required tests use a deterministic model and
-never make paid requests. Live benchmarks are not implemented or run by startup.
+`npm run dev` launches the native Mastra server and Next.js together. Open
+[Mastra Studio](http://127.0.0.1:4111) to inspect **Data Explorer**, its **analyze** and **compose** tools,
+the **grounded-analysis** workflow and local traces. Studio is an inspection surface; submit questions
+through the Next workspace so the server can resolve saved history, filters, source and revision.
+Raw native generate/stream/workflow/tool execution and memory mutations are disabled. Framework
+public auth endpoints have no configured auth provider and cannot create accounts or sessions.
+The services bind to loopback and do not provide public deployment or multi-user authorization.
 
-```bash
-curl http://127.0.0.1:4111/analysis \
-  -H 'Content-Type: application/json' \
-  -d '{"threadId":"demo","workspaceId":"demo","requestId":"question-1","baseRevision":0,"question":"Compare customer churn over the last 12 complete months and bookings growth against the matching previous year."}'
-```
+`src/mastra/index.ts` exports the actual registered `mastra` instance. Agent/tool construction is in
+`src/mastra/agent.ts`, workflow execution in `src/analysis/workflow.ts`, and connector authority checks
+in `src/analysis/verification.ts`. `createExplorer()` in `src/analysis/create.ts` offers the same
+bounded analytical engine to server-side consumers with explicit registered sources/models.
+Run `npm run build`, then `npm start` for the built native server and Next production application.
+The launcher still initializes data automatically and preserves existing accepted state.
 
 The stream reports planning, validation, reads and verification before one terminal outcome. Completed
 facts include request, workspace, trace, workflow run, query and result IDs; source/dataset/metric
@@ -106,7 +108,7 @@ but its late output is discarded. Cancel a streamed request by disconnecting its
 
 Successful results remain available through `DataExplorer.lastComplete(workspaceId)` in the current
 process, including after later failures. The browser workspace additionally commits accepted facts,
-components and context durably with revision checks. The NDJSON endpoint remains a separate API.
+components and context durably with revision checks.
 
 ## Configure registered views
 
@@ -159,12 +161,13 @@ Implement your source under `data-sources/<your-source>/`, then replace the expl
 `scripts/sources.ts` adds optional operational preparation. For example, after implementing `CustomSource`:
 
 ```ts
+import { CustomSource } from "./custom/source.ts";
+
 export const defaultSourceId = "custom";
 export const sources: readonly SourceRegistration[] = [
   {
     id: "custom",
     open: async (settings) => {
-      const { CustomSource } = await import("./custom/source.ts");
       return new CustomSource(settings);
     },
   },
@@ -276,7 +279,9 @@ Sales native reads run in disposable processes for actual deadline/cancellation 
 
 ## Persistence and recovery
 
-The launcher stores `sales.sqlite`, `workspace.sqlite` and `memory.sqlite` beneath `DATA_DIRECTORY`.
+The launcher stores `sales.sqlite`, `workspace.sqlite`, `memory.sqlite`, `telemetry.sqlite` and
+`traces.sqlite` beneath `DATA_DIRECTORY`. Sales, workspace, conversation, domain diagnostics and native
+traces use separate access paths. Analytical reads can access only Sales.
 The workspace transaction saves verified results, bindings, filters, drill context, conversation and
 revision together with its request journal. Mastra Memory/LibSQL stores conversation separately;
 accepted workspace messages reconcile that store before generation and after each run. An interrupted
@@ -316,19 +321,22 @@ npm run typecheck
 npm run test:unit
 npm run test:integration
 npm run test:workspace
+npm run standalone:prepare
+npm run test:quality
 npm run build
 ```
 
 Use `npm run format` to apply oxfmt formatting. All configuration and dependencies are local to
 this template. Strict TypeScript covers application code, operational scripts, and tests. `typecheck` includes the React/Next application. The build compiles the Next production application and
+bundles the native Mastra server to `.mastra/output/` and
 emits runtime modules to `dist/src/`, source adapters to `dist/data-sources/`, and operational scripts
 to `dist/scripts/`, excluding tests.
 All test setup, fixtures, and test configuration are under `tests/`. Plain Vitest
 tests verify data calculations, dataset persistence and real Mastra agent/tool/workflow execution
 with a deterministic model provider. Integration proofs include native SQLite cancellation,
 connector recovery, local HTTP streaming and the four native browser journeys. Chromium for Playwright
-can be installed with `npm exec -- playwright install chromium` when it is not already available. The official `@mastra/evals/vitest` reporter and setup
-are configured; no live or paid model evaluations run in these checks. The HTTP proof needs permission
+can be installed with `npm exec -- playwright install chromium` when it is not already available. The official `@mastra/evals/vitest` reporter and `expectEvals(...).toPass()`
+assertions execute eight independent analytical cases and reject a deliberately regressed fixture; no live or paid model evaluations run in these checks. The HTTP proof needs permission
 to open a loopback listener in restricted environments.
 
 ## Dependency licenses
@@ -336,7 +344,9 @@ to open a loopback listener in restricted environments.
 The data layer uses Node.js standard libraries (Node.js MIT; bundled SQLite public domain).
 `@mastra/core` and `@mastra/evals` (Apache-2.0) use `"latest"` in `dependencies`, following the Mastra
 template contribution convention. The analytical runtime uses Mastra agents, tools, workflows and
-RequestContext; tests use the official eval reporter. Zod 4.6.5 (MIT) is the direct shared schema
+RequestContext; tests use the official eval assertions and reporter. The native CLI (`mastra` 1.32.1)
+and local observability (`@mastra/observability` 1.18.3) use Apache-2.0 and declared `latest` ranges.
+The lockfile pins core 1.74.0 and evals 1.10.5 for reproducible installation. Zod 4.6.5 (MIT) is the direct shared schema
 dependency. Development dependencies are TypeScript 5.9.3 (Apache-2.0),
 Vitest 4.1.0, `@types/node` 24.19.1, and oxfmt 0.71.0 (MIT). The standalone NPM lockfile records exact
 resolved versions for all packages; `npm ci` reproduces those versions.
@@ -345,9 +355,9 @@ Mastra client, Memory and LibSQL integrations use Apache-2.0. Playwright and Typ
 type declarations are MIT. See the lockfile and installed package license metadata for exact
 transitive dependencies.
 
-The analytical runtime factory is `createExplorer()` in `src/mastra/index.ts`. It resolves the registered
+The analytical runtime factory is `createExplorer()` in `src/analysis/create.ts`. It resolves the registered
 source once, registers the actual Mastra agent/workflow, and accepts a developer-configured model.
-Requests cannot override source IDs, database paths, identity, model or budgets. The local endpoint
+Requests cannot override source IDs, database paths, identity, model or budgets. The guarded workspace
 requires JSON and rejects foreign Origins and nonlocal Hosts before any model execution.
 
 A replacement adapter must return the executed request and matching source, dataset, metric and clock
@@ -364,6 +374,84 @@ failures; only transient `rate-limit`/`source-unavailable` reads may retry. Keep
 messages and operation evidence. Implement deadline/cancellation handling and resource cleanup in
 the adapter. The independent non-SQL fixture under `tests/fixtures/` proves the same public path;
 it is contract evidence rather than a bundled CRM integration.
+
+## Evaluation reports and optional benchmark
+
+`npm run test:quality` is a check-only harness for a prepared standalone extraction. First run
+`npm run standalone:prepare`: it copies the template outside the checkout and runs `npm ci` using
+that copy's manifest, lockfile and cache. The subsequent quality check never installs dependencies.
+It runs independent NPM type/unit/integration/format/build checks, asserts that an intentionally
+failing official Mastra eval exits nonzero, then starts the real native server and Next browser with
+an offline OpenAI-compatible provider. The browser proof covers distinct trend/ranking/record views,
+configuration correction/retry, saved state, local trace redaction and shutdown. Browser binaries
+must already be installed. Refresh the extraction after changing source or the lockfile. A file fingerprint rejects stale copies;
+credential environment files and native-generated editor settings are excluded. Native check builds inspect configuration with disposable generated stores, remove them afterward, and set `MASTRA_BUILD_SKIP_INSTALL=1`
+and resolve only the prepared template dependencies.
+
+The mandatory deterministic report is `.data/quality-report.json`. It records actual applicable
+counts, failures, model/corpus/dataset metadata for eight dimensions: query semantics including
+joins; exact money/counts and ratios within 0.01 percentage points; provenance; suitable views;
+axes/units/completeness/scenario labels; filtered cohorts; paraphrase equivalence; and unsupported
+claims. Controlled providers test these contracts without certifying unrestricted model quality.
+
+`npm run benchmark:live` is separate from startup and required checks. It sends the versioned
+24-question corpus once per case, sequentially, including four paraphrase pairs. Before invoking it,
+verify the exact model's current official pricing and provide these environment values:
+
+```dotenv
+BENCHMARK_APPROVED=true
+BENCHMARK_CAP_USD=<your explicit spending cap>
+BENCHMARK_INPUT_USD_PER_MILLION=<verified positive input rate>
+BENCHMARK_OUTPUT_USD_PER_MILLION=<verified positive output rate>
+BENCHMARK_PRICING_MODEL=gpt-4.1-mini
+BENCHMARK_PRICING_VERSION=<your dated pricing record>
+BENCHMARK_PRICING_VERIFIED_AT=<UTC YYYY-MM-DD within seven days>
+BENCHMARK_PRICING_REFERENCE=https://openai.com/api/pricing/
+```
+
+The command refuses zero/unknown/stale/model-mismatched prices and any cap below its conservative
+input/response/step envelope before making a paid call. The actual model adapter enforces that
+input-byte, response-token and call envelope. There are no automatic paid retries. An outage or
+exhausted envelope stops the corpus and reports remaining cases as skipped, never passed.
+Estimates are distinct from provider billing. The live numeric oracle is the deterministic adapter
+reference; independent semantic truth is covered by the mandatory hand-authored fixtures.
+The live report is `.data/live-benchmark.json`, limited to its recorded model/corpus/seed/pricing.
+All applicable hard checks must pass; suitable views and equivalent questions require at least 90%.
+No paid benchmark result is claimed by deterministic fixture tests.
+
+## Local diagnostics and operations
+
+Run `npm run diagnostics` to summarize `telemetry.sqlite`. A failed diagnostic write emits one sanitized warning and cannot undo an accepted workspace transaction. Query success uses successful executed
+reads divided by read attempts, while validation rejects are separate. Visualization usage counts
+committed views by type. Follow-up rate uses threads with a follow-up divided by started analytical
+threads. Unsupported counts explicit unsupported outcomes; correction rate uses accepted corrections
+divided by completed analyses. Choose **Correct this view**, edit the reason and ask a follow-up
+that replaces its accepted card ID. Failed or rejected corrections preserve the accepted revision
+and do not increment that counter.
+
+Time to first insight ends at the first browser render acknowledgement for a current persisted,
+verified result. The server validates request/result/revision binding, timestamps reception and
+deduplicates acknowledgements. It does not use a client-supplied duration or first token. Restored
+cards do not repeat model calls. Unknown token usage and cost are unavailable, rather than zero;
+ordinary-use cost is unavailable because no current pricing table is silently assumed.
+
+Domain events correlate request/workspace/thread, analysis trace, workflow/run, query/result and
+source/dataset metadata. They contain validated plans, redacted operation evidence and outcome
+categories, never prompt text or full rows. Native spans retain timing/hierarchy and allowlisted
+correlation/usage metadata after a processor removes input/output/request-context payloads and
+error details before the local storage exporter. No hosted exporter is configured.
+
+Missing keys, invalid enabled source/view selections, occupied ports and storage failures identify
+corrective actions. Fix `.env` or registration/configuration and rerun the launcher; no reset is
+required. `SOURCE_ID` optionally selects an enabled registered source, and `UI_COMPONENT_IDS` can
+select unique registered component IDs; clear either setting to restore defaults.
+`ANALYSIS_BASE_URL` optionally selects a trusted server-side OpenAI-compatible endpoint.
+
+Stop services before maintenance. Back up accepted data before changing `sales.sqlite`,
+`workspace.sqlite` or `memory.sqlite`. To discard only diagnostic history, move `telemetry.sqlite`
+and `traces.sqlite` (plus any SQLite sidecars) after shutdown; the next launch creates fresh journals
+without reseeding Sales or deleting accepted work. Local history has no automatic retention policy.
+Do not delete data or workspace stores to conceal errors.
 
 ## About Mastra templates
 

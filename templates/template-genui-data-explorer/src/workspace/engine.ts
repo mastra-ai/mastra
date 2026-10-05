@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { SourceError, groupingColumn } from "../../data-sources/source.ts";
 import { DataExplorer } from "../analysis/explorer.ts";
 import { WorkspaceError, WorkspaceStore } from "./store.ts";
-import type { Workspace, WorkspaceAction, WorkspaceSnapshot } from "./contracts.ts";
+import type { Workspace, WorkspaceAction, WorkspaceSnapshot, Correction } from "./contracts.ts";
 import { workspaceId, threadId } from "./contracts.ts";
 import { validateCatalog, validateComposition } from "../ui/catalog.ts";
 import type { ComponentDeclaration, ComponentBinding } from "../ui/catalog.ts";
@@ -14,7 +14,10 @@ export class WorkspaceEngine {
   readonly explorer: DataExplorer;
   readonly store: WorkspaceStore;
   readonly catalog: readonly ComponentDeclaration[];
-  readonly #active = new Map<string, { controller: AbortController; completion: Promise<void> }>();
+  readonly #active = new Map<
+    string,
+    { requestId: string; controller: AbortController; completion: Promise<void> }
+  >();
   constructor(
     explorer: DataExplorer,
     store: WorkspaceStore,
@@ -23,6 +26,13 @@ export class WorkspaceEngine {
     this.explorer = explorer;
     this.store = store;
     this.catalog = validateCatalog(entries);
+  }
+  cancel(requestId: string) {
+    const active = this.#active.get(workspaceId);
+    if (active?.requestId === requestId)
+      active.controller.abort(
+        new SourceError("cancelled", "Analysis cancelled. The last saved workspace is preserved."),
+      );
   }
   snapshot(): WorkspaceSnapshot {
     const source = this.explorer.describe();
@@ -148,18 +158,19 @@ export class WorkspaceEngine {
     }
     return { request, filters, binding, result };
   }
-  requestPayload(question: Question, action?: WorkspaceAction) {
+  requestPayload(question: Question, action?: WorkspaceAction, correction?: Correction) {
     return JSON.stringify({
       question: question.question,
       baseRevision: question.baseRevision,
       action: action ?? undefined,
+      correction,
     });
   }
-  repeated(question: Question, action?: WorkspaceAction) {
+  repeated(question: Question, action?: WorkspaceAction, correction?: Correction) {
     return this.store.request(
       workspaceId,
       question.requestId,
-      this.requestPayload(question, action),
+      this.requestPayload(question, action, correction),
     );
   }
   async synchronizeConversation(workspace: Workspace) {
@@ -192,13 +203,14 @@ export class WorkspaceEngine {
     execute: NonNullable<NonNullable<Parameters<DataExplorer["analyze"]>[1]>["execute"]>,
     action?: WorkspaceAction,
     onCommit?: (workspace: Workspace) => void,
+    correction?: Correction,
   ) {
     const initial = this.snapshot();
     if (initial.status === "recovery-required")
       throw new WorkspaceError("recovery-required", initial.message);
     if (question.workspaceId !== workspaceId || question.threadId !== threadId)
       throw new WorkspaceError("invalid-input", "Only the local demo workspace is available.");
-    const payload = this.requestPayload(question, action);
+    const payload = this.requestPayload(question, action, correction);
     const duplicate = this.store.request(workspaceId, question.requestId, payload);
     if (duplicate) {
       if (duplicate.status === "running")
@@ -215,6 +227,14 @@ export class WorkspaceEngine {
         "stale-revision",
         "This request used an older revision. Reload the saved workspace and retry.",
       );
+    if (
+      correction &&
+      (action || !initial.workspace.components.some((item) => item.id === correction.componentId))
+    )
+      throw new WorkspaceError(
+        "invalid-input",
+        "Correct an existing accepted view with a new question and reason.",
+      );
     const interaction = action ? this.validateAction(action, initial.workspace) : undefined;
     const previous = this.#active.get(workspaceId);
     if (previous) {
@@ -223,11 +243,27 @@ export class WorkspaceEngine {
     }
     controller.signal.throwIfAborted();
     this.store.begin(workspaceId, question.requestId, payload);
+    this.explorer.telemetry?.record({
+      type: "source-selected",
+      requestId: question.requestId,
+      workspaceId,
+      threadId,
+      sourceId: initial.workspace.source.id,
+      datasetVersion: initial.workspace.source.datasetVersion,
+    });
+    if (action)
+      this.explorer.telemetry?.record({
+        type: "interaction",
+        requestId: question.requestId,
+        workspaceId,
+        threadId,
+        status: action.type,
+      });
     let release!: () => void;
     const completion = new Promise<void>((resolve) => {
       release = resolve;
     });
-    this.#active.set(workspaceId, { controller, completion });
+    this.#active.set(workspaceId, { requestId: question.requestId, controller, completion });
     let committed: Workspace | undefined;
     try {
       await this.synchronizeConversation(canonical);
@@ -306,6 +342,14 @@ export class WorkspaceEngine {
               "No validated UI composition was selected. Ask for a supported view and retry.",
             );
           controller.signal.throwIfAborted();
+          if (
+            correction &&
+            !session.composition.components.some((item) => item.id === correction.componentId)
+          )
+            throw new SourceError(
+              "invalid-composition",
+              "The correction must replace its referenced accepted view.",
+            );
           const replacements = new Map(
             session.composition.components.map((component) => [component.id, component]),
           );
@@ -326,6 +370,14 @@ export class WorkspaceEngine {
           const next: Workspace = {
             ...initial.workspace,
             revision: question.baseRevision + 1,
+            ...(correction
+              ? {
+                  corrections: [
+                    ...(initial.workspace.corrections ?? []),
+                    { ...correction, requestId: question.requestId },
+                  ],
+                }
+              : {}),
             source: this.explorer.describe(),
             components,
             results,
@@ -357,6 +409,26 @@ export class WorkspaceEngine {
             throw error;
           }
           committed = next;
+          for (const binding of session.composition.components)
+            this.explorer.telemetry?.record({
+              type: "composition-committed",
+              requestId: question.requestId,
+              workspaceId,
+              threadId,
+              traceId: session.traceId,
+              resultId: binding.resultId,
+              revision: next.revision,
+              component: binding.component,
+            });
+          if (correction)
+            this.explorer.telemetry?.record({
+              type: "correction-accepted",
+              requestId: question.requestId,
+              workspaceId,
+              threadId,
+              traceId: session.traceId,
+              revision: next.revision,
+            });
           try {
             onCommit?.(next);
           } catch {
@@ -382,6 +454,34 @@ export class WorkspaceEngine {
         this.#active.delete(workspaceId);
       release();
     }
+  }
+  acknowledgeRender(input: { revision: number; resultId: string; componentId: string }) {
+    const snapshot = this.snapshot();
+    const binding = snapshot.workspace.components.find(
+      (item) => item.id === input.componentId && item.resultId === input.resultId,
+    );
+    const result = snapshot.workspace.results.find((item) => item.resultId === input.resultId);
+    if (
+      snapshot.status !== "saved" ||
+      snapshot.workspace.revision !== input.revision ||
+      !binding ||
+      !result ||
+      result.data.status !== "available"
+    )
+      throw new WorkspaceError(
+        "invalid-input",
+        "Only a current saved verified view can acknowledge rendering.",
+      );
+    this.explorer.telemetry?.record({
+      type: "render-ack",
+      requestId: result.requestId,
+      workspaceId,
+      threadId,
+      traceId: result.traceId,
+      resultId: result.resultId,
+      revision: input.revision,
+      component: binding.component,
+    });
   }
   close() {
     this.store.close();

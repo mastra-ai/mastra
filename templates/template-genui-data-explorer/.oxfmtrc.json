@@ -5,7 +5,9 @@
     ".data/**",
     ".next/**",
     "next-env.d.ts",
-    "package-lock.json"
+    "package-lock.json",
+    ".mastra/**",
+    ".vscode/**"
   ],
   "printWidth": 100
 }

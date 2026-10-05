@@ -20,6 +20,7 @@ it("official Mastra adapter streams verified compositions and saves a workspace"
     settings: { path },
     workspacePath: join(dir, "workspace.sqlite"),
     memoryPath: join(dir, "memory.sqlite"),
+    telemetryPath: join(dir, "telemetry.sqlite"),
     model: provider.model,
     catalog: components,
   });
@@ -71,6 +72,18 @@ it("official Mastra adapter streams verified compositions and saves a workspace"
     expect(outcome.snapshot.workspace.components[0]?.component).toBe("line");
     expect(events.some((event) => event.type === "TOOL_CALL_RESULT")).toBe(true);
     expect(events.some((event) => event.type === "RUN_FINISHED")).toBe(true);
+    expect(provider.calls).toHaveLength(3);
+    expect(app.telemetry?.report().usage.filter((event) => event.requestId === "proof")).toEqual([
+      {
+        requestId: "proof",
+        model: "workspace-proof",
+        inputTokens: provider.calls.length * 10,
+        outputTokens: provider.calls.length * 10,
+        estimatedCost: null,
+        pricingVersion: null,
+        currency: null,
+      },
+    ]);
     const recalled = await app.memory.recall({
       threadId,
       resourceId: "local-demo-user",
@@ -78,6 +91,7 @@ it("official Mastra adapter streams verified compositions and saves a workspace"
     });
     expect(recalled.total).toBeGreaterThan(0);
   } finally {
+    app.telemetry?.close();
     await app.engine.close();
     await app.storage.close();
     await rm(dir, { recursive: true, force: true });

@@ -1,23 +1,20 @@
+import type { TelemetrySink } from "../observability/telemetry.ts";
 import { randomUUID } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import { RequestContext } from "@mastra/core/request-context";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
-import {
-  analysisRequestSchema,
-  resultSchemaFor,
-  resultRecordCount,
-  SourceError,
-} from "../../data-sources/source.ts";
+import { analysisRequestSchema, SourceError } from "../../data-sources/source.ts";
 import type {
   AnalysisRequest,
   DataSource,
   SourceDescriptor,
   SourceExecutionContext,
 } from "../../data-sources/source.ts";
+import { verifySourceResult } from "./verification.ts";
 import { explain, LIMITS, verifiedResultSchema } from "./contracts.ts";
 import type { AnalysisEvent, Question, VerifiedResult } from "./contracts.ts";
 
 export interface Session {
+  telemetry?: TelemetrySink | undefined;
   question: Question;
   source: DataSource;
   descriptor: SourceDescriptor;
@@ -99,6 +96,16 @@ export function analyticalWorkflow() {
       };
       try {
         validatePlan(plan, session.descriptor);
+        session.telemetry?.record({
+          type: "plan-validated",
+          requestId: session.question.requestId,
+          workspaceId: session.question.workspaceId,
+          traceId: session.traceId,
+          workflowId: "grounded-analysis",
+          workflowRunId: session.workflowRunId!,
+          metric: plan.metric,
+          operation: JSON.stringify(plan),
+        });
       } catch (error) {
         session.failure = error as SourceError;
         throw error;
@@ -145,13 +152,40 @@ export function analyticalWorkflow() {
             workflowId: "grounded-analysis",
             workflowRunId: session.workflowRunId!,
           });
+          session.telemetry?.record({
+            type: "query-attempt",
+            requestId: session.question.requestId,
+            workspaceId: session.question.workspaceId,
+            traceId: session.traceId,
+            workflowId: "grounded-analysis",
+            workflowRunId: session.workflowRunId!,
+            queryId,
+            sourceId: session.descriptor.id,
+          });
           try {
             raw = await bounded(
               session.source.execute(structuredClone(inputData), context),
               controller.signal,
             );
+            session.telemetry?.record({
+              type: "query-success",
+              requestId: session.question.requestId,
+              workspaceId: session.question.workspaceId,
+              traceId: session.traceId,
+              queryId,
+              elapsedMs: Date.now() - started,
+            });
             break;
           } catch (error) {
+            session.telemetry?.record({
+              type: "query-failure",
+              requestId: session.question.requestId,
+              workspaceId: session.question.workspaceId,
+              traceId: session.traceId,
+              queryId,
+              status: error instanceof SourceError ? error.code : "source-unavailable",
+              elapsedMs: Date.now() - started,
+            });
             if (
               !(error instanceof SourceError) ||
               !error.retryable ||
@@ -171,155 +205,13 @@ export function analyticalWorkflow() {
           workflowId: "grounded-analysis",
           workflowRunId: session.workflowRunId!,
         });
-        if (Buffer.byteLength(JSON.stringify(raw)) > LIMITS.bytes)
-          throw new SourceError(
-            "incomplete-result",
-            "The source exceeded the result byte limit. Narrow the analysis.",
-          );
-        const descriptor = session.descriptor;
-        const capability = descriptor.capabilities.find(
-          (item) => item.metric === inputData.metric,
-        )!;
-        const parsed = resultSchemaFor(capability).safeParse(raw);
-        if (!parsed.success)
-          throw new SourceError(
-            "invalid-result",
-            "The source returned malformed analytical data. Check the connector before retrying.",
-          );
-        const data = parsed.data;
-        // Narrative assumptions belong to versioned server capabilities, not connector output.
-        if (data.details) delete data.details.assumption;
-        if (data.provenance.sourceId !== descriptor.id)
-          throw new SourceError(
-            "invalid-result",
-            "The result source does not match the selected source.",
-          );
-        if (
-          data.provenance.sourceVersion !== descriptor.version ||
-          data.provenance.datasetVersion !== descriptor.datasetVersion ||
-          data.provenance.metricVersion !== descriptor.metricVersion ||
-          data.provenance.asOf !== descriptor.asOf ||
-          !isDeepStrictEqual(data.provenance.coverage, descriptor.coverage)
-        )
-          throw new SourceError(
-            "invalid-result",
-            "The result source versions or clock changed. Reopen the source and retry.",
-          );
-        if (
-          data.metric !== inputData.metric ||
-          !isDeepStrictEqual(data.request, inputData) ||
-          (inputData.period && !isDeepStrictEqual(data.period, inputData.period)) ||
-          (inputData.horizon && !isDeepStrictEqual(data.period, inputData.horizon)) ||
-          (inputData.asOf &&
-            !inputData.horizon &&
-            data.period &&
-            (data.period.start !== inputData.asOf ||
-              data.period.end !==
-                new Date(new Date(`${inputData.asOf}T00:00:00Z`).getTime() + 86400000)
-                  .toISOString()
-                  .slice(0, 10)))
-        )
-          throw new SourceError(
-            "invalid-result",
-            "The result does not match the requested metric, period and filters.",
-          );
-        if (!data.provenance.complete || resultRecordCount(data) > LIMITS.rows)
-          throw new SourceError(
-            "incomplete-result",
-            "The source returned incomplete or oversized data. Partial totals are unavailable.",
-          );
-        if (data.value !== null && (inputData.groupBy || inputData.records) && !data.table)
-          throw new SourceError(
-            "invalid-result",
-            "The requested grouped data or records are missing.",
-          );
-        if (data.table) {
-          const table = data.table;
-          if (table.omitted !== 0)
-            throw new SourceError(
-              "incomplete-result",
-              "Partial tables cannot represent complete results.",
-            );
-          if (
-            table.columns.find((column) => column.key === "value")?.unit !== capability.unit &&
-            table.kind !== "records"
-          )
-            throw new SourceError("invalid-result", "Table units do not match the metric.");
-          if (
-            table.rows.some((row) =>
-              table.columns.some(
-                (column) => column.unit === "USD cents" && !Number.isSafeInteger(row[column.key]),
-              ),
-            )
-          )
-            throw new SourceError("invalid-result", "Currency rows must be safe integer cents.");
-          if (
-            (inputData.records && table.kind !== "records") ||
-            (inputData.groupBy &&
-              table.kind !==
-                capability.groupings?.find((group) => group.field === inputData.groupBy)?.kind) ||
-            (!inputData.groupBy && !inputData.records)
-          )
-            throw new SourceError(
-              "invalid-result",
-              "Table does not match the requested representation.",
-            );
-          if (
-            table.kind === "records" &&
-            data.metric === "conversion" &&
-            (table.rows.filter((row) => row.stage === "won").length !== data.numerator ||
-              table.rows.length !== data.denominator)
-          )
-            throw new SourceError(
-              "invalid-result",
-              "Closed records do not reconcile to the verified counts.",
-            );
-          const values = table.rows.map((row) => row.value);
-          if (values.some((value) => typeof value !== "number" || !Number.isFinite(value)))
-            throw new SourceError("invalid-result", "Table values must be finite numbers.");
-          if (table.kind !== "records") {
-            for (const row of table.rows) {
-              if (
-                typeof row.numerator !== "number" ||
-                typeof row.denominator !== "number" ||
-                !Number.isSafeInteger(row.numerator) ||
-                !Number.isSafeInteger(row.denominator) ||
-                (capability.calculation === "percentage"
-                  ? row.denominator < 1
-                  : row.denominator < 0) ||
-                row.value !==
-                  (capability.calculation === "total"
-                    ? row.numerator
-                    : (row.numerator / row.denominator) * 100)
-              )
-                throw new SourceError("invalid-result", "Grouped calculation failed.");
-            }
-          }
-          if (
-            capability.calculation === "total" &&
-            table.rows.reduce(
-              (sum, row) => sum + (typeof row.value === "number" ? row.value : 0),
-              0,
-            ) !== data.value
-          )
-            throw new SourceError(
-              "invalid-result",
-              "Table values do not reconcile to the verified total.",
-            );
-          if (
-            capability.calculation === "percentage" &&
-            table.kind !== "records" &&
-            (table.rows.reduce(
-              (sum, row) => sum + (typeof row.numerator === "number" ? row.numerator : 0),
-              0,
-            ) !== data.numerator ||
-              table.rows.reduce(
-                (sum, row) => sum + (typeof row.denominator === "number" ? row.denominator : 0),
-                0,
-              ) !== data.denominator)
-          )
-            throw new SourceError("invalid-result", "Grouped closed-deal counts do not reconcile.");
-        }
+        const { data, capability } = verifySourceResult(
+          raw,
+          inputData,
+          session.descriptor,
+          LIMITS.bytes,
+          LIMITS.rows,
+        );
         const result = verifiedResultSchema.parse({
           resultId: randomUUID(),
           queryId,
@@ -344,6 +236,16 @@ export function analyticalWorkflow() {
           explanation: explain(data, capability),
         });
         sessionFrom(requestContext);
+        session.telemetry?.record({
+          type: "calculation-verified",
+          requestId: session.question.requestId,
+          workspaceId: session.question.workspaceId,
+          traceId: session.traceId,
+          queryId,
+          resultId: result.resultId,
+          metric: data.metric,
+          operation: JSON.stringify(data.provenance.operations),
+        });
         session.results.push(result);
         return result;
       } catch (error) {

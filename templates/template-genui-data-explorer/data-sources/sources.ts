@@ -1,3 +1,4 @@
+import { SalesSource } from "./sales/source.ts";
 import { resolve } from "node:path";
 import type { SourceRegistration, SourceSettings } from "./source.ts";
 
@@ -14,7 +15,6 @@ export const sources: readonly SourceRegistration[] = [
   {
     id: "sales",
     open: async (settings) => {
-      const { SalesSource } = await import("./sales/source.ts");
       return new SalesSource(salesPath(settings));
     },
   },

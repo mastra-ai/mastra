@@ -4,7 +4,7 @@ import { referenceFixture } from "./reference.ts";
 import { workspaceModel } from "./workspace-model.ts";
 import { createWorkspace } from "../../src/workspace/create.ts";
 process.env.COPILOTKIT_TELEMETRY_DISABLED = "true";
-const { workspaceServer } = await import("../../src/workspace/server.ts");
+const { workspaceServer } = await import("./server.ts");
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { components } from "../../src/ui/catalog.ts";
 

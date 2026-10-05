@@ -1,3 +1,5 @@
+import type { AnalysisRequest } from "../../data-sources/source.ts";
+import type { ComponentBinding } from "../../src/ui/catalog.ts";
 import { z } from "zod";
 import { representationSchema } from "../../src/analysis/contracts.ts";
 import { sourceDescriptorSchema } from "../../data-sources/source.ts";
@@ -52,6 +54,14 @@ function serverContext(call: Options) {
 /** Prompt routing belongs only to this deterministic provider fixture. Production uses Mastra. */
 export function workspaceModel(
   options: {
+    choose?: (question: string) => {
+      plan?: AnalysisRequest;
+      component?: string;
+      scenario?: boolean;
+    };
+    plan?: AnalysisRequest;
+    properties?: ComponentBinding["properties"];
+    cardId?: string;
     component?: string;
     version?: string;
     delayMs?: number;
@@ -65,7 +75,15 @@ export function workspaceModel(
     calls.push(call);
     options.onCall?.(call);
     const userIndex = call.prompt.findLastIndex((message) => message.role === "user");
-    const user = JSON.stringify(call.prompt[userIndex]);
+    const currentUser = call.prompt[userIndex];
+    const user = JSON.stringify(currentUser);
+    const selected = options.choose?.(
+      typeof currentUser?.content === "string"
+        ? currentUser.content
+        : Array.isArray(currentUser?.content)
+          ? currentUser.content.map((part) => ("text" in part ? part.text : "")).join("\n")
+          : "",
+    );
     const tools = call.prompt.slice(userIndex + 1).filter((message) => message.role === "tool");
     if (options.delayMs && tools.length === 0 && /slow/i.test(user))
       await new Promise((resolve) => setTimeout(resolve, options.delayMs));
@@ -78,7 +96,10 @@ export function workspaceModel(
       (entry) => entry.kind === (role === "series" ? "line" : role === "ranked" ? "bar" : "table"),
     );
     const component =
-      options.component ?? declaration?.id ?? (records ? "table" : ranked ? "bar" : "line");
+      selected?.component ??
+      options.component ??
+      declaration?.id ??
+      (records ? "table" : ranked ? "bar" : "line");
     const previous = context?.accepted.components.find(
       (binding) => binding.representation.role === role && binding.component === component,
     );
@@ -97,13 +118,16 @@ export function workspaceModel(
           type: "tool-call",
           toolCallId: randomUUID(),
           toolName: "analyze",
-          input: JSON.stringify({
-            metric: context ? capability?.metric : "bookings",
-            period: { start: "2025-03-01", end: "2026-04-01" },
-            ...(records
-              ? { records: true }
-              : { groupBy: context ? grouping?.field : ranked ? "segment" : "month" }),
-          }),
+          input: JSON.stringify(
+            selected?.plan ??
+              options.plan ?? {
+                metric: context ? capability?.metric : "bookings",
+                period: { start: "2025-03-01", end: "2026-04-01" },
+                ...(records
+                  ? { records: true }
+                  : { groupBy: context ? grouping?.field : ranked ? "segment" : "month" }),
+              },
+          ),
         },
       ];
     else if (tools.length === 1)
@@ -115,11 +139,13 @@ export function workspaceModel(
           input: JSON.stringify({
             components: [
               {
-                id: context ? (previous?.id ?? randomUUID()) : `card-${component}`,
+                id:
+                  options.cardId ??
+                  (context ? (previous?.id ?? randomUUID()) : `card-${component}`),
                 component,
                 version: options.version ?? declaration?.version ?? "1",
                 resultId: options.invalid ? "forged-result" : metadata?.resultId,
-                properties: {
+                properties: options.properties ?? {
                   title: context
                     ? "Verified view"
                     : records
@@ -136,6 +162,7 @@ export function workspaceModel(
                         )?.key,
                       }
                     : {}),
+                  ...(selected?.scenario ? { scenario: true } : {}),
                   ...(component === "compact" ? { options: { emphasis: "verified" } } : {}),
                 },
               },

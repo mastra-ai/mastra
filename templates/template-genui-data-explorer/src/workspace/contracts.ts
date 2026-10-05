@@ -12,6 +12,15 @@ export const workspaceSchema = z.strictObject({
   components: z.array(componentSchema),
   filters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
   drill: z.string().optional(),
+  corrections: z
+    .array(
+      z.strictObject({
+        componentId: z.string(),
+        requestId: z.string(),
+        reason: z.string().min(1).max(300),
+      }),
+    )
+    .optional(),
   messages: z.array(
     z.strictObject({ id: z.string(), role: z.enum(["user", "assistant"]), content: z.string() }),
   ),
@@ -34,9 +43,20 @@ export const actionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type WorkspaceAction = z.infer<typeof actionSchema>;
+export const correctionSchema = z.strictObject({
+  componentId: z.string().min(1).max(128),
+  reason: z.string().trim().min(1).max(300),
+});
+export type Correction = z.infer<typeof correctionSchema>;
+export const renderAckSchema = z.strictObject({
+  revision: z.number().int().positive(),
+  resultId: z.string().min(1).max(128),
+  componentId: z.string().min(1).max(128),
+});
 export const requestProperties = z.strictObject({
   baseRevision: z.number().int().nonnegative(),
   action: actionSchema.optional(),
+  correction: correctionSchema.optional(),
 });
 export interface WorkspaceSnapshot {
   catalog?: { id: string; version: string; defaults: { pageSize: number } }[] | undefined;

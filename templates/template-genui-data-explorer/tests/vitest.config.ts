@@ -7,6 +7,7 @@ export default defineConfig({
   cacheDir: "node_modules/.vite",
   test: {
     include: ["tests/**/*.test.ts"],
+    exclude: ["tests/fixtures/failing-eval.test.ts", "tests/integration/packaging.test.ts"],
     setupFiles: ["./tests/setup.ts"],
     reporters: ["default", new MastraEvalsReporter()],
     testTimeout: 20000,

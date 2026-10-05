@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { DataExplorer } from "./explorer.ts";
+import type { DataExplorer } from "../../src/analysis/explorer.ts";
 
 /** Local JSON transport. Host and Origin checks protect the server-owned provider credential. */
 export function analysisServer(explorer: DataExplorer) {

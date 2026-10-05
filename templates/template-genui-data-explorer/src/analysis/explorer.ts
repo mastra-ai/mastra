@@ -1,33 +1,24 @@
+import type { TelemetrySink } from "../observability/telemetry.ts";
 import type { Memory } from "@mastra/memory";
-import {
-  components,
-  agentCatalog,
-  compositionSchema,
-  validateComposition,
-  acceptedWorkspace,
-} from "../ui/catalog.ts";
+import { components, acceptedWorkspace } from "../ui/catalog.ts";
 import type { ComponentDeclaration, ComponentBinding } from "../ui/catalog.ts";
 import { randomUUID } from "node:crypto";
 import { Mastra } from "@mastra/core/mastra";
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
 import { RequestContext } from "@mastra/core/request-context";
 import type { MastraModelConfig } from "@mastra/core/llm";
-import {
-  analysisRequestSchema,
-  sourceDescriptorSchema,
-  SourceError,
-} from "../../data-sources/source.ts";
+import { sourceDescriptorSchema, SourceError } from "../../data-sources/source.ts";
 import type { DataSource, SourceDescriptor } from "../../data-sources/source.ts";
 import { analyticalWorkflow, bounded, sessionFrom } from "./workflow.ts";
 import type { Session } from "./workflow.ts";
-import { LIMITS, questionSchema, representationSchema, representation } from "./contracts.ts";
+import { explorerAgent } from "../mastra/agent.ts";
+import { LIMITS, questionSchema } from "./contracts.ts";
 import type { AnalysisEvent, Outcome, VerifiedResult } from "./contracts.ts";
 
 export class DataExplorer {
-  readonly mastra;
+  readonly mastra: Mastra;
   readonly agent;
   readonly workflow;
+  readonly telemetry: TelemetrySink | undefined;
   readonly #catalog: readonly ComponentDeclaration[];
   readonly #source: DataSource;
   readonly #descriptor: SourceDescriptor;
@@ -36,133 +27,30 @@ export class DataExplorer {
   constructor(
     source: DataSource,
     model: MastraModelConfig,
-    options: { catalog?: readonly ComponentDeclaration[]; memory?: Memory } = {},
+    options: {
+      catalog?: readonly ComponentDeclaration[];
+      memory?: Memory;
+      telemetry?: TelemetrySink;
+      mastra?: Mastra;
+    } = {},
   ) {
+    this.telemetry = options.telemetry;
     this.#catalog = options.catalog ?? components;
     this.#source = source;
     this.#descriptor = sourceDescriptorSchema.parse(source.describe());
     this.workflow = analyticalWorkflow();
-    const analyze = createTool({
-      id: "analyze",
-      description:
-        "Execute a supported typed read-only metric. The server chooses the source, clock and limits. Never submit SQL, paths or numeric facts.",
-      inputSchema: analysisRequestSchema,
-      outputSchema: representationSchema,
-      execute: async (inputData, context) => {
-        const session = sessionFrom(context?.requestContext);
-        if (++session.steps > LIMITS.steps) {
-          session.failure = new SourceError(
-            "budget-exceeded",
-            "The analysis reached its model/tool step limit. Ask a smaller question.",
-          );
-          throw session.failure;
-        }
-        try {
-          const run = await this.workflow.createRun({
-            runId: randomUUID(),
-            shouldPersistSnapshot: () => false,
-          });
-          session.workflowRunId = run.runId;
-          const output = await run.start({ inputData, requestContext: context?.requestContext });
-          if (output.status !== "success")
-            throw (
-              session.failure ??
-              new SourceError(
-                "invalid-input",
-                "The analytical workflow could not complete this request.",
-              )
-            );
-          sessionFrom(context?.requestContext);
-          return representation(output.result);
-        } catch (error) {
-          session.failure =
-            error instanceof SourceError
-              ? error
-              : new SourceError(
-                  "invalid-result",
-                  "The analytical workflow failed. Check the source and retry.",
-                );
-          throw session.failure;
-        }
-      },
-    });
-    const catalog = options.catalog ?? components;
-    const compose = createTool({
-      id: "compose",
-      description:
-        "Choose enabled UI components bound only to verified analyze result IDs. No numeric facts, code or URLs. Charts need x/y column bindings. Preserve unrelated cards by adding components.",
-      inputSchema: compositionSchema,
-      outputSchema: compositionSchema,
-      execute: async (input, context) => {
-        const session = sessionFrom(context?.requestContext);
-        if (++session.steps > LIMITS.steps)
-          throw new SourceError("budget-exceeded", "The composition exceeded the step limit.");
-        try {
-          session.composition = validateComposition(input, session.results, catalog);
-          return session.composition;
-        } catch {
-          session.failure = new SourceError(
-            "invalid-result",
-            "Invalid UI composition. Select enabled components bound to verified results and compatible units.",
-          );
-          throw session.failure;
-        }
-      },
-    });
-    this.agent = new Agent({
-      id: "data-explorer",
-      name: "Data Explorer",
-      model,
-      maxRetries: 0,
-      instructions: ({ requestContext }) =>
-        [
-          "Select supported metrics with analyze. Use the source's saved clock for relative questions. Ask for clarification when ambiguous. Never claim causation from descriptive data, supply raw SQL, or invent facts. Return only a brief nonnumeric acknowledgement after tool calls.",
-          ...(options.catalog
-            ? [
-                "After analyzing, use compose with verified result metadata for axes and units. Refine accepted card IDs to replace them; new IDs add cards.",
-              ]
-            : []),
-          `Source descriptor: ${JSON.stringify(this.#descriptor)}`,
-          ...(options.catalog ? [`Enabled catalog: ${JSON.stringify(agentCatalog(catalog))}`] : []),
-          `Accepted workspace context: ${JSON.stringify(sessionFrom(requestContext).accepted ?? { revision: 0, components: [] })}`,
-        ].join("\n"),
-      tools: { analyze, ...(options.catalog ? { compose } : {}) },
-      ...(options.memory ? { memory: options.memory } : {}),
-      defaultOptions: ({ requestContext }) => ({
-        maxSteps: LIMITS.steps,
-        toolCallConcurrency: 1,
-        modelSettings: {
-          maxOutputTokens: LIMITS.responseTokens,
-          maxRetries: 0,
-          timeout: { totalMs: LIMITS.analysisMs },
-        },
-        onFinish: ({ finishReason }) => {
-          const session = sessionFrom(requestContext);
-          if (finishReason === "length" || finishReason === "tool-calls")
-            session.failure = new SourceError(
-              "budget-exceeded",
-              "The model exhausted its response or step budget. Ask a smaller question.",
-            );
-        },
-        prepareStep: () => {
-          const session = sessionFrom(requestContext);
-          session.controller.signal.throwIfAborted();
-          if (++session.steps > LIMITS.steps) {
-            session.failure = new SourceError(
-              "budget-exceeded",
-              "The analysis reached its model/tool step limit.",
-            );
-            throw session.failure;
-          }
-          return {};
-        },
-      }),
-    });
-    this.mastra = new Mastra({
-      agents: { dataExplorer: this.agent },
-      workflows: { groundedAnalysis: this.workflow },
-      logger: false,
-    });
+    this.agent = explorerAgent(this.workflow, this.#descriptor, model, this.#catalog, options);
+    this.mastra =
+      options.mastra ??
+      new Mastra({
+        agents: { dataExplorer: this.agent },
+        workflows: { groundedAnalysis: this.workflow },
+        logger: false,
+      });
+    if (options.mastra) {
+      this.mastra.addAgent(this.agent, "dataExplorer");
+      this.mastra.addWorkflow(this.workflow, "groundedAnalysis");
+    }
   }
   describe(): SourceDescriptor {
     return structuredClone(this.#descriptor);
@@ -184,6 +72,7 @@ export class DataExplorer {
       onComplete?: (session: Session) => void | Promise<void>;
     } = {},
   ): Promise<Outcome> {
+    const started = Date.now();
     const traceId = randomUUID();
     const parsed = questionSchema.safeParse(input);
     const identity = {
@@ -198,8 +87,24 @@ export class DataExplorer {
         /* A disconnected consumer cannot change execution. */
       }
     };
+    this.telemetry?.record({
+      type: "analysis-start",
+      ...identity,
+      threadId: parsed.success ? parsed.data.threadId : "invalid",
+      status: options.accepted?.components.length ? "follow-up" : "initial",
+      sourceId: this.#descriptor.id,
+      datasetVersion: this.#descriptor.datasetVersion,
+    });
     const finish = (outcome: Omit<Outcome, "requestId" | "workspaceId" | "traceId">) => {
       const result = { ...identity, ...outcome };
+      this.telemetry?.record({
+        type: "analysis-end",
+        ...identity,
+        status: result.status,
+        elapsedMs: Date.now() - started,
+      });
+      if (["rejected", "unsupported"].includes(result.status))
+        this.telemetry?.record({ type: "guardrail", ...identity, status: result.status });
       emit({ type: "terminal", outcome: result });
       return result;
     };
@@ -269,10 +174,16 @@ export class DataExplorer {
       cleanups: [],
       emit,
       steps: 0,
+      telemetry: this.telemetry,
       ...(options.filters ? { filters: options.filters } : {}),
     };
     const requestContext = new RequestContext();
     requestContext.set("analysis-session", session);
+    requestContext.set("requestId", question.requestId);
+    requestContext.set("workspaceId", question.workspaceId);
+    requestContext.set("threadId", question.threadId);
+    requestContext.set("analysisTraceId", traceId);
+    requestContext.set("datasetVersion", this.#descriptor.datasetVersion);
     requestContext.set("identity", "local-demo-user");
     requestContext.set("source", structuredClone(this.#descriptor));
     requestContext.set("limits", LIMITS);

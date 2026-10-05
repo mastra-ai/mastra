@@ -1,6 +1,7 @@
+import { renderAckSchema } from "../../src/workspace/contracts.ts";
 import { createServer } from "node:http";
-import { workspaceRuntime } from "./runtime.ts";
-import type { WorkspaceEngine } from "./engine.ts";
+import { workspaceRuntime } from "../../src/workspace/runtime.ts";
+import type { WorkspaceEngine } from "../../src/workspace/engine.ts";
 
 export function workspaceServer(
   engine: WorkspaceEngine,
@@ -44,6 +45,21 @@ export function workspaceServer(
           }),
         );
       }
+      return;
+    }
+    if (request.url === "/render-ack" && request.method === "POST") {
+      try {
+        let body = "";
+        for await (const chunk of request) {
+          body += String(chunk);
+          if (Buffer.byteLength(body) > 1024) throw new Error("Request too large.");
+        }
+        engine.acknowledgeRender(renderAckSchema.parse(JSON.parse(body)));
+        response.writeHead(204);
+      } catch {
+        response.writeHead(400);
+      }
+      response.end();
       return;
     }
     if (

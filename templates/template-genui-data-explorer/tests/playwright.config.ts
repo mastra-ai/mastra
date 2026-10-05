@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./browser",
+  testMatch: "workspace.spec.ts",
   outputDir: "../.data/browser-results",
   workers: 1,
   retries: 0,

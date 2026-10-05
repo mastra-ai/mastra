@@ -1,3 +1,5 @@
+import { LocalTelemetry } from "../observability/telemetry.ts";
+import type { Mastra } from "@mastra/core/mastra";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import type { MastraModelConfig } from "@mastra/core/llm";
@@ -16,8 +18,10 @@ export async function createWorkspace(options: {
   settings?: SourceSettings;
   workspacePath: string;
   memoryPath: string;
+  telemetryPath?: string;
   model?: MastraModelConfig;
   catalog?: readonly ComponentDeclaration[];
+  mastra?: Mastra;
 }) {
   const source = await openDataSource(
     options.registrations ?? sources,
@@ -25,6 +29,7 @@ export async function createWorkspace(options: {
     options.settings,
   );
   const storage = new LibSQLStore({ id: "local-conversations", url: `file:${options.memoryPath}` });
+  const telemetry = options.telemetryPath ? new LocalTelemetry(options.telemetryPath) : undefined;
   try {
     await storage.init();
     const memory = new Memory({
@@ -42,7 +47,12 @@ export async function createWorkspace(options: {
         providerId: "openai",
         modelId: process.env.ANALYSIS_MODEL ?? "gpt-4.1-mini",
       },
-      { catalog: options.catalog ?? components, memory },
+      {
+        catalog: options.catalog ?? components,
+        ...(options.mastra ? { mastra: options.mastra } : {}),
+        memory,
+        ...(telemetry ? { telemetry } : {}),
+      },
     );
     return {
       engine: new WorkspaceEngine(
@@ -52,8 +62,10 @@ export async function createWorkspace(options: {
       ),
       storage,
       memory,
+      telemetry,
     };
   } catch (error) {
+    telemetry?.close();
     await source.close();
     await storage.close();
     throw error;

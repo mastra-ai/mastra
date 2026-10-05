@@ -14,7 +14,7 @@ import { WorkspaceEngine } from "./engine.ts";
 import { WorkspaceError } from "./store.ts";
 import { requestProperties, threadId, workspaceId, workspaceSchema } from "./contracts.ts";
 
-/** Only this guarded agent is registered with the official runtime. Native Mastra stays private. */
+/** Only this guarded agent is registered with the official runtime. Native execution remains guarded. */
 export class WorkspaceAgent extends AbstractAgent {
   readonly #controllers = new Set<AbortController>();
   readonly engine: WorkspaceEngine;
@@ -73,7 +73,7 @@ export class WorkspaceAgent extends AbstractAgent {
           // A matching journal entry is a replay; fresh history remains server-owned.
           if (
             !action &&
-            !this.engine.repeated(question, action) &&
+            !this.engine.repeated(question, action, properties.correction) &&
             !isDeepStrictEqual(
               input.messages.slice(0, -1).map(({ id, role, content }) => ({ id, role, content })),
               snapshot.workspace.messages,
@@ -95,7 +95,7 @@ export class WorkspaceAgent extends AbstractAgent {
                 resourceId: "local-demo-user",
                 streamServerToolCalls: true,
               });
-              return new Promise((resolve, reject) => {
+              return new Promise<{ finishReason: string }>((resolve, reject) => {
                 const cancel = () => adapter.abortRun();
                 session.controller.signal.addEventListener("abort", cancel, { once: true });
                 adapter
@@ -125,6 +125,8 @@ export class WorkspaceAgent extends AbstractAgent {
               });
             },
             action,
+            undefined,
+            properties.correction,
           );
           send({ type: EventType.STATE_SNAPSHOT, snapshot: result.snapshot });
           send({ type: EventType.MESSAGES_SNAPSHOT, messages: result.snapshot.workspace.messages });
@@ -183,7 +185,7 @@ class WorkspaceRunner extends InMemoryAgentRunner {
   }
 }
 export function workspaceRuntime(engine: WorkspaceEngine) {
-  return createCopilotRuntimeHandler({
+  const handler = createCopilotRuntimeHandler({
     runtime: new CopilotRuntime({
       agents: { dataExplorer: new WorkspaceAgent(engine) },
       runner: new WorkspaceRunner(engine),
@@ -193,4 +195,61 @@ export function workspaceRuntime(engine: WorkspaceEngine) {
     cors: false,
     activateChannels: false,
   });
+  return async (request: Request) => {
+    // The official in-memory runner intentionally survives detached subscribers.
+    // A workspace run instead owns its HTTP lifetime and must stop before saving.
+    if (request.method !== "POST" || !new URL(request.url).pathname.endsWith("/run"))
+      return handler(request);
+    let requestId: string | undefined;
+    try {
+      const body: unknown = await request.clone().json();
+      if (body && typeof body === "object" && "runId" in body && typeof body.runId === "string")
+        requestId = body.runId;
+    } catch {
+      return handler(request);
+    }
+    const cancel = () => {
+      if (requestId) engine.cancel(requestId);
+    };
+    request.signal.addEventListener("abort", cancel, { once: true });
+    try {
+      const response = await handler(request);
+      if (!response.body) {
+        request.signal.removeEventListener("abort", cancel);
+        return response;
+      }
+      const reader = response.body.getReader();
+      const cleanup = () => {
+        request.signal.removeEventListener("abort", cancel);
+        reader.releaseLock();
+      };
+      return new Response(
+        new ReadableStream({
+          async pull(controller) {
+            try {
+              const next = await reader.read();
+              if (next.done) {
+                controller.close();
+                cleanup();
+              } else controller.enqueue(next.value);
+            } catch (error) {
+              cancel();
+              cleanup();
+              controller.error(error);
+            }
+          },
+          async cancel() {
+            cancel();
+            await reader.cancel();
+            cleanup();
+          },
+        }),
+        { status: response.status, statusText: response.statusText, headers: response.headers },
+      );
+    } catch (error) {
+      request.signal.removeEventListener("abort", cancel);
+      cancel();
+      throw error;
+    }
+  };
 }

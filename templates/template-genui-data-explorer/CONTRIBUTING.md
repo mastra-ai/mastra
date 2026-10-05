@@ -6,7 +6,7 @@ repository remain maintainer decisions.
 
 Work from this directory with Node.js 24.15 or later and NPM. Keep dependencies, configuration, and
 changes local to the template. Run `npm install`, then `npm run format:check`, `npm run typecheck`,
-`npm run test:unit`, `npm run test:integration`, `npm run test:workspace`, and `npm run build` before submitting changes. Use
+`npm run test:unit`, `npm run test:integration`, `npm run test:workspace`, `npm run standalone:prepare`, `npm run test:quality`, and `npm run build` before submitting changes. Use
 `npm run format` to apply formatting.
 
 Keep generic source contracts and selection under `data-sources/`; source-specific implementations
@@ -31,3 +31,10 @@ the shared root schema version without checking compatibility.
 
 The README describes the delivered data, analytical runtime and browser workspace. Keep examples and claims
 aligned with observable behavior. Never commit provider credentials or real customer records.
+
+The quality harness runs only after preparing an independent extraction outside the monorepo.
+It exercises the native Mastra CLI, official eval pass/failure assertions, independent NPM checks
+and the actual CopilotKit browser against an offline HTTP provider. Refresh the extraction after
+source changes. Live benchmark tests validate the protocol without provider calls; paid benchmark
+execution remains an explicit operator action with dated model-specific pricing and a spending cap.
+Keep diagnostics redacted before persistence in both domain events and native span exporters.
