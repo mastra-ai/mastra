@@ -26,10 +26,15 @@
  *
  * Durable agent tool step (the tool-call step of `durable-agentic-execution`):
  *
- *   const end = driver.waitForStepEnd({ spec: 'tool-step' });
- *   await (await agent.stream('hi')).consumeStream();
- *   await end;
- *   await driver.redeliver({ spec: 'tool-step' });
+ *   const agent = createEventedAgent({ agent: baseAgent }); // registered on the Mastra above
+ *   driver.assertEvented(agent.getWorkflow());
+ *   const { output, cleanup } = await agent.stream('hi');
+ *   const done = output.consumeStream();
+ *   await toolStarted; // e.g. a deferred resolved inside the tool's execute
+ *   await driver.redeliver({ spec: 'tool-step' }); // same as 'durable-agentic-execution@3,0'
+ *   releaseTool();
+ *   await done;
+ *   cleanup();
  *
  * `redeliver()` re-emits the captured event with its original id and
  * `deliveryAttempt` 2 (what a broker does after a missed ack) and resolves
