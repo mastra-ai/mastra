@@ -208,6 +208,45 @@ describe('Subconscious observation curator', () => {
     ]);
   });
 
+  it('surfaces structural scope descriptions reachable from the curator frontier', async () => {
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      structure: {
+        scopes: [
+          { address: 'org:acme', name: 'acme' },
+          { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+          {
+            address: 'features:memory',
+            name: 'memory',
+            parentAddresses: ['features'],
+            metadata: { description: 'Knowledge about the memory subsystem belongs here.' },
+          },
+          { address: 'org:other', name: 'other' },
+          {
+            address: 'other:things',
+            name: 'things',
+            parentAddresses: ['org:other'],
+            metadata: { description: 'Unreachable scope description must stay hidden.' },
+          },
+        ],
+      },
+    });
+    const { context, extractor } = fixture(knowledge);
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
+    });
+
+    await extractor.onExtracted!(context);
+
+    await vi.waitFor(() => expect(curatorAgent).toBeDefined());
+    const instructions = await curatorAgent!.getInstructions();
+    expect(instructions).toContain('features:memory (memory): Knowledge about the memory subsystem belongs here.');
+    expect(instructions).not.toContain('Unreachable scope description must stay hidden.');
+  });
+
   it.each(['instance', 'key'] as const)(
     'passes selected Knowledge by %s into the configured curator',
     async selection => {
@@ -440,7 +479,7 @@ describe('Subconscious observation curator', () => {
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('requires organizationId') }),
+          data: expect.objectContaining({ error: expect.stringContaining('require requestContext.organizationId') }),
         }),
       ),
     );
