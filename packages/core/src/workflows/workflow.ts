@@ -4951,6 +4951,7 @@ export class Run<
       actor?: ActorSignal;
       skipParentWorkflowClaim?: boolean;
       claimedSnapshot?: WorkflowRunState;
+      onExecutionStarted?: () => void;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
@@ -5222,13 +5223,23 @@ export class Run<
 
     const releaseParentClaim = async () => {
       if (!claimedParent) return;
-      await claimedParent.store.updateWorkflowState({
-        workflowName: claimedParent.run.workflowId,
-        runId: claimedParent.run.runId,
-        opts: { status: 'suspended', expectedStatus: 'running' },
-      });
+      try {
+        await claimedParent.store.updateWorkflowState({
+          workflowName: claimedParent.run.workflowId,
+          runId: claimedParent.run.runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      } catch (releaseError) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] Failed to release parent resume claim for run ${claimedParent.run.runId}`,
+            releaseError,
+          );
+      }
     };
 
+    params.onExecutionStarted?.();
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -5269,13 +5280,22 @@ export class Run<
         }
         if (result.status === 'success') {
           if (claimedParent && this.parentWorkflow) {
+            let parentExecutionStarted = false;
             void claimedParent.run
               ._resume({
                 step: this.parentWorkflow.stepId,
                 forEachIndex: this.parentWorkflow.foreachIndex,
+                requestContext: params.requestContext,
+                actor: params.actor,
                 claimedSnapshot: claimedParent.snapshot,
+                onExecutionStarted: () => {
+                  parentExecutionStarted = true;
+                },
               })
-              .catch(error => {
+              .catch(async error => {
+                if (!parentExecutionStarted) {
+                  await releaseParentClaim();
+                }
                 this.#mastra
                   ?.getLogger()
                   ?.error('Failed to resume parent workflow after nested child completion.', error);
