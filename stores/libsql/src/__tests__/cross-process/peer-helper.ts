@@ -32,6 +32,20 @@
  * Peers must flush before exit. `runPeer` (peer-runtime.ts) awaits the shared
  * pubsub's `flush()` before reporting a result and exiting; without it a
  * peer's last publish can die in flight and look like the receiver ignored it.
+ * A flush failure is not swallowed: it becomes the peer's error outcome and a
+ * nonzero exit, and is written to the peer's stderr too, so a lost final frame
+ * cannot pass as success.
+ *
+ * What `flush()` guarantees is narrower than "everything I published arrived":
+ * it awaits the writes already queued on that instance (see
+ * `UnixSocketPubSub.flush`), so it neither waits for an in-flight
+ * fire-and-forget publish to enqueue its write nor reports individual write
+ * failures. A fixture that calls a fire-and-forget API (for example
+ * `agent.abortRunStream`) must therefore await the publish itself or establish
+ * an explicit delivery barrier before returning — as fixtures/t79-peer.ts does
+ * by waiting for its own abort request to echo back through the broker. It
+ * also only flushes the instance from `peer.pubsub()`; a fixture that builds
+ * its own `UnixSocketPubSub` bypasses this entirely.
  */
 import { execFile, fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';

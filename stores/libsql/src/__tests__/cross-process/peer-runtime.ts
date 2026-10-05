@@ -143,7 +143,13 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
   };
 
   const exitWith = async (message: PeerToMain, code: number) => {
-    await send(message).catch(() => {});
+    await send(message).catch(error => {
+      // The test process may already be gone. Keep the report reachable: the
+      // parent captures this process's stderr.
+      process.stderr.write(
+        `peer-runtime: could not send ${message.kind} over IPC (${serializeError(error).message})\n${JSON.stringify(message)}\n`,
+      );
+    });
     process.disconnect?.();
     process.exit(code);
   };
@@ -157,12 +163,15 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
     try {
       await pubsub?.flush();
     } catch (error) {
+      // When the fixture had already failed, keep that failure in the report:
+      // the flush error is a consequence of exiting, not the root cause.
+      const fixtureFailure = message.kind === 'error' ? `\nthe fixture had also failed: ${message.error.message}` : '';
       await exitWith(
         {
           kind: 'error',
           error: serializeError(
             new Error(
-              `peer ${config.role} (pid ${config.pid}): flush() before exit failed, its last publish may not have reached the broker: ${serializeError(error).message}`,
+              `peer ${config.role} (pid ${config.pid}): flush() before exit failed, its last publish may not have reached the broker: ${serializeError(error).message}${fixtureFailure}`,
             ),
           ),
         },

@@ -54,11 +54,19 @@ describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from a
     // instead land during shutdown and lose the race against the store closing;
     // the store then logs `deleteWorkflowRunById ... CLIENT_CLOSED` and the
     // agent swallows it (no unhandled rejection, nothing asserted after here).
-    await mastra?.shutdown();
-    mastra = undefined;
-    await storage?.close();
-    storage = undefined;
-    await env.cleanup();
+    // Nested so a shutdown failure still closes the store, and either still
+    // cleans up the peers: teardown is what contains a failed cell.
+    try {
+      await mastra?.shutdown();
+      mastra = undefined;
+    } finally {
+      try {
+        await storage?.close();
+        storage = undefined;
+      } finally {
+        await env.cleanup();
+      }
+    }
   });
 
   it(
@@ -130,38 +138,54 @@ describe.each(['durable', 'evented'] as const)('T79 xproc-%s: abort a run from a
         });
       const context = () => `${record()}\n${env.describe()}`;
 
-      // Not-exercised guard: the case only means something once step 2 is parked.
-      await hangGuard(reached.promise, 'step 2 never reached its gate (case not exercised)', context);
-      const callsAtAbort = modelCalls();
+      // Whatever happens from here on, the run must not outlive the test:
+      // release the parked tool, then wait a bounded time for the stream to
+      // settle so teardown is not racing a live run (shutdown does not wait for
+      // one — it abandons pending runs after its drain timeout). Never throws:
+      // the test's own failure is the one that gets reported.
+      const releaseAndSettle = async () => {
+        release.resolve();
+        await Promise.race([
+          settled.catch(() => {}),
+          new Promise<void>(resolve => setTimeout(resolve, DEFAULT_HANG_GUARD_MS)),
+        ]);
+      };
 
-      const { result: peerResult, exit: peerExit } = await (async () => {
-        try {
-          peer.send('abort-now');
-          const result = await peer.result<{ accepted: boolean; runId: string }>();
-          const exit = await peer.exit();
-          return { result, exit };
-        } finally {
-          // The success path releases the gate only after the peer has
-          // reported; on a failure this keeps the parked tool (and the run)
-          // from outliving the test.
-          release.resolve();
-        }
-      })();
-      await hangGuard(settled, 'stream did not settle after the abort', context);
-      // Recorded, not asserted (tri-state / product calls): accepted, abort chunk, onAbort vs onFinish.
-      const diagnostics = `peer=${JSON.stringify({ peerResult, peerExit })}\n${context()}`;
+      try {
+        // Not-exercised guard: the case only means something once step 2 is parked.
+        await hangGuard(reached.promise, 'step 2 never reached its gate (case not exercised)', context);
+        const callsAtAbort = modelCalls();
 
-      expect(peerExit, `peer process exited cleanly\n${diagnostics}`).toEqual({ code: 0, signal: null });
-      expect(peerResult.runId, `peer reported a result with no error\n${diagnostics}`).toBe(runId);
-      expect(modelCalls() - callsAtAbort, `no model call after the abort\n${diagnostics}`).toBe(0);
-      expect(
-        toolLog.filter(e => e.event === 'start' && e.n === 3),
-        `step 3 never started\n${diagnostics}`,
-      ).toEqual([]);
-      expect(
-        chunks.filter(c => c.type === 'error'),
-        `no error chunk\n${diagnostics}`,
-      ).toEqual([]);
+        const { result: peerResult, exit: peerExit } = await (async () => {
+          try {
+            peer.send('abort-now');
+            const result = await peer.result<{ accepted: boolean; runId: string }>();
+            const exit = await peer.exit();
+            return { result, exit };
+          } finally {
+            // The success path releases the gate only after the peer has
+            // reported, so the run cannot unpark before the abort arrived.
+            release.resolve();
+          }
+        })();
+        await hangGuard(settled, 'stream did not settle after the abort', context);
+        // Recorded, not asserted (tri-state / product calls): accepted, abort chunk, onAbort vs onFinish.
+        const diagnostics = `peer=${JSON.stringify({ peerResult, peerExit })}\n${context()}`;
+
+        expect(peerExit, `peer process exited cleanly\n${diagnostics}`).toEqual({ code: 0, signal: null });
+        expect(peerResult.runId, `peer reported a result with no error\n${diagnostics}`).toBe(runId);
+        expect(modelCalls() - callsAtAbort, `no model call after the abort\n${diagnostics}`).toBe(0);
+        expect(
+          toolLog.filter(e => e.event === 'start' && e.n === 3),
+          `step 3 never started\n${diagnostics}`,
+        ).toEqual([]);
+        expect(
+          chunks.filter(c => c.type === 'error'),
+          `no error chunk\n${diagnostics}`,
+        ).toEqual([]);
+      } finally {
+        await releaseAndSettle();
+      }
     },
     DEFAULT_HANG_GUARD_MS + 5_000,
   );

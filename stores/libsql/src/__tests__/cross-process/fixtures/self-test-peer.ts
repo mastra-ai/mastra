@@ -84,6 +84,9 @@ runPeer<SelfTestArgs>(async peer => {
       await peer.waitFor('release');
       release.resolve();
       const text = await result.output.text;
+      // This process owns (and has finished) the run, so unlike the T79 peer it
+      // can shut its instance down before closing the store it owns.
+      await mastra.shutdown();
       await storage.close();
       return { text };
     }
