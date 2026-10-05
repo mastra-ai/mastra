@@ -39,7 +39,7 @@ const packageManagerCommands: Record<PackageManager, string> = {
 };
 
 const versionBadgeClassName =
-  'inline-flex h-[1.375rem] items-center rounded-full bg-fill px-2.5      tabular-nums whitespace-nowrap';
+  'inline-flex h-[1.375rem] items-center rounded-full bg-fill px-2.5 tabular-nums whitespace-nowrap';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
