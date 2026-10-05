@@ -5,9 +5,11 @@ import {
   createClientAcceptanceTests,
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { EntityType, SpanType } from '@mastra/core/observability';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MemoryStorageClickhouse } from './domains/memory';
+import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 import { ClickhouseStore } from '.';
@@ -493,5 +495,61 @@ describe('ClickHouse Domain with URL/credentials config', () => {
       await memoryDomain.deleteThread({ threadId });
       await client.close();
     });
+  });
+});
+
+describe('ClickHouse legacy observability listTraces', () => {
+  const observability = new ObservabilityStorageClickhouse({
+    url: TEST_CONFIG.url,
+    username: TEST_CONFIG.username || 'default',
+    password: TEST_CONFIG.password || '',
+  });
+  const suffix = Date.now();
+  const failingTrace = `trace-child-error-${suffix}`;
+  const cleanTrace = `trace-child-ok-${suffix}`;
+  const span = (traceId: string, spanId: string, parentSpanId: string | null, error: unknown) => ({
+    traceId,
+    spanId,
+    parentSpanId,
+    name: spanId,
+    spanType: SpanType.AGENT_RUN,
+    isEvent: false,
+    entityType: EntityType.AGENT,
+    entityId: `agent-child-error-${suffix}`,
+    entityName: 'childErrorAgent',
+    attributes: null,
+    metadata: null,
+    links: null,
+    input: null,
+    output: null,
+    error,
+    startedAt: new Date(),
+    endedAt: new Date(),
+  });
+
+  beforeAll(async () => {
+    await observability.init();
+    await observability.batchCreateSpans({
+      records: [
+        span(failingTrace, 'root', null, null),
+        span(failingTrace, 'child', 'root', { message: 'child failed' }),
+        span(cleanTrace, 'root', null, null),
+        span(cleanTrace, 'child', 'root', null),
+      ] as never,
+    });
+  });
+
+  afterAll(async () => {
+    await observability.batchDeleteTraces({ traceIds: [failingTrace, cleanTrace] });
+  });
+
+  it.each([
+    [true, failingTrace],
+    [false, cleanTrace],
+  ])('filters by hasChildError: %s', async (hasChildError, expected) => {
+    const result = await observability.listTraces({
+      filters: { entityId: `agent-child-error-${suffix}`, hasChildError },
+    });
+    expect(result.spans.map(s => s.traceId)).toEqual([expected]);
   });
 });
