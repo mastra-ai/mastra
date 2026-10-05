@@ -12,18 +12,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
-import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -77,10 +76,10 @@ function RequestContextForm({
   }
 
   return (
-    <div className="space-y-2">
-      <Label>Request Context</Label>
+    <Fieldset>
+      <FieldsetLegend>Request Context</FieldsetLegend>
       <DynamicForm schema={zodSchema} onValuesChange={onChange} className="[&_button[type=submit]]:hidden" />
-    </div>
+    </Fieldset>
   );
 }
 
@@ -140,8 +139,13 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
-  const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  const { total: itemCount } = useDatasetItems({
+    datasetId: datasetId,
+    search: undefined,
+    version: version,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
   const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
@@ -255,48 +259,47 @@ export function ExperimentTriggerDialog({
 
         <DialogBody>
           <div className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-name">Name *</Label>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="experiment-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter experiment name"
                 autoFocus
                 disabled={isRunning}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Textarea
-                id="experiment-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter experiment description (optional)"
                 disabled={isRunning}
                 rows={2}
               />
-            </div>
+            </Field>
           </div>
 
           <ol className="list-none">
             <PipelineStep index={1} done={Boolean(datasetId)}>
               <div className="grid grid-cols-[1fr_140px] gap-3">
-                <div className="grid gap-2">
-                  <Label>Dataset</Label>
+                <Field>
+                  <FieldLabel>Dataset</FieldLabel>
                   <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
-                </div>
+                </Field>
                 {datasetId && (
-                  <div className="grid gap-2">
-                    <Label>Version</Label>
+                  <Field>
+                    <FieldLabel>Version</FieldLabel>
                     <DatasetVersions
                       datasetId={datasetId}
                       value={version}
                       onValueChange={setVersion}
                       container={contentRef}
                     />
-                  </div>
+                  </Field>
                 )}
               </div>
               {datasetId && itemCount !== undefined && (

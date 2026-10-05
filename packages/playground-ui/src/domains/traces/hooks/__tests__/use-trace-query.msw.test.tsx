@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
+import type { TraceQueryArgs } from '@mastra/react/hooks';
+import { getTraceQueryNextPageParam, useTraceQuery, useTraceMetadataFilterFields } from '@mastra/react/hooks';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -9,9 +10,6 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { buildTraceListFilters } from '../../trace-filters';
-import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
-import { getTraceQueryNextPageParam, useTraceQuery } from '../use-trace-query';
-import type { TraceQueryArgs } from '../use-trace-query';
 import { firstTraceQueryPage, lastTraceQueryPage } from './fixtures/trace-query';
 import { firstLegacyTracePage, lastLegacyTracePage } from './fixtures/trace-query-legacy';
 
@@ -235,10 +233,13 @@ describe('useTraceQuery', () => {
         }),
       );
       focusManager.setFocused(true);
-      const { result, rerender } = renderHook(({ interval }) => useTraceQuery({ query, refetchInterval: interval }), {
-        initialProps: { interval: 0 },
-        wrapper: makeWrapper(),
-      });
+      const { result, rerender } = renderHook(
+        ({ interval }) => useTraceQuery({ query, queryOptions: { traceQuery: { refetchInterval: interval } } }),
+        {
+          initialProps: { interval: 0 },
+          wrapper: makeWrapper(),
+        },
+      );
       await waitFor(() => expect(result.current.data).toEqual(lastTraceQueryPage.traces));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       try {
@@ -343,8 +344,8 @@ describe('useTraceQuery', () => {
           createdAt: '2026-09-01T10:00:00.000Z',
           metadata: { region: 'eu-west' },
           inputPreview: 'Hello',
-          threadId: null,
-          resourceId: null,
+          threadId: 'thread-legacy-a',
+          resourceId: 'user-legacy-a',
           startedAt: '2026-09-01T10:00:00.000Z',
           endedAt: '2026-09-01T10:01:00.000Z',
           entityName: 'assistant',
@@ -381,7 +382,7 @@ describe('useTraceQuery', () => {
           traces: useTraceQuery({ query, withQueryTrace, legacyFilters }),
           metadata: useTraceMetadataFilterFields({
             timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-02T00:00:00.000Z' },
-            enabled: withQueryTrace,
+            queryOptions: { enabled: withQueryTrace },
           }),
         }),
         { wrapper: makeWrapper() },

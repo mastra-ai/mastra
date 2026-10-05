@@ -2,6 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
+import { serializeError } from '../../../../events/codec/error';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
@@ -14,6 +15,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
+import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
@@ -23,20 +25,15 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
-import type {
-  SpanType,
-  AIModelGenerationSpan,
-  ExportedSpan,
-  IModelSpanTracker,
-  AnySpan,
-} from '../../../../observability';
-import { EntityType } from '../../../../observability';
-import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
+import { getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
+import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
@@ -49,6 +46,7 @@ import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
+import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
@@ -74,6 +72,20 @@ function resolveTotalTimeoutAbort(signal: AbortSignal | undefined, error?: Error
   if (isMastraTimeoutError(reason) && reason.timeoutType === 'total') return reason;
   if (isMastraTimeoutError(error) && error.timeoutType === 'total') return error;
   return undefined;
+}
+
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
 }
 
 /**
@@ -148,6 +160,8 @@ const durableLLMOutputSchema = z.object({
       providerExecuted: z.boolean().optional(),
       output: z.any().optional(),
       activeTools: z.array(z.string()).nullable().optional(),
+      requireApproval: z.boolean().optional(),
+      hasSuspendSchema: z.boolean().optional(),
       stepSpanData: z.any().optional(),
     }),
   ),
@@ -156,6 +170,7 @@ const durableLLMOutputSchema = z.object({
     warnings: z.array(z.any()),
     isContinued: z.boolean(),
     totalUsage: z.any().optional(),
+    tripwire: z.any().optional(),
   }),
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
@@ -270,14 +285,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             from: ChunkFrom.AGENT,
             // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
             // transports, which destroys the producer stack and makes crashes
-            // unattributable on the consumer side.
-            payload: {
-              error: {
-                message: fatalError.message,
-                stack: fatalError.stack,
-                name: fatalError.name,
-              },
-            },
+            // unattributable on the consumer side. Own fields (statusCode, ...)
+            // are kept so the caller sees the full provider error.
+            payload: { error: serializeError(fatalError) },
           });
 
           // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
@@ -291,7 +301,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued: false,
               },
               output: {
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
               },
               metadata: {},
             },
@@ -419,10 +429,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // errors away from processors (#21738) — durable is immune by
       // construction, don't port that guard here.
       let lastError: Error | undefined;
-      let processorRetryCount = 0;
       const maxProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries: typedInput.options?.maxProcessorRetries,
         hasErrorProcessors: Boolean(globalRunRegistry.get(runId)?.errorProcessors?.length),
+        hasConfiguredErrorProcessors: Boolean(typedInput.options?.hasErrorProcessors),
         agentId,
         logger,
       });
@@ -433,6 +443,34 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
         return currentMessageId;
       };
+
+      // Processor retries are read from the step history: each rejected step is recorded with
+      // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
+      // API-error retries happen inside this step and add to the same count, as in Agent.
+      const previousSteps = inputData.accumulatedSteps ?? [];
+      let processorRetryCount = 0;
+      for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
+        processorRetryCount++;
+      }
+      const lastStep = previousSteps.at(-1);
+      const processorRetryFeedback = lastStep?.finishReason === 'retry' ? lastStep.tripwire?.reason : undefined;
+
+      // The abort reason from a processor-requested retry goes at the end of the conversation
+      // as a reminder signal (mirrors the main loop). The response message id is rotated first
+      // so the retry streams into a new message after the signal.
+      if (processorRetryFeedback) {
+        rotateResponseMessageId();
+        const feedbackSignal = messageList.addSignal(
+          createSignal({
+            type: 'reactive',
+            tagName: 'system-reminder',
+            contents: processorRetryFeedback,
+          }),
+        );
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart() as any);
+        }
+      }
       let terminalAttemptContext:
         | {
             recordTerminalError: (error: unknown) => void;
@@ -589,7 +627,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   activeTools: currentActiveTools,
                   modelSettings: currentModelSettings,
                   structuredOutput: structuredOutput as any,
-                  retryCount: (inputData as any).processorRetryCount ?? 0,
+                  retryCount: processorRetryCount,
                   abortSignal: executionAbortSignal,
                   writer: inputStepWriter,
                 });
@@ -831,7 +869,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: inputData.accumulatedSteps ?? [],
-                  retryCount: (inputData as any).processorRetryCount ?? 0,
+                  retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
@@ -891,7 +929,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let rawResponse: any = {};
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
-            let usage: any = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+            let usage: any = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
             let responseMetadata: any = {};
             // Tracks whether this attempt produced any actual model output.
             // Used to detect a zero-output stream that finishes with reason
@@ -1081,18 +1119,28 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Apply post-processor request-side context to MODEL_INFERENCE then
             // open the inference span immediately before the model call so its
-            // startTime excludes any input processor work and availableTools /
-            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // startTime excludes any input processor work and tools /
+            // availableTools / toolChoice reflect per-step mutations.
+            // availableTools is derived from the serialized definitions so the
+            // two can't disagree. responseFormat tracks the
             // actual structuredOutput payload sent to execute() — which is
             // undefined when structuringModelConfig routes through a separate
             // structuring step instead of asking the model for json_schema.
+            // Skipped when tracing is off or the trace was not sampled (a
+            // no-op span still hands out a tracker).
+            const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
+              ? getToolDefinitionsForTracing({
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  specificationVersion: currentModel.specificationVersion,
+                })
+              : undefined;
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
               providerOptions: currentProviderOptions as Record<string, unknown> | undefined,
-              availableTools: getStepAvailableToolNames(
-                currentTools as Record<string, unknown> | undefined,
-                currentActiveTools,
-              ),
+              availableTools: inferenceTools?.map(tool => tool.name) ?? [],
+              tools: inferenceTools,
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
@@ -1284,6 +1332,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // llm-execution tool-result case. Lazy: most streams carry no
             // provider tool results.
             let toolResultTripwire: TripWire | null = null;
+            let outputStreamBlocked = false;
             let toolResultRunner: ProcessorRunner | undefined;
             const getToolResultRunner = (): ProcessorRunner => {
               toolResultRunner ??= new ProcessorRunner({
@@ -1306,6 +1355,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ) => {
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                     await emitChunkEvent(pubsub, runId, data as any);
+                  },
+                }
+              : undefined;
+            const outputStreamWriter = pubsub
+              ? {
+                  custom: async (
+                    data: { type: string; data?: unknown; transient?: boolean },
+                    writerOptions?: { messageId?: string },
+                  ) => {
+                    persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
+                    try {
+                      await emitChunkEvent(pubsub, runId, data as any, true);
+                    } catch (error) {
+                      throw new DurableChunkPublishError(error);
+                    }
                   },
                 }
               : undefined;
@@ -1405,7 +1469,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         result: resultPayload.result,
                         providerExecuted: resultProviderExecuted,
                         requestContext,
-                        retryCount: (inputData as any).processorRetryCount ?? 0,
+                        retryCount: processorRetryCount,
                         tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                         writer: toolResultChunkWriter,
                         abortSignal: executionAbortSignal,
@@ -1563,6 +1627,48 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
+                  } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                    try {
+                      await processAndEmitChunk(clientChunk, {
+                        runner: getToolResultRunner(),
+                        processorStates: registryEntry.processorStates,
+                        observabilityContext: createObservabilityContext(
+                          modelSpanTracker?.getTracingContext() ?? tracingContext,
+                        ),
+                        requestContext,
+                        messageList,
+                        streamWriter: outputStreamWriter,
+                        emitChunk: async chunk => {
+                          // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
+                          if (chunk.type === 'tripwire') {
+                            outputStreamBlocked = true;
+                          }
+                          try {
+                            await emitChunkEvent(pubsub, runId, chunk, true);
+                          } catch (error) {
+                            throw new DurableChunkPublishError(error);
+                          }
+                        },
+                        onProcessorError: error => {
+                          if (error instanceof DurableChunkPublishError) {
+                            throw error.cause;
+                          }
+                          throw new DurableOutputProcessorError(error);
+                        },
+                      });
+                    } catch (error) {
+                      if (error instanceof DurableOutputProcessorError) {
+                        const processorError = error.cause instanceof Error ? error.cause : error;
+                        // Keep already-published output and the error record; the failing chunk was never collected.
+                        terminalAttemptContext?.recordTerminalError(processorError);
+                        return emitFatalErrorBail(processorError, currentModel.modelId);
+                      }
+                      throw error;
+                    }
+                    // A blocked chunk ends the stream: it is never collected, and later chunks are never published.
+                    if (outputStreamBlocked) {
+                      break;
+                    }
                   } else {
                     await emitChunkEvent(pubsub, runId, clientChunk);
                   }
@@ -1643,6 +1749,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-call': {
                     const payload = rawChunk.payload as ToolCallPayload;
+                    // Stamp approval/suspension capability from the step's *effective* tool
+                    // set. Processor-injected tools (e.g. ToolSearchProcessor) never appear
+                    // in the run-start `toolsMetadata`, so without this stamp the durable
+                    // foreach concurrency gate cannot see that the call can suspend for
+                    // approval (issue #24377). The stamp is persisted with the call, so it
+                    // stays correct across cold resumes.
+                    const effectiveTool = (
+                      currentTools as
+                        | Record<string, { requireApproval?: unknown; hasSuspendSchema?: unknown } | undefined>
+                        | undefined
+                    )?.[payload.toolName];
                     toolCalls.push({
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
@@ -1651,6 +1768,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
+                      ...(effectiveTool?.requireApproval ? { requireApproval: true } : {}),
+                      ...(effectiveTool?.hasSuspendSchema ? { hasSuspendSchema: true } : {}),
                     });
                     break;
                   }
@@ -1767,6 +1886,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'error': {
                     const payload = rawChunk.payload as any;
+                    // Pass the provider error through unchanged (keeps statusCode,
+                    // isRetryable, responseBody, ...) so error processors and the
+                    // caller see the same error the regular engine surfaces.
+                    if (payload?.error instanceof Error) {
+                      throw payload.error;
+                    }
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
                     const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
                     // Keep the producer's stack so crashes stay attributable to their real throw site.
@@ -1928,8 +2053,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // A processToolResult tripwire fired mid-stream (#14282 parity port):
             // the raw provider tool result was never emitted nor persisted. Join
             // the shared tripwire bail path (mirrors processLLMResponse below).
-            if (toolResultTripwire) {
-              if (pubsub) {
+            // A blocked output-stream chunk joins the same path; its tripwire
+            // chunk was already published by processAndEmitChunk.
+            if (toolResultTripwire || outputStreamBlocked) {
+              if (toolResultTripwire && pubsub) {
                 await emitChunkEvent(pubsub, runId, {
                   type: 'tripwire',
                   runId,
@@ -1975,7 +2102,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   request,
                   rawResponse,
                   fromCache: false,
-                  retryCount: (inputData as any).processorRetryCount ?? 0,
+                  retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
@@ -2050,6 +2177,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 13.5. Run processOutputStep for output processors (runs AFTER LLM response, BEFORE tool execution)
             // Mirrors the regular agent's llm-execution-step.ts processOutputStep call
+            let processOutputStepTripwire: TripWire | undefined;
             if (effectiveOutputProcessors.length > 0) {
               const outputStepRunner = new ProcessorRunner({
                 inputProcessors: [],
@@ -2095,38 +2223,35 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
+                  retryCount: processorRetryCount,
                 });
               } catch (error) {
-                if (error instanceof TripWire) {
-                  // Emit tripwire chunk and return bail response
-                  if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
-                      type: 'tripwire',
-                      runId,
-                      from: ChunkFrom.AGENT,
-                      payload: {
-                        reason: error.message,
-                        processorId: error.processorId,
-                        metadata: error.options?.metadata,
-                      },
-                    });
-                  }
-                  return {
-                    messageListState: messageList.serialize(),
-                    text: '',
-                    toolCalls: [],
-                    stepResult: {
-                      reason: 'tripwire' as any,
-                      warnings: [],
-                      isContinued: false,
-                    },
-                    metadata: { modelId: currentModel.modelId },
-                    state: typedInput.state,
-                  };
-                }
-                throw error;
+                // No tripwire chunk here: the stream reader closes on one, which would drop
+                // the retry and the finish chunk. The step result carries the tripwire instead.
+                if (!(error instanceof TripWire)) throw error;
+                processOutputStepTripwire = error;
               }
             }
+
+            const retryRequested = processOutputStepTripwire?.options?.retry === true;
+            const canRetry =
+              typedInput.options?.maxProcessorRetries !== undefined &&
+              processorRetryCount < typedInput.options.maxProcessorRetries;
+            const shouldRetry = retryRequested && canRetry;
+
+            // Remove the rejected response so the retry doesn't send it back to the model.
+            if (shouldRetry) {
+              messageList.rollbackToStepBoundary(materializationMessageId);
+            }
+
+            const stepTripwire = processOutputStepTripwire
+              ? {
+                  reason: processOutputStepTripwire.message,
+                  retry: processOutputStepTripwire.options?.retry,
+                  metadata: processOutputStepTripwire.options?.metadata,
+                  processorId: processOutputStepTripwire.processorId,
+                }
+              : undefined;
 
             // 13.9. step-finish emission strategy:
             //
@@ -2139,7 +2264,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // ordering (tool-result → step-finish) which MastraModelOutput relies
             // on for correct step content reconstruction.
             if (pubsub && deferredStepFinishChunk) {
-              if (!hasToolCalls) {
+              // A rejected response's tool calls never run, so its step finishes here too.
+              if (!hasToolCalls || processOutputStepTripwire) {
                 // Final step: emit immediately with pre-computed content
                 // Build step content directly from the current step's data rather
                 // than relying on messageList which may contain response messages
@@ -2160,8 +2286,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     // the tool step and drops everything after it (#23341).
                     stepResult: {
                       ...deferredStepFinishChunk.payload?.stepResult,
-                      isContinued,
+                      ...(processOutputStepTripwire ? { reason: shouldRetry ? 'retry' : 'tripwire' } : {}),
+                      isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
                     },
+                    // The stream reader reads a rejected step's tripwire from here, like the main loop's.
+                    ...(stepTripwire
+                      ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire: stepTripwire }] } }
+                      : {}),
                     _durableStepContent: stepContent,
                   },
                 };
@@ -2173,21 +2304,25 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 14. Export spans if there are tool calls (so tools can be children of model_step)
             // Don't end the spans yet - they will be ended after tool execution
-            const stepSpanData = hasToolCalls ? modelSpanTracker?.exportCurrentStep() : undefined;
-            const stepFinishPayload = hasToolCalls ? modelSpanTracker?.getPendingStepFinishPayload() : undefined;
+            const stepSpanData =
+              hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.exportCurrentStep() : undefined;
+            const stepFinishPayload =
+              hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.getPendingStepFinishPayload() : undefined;
 
             // 15. Build output
             const output: DurableLLMStepOutput = {
               messageListState: messageList.serialize(),
               text: textDeltas.join(''),
-              toolCalls,
+              // A rejected response's tool calls never run.
+              toolCalls: processOutputStepTripwire ? [] : toolCalls,
               stepResult: {
-                reason: finishReason as any,
+                reason: (shouldRetry ? 'retry' : processOutputStepTripwire ? 'tripwire' : finishReason) as any,
                 warnings,
-                isContinued,
+                isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
                 totalUsage: usage,
                 headers: rawResponse?.headers,
                 request,
+                tripwire: stepTripwire,
               },
               metadata: {
                 id: responseMetadata.id,
@@ -2199,19 +2334,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               },
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step
-              modelSpanData: hasToolCalls ? modelSpan?.exportSpan?.() : undefined,
+              modelSpanData: hasToolCalls && !processOutputStepTripwire ? modelSpan?.exportSpan?.() : undefined,
               stepSpanData,
               stepFinishPayload,
               // For intermediate steps (hasToolCalls), save the deferred step-finish
               // chunk so llm-mapping can emit it AFTER tool-result chunks.
-              deferredStepFinishChunk: hasToolCalls ? deferredStepFinishChunk : undefined,
+              deferredStepFinishChunk: hasToolCalls && !processOutputStepTripwire ? deferredStepFinishChunk : undefined,
             };
 
             // 16. End step span only if there are NO tool calls
             // If there are tool calls, step span will be ended after tool execution
             // NOTE: We NEVER close the model span here - it stays open for the entire agent run
             // and is closed in map-final-output after the agentic loop completes
-            if (!hasToolCalls) {
+            if (!hasToolCalls || processOutputStepTripwire) {
               // Close the step span with usage/finish info
               const pendingPayload = modelSpanTracker?.getPendingStepFinishPayload() as any;
               if (pendingPayload) {

@@ -136,6 +136,20 @@ describe('AISDKV5LanguageModel', () => {
     },
   );
 
+  describe('supportsStructuredOutputs', () => {
+    it('exposes the wrapped model capability', () => {
+      const wrapped = new AISDKV5LanguageModel(Object.assign(createMockV2Model(), { supportsStructuredOutputs: true }));
+      expect(wrapped.supportsStructuredOutputs).toBe(true);
+    });
+
+    it('leaves the capability undefined when the wrapped model does not declare it', () => {
+      const model = createMockV2Model() as unknown as Record<string, unknown>;
+      delete model.supportsStructuredOutputs;
+      const wrapped = new AISDKV5LanguageModel(model as any);
+      expect(wrapped.supportsStructuredOutputs).toBeUndefined();
+    });
+  });
+
   describe('serializeForSpan', () => {
     it('returns only identity fields', () => {
       const model = createMockV2Model();

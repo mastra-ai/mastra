@@ -17,7 +17,10 @@ const Command = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive
     ref={ref}
-    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-card text-muted-foreground', className)}
+    className={cn(
+      'flex size-full flex-col overflow-hidden rounded-xl bg-card text-muted-foreground in-data-[slot=dialog-content]:bg-transparent',
+      className,
+    )}
     {...props}
   />
 ));
@@ -223,7 +226,7 @@ const CommandItem = React.forwardRef<
       transitions.colors,
       'data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground',
+      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground data-[selected=true]:[&>svg]:text-foreground',
       className,
     )}
     {...props}

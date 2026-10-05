@@ -7,7 +7,7 @@ description: "Browse CrossModel model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/crossmodel.svg" alt="CrossModel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CrossModel
 
-Access 66 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
+Access 68 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
 
 Learn more in the [CrossModel documentation](https://www.crossmodel.ai/docs).
 
@@ -154,6 +154,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "crossmodel/anthropic/claude-sonnet-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "crossmodel/deepseek/deepseek-v4-flash",
     "imageInput": false,
     "audioInput": false,
@@ -162,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.27,
-    "outputCost": 1.08
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4-flash-vision-exp",
@@ -174,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.27,
-    "outputCost": 1.08
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4-pro",
@@ -186,8 +198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 1.215,
-    "outputCost": 3.645
+    "inputCost": 1.35,
+    "outputCost": 4.05
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4.1-flash",
@@ -198,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.27,
-    "outputCost": 1.08
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "crossmodel/gemini/gemini-2.5-flash",
@@ -515,6 +527,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "crossmodel/openai/gpt-6-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "crossmodel/openai/gpt-6.1-sol",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

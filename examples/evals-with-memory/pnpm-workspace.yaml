@@ -22,7 +22,6 @@ overrides:
   'brace-expansion@>=4.0.0 <5.0.12': 5.0.12
   'hono@<4.13.8': 4.13.8
   'ip-address@<10.7.1': 10.7.2
-  'nanoid@>=3.0.0 <3.3.19': 3.3.19
   'js-yaml@>=3.0.0 <3.15.2': 3.15.2
   'js-yaml@>=4.0.0 <4.3.2': 4.3.2
   'adm-zip@<=0.6.0': 0.6.1
@@ -41,3 +40,5 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'nanoid@<5.1.16': 5.1.16

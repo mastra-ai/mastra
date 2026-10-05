@@ -44,6 +44,13 @@ export interface PlatformProxyRequest {
   retries?: number;
   /** Provider base URL selected by the tool from connection config or metadata. */
   baseUrlOverride?: string;
+  /**
+   * How to decode the provider response body. Defaults to JSON. Set to
+   * `'arraybuffer'` when the endpoint returns binary content (e.g. file
+   * exports); the body is returned as an ArrayBuffer that a template can
+   * wrap with `Buffer.from(...)`.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
@@ -220,6 +227,7 @@ async function callProxy<T>(
         headers: config.headers,
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
+        responseType: config.responseType,
       });
       return { ...response, data: response.data as T };
     } catch (error) {

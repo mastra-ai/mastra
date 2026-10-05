@@ -216,6 +216,34 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+    }
+  /**
+   * Fired once after the user approves an approval card. Only `post` results
+   * are honored: the returned message replaces the approval card in place.
+   * Returning nothing (or a blank message) keeps the default "Approved" card.
+   */
+  | {
+      kind: 'approved';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+    }
+  /**
+   * Fired once after the user denies an approval card. Only `post` results
+   * are honored: the returned message replaces the approval card in place.
+   * Returning nothing (or a blank message) keeps the default "Denied" card.
+   * `byUser` is the denying user's name, or undefined in DMs.
+   */
+  | {
+      kind: 'denied';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      byUser?: string;
     };
 
 /** Context about which driver is consuming the function-form result. */
@@ -383,12 +411,12 @@ export interface ChannelHandlerContext {
    */
   readonly signalMetadata: Record<string, unknown>;
   /**
-   * Earlier messages the Chat SDK batched into this dispatch when a
-   * `chatOptions.concurrency` strategy such as `burst`, `debounce`, or `queue`
-   * is set, oldest first. Empty when nothing was batched. `defaultHandler`
-   * merges consecutive messages from the same sender into one agent turn and
-   * dispatches each sender's messages as a separate turn. Only the turn that
-   * contains the current message uses this context's `requestContext`.
+   * Earlier messages from the same sender that the Chat SDK batched into this
+   * turn when a `chatOptions.concurrency` strategy such as `burst`, `debounce`,
+   * or `queue` is set, oldest first. Empty when nothing was batched. A batch
+   * spanning several senders is split into one turn per sender; the handler is
+   * called once per turn with its own context, and `defaultHandler` dispatches
+   * that turn.
    */
   readonly skipped: readonly Message[];
 }
@@ -996,6 +1024,8 @@ export type ChannelContext = {
   botUserId?: string;
   /** The bot's display name on this platform. */
   botUserName?: string;
+  /** The bot's current profile display name, when the adapter resolves one that differs from `botUserName`. */
+  botDisplayName?: string;
   /** The bot's mention string (e.g. '<@U123>' on Slack/Discord). */
   botMention?: string;
 };

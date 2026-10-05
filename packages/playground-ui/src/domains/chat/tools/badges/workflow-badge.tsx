@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { useWorkflow } from '@mastra/react/hooks';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -22,7 +23,6 @@ import {
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -51,10 +51,11 @@ export const WorkflowBadge = ({
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow({
     workflowId,
-    useEntityRequestContext('workflow', workflowId)[0],
-  );
+    requestContext: useEntityRequestContext('workflow', workflowId)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;

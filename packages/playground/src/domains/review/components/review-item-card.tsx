@@ -1,4 +1,3 @@
-import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -6,30 +5,11 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { ReviewItem } from '@mastra/react/hooks';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-
-export interface ReviewItem {
-  id: string;
-  input: unknown;
-  output: unknown;
-  error: unknown;
-  itemId: string;
-  datasetId?: string;
-  scores?: Record<string, number>;
-  tags: string[];
-  rating?: 'positive' | 'negative';
-  comment?: string;
-  clusterId?: string;
-  experimentId?: string;
-  traceId?: string;
-  createdAt?: DatasetExperimentResult['createdAt'];
-  status?: DatasetExperimentResult['status'];
-  groundTruth?: unknown;
-  toolMockReport?: DatasetExperimentResult['toolMockReport'];
-}
 
 function formatUnknown(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -89,7 +69,7 @@ export function ReviewItemCard({
     <div
       className={cn(
         'rounded-lg border border-border p-3 transition-colors',
-        isSelected && 'ring-1 ring-border-strong',
+        isSelected && 'ring-1 ring-foreground',
         item.tags.length > 0 && 'border-l-2 border-l-border-strong',
       )}
     >
@@ -116,7 +96,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="mt-1 block truncate text-destructive-indicator">
+        <Txt variant="meta" className="mt-1 block truncate text-destructive-foreground">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -145,7 +125,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-indicator' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-foreground' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -194,7 +174,7 @@ export function ReviewItemCard({
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="xs" className="text-placeholder hover:text-destructive-indicator">
+                <Icon size="xs" className="text-placeholder hover:text-destructive-foreground">
                   <Trash2 />
                 </Icon>
               </Button>
@@ -239,7 +219,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-indicator">
+              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground">
                 {formatUnknown(item.error)}
               </pre>
             </div>

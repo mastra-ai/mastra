@@ -26,10 +26,11 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
-import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } from '../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorStreamWriter,
 } from '../../../processors/index';
@@ -40,6 +41,7 @@ import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
+import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -116,8 +118,8 @@ function getRequestInputProcessors({
   llmRequestInputProcessors,
 }: {
   inputProcessors?: InputProcessorOrWorkflow[];
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
-}): InputProcessorOrWorkflow[] {
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
+}): LLMRequestProcessorOrWorkflow[] {
   if (!llmRequestInputProcessors?.length) {
     return inputProcessors || [];
   }
@@ -1179,7 +1181,18 @@ function executeStreamWithFallbackModels<T>(
 
         lastError = err;
 
-        logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
+        const nextModel = models[index];
+        if (nextModel) {
+          logger?.warn(`Model ${modelConfig.model.modelId} failed; falling back to ${nextModel.model.modelId}`, {
+            error: err,
+            modelId: modelConfig.model.modelId,
+            nextModelId: nextModel.model.modelId,
+            attempt: index,
+            totalModels: models.length,
+          });
+        } else {
+          logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
+        }
       }
     }
     if (typeof finalResult === 'undefined') {
@@ -1211,6 +1224,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   inputProcessors,
   llmRequestInputProcessors,
   errorProcessors,
+  hasConfiguredErrorProcessors,
   logger,
   agentId,
   downloadRetries,
@@ -1450,6 +1464,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const maxErrorProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries,
         hasErrorProcessors: Boolean(errorProcessors?.length),
+        hasConfiguredErrorProcessors: Boolean(hasConfiguredErrorProcessors),
         agentId,
         logger,
       });
@@ -1969,14 +1984,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tool set + per-step settings, then open the inference span. Doing this
           // immediately before execute() ensures the span's startTime excludes
           // input processor / prepareStep / processLLMRequest work, and that
-          // availableTools / toolChoice reflect any per-step mutations.
+          // tools / availableTools / toolChoice reflect any per-step mutations.
+          // availableTools is derived from the serialized definitions so the
+          // two can't disagree. Skipped when tracing is off or the trace was
+          // not sampled (a no-op span still hands out a tracker).
+          const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
+            ? getToolDefinitionsForTracing({
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                specificationVersion: currentStep.model.specificationVersion,
+              })
+            : undefined;
           modelSpanTracker?.setInferenceContext?.({
             parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
-            availableTools: getStepAvailableToolNames(
-              currentStep.tools as Record<string, unknown> | undefined,
-              currentStep.activeTools as readonly string[] | undefined,
-            ),
+            availableTools: inferenceTools?.map(tool => tool.name) ?? [],
+            tools: inferenceTools,
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
@@ -2073,6 +2097,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext,
             processorStates,
             requestContext,
+            abortSignal: options?.abortSignal,
           },
         });
 
@@ -2430,8 +2455,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           const isUpstreamError = APICallError.isInstance(error);
+          const isTerminalAttempt = isLastModel || eagerCoordinator?.hasSuspendedHandback;
 
-          if (isUpstreamError) {
+          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
+          if (isTerminalAttempt && isUpstreamError) {
             const providerInfo = provider ? ` from ${provider}` : '';
             const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
             logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
@@ -2440,7 +2467,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               ...(provider && { provider }),
               ...(modelIdStr && { modelId: modelIdStr }),
             });
-          } else {
+          } else if (isTerminalAttempt) {
             logger?.error('Error in LLM execution', {
               error,
               runId,

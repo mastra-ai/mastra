@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -87,6 +85,8 @@ function getAggregationSql(aggregation: AggregationType, measure = 'score'): str
       return `toFloat64(count(${measure}))`;
     case 'last':
       return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
     default:
       return `sum(${measure})`;
   }
@@ -239,7 +239,7 @@ export async function deleteScores(
   if (args.scoreIds.length === 0) return;
 
   const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'scores',
@@ -461,7 +461,8 @@ export async function getScoreAggregate(
   client: ClickHouseClient,
   args: GetScoreAggregateArgs,
 ): Promise<GetScoreAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  // ClickHouse returns type defaults (0 / nan) for aggregates over an empty set; other stores return NULL.
+  const aggSql = `if(count() = 0, NULL, ${getAggregationSql(args.aggregation)})`;
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
   const combined = mergeFilters(identity, signalFilter);

@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as React from 'react';
 
 import { Button } from '../Button';
+import { Field, FieldLabel } from '../Field';
 import { Input } from '../Input';
-import { Label } from '../Label';
 import { createDrawerHandle } from './create-drawer-handle';
 import {
   Drawer,
@@ -120,13 +120,11 @@ export const Sides: Story = {
 };
 
 type RepositoryPanelProps = {
-  idPrefix: string;
   title?: string;
   description?: string;
 };
 
 function RepositoryPanel({
-  idPrefix,
   title = 'Repository setup',
   description = 'Select the repository and branch to attach to this project.',
 }: RepositoryPanelProps) {
@@ -137,14 +135,14 @@ function RepositoryPanel({
         <DrawerDescription>{description}</DrawerDescription>
       </DrawerHeader>
       <DrawerBody className="grid content-start gap-4">
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${idPrefix}-repository`}>Repository</Label>
-          <Input id={`${idPrefix}-repository`} defaultValue="mastra-ai/mastra" />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${idPrefix}-branch`}>Branch</Label>
-          <Input id={`${idPrefix}-branch`} defaultValue="main" />
-        </div>
+        <Field className="gap-1.5">
+          <FieldLabel>Repository</FieldLabel>
+          <Input defaultValue="mastra-ai/mastra" />
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel>Branch</FieldLabel>
+          <Input defaultValue="main" />
+        </Field>
       </DrawerBody>
       <DrawerFooter>
         <DrawerClose asChild>
@@ -220,11 +218,7 @@ export const FloatingOverlayModes: Story = {
         <DrawerTrigger asChild>
           <Button>No overlay</Button>
         </DrawerTrigger>
-        <RepositoryPanel
-          idPrefix="floating-none"
-          title="No overlay"
-          description="The workspace remains available while the panel is open."
-        />
+        <RepositoryPanel title="No overlay" description="The workspace remains available while the panel is open." />
       </Drawer>
 
       <Drawer side="right" variant="floating" overlay="transparent">
@@ -232,7 +226,6 @@ export const FloatingOverlayModes: Story = {
           <Button>Transparent overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
-          idPrefix="floating-transparent"
           title="Transparent overlay"
           description="Outside clicks dismiss the panel without drawing a dimmed backdrop."
         />
@@ -243,7 +236,6 @@ export const FloatingOverlayModes: Story = {
           <Button>Visible overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
-          idPrefix="floating-visible"
           title="Visible overlay"
           description="The floating panel uses the standard modal backdrop treatment."
         />
@@ -295,14 +287,14 @@ export const WithForm: Story = {
           <DrawerDescription>Make changes to your profile. Save when you are done.</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid gap-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="drawer-name">Name</Label>
-            <Input id="drawer-name" defaultValue="John Doe" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="drawer-username">Username</Label>
-            <Input id="drawer-username" defaultValue="@johndoe" />
-          </div>
+          <Field className="gap-1.5">
+            <FieldLabel>Name</FieldLabel>
+            <Input defaultValue="John Doe" />
+          </Field>
+          <Field className="gap-1.5">
+            <FieldLabel>Username</FieldLabel>
+            <Input defaultValue="@johndoe" />
+          </Field>
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
@@ -354,9 +346,11 @@ export const Nested: Story = {
                         <DrawerTitle>Advanced</DrawerTitle>
                         <DrawerDescription>A third level to demonstrate deep nesting.</DrawerDescription>
                       </DrawerHeader>
-                      <DrawerBody className="grid gap-1.5">
-                        <Label htmlFor="drawer-device">Device name</Label>
-                        <Input id="drawer-device" defaultValue="Personal laptop" />
+                      <DrawerBody>
+                        <Field className="gap-1.5">
+                          <FieldLabel>Device name</FieldLabel>
+                          <Input defaultValue="Personal laptop" />
+                        </Field>
                       </DrawerBody>
                       <DrawerFooter>
                         <DrawerClose asChild>
@@ -510,7 +504,7 @@ function ActionSheetExample() {
         <DrawerFooter className="border-t border-border">
           <Button
             variant="ghost"
-            className="w-full justify-center rounded-none text-destructive-indicator"
+            className="w-full justify-center rounded-none text-destructive-foreground"
             onClick={() => setOpen(false)}
           >
             Block user

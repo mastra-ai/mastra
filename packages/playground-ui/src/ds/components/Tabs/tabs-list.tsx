@@ -32,15 +32,8 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
-  /** Control height of each tab; `sm` lines up with `size="sm"` buttons (e.g. inside a `DataPanel.Header`). */
   size?: TabListSize;
-  /** `pill` sits the selected tab on a track; `pill-ghost` drops the track. */
   variant?: TabListVariant | null;
-  /**
-   * Optional inline styles applied to the underlying tab list element.
-   * To override the active tab indicator color, set the `--tab-indicator-color`
-   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--info-indicator)' } as React.CSSProperties}`.
-   */
   style?: React.CSSProperties;
 };
 
@@ -88,8 +81,8 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     observer.observe(viewport);
     return () => observer.disconnect();
   }, [contained]);
-  const gap = tabs?.frame === 'inset' ? 4 : 0;
-  const frameReserve = tabs?.frame === 'inset' ? 30 : 0;
+  const gap = contained ? 4 : 0;
+  const frameReserve = contained ? 30 : 0;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!contained || available === null) return hidden;
@@ -111,7 +104,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
   const hiddenTabs = measurements.filter(tab => hiddenValues.has(tab.value));
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))
-    .reduce((sum, tab) => sum + tab.width + gap, tabs?.frame === 'inset' ? 4 : 0);
+    .reduce((sum, tab) => sum + tab.width + gap, contained ? 4 : 0);
   const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
   const listContext = useMemo(
     () => ({ variant: resolvedVariant, size, hiddenValues, register, unregister }),
@@ -150,7 +143,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     const previousValue = selectedValue.current;
     selectedValue.current = tabs?.value;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (!contained || tabs?.frame !== 'inset' || previousValue === tabs?.value || reduceMotion) return;
+    if (!contained || previousValue === tabs?.value || reduceMotion) return;
     const indicator = scrollRef.current?.querySelector<HTMLElement>('[data-slot="tabs-indicator"]');
     if (!indicator || !('animate' in indicator)) return;
     indicator.animate(
@@ -163,7 +156,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
       },
     );
-  }, [contained, tabs?.frame, tabs?.value]);
+  }, [contained, tabs?.value]);
 
   return (
     <TabListContext.Provider value={listContext}>
@@ -213,7 +206,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         data-slot="tab-close"
                         onClick={tab.onClose}
                         className={cn(
-                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-indicator',
+                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
                           transitions.colors,
                         )}
                       />
@@ -264,7 +257,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             render={
                               <DropdownMenu.Item
                                 data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-indicator data-[highlighted]:text-destructive-indicator"
+                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
                                 style={{ gridArea: `${index + 1} / 1` }}
                                 onClick={tab.onClose}
                               />

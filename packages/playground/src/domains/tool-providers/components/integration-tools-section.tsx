@@ -3,10 +3,10 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
+import { useToolProviders } from '@mastra/react/hooks';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 

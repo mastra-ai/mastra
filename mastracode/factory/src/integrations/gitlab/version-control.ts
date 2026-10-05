@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   PullRequest,
@@ -335,8 +333,8 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       ...(input.startLine !== undefined && input.startSide
         ? {
             line_range: {
-              start: discussionLine(path, input.startLine, input.startSide),
-              end: discussionLine(path, line, side),
+              start: await discussionLine(path, input.startLine, input.startSide),
+              end: await discussionLine(path, line, side),
             },
           }
         : {}),
@@ -729,8 +727,10 @@ function discussionPosition(notes: GitLabDiscussionNote[]): GitLabDiscussionPosi
   return notes.find(note => note.position)?.position ?? undefined;
 }
 
-function discussionLine(path: string, line: number, side: 'left' | 'right') {
-  const pathHash = createHash('sha1').update(path).digest('hex');
+async function discussionLine(path: string, line: number, side: 'left' | 'right') {
+  const pathHash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-1', new TextEncoder().encode(path))).toString(
+    'hex',
+  );
   const oldLine = side === 'left' ? line : undefined;
   const newLine = side === 'right' ? line : undefined;
   return {

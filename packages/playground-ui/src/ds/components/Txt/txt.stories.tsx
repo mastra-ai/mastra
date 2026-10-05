@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from './Txt';
+import { TextRoles } from '@/ds/tokens/fonts';
 
 const meta: Meta<typeof Txt> = {
   title: 'Elements/Txt',
@@ -14,7 +15,7 @@ const meta: Meta<typeof Txt> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['display', 'title', 'heading', 'subheading', 'body', 'label', 'body-sm', 'column', 'caption', 'meta'],
+      options: TextRoles,
     },
     tone: {
       control: { type: 'select' },
@@ -57,6 +58,9 @@ export const Roles: Story = {
       </Txt>
       <Txt variant="body">body · 14/400 · prose and descriptions</Txt>
       <Txt variant="label">label · 13/500 · control labels, nav items, buttons</Txt>
+      <Txt variant="card-title">card-title · 13/550 · expanded card title</Txt>
+      <Txt variant="card-title-tight">card-title-tight · 13/550 · compact card title</Txt>
+      <Txt variant="card-title-strong">card-title-strong · 13/600 · emphasized card title</Txt>
       <Txt variant="body-sm">body-sm · 13/400 · table cells, menus, field values</Txt>
       <Txt variant="column">column · 12/500 · column headers</Txt>
       <Txt variant="caption">caption · 12/400 · secondary copy</Txt>
