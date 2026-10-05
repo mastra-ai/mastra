@@ -81,8 +81,10 @@ describe('Integrations tab', () => {
   });
 
   beforeEach(() => {
-    // The oauth connect result opens a new tab; jsdom's window.open is unimplemented.
-    vi.spyOn(window, 'open').mockImplementation(() => window);
+    // The connect action pre-opens a tab and navigates it when the request
+    // resolves; jsdom's window.open is unimplemented, so hand back a stub tab.
+    const tab = { opener: window as Window | null, location: { href: 'about:blank' }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
   });
 
   afterEach(() => {

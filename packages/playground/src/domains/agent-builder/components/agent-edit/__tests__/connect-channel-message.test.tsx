@@ -37,6 +37,18 @@ const installRadixDomShims = () => {
   }
 };
 
+type TabStub = { opener: Window | null; location: { href: string }; close: ReturnType<typeof vi.fn> };
+
+/**
+ * jsdom has no window.open; stub it with a navigable tab handle shaped like the
+ * one the connect action pre-opens on click and navigates once the request resolves.
+ */
+const stubOpenTab = (): TabStub => {
+  const tab: TabStub = { opener: window, location: { href: 'about:blank' }, close: vi.fn() };
+  vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
+  return tab;
+};
+
 const platformsHandler = (platforms: unknown[]) =>
   http.get('*/api/channels/platforms', () => HttpResponse.json(platforms));
 
@@ -100,7 +112,7 @@ describe('ConnectChannelMessage', () => {
 
   it('shows "Continue with Slack" and opens the OAuth URL in a new tab when configured but not yet connected', async () => {
     let connectCalled = false;
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
+    const tab = stubOpenTab();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -126,12 +138,16 @@ describe('ConnectChannelMessage', () => {
 
     fireEvent.click(button);
 
+    // The tab opens synchronously on click (while user activation is live),
+    // then navigates once the connect request resolves.
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
     await waitFor(() => {
       expect(connectCalled).toBe(true);
     });
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith('https://slack.example/oauth', '_blank', 'noopener,noreferrer');
+      expect(tab.location.href).toBe('https://slack.example/oauth');
     });
+    expect(tab.opener).toBeNull();
   });
 
   it('shows a "Connected" badge and a Manage button when there is an active installation', async () => {
@@ -164,8 +180,8 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Manage');
   });
 
-  it('does not open an OAuth tab after the connect mutation settles with an error', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
+  it('closes the pre-opened tab without navigating it when the connect mutation settles with an error', async () => {
+    const tab = stubOpenTab();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -182,8 +198,10 @@ describe('ConnectChannelMessage', () => {
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     fireEvent.click(button);
 
-    // Waiting on the label revert, not a sleep, keeps the failed-mutation state update inside act.
+    // The error path closes the tab — waiting on it (not the label, which starts
+    // as "Continue with Slack") guarantees the mutation actually settled.
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(tab.location.href).toBe('about:blank'); // never navigated
     await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
-    expect(openSpy).not.toHaveBeenCalled();
   });
 });

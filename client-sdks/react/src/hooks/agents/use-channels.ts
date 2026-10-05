@@ -38,6 +38,9 @@ export const useChannelInstallations = <TData = ChannelInstallationInfo[]>({
     queryKey: ['channels', 'installations', platform, agentId],
     queryFn: () => client.channels.listInstallations(platform, agentId),
     staleTime: 10 * 1000,
+    // Connect flows finish in another tab (OAuth/invite); refetch on focus-return
+    // even inside staleTime so the server can reconcile and the UI flips promptly.
+    refetchOnWindowFocus: 'always',
     retry: false,
     ...queryOptions,
   });

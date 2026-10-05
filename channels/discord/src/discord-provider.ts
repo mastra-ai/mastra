@@ -486,27 +486,41 @@ export class DiscordProvider implements ChannelProvider {
    * gateway event can reach it either. Instead, each pending install carries a
    * {@link DiscordInstallation.guildSnapshot} taken when the invite was issued;
    * here we diff it against the bot's current membership. Exactly **one** guild
-   * appearing since the snapshot — and claimed by no other pending install — is
-   * the authorized guild, and the install activates through the same serialized
-   * {@link activateGuild} path as a first interaction. Anything ambiguous
-   * (zero or multiple new guilds, membership unknown, shared-app races) stays
-   * pending and retries on the next list. Best-effort: failures log and never
-   * break the listing.
+   * appearing since the snapshot — not already listed by any install, and
+   * claimed by no other pending install — is the authorized guild, and the
+   * install activates through the same serialized {@link activateGuild} path as
+   * a first interaction. Anything ambiguous (zero or multiple new guilds,
+   * membership unknown, shared-app races) stays pending and retries on the
+   * next list. Best-effort: failures log and never break the listing.
+   *
+   * Limitation: the bot-invite URL is per-app, not per-install, so when the
+   * operator invites the bot to a new server *for an already-active install*
+   * (as `connect()`'s already-connected error suggests) while an invite for
+   * another agent is outstanding, nothing distinguishes the two intents — the
+   * new guild can be attributed to the pending install. Reconciliation is only
+   * reliable while a single invite flow is in progress; the first-interaction
+   * path remains the authoritative fallback.
    */
   async #reconcilePendingInstallations(store: DiscordInstallStore): Promise<void> {
     try {
-      const pending = (await store.list()).filter(i => i.status === 'pending' && i.guildSnapshot);
+      const all = await store.list();
+      const pending = all.filter(i => i.status === 'pending' && i.guildSnapshot);
       if (!pending.length) return;
       const app = await store.getAppConfig();
       if (!app) return;
       const current = await listBotGuildIds(app.botToken, this.#apiBaseUrl());
       if (!current) return; // membership unknown (too many guilds to page) — stay pending
 
+      // A guild any install already lists is owned. It can still look "new"
+      // relative to a stale snapshot (joined after the snapshot was taken and
+      // activated elsewhere via a first interaction) and must never be claimed.
+      const owned = new Set(all.flatMap(i => i.guildIds));
+
       const diffs: Array<{ installation: DiscordInstallation; newGuilds: string[] }> = [];
       const claims = new Map<string, number>();
       for (const installation of pending) {
         const snapshot = new Set(installation.guildSnapshot);
-        const newGuilds = current.filter(id => !snapshot.has(id));
+        const newGuilds = current.filter(id => !snapshot.has(id) && !owned.has(id));
         diffs.push({ installation, newGuilds });
         for (const id of newGuilds) claims.set(id, (claims.get(id) ?? 0) + 1);
       }

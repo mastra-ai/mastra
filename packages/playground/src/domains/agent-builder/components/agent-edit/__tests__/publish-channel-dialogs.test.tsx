@@ -47,6 +47,18 @@ const installRadixDomShims = () => {
   }
 };
 
+type TabStub = { opener: Window | null; location: { href: string }; close: ReturnType<typeof vi.fn> };
+
+/**
+ * jsdom has no window.open; stub it with a navigable tab handle shaped like the
+ * one the connect action pre-opens on click and navigates once the request resolves.
+ */
+const stubOpenTab = (): TabStub => {
+  const tab: TabStub = { opener: window, location: { href: 'about:blank' }, close: vi.fn() };
+  vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
+  return tab;
+};
+
 describe('ChannelDialog (default platform)', () => {
   beforeAll(() => {
     installRadixDomShims();
@@ -70,7 +82,7 @@ describe('ChannelDialog (default platform)', () => {
 
     // New tab (not a same-tab redirect) keeps this studio tab alive so the
     // installations query refetches on focus-return after the OAuth flow.
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
+    const tab = stubOpenTab();
     const onOpenChange = vi.fn();
 
     render(
@@ -85,13 +97,13 @@ describe('ChannelDialog (default platform)', () => {
     );
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+    // The tab opens synchronously on click (while user activation is live),
+    // then navigates once the connect request resolves.
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://oauth.example.com/authorize?id=abc',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(tab.location.href).toBe('https://oauth.example.com/authorize?id=abc');
     });
+    expect(tab.opener).toBeNull();
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
@@ -128,7 +140,7 @@ describe('ChannelDialog (default platform)', () => {
     });
   });
 
-  it('handles deep_link result by calling window.open and surfacing a popup-blocked toast', async () => {
+  it('handles deep_link result by navigating the pre-opened tab to the deep link', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({
@@ -139,7 +151,7 @@ describe('ChannelDialog (default platform)', () => {
       ),
     );
 
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const tab = stubOpenTab();
     const onOpenChange = vi.fn();
 
     render(
@@ -154,21 +166,23 @@ describe('ChannelDialog (default platform)', () => {
     );
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith('tg://example', '_blank', 'noopener,noreferrer');
+      expect(tab.location.href).toBe('tg://example');
     });
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
   });
 
-  it('handles immediate result by closing the dialog', async () => {
+  it('handles immediate result by closing the dialog and the unused pre-opened tab', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({ type: 'immediate', installationId: 'inst-3' }),
       ),
     );
 
+    const tab = stubOpenTab();
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
@@ -185,6 +199,8 @@ describe('ChannelDialog (default platform)', () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe('about:blank'); // never navigated
   });
 
   it('switches to the disconnect-confirm view in-place when the Disconnect action is clicked', () => {

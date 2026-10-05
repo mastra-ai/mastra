@@ -458,6 +458,29 @@ describe('DiscordProvider — pending-install reconcile (invite completed in ano
     expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
   });
 
+  it('never claims a guild another install already owns, even when it is new to this snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending, snapshot []
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // pending, snapshot []
+
+    // agent-2 activates on GUILD through a first interaction — GUILD joined
+    // after both snapshots were taken, so it still looks "new" to agent-1.
+    stubGuildCommands(GUILD);
+    const agent2 = await provider.getInstallation('agent-2');
+    await provider.activateGuild(agent2!.webhookId, GUILD);
+
+    stubBotGuilds([GUILD]);
+    const installs = await provider.listInstallations();
+
+    const agent1 = installs.find(i => i.agentId === 'agent-1');
+    expect(agent1).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-2'))?.guildIds).toEqual([GUILD]);
+  });
+
   it('stays pending when the membership listing fails (reconcile is best-effort)', async () => {
     const { provider } = makeProvider();
     stubValidateApp();
