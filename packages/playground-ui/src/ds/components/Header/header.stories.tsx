@@ -15,10 +15,6 @@ const meta: Meta<typeof Header> = {
     border: {
       control: { type: 'boolean' },
     },
-    borderTone: {
-      control: { type: 'select' },
-      options: ['default', 'surface'],
-    },
   },
 };
 
@@ -26,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof Header>;
 
 export const Default: Story = {
-  args: { border: true, borderTone: 'default' },
+  args: { border: true },
   render: args => (
     <Header {...args}>
       <HeaderTitle>Dashboard</HeaderTitle>
@@ -34,8 +30,8 @@ export const Default: Story = {
   ),
 };
 
-export const SurfaceBorder: Story = {
-  args: { border: true, borderTone: 'surface' },
+export const InFrame: Story = {
+  args: { border: true },
   render: args => (
     <div className="bg-sidebar p-4">
       <MainCard className="min-h-48">

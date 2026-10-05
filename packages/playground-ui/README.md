@@ -121,7 +121,7 @@ Choose a role at its authored opacity. Avoid extra modifiers such as `border-bor
 
 `border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box; `shadow-raised` and `shadow-overlay` combine it with a lip and drop shadows. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
 
-`Header` defaults to a content divider. Use `borderTone="surface"` for frame headers; `PageLayout` applies it to the app breadcrumb bar. `border={false}` hides either tone.
+`Header` is a layout primitive: every instance uses `border-surface-rim`, matching the surrounding frame or panel. Call sites do not choose a tone. `border={false}` hides the edge. Internal content separators use `border-border` directly or a separator component.
 
 Storybook's Foundations/Surface renders border tokens as isolated 1px edges on named backgrounds, with composed surfaces labeled separately. Foundations/Elevation shows the full recipes and each inset edge separately. Switch themes to inspect the actual token values in context; no extra opacity is applied to these previews.
 

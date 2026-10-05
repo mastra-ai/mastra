@@ -135,7 +135,7 @@ const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
     <Txt variant="meta" tone="muted">
       {title}
     </Txt>
-    <Header borderTone="surface" className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">
+    <Header className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">
       <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
         {children}
       </Breadcrumb>

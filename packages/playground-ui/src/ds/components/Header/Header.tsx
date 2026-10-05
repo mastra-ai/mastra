@@ -6,20 +6,17 @@ import { cn } from '@/lib/utils';
 export interface HeaderProps {
   children?: React.ReactNode;
   border?: boolean;
-  /** Surface edges match the app frame; content dividers use the normal border. */
-  borderTone?: 'default' | 'surface';
   className?: string;
 }
 
-export const Header = ({ children, border = true, borderTone = 'default', className }: HeaderProps) => {
+export const Header = ({ children, border = true, className }: HeaderProps) => {
   return (
     <header
       className={cn(
         'z-50 flex h-header-default w-full items-center gap-2 bg-transparent px-2',
         {
-          'border-b': border,
-          'border-border': border && borderTone === 'default',
-          'border-surface-rim': border && borderTone === 'surface',
+          // Layout headers share the same edge color as their surrounding surface.
+          'border-b border-surface-rim': border,
         },
         className,
       )}
