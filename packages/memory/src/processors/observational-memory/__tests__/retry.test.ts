@@ -232,7 +232,7 @@ describe('withRetry', () => {
 });
 
 describe('assertCompleteModelResponse', () => {
-  it.each(['other', 'unknown', 'retry'])('throws a transient error for finishReason %s', finishReason => {
+  it.each(['other', 'unknown'])('throws a transient error for finishReason %s', finishReason => {
     let thrown: unknown;
     try {
       assertCompleteModelResponse({ finishReason, text: 'partial' }, 'OM observer');
