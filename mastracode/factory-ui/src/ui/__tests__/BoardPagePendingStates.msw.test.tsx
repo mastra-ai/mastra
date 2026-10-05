@@ -1358,6 +1358,72 @@ describe('Board card pending states', () => {
     await waitForMutationsIdle(client);
   });
 
+  it('moves a mapped Linear card into a working lane without asking for a repository while intake config loads', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    const configGate = deferred();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-1',
+              repositories: [
+                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              factoryProjectId: FACTORY_ID,
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:issue-1' },
+              stages: ['review'],
+              sessions: {},
+              metadata: { linearProjectId: 'linear-project-1' },
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, async () => {
+        await configGate.promise;
+        return HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            linear: {
+              enabled: true,
+              sourceIds: ['linear-project-1'],
+              repositoryByLinearProject: { 'linear-project-1': 'acme/other' },
+            },
+          },
+        });
+      }),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    const planning = screen.getByTestId('board-column-planning');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planning, { dataTransfer });
+    fireEvent.drop(planning, { dataTransfer });
+    configGate.resolve();
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
+  });
+
   it('creates a manual work item in the selected active column', async () => {
     stubBoardEndpoints();
     let created = false;

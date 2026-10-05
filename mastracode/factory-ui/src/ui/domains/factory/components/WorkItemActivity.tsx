@@ -107,9 +107,11 @@ export function ActivityEvent({
 export function WorkItemActivity({
   activity,
   actors,
+  showName = true,
 }: {
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
+  showName?: boolean;
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
@@ -132,9 +134,11 @@ export function WorkItemActivity({
               `hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`,
             )}
           >
-            <Txt as="span" variant="meta" className="max-w-32 truncate">
-              {worker.name}
-            </Txt>
+            {showName && (
+              <Txt as="span" variant="meta" className="max-w-32 truncate">
+                {worker.name}
+              </Txt>
+            )}
             <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }
