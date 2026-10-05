@@ -70,7 +70,7 @@ const CommandDialogBody = ({
     <>
       <div
         data-slot="command-dialog-panel"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-background"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background"
       >
         {children}
       </div>
