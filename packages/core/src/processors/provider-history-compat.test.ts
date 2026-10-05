@@ -488,6 +488,15 @@ describe('ensureUserFirstTurn', () => {
     expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting.slice(0, 1), model: bedrock })).toBeUndefined();
     expect(ensureUserFirstTurn.applyToPrompt({ prompt: [], model: bedrock })).toBeUndefined();
   });
+
+  it('runs as a default ProviderHistoryCompat rule', () => {
+    const handler = new ProviderHistoryCompat();
+
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, bedrock))).toEqual({
+      prompt: [greeting[0], { role: 'user', content: [{ type: 'text', text: '.' }] }, greeting[1], greeting[2]],
+    });
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, openai))).toBeUndefined();
+  });
 });
 
 describe('isMaybeCerebras', () => {

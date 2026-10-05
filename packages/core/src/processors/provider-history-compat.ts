@@ -569,11 +569,6 @@ export function isMaybeRequiringUserFirstTurn(model: unknown): boolean {
  * {@link isMaybeRequiringUserFirstTurn}). History windows commonly start on an
  * assistant turn — agents that greet first, or `lastMessages` cutting into a
  * thread — and those providers reject the whole request otherwise.
- *
- * Not part of {@link DEFAULT_COMPAT_RULES}: the agent loops apply this rule to
- * every request after `processLLMRequest`, so it runs whether or not
- * `ProviderHistoryCompat` is configured and user processors never see the
- * synthetic turn.
  */
 export const ensureUserFirstTurn = {
   name: 'ensure-user-first-turn',
@@ -1150,6 +1145,8 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   azureSystemReminderTransform,
   openaiOrphanItemId,
   anthropicOrphanedThinkingStep,
+  // Last, so it sees the prompt after other rules have dropped emptied turns.
+  ensureUserFirstTurn,
 ];
 
 // ---------------------------------------------------------------------------
@@ -1201,6 +1198,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   see that thinking merged into the next step. Reactive (matches the
  *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
  *   already-corrupted history.
+ * - **ensure-user-first-turn** — inserts a `.` user turn ahead of a leading
+ *   assistant turn for Amazon Bedrock and Google/Vertex, which reject
+ *   assistant-first conversations. Preemptive; the turn is never persisted.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
