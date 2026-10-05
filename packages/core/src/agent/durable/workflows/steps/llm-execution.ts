@@ -1126,7 +1126,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // actual structuredOutput payload sent to execute() — which is
             // undefined when structuringModelConfig routes through a separate
             // structuring step instead of asking the model for json_schema.
-            const inferenceTools = modelSpanTracker
+            // Skipped when tracing is off or the trace was not sampled (a
+            // no-op span still hands out a tracker).
+            const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
               ? getToolDefinitionsForTracing({
                   tools: currentTools,
                   toolChoice: currentToolChoice,
