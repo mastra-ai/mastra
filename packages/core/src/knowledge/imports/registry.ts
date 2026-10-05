@@ -4,6 +4,7 @@ import type {
   KnowledgeImporterAccess,
   KnowledgeImporterAgentConfig,
   KnowledgeImporterBindingInput,
+  KnowledgeImporterCitationPolicy,
   KnowledgeImporterCronTrigger,
   KnowledgeImporterDefinition,
   KnowledgeImporterHandle,
@@ -159,6 +160,27 @@ function webhookPath(id: string, triggers: KnowledgeImporterTriggers): Knowledge
     `/api/knowledge/${encodeURIComponent(assertNonEmpty(instanceKey, 'instance key'))}/importers/${encodeURIComponent(id)}/webhook`;
 }
 
+function normalizeCitations(
+  citations: KnowledgeImporterCitationPolicy | undefined,
+): KnowledgeImporterCitationPolicy | undefined {
+  if (citations === undefined) return undefined;
+  if (!citations || typeof citations !== 'object' || Array.isArray(citations)) {
+    throw new Error('Knowledge importer citations configuration must be an object');
+  }
+  if (typeof citations.fetch !== 'function') throw new Error('Knowledge importer citations require a fetch function');
+  const budget = citations.budget;
+  if (!budget || typeof budget !== 'object') throw new Error('Knowledge importer citations require a finite budget');
+  for (const key of ['maxDepth', 'maxItems', 'timeoutMs'] as const) {
+    if (!Number.isSafeInteger(budget[key]) || budget[key] < 1) {
+      throw new Error(`Knowledge importer citation budget ${key} must be a positive integer`);
+    }
+  }
+  return Object.freeze({
+    budget: Object.freeze({ maxDepth: budget.maxDepth, maxItems: budget.maxItems, timeoutMs: budget.timeoutMs }),
+    fetch: citations.fetch,
+  });
+}
+
 export class KnowledgeImporterRegistry {
   #byId = new Map<string, KnowledgeImporterHandle>();
 
@@ -179,12 +201,14 @@ export class KnowledgeImporterRegistry {
     const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
     const agentic = normalizeAgentic(definition.agentic);
+    const citations = normalizeCitations(definition.citations);
     const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
       id,
       ...(access === undefined ? {} : { access }),
       ...(definition.canCreateRoots ? { canCreateRoots: true } : {}),
       triggers,
       ...(agentic ? { agentic } : {}),
+      ...(citations ? { citations } : {}),
       handler: definition.handler,
     });
     const handle: KnowledgeImporterHandle<TPayload> = Object.freeze({
@@ -194,6 +218,7 @@ export class KnowledgeImporterRegistry {
       canCreateRoots: definition.canCreateRoots ?? false,
       triggers,
       ...(agentic ? { agentic } : {}),
+      ...(citations ? { citations } : {}),
       handler: definition.handler,
       programmatic: true,
       webhookPath: webhookPath(id, triggers),
