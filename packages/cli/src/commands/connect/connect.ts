@@ -236,7 +236,15 @@ export async function connectProviderAction(
     }
   }
 
-  const fields = authFieldsFor(integration.authType, integration.authFields);
+  // Only collect fields the chosen auth path actually uses: credential auth
+  // sends everything, OAuth only carries `params` into the consent URL, and
+  // the hosted Connect UI renders its own forms.
+  const allFields = authFieldsFor(integration.authType, integration.authFields);
+  const fields = isCredentialAuthType(integration.authType)
+    ? allFields
+    : isOAuthAuthType(integration.authType)
+      ? allFields.filter(field => field.target === 'params')
+      : [];
   const needsForm = fields.length > 0;
   if (needsForm && !isInteractive()) {
     throw new Error(
@@ -244,9 +252,12 @@ export async function connectProviderAction(
     );
   }
 
-  const session = await createProjectConnectSession(ctx.token, ctx.orgId, ctx.projectId, integration.id);
+  // Prompt before creating the session, so cancelling the form doesn't
+  // leave a pending connection behind.
   const values = needsForm ? await promptAuthFields(integration, fields) : {};
   const { credentials, params } = splitAuthValues(fields, values);
+
+  const session = await createProjectConnectSession(ctx.token, ctx.orgId, ctx.projectId, integration.id);
 
   if (isCredentialAuthType(integration.authType)) {
     if (!credentials) {
@@ -265,6 +276,9 @@ export async function connectProviderAction(
       spinner.stop('Credentials accepted');
     } catch (error) {
       spinner.stop('Authorization failed');
+      // Rejected credentials leave the session's pending connection behind;
+      // unlink it so it doesn't pile up in `mastra connect remove`.
+      await removeProjectConnection(ctx.token, ctx.orgId, ctx.projectId, session.connectionId).catch(() => {});
       throw error;
     }
   } else {
@@ -356,6 +370,12 @@ async function promptDisplayName(
       if (!useAnyway) continue;
     }
 
+    // Accepting the suggestion often keeps the name the connection already
+    // shows; renaming needs the org admin role, so skip the no-op PATCH.
+    if (name === connection?.displayName || (!connection?.displayName && name === connection?.accountLabel)) {
+      return name;
+    }
+
     try {
       await updateConnectionDisplayName(ctx.token, ctx.orgId, connectionId, name);
       return name;
@@ -445,13 +465,27 @@ async function waitForActiveConnection(ctx: ConnectContext, connectionId: string
   const spinner = p.spinner();
   spinner.start('Waiting for the connection to become active');
   const deadline = Date.now() + POLL_MAX_MS;
+  let fetchFailures = 0;
   try {
     for (;;) {
-      const connections = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
-      const connection = connections.find(row => row.id === connectionId);
+      let connection: ProjectConnection | undefined;
+      try {
+        const connections = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
+        fetchFailures = 0;
+        connection = connections.find(row => row.id === connectionId);
+      } catch (error) {
+        // Tolerate a transient network blip; give up after repeated failures.
+        fetchFailures += 1;
+        if (fetchFailures >= 3) throw error;
+      }
       if (connection?.status === 'active') {
         spinner.stop('Connection is active');
         return;
+      }
+      if (connection?.status === 'error') {
+        // The provider denied or failed the authorization; no point waiting
+        // out the rest of the deadline.
+        throw new Error('The provider did not authorize this connection. Try again.');
       }
       if (Date.now() >= deadline) {
         throw new Error('Authorization did not finish in time. Try again.');
@@ -468,7 +502,7 @@ async function waitForActiveConnection(ctx: ConnectContext, connectionId: string
 
 export async function removeConnectionAction(
   provider: string,
-  options?: { project?: string; yes?: boolean },
+  options?: { project?: string; yes?: boolean; all?: boolean; connection?: string },
 ): Promise<void> {
   const ctx = await resolveConnectContext(options?.project);
   const connections = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).filter(
@@ -480,15 +514,35 @@ export async function removeConnectionAction(
   }
 
   let targets = connections;
-  if (connections.length > 1 && isInteractive() && !options?.yes) {
-    const memberByUserId = await fetchMemberMap(ctx);
-    const choice = await p.select({
-      message: `${provider} has ${connections.length} connections. Which one should be removed?`,
-      options: [...connectionChoices(connections, memberByUserId), { value: 'all', label: 'All connections' }],
-    });
-    if (p.isCancel(choice)) return;
-    if (choice !== 'all') {
-      targets = connections.filter(connection => connection.id === choice);
+  if (options?.connection) {
+    targets = connections.filter(connection => connection.id === options.connection);
+    if (targets.length === 0) {
+      throw new Error(
+        `No ${provider.toLowerCase()} connection with id ${options.connection} is attached to ${ctx.projectName}.`,
+      );
+    }
+  } else if (connections.length > 1) {
+    if (options?.all) {
+      // Explicit opt-in to removing every connection; skip the picker.
+    } else if (options?.yes || !isInteractive()) {
+      // Without a picker, make removing several connections at once an
+      // explicit choice instead of the default.
+      const rows = connections
+        .map(connection => `  ${connection.id}  ${connectionLabel(connection) || 'Account name unavailable'}`)
+        .join('\n');
+      throw new Error(
+        `${provider.toLowerCase()} has ${connections.length} connections:\n${rows}\nPass --connection <id> to remove one, or --all to remove all of them.`,
+      );
+    } else {
+      const memberByUserId = await fetchMemberMap(ctx);
+      const choice = await p.select({
+        message: `${provider} has ${connections.length} connections. Which one should be removed?`,
+        options: [...connectionChoices(connections, memberByUserId), { value: 'all', label: 'All connections' }],
+      });
+      if (p.isCancel(choice)) return;
+      if (choice !== 'all') {
+        targets = connections.filter(connection => connection.id === choice);
+      }
     }
   }
 

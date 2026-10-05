@@ -551,15 +551,16 @@ mastra env db create --kind turso                                    # picks or 
 mastra env db create staging --kind turso                            # scoped to the "staging" environment
 mastra env db create --kind turso --shared                           # shared by all environments
 mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
+mastra env db create production --kind postgres                      # VPC-isolated Postgres, private to the environment
 ```
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon` (public serverless Postgres), or `postgres` (VPC-isolated Postgres that runs on the same private network as the deployed environment).
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-pg`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso`, `my-app-pg` for Neon, or `my-app-postgres` for VPC Postgres).
 
 #### `--region`
 
@@ -936,7 +937,7 @@ mastra auth tokens revoke <token-id>
 
 Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
 
-The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`. All subcommands accept `--project <project>` to override the linked project.
+The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <project>` to select a project when `MASTRA_PROJECT_ID` isn't set.
 
 ### `mastra connect list`
 
@@ -968,7 +969,7 @@ Unlinks a provider's connection from the project. The organization-level connect
 mastra connect remove <provider>
 ```
 
-When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation.
+When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation. Without a terminal, or with `--yes`, removing several connections at once requires `--all`, and `--connection <id>` removes a single one.
 
 ## `mastra lint`
 

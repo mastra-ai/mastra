@@ -378,6 +378,8 @@ connectCommand
   .command('remove <provider>')
   .description('Unlink a provider connection from the project')
   .option(...PROJECT_OPTION_ARGS)
+  .option('--connection <id>', 'Remove only the connection with this id')
+  .option('--all', "Remove all of the provider's connections")
   .option('-y, --yes', 'Skip confirmation prompts')
   .action(wrapAction(removeConnectionAction));
 
