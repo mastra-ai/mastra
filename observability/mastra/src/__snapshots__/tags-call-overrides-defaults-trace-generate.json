@@ -241,6 +241,16 @@
                       "source": "call",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Hello"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []

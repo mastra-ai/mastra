@@ -150,8 +150,9 @@ const exporter = new PosthogExporter({
 
 | Mastra Span Type | PostHog Event Type |
 | - | - |
-| `MODEL_GENERATION` | `$ai_generation` |
-| `MODEL_STEP` | `$ai_generation` |
+| `MODEL_INFERENCE` | `$ai_generation` |
+| `MODEL_GENERATION` | `$ai_span` |
+| `MODEL_STEP` | `$ai_span` |
 | `MODEL_CHUNK` | `$ai_span` |
 | `TOOL_CALL` | `$ai_span` |
 | `MCP_TOOL_CALL` | `$ai_span` |
@@ -161,6 +162,10 @@ const exporter = new PosthogExporter({
 | `WORKFLOW_RUN` | `$ai_span` |
 | All other workflows | `$ai_span` |
 | `GENERIC` | `$ai_span` |
+
+Each call to the model provider is a `MODEL_INFERENCE` span and is exported as one `$ai_generation` event. The event carries the model, token usage, input, output, and the tool definitions sent on that call as `$ai_tools`. A run that calls the model three times sends three `$ai_generation` events.
+
+The `MODEL_GENERATION` span wraps those calls. It is exported as `$ai_span` without token usage, so tokens and cost aren't counted twice. A `MODEL_GENERATION` span with no `MODEL_INFERENCE` spans is exported as `$ai_generation`. This is the case with older `@mastra/core` versions and with `generateLegacy()` and `streamLegacy()`.
 
 ## Feedback export
 

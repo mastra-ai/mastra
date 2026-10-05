@@ -294,6 +294,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools that create child spans"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use child span tool to process test-data"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -616,6 +626,24 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools that create child spans"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use child span tool to process test-data"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: childSpanTool]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: childSpanTool]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []

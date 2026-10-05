@@ -312,6 +312,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                      },
+                      {
+                        "role": "user",
+                        "content": "What is 5 + 3?"
+                      }
+                    ],
                     "output": {
                       "text": "Let me calculate that for you. ",
                       "toolCalls": [
@@ -656,6 +666,24 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                      },
+                      {
+                        "role": "user",
+                        "content": "What is 5 + 3?"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "Let me calculate that for you. [tool: calculator]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: calculator]"
+                      }
+                    ],
                     "output": {
                       "text": "The result of 5 + 3 is 8.",
                       "toolCalls": []

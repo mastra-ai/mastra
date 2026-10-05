@@ -90,6 +90,8 @@ interface MastraContent {
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
 const DISTINCT_ID = 'distinctId';
+/** Per-trace key prefix marking a MODEL_GENERATION whose provider calls were exported as MODEL_INFERENCE spans. */
+const HAS_INFERENCE = 'hasInference:';
 
 export interface PosthogExporterConfig extends TrackingExporterConfig {
   /** PostHog API key. Defaults to POSTHOG_API_KEY environment variable. */
@@ -185,16 +187,16 @@ export class PosthogExporter extends TrackingExporter<
   }): Promise<PosthogEvent> {
     const { span, traceData } = args;
 
-    const eventName = this.mapToPostHogEvent(span.type);
+    const isModelCall = this.isModelCall(span, traceData);
     const distinctId = this.getDistinctId(span, traceData);
-    const properties = this.buildEventProperties(span, 0);
+    const properties = this.buildEventProperties(span, 0, false, isModelCall);
 
     // captureAi() targets PostHog's dedicated AI endpoint (8 MiB per event, oversized events
     // dropped individually). Plain capture() uses /batch/, which returns 413 for large spans.
     this.#client?.captureAi(
       this.withGroups({
         distinctId,
-        event: eventName,
+        event: isModelCall ? '$ai_generation' : '$ai_span',
         properties,
         timestamp: span.endTime ? new Date(span.endTime) : new Date(),
       }),
@@ -399,18 +401,18 @@ export class PosthogExporter extends TrackingExporter<
   }): EventMessage {
     const { span, distinctId, endTime, traceData } = args;
 
-    const eventName = this.mapToPostHogEvent(span.type);
+    const isModelCall = this.isModelCall(span, traceData);
     const startTime = span.startTime.getTime();
     const latency = (endTime - startTime) / 1000;
 
     // Check if parent is the root span - if so, use traceId as parent_id
     // since we don't create an $ai_span for root spans
     const parentIsRootSpan = this.isParentRootSpan(span, traceData);
-    const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
+    const properties = this.buildEventProperties(span, latency, parentIsRootSpan, isModelCall);
 
     return {
       distinctId,
-      event: eventName,
+      event: isModelCall ? '$ai_generation' : '$ai_span',
       properties,
       timestamp: new Date(endTime),
     };
@@ -420,11 +422,28 @@ export class PosthogExporter extends TrackingExporter<
     return timestamp instanceof Date ? timestamp : new Date(timestamp);
   }
 
-  private mapToPostHogEvent(spanType: SpanType): string {
-    if (spanType == SpanType.MODEL_GENERATION) {
-      return '$ai_generation';
+  /**
+   * Whether this span is exported as `$ai_generation`. PostHog expects one per
+   * provider call and sums tokens and cost across them, so exactly one span
+   * per call may carry usage.
+   *
+   * MODEL_INFERENCE is the provider call. Its parent MODEL_GENERATION is then
+   * the loop around those calls and is exported as `$ai_span`. A generation
+   * with no inference spans (older @mastra/core, legacy model path) is the
+   * only record of its call and keeps the `$ai_generation` role.
+   */
+  private isModelCall(span: AnyExportedSpan, traceData: PosthogTraceData): boolean {
+    if (span.type === SpanType.MODEL_INFERENCE) {
+      // Inference spans end before their generation, so the mark is set by the
+      // time the generation is exported.
+      let ancestor = span.parentSpanId ? traceData.getSpan({ spanId: span.parentSpanId }) : undefined;
+      while (ancestor && ancestor.type !== SpanType.MODEL_GENERATION) {
+        ancestor = ancestor.parentSpanId ? traceData.getSpan({ spanId: ancestor.parentSpanId }) : undefined;
+      }
+      if (ancestor) traceData.setExtraValue(HAS_INFERENCE + ancestor.id, true);
+      return true;
     }
-    return '$ai_span';
+    return span.type === SpanType.MODEL_GENERATION && !traceData.hasExtraValue(HAS_INFERENCE + span.id);
   }
 
   private getDistinctId(span: AnyExportedSpan, traceData?: PosthogTraceData): string {
@@ -467,6 +486,7 @@ export class PosthogExporter extends TrackingExporter<
     span: AnyExportedSpan,
     latency: number,
     parentIsRootSpan: boolean = false,
+    isModelCall: boolean = span.type === SpanType.MODEL_GENERATION,
   ): Record<string, any> {
     const baseProperties: Record<string, any> = {
       $ai_trace_id: span.traceId,
@@ -493,7 +513,7 @@ export class PosthogExporter extends TrackingExporter<
       }
     }
 
-    if (span.type === SpanType.MODEL_GENERATION) {
+    if (isModelCall) {
       baseProperties.$ai_generation_id = span.id;
       return { ...baseProperties, ...this.buildGenerationProperties(span) };
     } else {
@@ -576,6 +596,12 @@ export class PosthogExporter extends TrackingExporter<
 
     if (span.attributes) {
       Object.assign(props, span.attributes);
+    }
+
+    // A generation exported as a span wraps `$ai_generation` events that
+    // already carry the usage for each call.
+    if (span.type === SpanType.MODEL_GENERATION) {
+      delete props.usage;
     }
 
     return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span.metadata) };

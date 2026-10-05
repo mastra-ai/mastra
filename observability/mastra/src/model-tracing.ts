@@ -628,6 +628,11 @@ export class ModelSpanTracker {
         ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
       },
     });
+    // The inference span is opened before the request exists, so it gets the
+    // same input preview here.
+    if (input !== undefined) {
+      this.#currentInferenceSpan?.update({ input });
+    }
     if (hasFinalInput) {
       this.#currentStepInputIsFinal = true;
     }

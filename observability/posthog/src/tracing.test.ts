@@ -291,6 +291,116 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }));
     });
 
+    describe('with MODEL_INFERENCE spans', () => {
+      const traceId = 'trace-inference';
+      const usage = { inputTokens: 10, outputTokens: 5 };
+      const generation = createSpan({
+        id: 'generation',
+        traceId,
+        parentSpanId: 'agent-run',
+        type: SpanType.MODEL_GENERATION,
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          usage: { inputTokens: 20, outputTokens: 10 },
+          tools: [
+            { type: 'function', name: 'a' },
+            { type: 'function', name: 'hidden' },
+          ],
+        },
+      });
+      const inference = (step: number, toolNames: string[]) =>
+        createSpan({
+          id: `inference-${step}`,
+          traceId,
+          parentSpanId: `step-${step}`,
+          type: SpanType.MODEL_INFERENCE,
+          input: [{ role: 'user', content: 'hi' }],
+          output: { text: `answer ${step}` },
+          attributes: {
+            model: 'gpt-4o',
+            provider: 'openai',
+            usage,
+            tools: toolNames.map(name => ({ type: 'function', name })),
+          },
+        });
+
+      /** Exports generation → step → inference per call, closing each in the order the tracker does. */
+      async function exportGeneration(calls: string[][]) {
+        const { output: _output, endTime: _endTime, ...startedGeneration } = generation;
+        await exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: startedGeneration as AnyExportedSpan,
+        });
+        for (const [step, toolNames] of calls.entries()) {
+          const stepSpan = createSpan({
+            id: `step-${step}`,
+            traceId,
+            parentSpanId: generation.id,
+            type: SpanType.MODEL_STEP,
+          });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: stepSpan });
+          const inferenceSpan = inference(step, toolNames);
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: inferenceSpan });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: stepSpan });
+        }
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: generation });
+      }
+
+      const captured = (event: string) =>
+        mockCapture.mock.calls.map(([message]) => message).filter(message => message.event === event);
+
+      it('should export one $ai_generation per provider call with the tools sent on that call', async () => {
+        await exportGeneration([['a'], ['hidden']]);
+
+        const generations = captured('$ai_generation');
+        expect(generations.map(message => message.properties.$ai_generation_id)).toEqual([
+          'inference-0',
+          'inference-1',
+        ]);
+        expect(generations.map(message => message.properties.$ai_tools.map((tool: any) => tool.function.name))).toEqual(
+          [['a'], ['hidden']],
+        );
+        expect(generations[0].properties).toMatchObject({
+          $ai_model: 'gpt-4o',
+          $ai_provider: 'openai',
+          $ai_input_tokens: 10,
+          $ai_output_tokens: 5,
+          $ai_parent_id: 'step-0',
+          $ai_input: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+          $ai_output_choices: [{ role: 'assistant', content: [{ type: 'text', text: 'answer 0' }] }],
+        });
+      });
+
+      it('should export the wrapping MODEL_GENERATION as $ai_span without usage', async () => {
+        await exportGeneration([['a'], ['hidden']]);
+
+        const generationSpan = captured('$ai_span').find(message => message.properties.$ai_span_id === 'generation');
+        expect(generationSpan).toBeDefined();
+        expect(generationSpan.properties).not.toHaveProperty('usage');
+        expect(generationSpan.properties).not.toHaveProperty('$ai_input_tokens');
+        expect(generationSpan.properties).not.toHaveProperty('$ai_generation_id');
+      });
+
+      it('should keep MODEL_GENERATION as $ai_generation in a trace where another generation had inference spans', async () => {
+        await exportGeneration([['a']]);
+        const legacy = createSpan({
+          id: 'legacy-generation',
+          traceId,
+          parentSpanId: 'agent-run',
+          type: SpanType.MODEL_GENERATION,
+          attributes: { model: 'gpt-4o', provider: 'openai', usage },
+        });
+        await exportSpanLifecycle(exporter, legacy);
+
+        expect(captured('$ai_generation').map(message => message.properties.$ai_generation_id)).toEqual([
+          'inference-0',
+          'legacy-generation',
+        ]);
+      });
+    });
+
     it('should map MODEL_STEP to $ai_span (non-root)', async () => {
       // MODEL_STEP now goes through span properties path (not generation)
       // Use non-root span since root spans only send $ai_trace
