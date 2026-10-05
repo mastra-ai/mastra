@@ -174,7 +174,9 @@ describe('RedisStreamsPubSub fan-out sharing', () => {
     expect(b.received).toEqual(['e3']);
   });
 
-  it('republishes once when any subscriber nacks, and acks once when all ack', async () => {
+  // A nack republishes the event as a new stream entry, which every fan-out subscriber reads.
+  // This matches the per-subscriber-group behavior before readers were shared.
+  it('redelivers a nacked event to every subscriber once, as before sharing, and acks once when all ack', async () => {
     const { ps } = createPubSub();
     const topic = `t-${randomUUID()}`;
     const attemptsA: number[] = [];

@@ -134,9 +134,10 @@ describe('ValkeyStreamsPubSub fan-out sharing', () => {
     for (const c of subs.slice(0, 9)) expect(c.received).toEqual([]);
 
     await ps.unsubscribe(topic, subs[9]!.cb);
-    // GLIDE closes the socket asynchronously, so poll until the server drops it.
+    // GLIDE's close() returns before the server drops the socket; any closed GLIDE client,
+    // idle or not, stays in CLIENT LIST for ~3s. Poll well past that.
     let after = withReader;
-    for (const deadline = Date.now() + 3_000; Date.now() < deadline && after !== withReader - 1;) {
+    for (const deadline = Date.now() + 10_000; Date.now() < deadline && after !== withReader - 1;) {
       after = await connections(name);
       await tick(50);
     }
@@ -180,7 +181,9 @@ describe('ValkeyStreamsPubSub fan-out sharing', () => {
     expect(b.received).toEqual(['e3']);
   });
 
-  it('republishes once when any subscriber nacks, and acks once when all ack', async () => {
+  // A nack republishes the event as a new stream entry, which every fan-out subscriber reads.
+  // This matches the per-subscriber-group behavior before readers were shared.
+  it('redelivers a nacked event to every subscriber once, as before sharing, and acks once when all ack', async () => {
     const { ps } = createPubSub();
     const topic = `t-${randomUUID()}`;
     const attemptsA: number[] = [];
