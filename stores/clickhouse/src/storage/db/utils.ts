@@ -57,6 +57,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
+  mastra_version_labels: `ReplacingMergeTree()`,
   [TABLE_DATASETS]: `ReplacingMergeTree()`,
   [TABLE_DATASET_ITEMS]: `ReplacingMergeTree()`,
   [TABLE_DATASET_VERSIONS]: `MergeTree()`,
