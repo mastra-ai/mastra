@@ -1,5 +1,5 @@
-// Opt-in: a present ResizeObserver flips components such as @xyflow/react onto their observer path,
-// and this one never reports a size.
+// Opt-in: a present ResizeObserver flips components such as @xyflow/react and react-resizable-panels
+// onto their observer path, and this one never reports a size.
 class InertResizeObserver implements ResizeObserver {
   observe() {}
   unobserve() {}
@@ -9,5 +9,8 @@ class InertResizeObserver implements ResizeObserver {
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = InertResizeObserver;
 }
+
+// Base UI ScrollArea calls getAnimations once a ResizeObserver exists; jsdom has no Web Animations API.
+Element.prototype.getAnimations ??= () => [];
 
 export {};
