@@ -1,5 +1,5 @@
 /**
- * SlashCommandComponent - renders a bordered box for slash command messages
+ * SlashCommandComponent - renders a "● /command" block for slash command messages
  * showing the command name as a heading and truncated content that can be
  * expanded with ctrl+e. The full content is still sent to the assistant.
  */
@@ -8,6 +8,7 @@ import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { toolBlock } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_COLLAPSED_LINES = 3;
@@ -45,18 +46,18 @@ export class SlashCommandComponent extends WidthAwareContainer {
   protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
-    const border = (char: string) => chalk.bold.hex(getBorderColor())(char);
-    const maxLineWidth = Math.max(1, termWidth - 6 - BOX_INDENT * 2);
-
+    const width = Math.max(1, termWidth - BOX_INDENT * 2);
+    const maxLineWidth = Math.max(1, width - 3);
+    // "● /command" with the command's expanded content on a panel below
+    const dot = chalk.hex(getBorderColor())('●');
     const heading = chalk.hex(mastra.specialGray)(`/${this.commandName}`);
+    const block = (output: string[]) =>
+      this.addChild(new Text(toolBlock(dot, heading, output, width).join('\n'), BOX_INDENT, 0));
 
     if (this.contentLines.length === 0) {
-      this.addChild(new Text(`${border('╰──')} ${heading}`, BOX_INDENT, 0));
+      block([]);
       return;
     }
-
-    // Top border
-    this.addChild(new Text(`${border('╭──')}`, BOX_INDENT, 0));
 
     // Word-wrap content lines
     const wrappedLines: string[] = [];
@@ -78,23 +79,15 @@ export class SlashCommandComponent extends WidthAwareContainer {
     const truncated = !this.expanded && wrappedLines.length > MAX_COLLAPSED_LINES + 1;
     const displayLines = truncated ? wrappedLines.slice(0, MAX_COLLAPSED_LINES) : wrappedLines;
 
-    const contentText = displayLines
-      .map(
-        line =>
-          `${border('│')} ${chalk.hex(mastra.mainGray)(line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line)}`,
-      )
-      .join('\n');
-    this.addChild(new Text(contentText, BOX_INDENT, 0));
-
+    const output = displayLines.map(line =>
+      chalk.hex(mastra.mainGray)(line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line),
+    );
     if (truncated) {
-      const moreText = chalk.hex(mastra.darkGray)(
-        `... ${wrappedLines.length - MAX_COLLAPSED_LINES} more lines (ctrl+e to expand)`,
+      output.push(
+        chalk.hex(mastra.darkGray)(`... ${wrappedLines.length - MAX_COLLAPSED_LINES} more lines (ctrl+e to expand)`),
       );
-      this.addChild(new Text(`${border('│')} ${moreText}`, BOX_INDENT, 0));
     }
-
-    // Bottom border with command name
-    this.addChild(new Text(`${border('╰──')} ${heading}`, BOX_INDENT, 0));
+    block(output);
   }
 
   getChatSpacingKind(): ChatSpacingKind {

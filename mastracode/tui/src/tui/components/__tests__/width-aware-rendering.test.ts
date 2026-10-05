@@ -153,17 +153,20 @@ describe('width-aware custom component rendering', () => {
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
   });
 
-  it('draws the error box borders on a single line at narrow widths', () => {
-    const component = new ErrorDisplayComponent(new Error('boom'), {}, ui);
+  it('wraps the error card message under its left bar at narrow widths', () => {
+    const component = new ErrorDisplayComponent(new Error(source), {}, ui);
     const lines = component.render(40);
     expect(lines.every(line => visibleWidth(line) <= 40)).toBe(true);
-    // A wrapped border would leave the corner glyph on a different line than the box edge.
-    const plain = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
-    expect(plain(lines.find(line => line.includes('╭')) ?? '').endsWith('╮')).toBe(true);
-    expect(plain(lines.find(line => line.includes('╰')) ?? '').endsWith('╯')).toBe(true);
+    // The message wraps inside the card, so every row (heading and continuation rows) keeps the bar.
+    const plain = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trimEnd());
+    expect(plain.length).toBeGreaterThan(2);
+    expect(plain[0]).toBe('▎ Error');
+    expect(plain.every(line => line.startsWith('▎ '))).toBe(true);
+    expect(plain.at(-1)).toContain('unique-restored-tail');
+    expect(plain.join('\n')).not.toMatch(/[╭╮╰╯│]/);
   });
 
-  it('keeps the error box within widths narrower than its chrome', () => {
+  it('keeps the error card within widths narrower than its chrome', () => {
     const component = new ErrorDisplayComponent(new Error('boom'), {}, ui);
     expect(component.render(8).every(line => visibleWidth(line) <= 8)).toBe(true);
   });

@@ -19,12 +19,12 @@ import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { formatStatusDuration } from '../status-duration.js';
-import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
+import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast, getThemeMode } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import { fillBg, halfBlockPanel, toolSurface } from './surface.js';
+import { fillBg, toolBlock, toolSurface } from './surface.js';
 import type {
   CommandExitRecord,
   CompactToolLabelColor,
@@ -90,6 +90,32 @@ const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   tag: chalk.hex('#c4b5fd'),
   name: chalk.hex('#c4b5fd'),
 };
+
+/** The same roles in darker tones that read on light backgrounds. */
+const LIGHT_CODE_HIGHLIGHT_THEME: HighlightTheme = {
+  default: text => theme.fg('toolArgs', text),
+  keyword: chalk.hex('#7e22ce'),
+  built_in: chalk.hex('#1d4ed8'),
+  type: chalk.hex('#1d4ed8'),
+  literal: chalk.hex('#b91c1c'),
+  number: chalk.hex('#b45309'),
+  string: chalk.hex('#15803d'),
+  regexp: chalk.hex('#b91c1c'),
+  title: chalk.hex('#1d4ed8'),
+  function: chalk.hex('#1d4ed8'),
+  params: chalk.hex('#3f3f46'),
+  comment: chalk.hex('#71717a'),
+  meta: chalk.hex('#52525b'),
+  attr: chalk.hex('#b45309'),
+  variable: chalk.hex('#3f3f46'),
+  tag: chalk.hex('#7e22ce'),
+  name: chalk.hex('#7e22ce'),
+};
+
+const codeHighlightTheme = (): HighlightTheme =>
+  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : CODE_HIGHLIGHT_THEME;
+const quietCodeHighlightTheme = (): HighlightTheme =>
+  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : QUIET_CODE_HIGHLIGHT_THEME;
 
 const SHELL_CONTROL_WORDS = new Set([
   'if',
@@ -749,7 +775,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return highlight(preview, {
         language: getLanguageFromPath(path),
         ignoreIllegals: true,
-        theme: QUIET_CODE_HIGHLIGHT_THEME,
+        theme: quietCodeHighlightTheme(),
       });
     } catch {
       return theme.fg('toolArgs', preview);
@@ -1667,7 +1693,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const timeSuffix = this.isPartial ? timeoutSuffix : this.getDurationSuffix();
 
     // Title row "$ command in cwd  duration", then the output on a shaded panel below it.
-    const renderShellBlock = (status: string, outputLines: string[]) => {
+    const renderShellBlock = (status: string, outputLines: string[], failed?: boolean) => {
       const prompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const suffix = `${cwdSuffix}${timeSuffix}${status}`;
       const titleWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2 - 2 - visibleWidth(prompt));
@@ -1689,7 +1715,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       this.startBlock();
       if (hiddenNote) this.blockLine(hiddenNote);
       this.blockLines(shown.map(line => theme.fg('toolOutput', line)));
-      this.endBlock(title);
+      this.endBlock(title, failed);
     };
 
     if (!this.result || this.isPartial) {
@@ -1730,7 +1756,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderShellBlock(this.getStatusIndicator(failed), prepareOutputLines(output));
+    renderShellBlock(this.getStatusIndicator(failed), prepareOutputLines(output), failed);
   }
 
   /**
@@ -2233,7 +2259,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       this.addLeadingPadding();
       this.startBlock();
 
-      const highlighted = highlightCode(content, fullPath);
+      const highlighted = highlightCode(content, fullPath, undefined, false);
       let lines = highlighted.split('\n');
 
       const collapsedLines = this.getCollapsedLineLimit(20);
@@ -2286,7 +2312,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.blockLines(lines);
       }
     } else if (content) {
-      const highlighted = highlightCode(content, fullPath);
+      const highlighted = highlightCode(content, fullPath, undefined, false);
       let lines = highlighted.split('\n');
 
       const collapsedLines = this.getCollapsedLineLimit(20);
@@ -2978,16 +3004,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
    * Finish the block: a "● title" row (the dot carries the status: green done, red failed, grey
    * running), then any collected output on a shaded half-block panel, indented under the title.
    */
-  private endBlock(title: string | string[]): void {
+  private endBlock(title: string | string[], isError = this.isErrorResult()): void {
     const output = this.pendingBlock ?? [];
     this.pendingBlock = null;
-    const [first = '', ...rest] = Array.isArray(title) ? title : [title];
-    const titleRows = [`${this.getStatusDot()} ${first}`, ...rest.map(line => `  ${line}`)];
-    this.contentBox.addChild(new Text(titleRows.join('\n'), 0, 0));
-    if (output.length === 0) return;
     const width = Math.max(1, this.renderWidth - BOX_INDENT * 2);
-    const rows = output.map(line => `  ${truncateAnsi(line, Math.max(1, width - 3))}`);
-    this.contentBox.addChild(new Text(halfBlockPanel(rows, width, toolSurface()).join('\n'), 0, 0));
+    this.contentBox.addChild(new Text(toolBlock(this.getStatusDot(isError), title, output, width).join('\n'), 0, 0));
   }
 
   private getStatusDot(isError = this.isErrorResult()): string {
@@ -3191,13 +3212,14 @@ function getPlainCodeFromViewOutput(content: string, startLine?: number): string
 }
 
 /** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
-function highlightCode(content: string, path: string, startLine?: number): string {
-  const code = getPlainCodeFromViewOutput(content, startLine);
+function highlightCode(content: string, path: string, startLine?: number, hasLineNumbers = true): string {
+  // Only view output carries line numbers; stripping them from file content would eat a leading "1." etc.
+  const code = hasLineNumbers ? getPlainCodeFromViewOutput(content, startLine) : content.replace(/\n+$/, '');
   try {
     return highlight(code, {
       language: getLanguageFromPath(path),
       ignoreIllegals: true,
-      theme: CODE_HIGHLIGHT_THEME,
+      theme: codeHighlightTheme(),
     });
   } catch {
     return code;

@@ -53,6 +53,13 @@ describe('completed shell/process background status', () => {
     }
   });
 
+  it('colors the status dot red when a shell command exits nonzero', () => {
+    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'cat CHANGELOG.md' }, {}, ui);
+    component.updateResult({ content: [{ type: 'text', text: 'No such file\n\nExit code: 1' }], isError: false });
+    const title = component.render(120).find(line => stripAnsi(line).includes('cat CHANGELOG.md'))!;
+    expect(title).toContain(theme.fg('error', '●'));
+  });
+
   it('does not treat error-looking output from a successful command as a failure', () => {
     const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
     component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
@@ -903,6 +910,19 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(lines[3]!)).toContain('╰──');
     expect(stripAnsi(lines.join('\n'))).not.toContain('old value');
     expect(stripAnsi(lines.join('\n'))).not.toContain('(2 lines)');
+  });
+
+  it('keeps leading numbers in written file content (no view line-number stripping)', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/plan.md', content: '# Plan\n\n1. First step\n2. Second step\n' },
+      {},
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('1. First step');
+    expect(visible).toContain('2. Second step');
   });
 
   it('renders quiet write tools with path and content preview lines', () => {

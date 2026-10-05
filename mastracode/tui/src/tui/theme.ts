@@ -260,11 +260,13 @@ export function surfaceShade(step: number): string {
 /**
  * Mode colors (build / plan / fast) as displayed. On dark backgrounds the deep brand colors are lifted
  * toward white the same way the accent is (brand green maps exactly to the accent), so mode-colored text
- * never reads darker than the accent. Light mode uses them as-is.
+ * never reads darker than the accent. On light backgrounds brand green maps to the light accent and the
+ * others are darkened just enough to read.
  */
 export function displayModeColor(hex: string): string {
-  if (currentThemeMode !== 'dark') return hex;
-  if (hex.toLowerCase() === mastraBrand.green.toLowerCase()) return darkTheme.accent;
+  const isBrandGreen = hex.toLowerCase() === mastraBrand.green.toLowerCase();
+  if (currentThemeMode === 'light') return isBrandGreen ? lightTheme.accent : ensureContrast(hex, getContrastBg());
+  if (isBrandGreen) return darkTheme.accent;
   const mix = (i: number) => {
     const c = parseInt(hex.slice(i, i + 2), 16);
     return Math.round(c + (255 - c) * 0.35)
@@ -419,7 +421,7 @@ export const lightTheme: ThemeColors = {
   border: '#d4d4d8',
   borderAccent: '#0d8020',
   borderMuted: '#e4e4e7',
-  success: '#15803d',
+  success: '#0d8020', // Same as the accent, like the dark theme
   error: '#dc2626',
   warning: '#d97706',
   muted: '#595961',
@@ -439,8 +441,8 @@ export const lightTheme: ThemeColors = {
   toolBorderPending: '#a1a1aa', // Zinc-400 dim grey for pending
   toolBorderSuccess: '#a1a1aa', // Zinc-400 dim grey for success
   toolBorderError: '#dc2626', // Red for error
-  toolTitle: '#c2410c', // Deep amber for light backgrounds
-  toolArgs: '#92400e', // Deep amber-brown for light backgrounds
+  toolTitle: '#38383e', // Same as secondary, like the dark theme
+  toolArgs: '#38383e',
   toolOutput: '#3f3f46',
   textHighlight: '#7c3aed', // Deep violet for light backgrounds
   // Error display

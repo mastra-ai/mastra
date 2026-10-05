@@ -327,12 +327,13 @@ describe('handleMessageStart signals', () => {
     expect(visibleChildren(state)).toHaveLength(1);
     const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
-    expect(rendered).toContain('notification from github');
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('╰');
-    expect(rendered).toContain('high · ci-status · delivered');
-    expect(rendered).toContain('CI failed on main');
+    const lines = stripAnsi((component as NotificationComponent).render(100).join('\n')).split('\n');
+    // Left-bar card: title, details, message, every row on the bar.
+    expect(lines).toEqual([
+      expect.stringMatching(/^▎ notification from github/),
+      expect.stringMatching(/^▎ high · ci-status · delivered/),
+      expect.stringMatching(/^▎ CI failed on main/),
+    ]);
   });
 
   it('wraps long streamed full notifications within the terminal width', () => {

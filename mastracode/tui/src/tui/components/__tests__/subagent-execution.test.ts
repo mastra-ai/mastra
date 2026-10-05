@@ -17,6 +17,20 @@ function nonEmpty(lines: string[]): string[] {
   return lines.filter(l => l.trim().length > 0);
 }
 
+/**
+ * Splits a tool-style block into its "● title" row and the rows of the shaded panel between the ▄ and ▀ edges.
+ * Asserts the block uses that structure and no box borders.
+ */
+function toolBlockParts(lines: string[]): { title: string; panel: string[] } {
+  const top = lines.findIndex(l => /^▄+$/.test(l.trim()));
+  const bottom = lines.findIndex(l => /^▀+$/.test(l.trim()));
+  expect(lines[0]).toMatch(/^● /);
+  expect(top).toBe(1);
+  expect(bottom).toBe(lines.length - 1);
+  expect(lines.join('\n')).not.toMatch(/[╭╰│]/);
+  return { title: lines[0]!, panel: lines.slice(top + 1, bottom) };
+}
+
 describe('SubagentExecutionComponent', () => {
   const originalColumns = process.stdout.columns;
 
@@ -62,15 +76,12 @@ describe('SubagentExecutionComponent', () => {
     }
   });
 
-  it('renders task and borders while running', () => {
+  it('renders the title row and the task on a panel while running', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
-    const lines = renderPlain(comp);
+    const { title, panel } = toolBlockParts(renderPlain(comp));
 
-    expect(lines.some(l => l.includes('╭──'))).toBe(true);
-    expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
-    expect(lines.some(l => l.includes('╰──'))).toBe(true);
-    expect(lines.some(l => l.includes('subagent'))).toBe(true);
-    expect(lines.some(l => l.includes('explore'))).toBe(true);
+    expect(title.trimEnd()).toBe('● subagent explore claude-sonnet-4-20250514');
+    expect(panel.map(l => l.trimEnd())).toEqual(['  Find all usages of X']);
   });
 
   it('renders fork as the type and the parent model id when forked', () => {
@@ -210,12 +221,13 @@ describe('SubagentExecutionComponent', () => {
 
       const lines = nonEmpty(renderPlain(comp));
 
-      // Should still show full bordered box content
-      expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
-      expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
-      expect(lines.some(l => l.includes('╰──'))).toBe(true);
-      expect(lines.some(l => l.includes('✓'))).toBe(true);
+      // Should still show the title and the full panel content
+      const { title, panel } = toolBlockParts(lines);
+      expect(title).toContain('subagent explore claude-sonnet-4-20250514 12.3s');
+      // Success is shown by the dot alone, not an icon in the title.
+      expect(title).not.toContain('✓');
+      expect(panel.some(l => l.includes('Find all usages of X'))).toBe(true);
+      expect(panel.some(l => l.includes('✓') && l.includes('search_content'))).toBe(true);
     });
 
     it('keeps full content visible even when setExpanded(false) is called', () => {
@@ -228,15 +240,16 @@ describe('SubagentExecutionComponent', () => {
       comp.setExpanded(false);
       const lines = nonEmpty(renderPlain(comp));
 
-      expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
+      const { panel } = toolBlockParts(lines);
+      expect(panel.some(l => l.includes('Find usages'))).toBe(true);
+      expect(panel.some(l => l.includes('view'))).toBe(true);
     });
   });
 
   // ─── Opt-in collapse behavior ──────────────────────────────────────────
 
   describe('collapse on completion (collapseOnComplete: true)', () => {
-    it('collapses to a single footer line when finished and not expanded', () => {
+    it('collapses to the single title row when finished and not expanded', () => {
       const comp = new SubagentExecutionComponent(
         'explore',
         'Find all usages of X',
@@ -254,13 +267,10 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('╰──');
-      expect(lines[0]).toContain('subagent');
-      expect(lines[0]).toContain('explore');
-      expect(lines[0]).toContain('✓');
+      expect(lines[0]!.trimEnd()).toBe('● subagent explore claude-sonnet-4-20250514 12.3s');
     });
 
-    it('collapses to footer on error completion too', () => {
+    it('collapses to the title row on error completion too, keeping the error icon', () => {
       const comp = new SubagentExecutionComponent(
         'execute',
         'Implement feature Y',
@@ -276,8 +286,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('╰──');
-      expect(lines[0]).toContain('✗');
+      expect(lines[0]!.trimEnd()).toBe('● subagent execute claude-sonnet-4-20250514 5.0s ✗');
     });
 
     it('shows full content when expanded after completion', () => {
@@ -297,11 +306,10 @@ describe('SubagentExecutionComponent', () => {
       comp.setExpanded(true);
       const lines = nonEmpty(renderPlain(comp));
 
-      expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
-      expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
-      expect(lines.some(l => l.includes('search_content'))).toBe(true);
-      expect(lines.some(l => l.includes('╰──'))).toBe(true);
+      const { title, panel } = toolBlockParts(lines);
+      expect(title).toContain('subagent explore');
+      expect(panel.some(l => l.includes('Find all usages of X'))).toBe(true);
+      expect(panel.some(l => l.includes('search_content'))).toBe(true);
     });
 
     it('can stay expanded on completion and show the final result', () => {
@@ -314,12 +322,13 @@ describe('SubagentExecutionComponent', () => {
       comp.finish(false, 10, 'nested\nbrowser-demo.html');
 
       const lines = nonEmpty(renderPlain(comp));
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
-      expect(lines.some(l => l.includes('List files'))).toBe(true);
-      expect(lines.some(l => l.includes('find_files'))).toBe(true);
-      expect(lines.some(l => l.includes('nested'))).toBe(true);
-      expect(lines.some(l => l.includes('browser-demo.html'))).toBe(true);
-      expect(lines.some(l => l.includes('subagent explore openai/gpt-5.5'))).toBe(true);
+      const { title, panel } = toolBlockParts(lines);
+      expect(title).toContain('subagent explore openai/gpt-5.5');
+      expect(panel.some(l => l.includes('List files'))).toBe(true);
+      expect(panel.some(l => l.includes('find_files'))).toBe(true);
+      // The final result is the end of the panel.
+      expect(panel.at(-2)).toContain('nested');
+      expect(panel.at(-1)).toContain('browser-demo.html');
     });
 
     it('toggleExpanded works correctly after completion', () => {
@@ -337,14 +346,13 @@ describe('SubagentExecutionComponent', () => {
       // Toggle to expanded
       comp.toggleExpanded();
       lines = nonEmpty(renderPlain(comp));
-      expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
+      expect(toolBlockParts(lines).panel.some(l => l.includes('search_content'))).toBe(true);
 
       // Toggle back to collapsed
       comp.toggleExpanded();
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('╰──');
+      expect(lines[0]).toMatch(/^● subagent explore/);
     });
 
     it('auto-collapses even if user expanded during execution', () => {
@@ -362,7 +370,7 @@ describe('SubagentExecutionComponent', () => {
       comp.finish(false, 5000);
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('╰──');
+      expect(lines[0]).toMatch(/^● subagent explore/);
     });
 
     it('shows full content while still running (not yet finished)', () => {
@@ -373,9 +381,9 @@ describe('SubagentExecutionComponent', () => {
 
       const lines = nonEmpty(renderPlain(comp));
 
-      expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('╭──'))).toBe(true);
-      expect(lines.some(l => l.includes('Find usages'))).toBe(true);
+      const { panel } = toolBlockParts(lines);
+      expect(panel.some(l => l.includes('Find usages'))).toBe(true);
+      expect(panel.some(l => l.includes('search_content'))).toBe(true);
     });
 
     it('keeps the latest activity visible when completed activity is capped', () => {

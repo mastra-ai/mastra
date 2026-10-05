@@ -6,6 +6,7 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
 import { surfaceShade, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 
 const bgOpen = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
@@ -32,6 +33,30 @@ export function halfBlockPanel(rows: string[], width: number, bg: string): strin
 export const promptSurface = () => surfaceShade(2);
 /** Background of tool output panels. */
 export const toolSurface = () => surfaceShade(1);
+
+/** Status dot in front of a tool-style row: grey while running, green when done, red on failure. */
+export function statusDot(status: 'running' | 'done' | 'error'): string {
+  return status === 'running' ? theme.fg('muted', '●') : theme.fg(status === 'error' ? 'error' : 'success', '●');
+}
+
+/**
+ * Tool-style block: a "● title" row (further title rows indented under it), then the output on a shade-1
+ * panel. No panel when there's no output.
+ */
+export function toolBlock(dot: string, title: string | string[], output: string[], width: number): string[] {
+  const [first = '', ...rest] = Array.isArray(title) ? title : [title];
+  const rows = [`${dot} ${first}`, ...rest.map(line => `  ${line}`)];
+  if (output.length === 0) return rows;
+  const contentWidth = Math.max(1, width - 3);
+  return [
+    ...rows,
+    ...halfBlockPanel(
+      output.map(line => `  ${truncateAnsi(line, contentWidth)}`),
+      width,
+      toolSurface(),
+    ),
+  ];
+}
 
 /** Left-bar card for inline prompts: accent = waiting on you, warning = approval, border = answered. */
 export function card(color: string, lines: string[]): string[] {
