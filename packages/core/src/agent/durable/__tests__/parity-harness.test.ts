@@ -9,7 +9,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { CapturedRequest, EngineParityScenario, ParityEngine } from './parity-harness';
-import { expectEngineParity, lastUserText, textOnlyTape, toolCallTape } from './parity-harness';
+import { expectEngineParity, lastUserText, staleKnownDifferences, textOnlyTape, toolCallTape } from './parity-harness';
 
 function systemText(request: CapturedRequest): string {
   return request.prompt
@@ -118,7 +118,7 @@ describe('expectEngineParity', () => {
         differences: {
           durable: {
             reason: 'self-test: durable uses other instructions',
-            ignore: ['text', 'streamedText', 'requests'],
+            ignore: ['text', 'streamedText', 'fullOutput', 'requests'],
           },
         },
       }),
@@ -134,7 +134,12 @@ describe('expectEngineParity', () => {
             ignore: ['requests'],
             expect: plain => ({
               ...plain,
-              turns: plain.turns.map(t => ({ ...t, text: 'system said: B', streamedText: 'system said: B' })),
+              turns: plain.turns.map(t => ({
+                ...t,
+                text: 'system said: B',
+                streamedText: 'system said: B',
+                fullOutput: { ...t.fullOutput, text: 'system said: B' },
+              })),
             }),
           },
         },
@@ -152,7 +157,12 @@ describe('expectEngineParity', () => {
               ignore: ['requests'],
               expect: plain => ({
                 ...plain,
-                turns: plain.turns.map(t => ({ ...t, text: 'system said: C', streamedText: 'system said: C' })),
+                turns: plain.turns.map(t => ({
+                  ...t,
+                  text: 'system said: C',
+                  streamedText: 'system said: C',
+                  fullOutput: { ...t.fullOutput, text: 'system said: C' },
+                })),
               }),
             },
           },
@@ -194,5 +204,21 @@ describe('expectEngineParity', () => {
         },
       }),
     ).rejects.toThrow("evented agent resolved to the 'default' engine");
+  });
+
+  it('flags a built-in engine difference once the engine stops showing it', async () => {
+    const results = await expectEngineParity({
+      model: { tapes: [textOnlyTape('hi')] },
+      buildAgent: ({ model }) => new Agent({ id: 'parity-stale-builtin', name: 'P', instructions: 'x', model }),
+      input: 'hi',
+    });
+    const durable = results.durable!;
+    expect(staleKnownDifferences('durable', durable)).toEqual([]);
+
+    const fixed = structuredClone({ turns: durable.turns, requests: durable.requests });
+    fixed.turns[0]!.finishChunk.payloadKeys.push('messageId');
+    expect(staleKnownDifferences('durable', fixed)).toEqual([
+      'durable: finish payload now includes messageId; remove them from FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES',
+    ]);
   });
 });

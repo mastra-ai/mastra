@@ -15,6 +15,8 @@
  * - `stepCount`      → loop-iteration count (catches stopWhen drift)
  * - `chunks`         → `from:type` sequence of `fullStream`
  * - `streamedText`   → concatenated `text-delta` payloads
+ * - `finishChunk`    → payload keys and usage of the last `finish` chunk
+ * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
  * Plus, across the whole run:
  * - `requests`       → every request sent to the model, with per-message
  *                      `createdAt` timestamps stripped
@@ -54,7 +56,9 @@
  *     }
  *
  * A declared difference that no longer reproduces fails the test, so fixed
- * bugs force their override to be removed.
+ * bugs force their override to be removed. Differences every scenario hits
+ * (see `FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`) are declared once here, under
+ * the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
@@ -92,6 +96,10 @@ export interface ParitySnapshot {
   chunks: string[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
+  /** Sorted defined payload keys and usage of the last `finish` chunk. */
+  finishChunk: { payloadKeys: string[]; usage: unknown };
+  /** `getFullOutput()` as a non-streaming consumer reads it. */
+  fullOutput: { text: string | undefined; finishReason: string | undefined; usage: unknown; keys: string[] };
 }
 
 function sortByCallId<T extends { toolCallId: string; toolName: string }>(arr: T[]): T[] {
@@ -105,11 +113,14 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
   // Reading fullStream to the end drains the output, so its promises resolve.
   const chunks: string[] = [];
   let streamedText = '';
+  let finishPayload: any;
   for await (const chunk of output.fullStream as AsyncIterable<{ from?: string; type: string; payload?: any }>) {
     chunks.push(`${chunk.from}:${chunk.type}`);
     if (chunk.type === 'text-delta') streamedText += chunk.payload?.text ?? '';
+    if (chunk.type === 'finish') finishPayload = chunk.payload ?? {};
   }
 
+  const full = await output.getFullOutput();
   const [text, finishReason, usage, toolCalls, toolResults, steps] = await Promise.all([
     output.text,
     output.finishReason,
@@ -144,6 +155,19 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
     stepCount: steps?.length ?? 0,
     chunks,
     streamedText,
+    finishChunk: {
+      // Keys holding `undefined` are not observable over any serialized transport.
+      payloadKeys: Object.keys(finishPayload ?? {})
+        .filter(k => finishPayload[k] !== undefined)
+        .sort(),
+      usage: finishPayload?.usage ?? finishPayload?.output?.usage,
+    },
+    fullOutput: {
+      text: full.text,
+      finishReason: full.finishReason as string | undefined,
+      usage: full.usage,
+      keys: Object.keys(full).sort(),
+    },
   };
 }
 
@@ -420,12 +444,50 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
   return { engine, agent, turns, requests };
 }
 
+/**
+ * Keys plain's `finish` chunk payload carries that durable and evented omit.
+ * Found by harness case T29 (engine comparison FAIL, batch
+ * 2026-09-25T16-30-32.791Z); no ticket yet. Applies to every scenario, so it
+ * lives here instead of in each case's `differences`.
+ */
+const FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES = ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'];
+
+function withKnownEngineDifferences(plain: EngineObservation): EngineObservation {
+  return {
+    ...plain,
+    turns: plain.turns.map(turn => ({
+      ...turn,
+      finishChunk: {
+        ...turn.finishChunk,
+        payloadKeys: turn.finishChunk.payloadKeys.filter(k => !FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.includes(k)),
+      },
+    })),
+  };
+}
+
+export function staleKnownDifferences(engine: string, actual: EngineObservation): string[] {
+  const fixed = new Set(
+    actual.turns.flatMap(t =>
+      t.finishChunk.payloadKeys.filter(k => FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.includes(k)),
+    ),
+  );
+  return fixed.size === 0
+    ? []
+    : [
+        `${engine}: finish payload now includes ${[...fixed].join(', ')}; remove them from FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`,
+      ];
+}
+
 function checkEngine(
   engine: Exclude<ParityEngine, 'plain'>,
-  plain: EngineObservation,
+  reference: EngineObservation,
   actual: EngineObservation,
   scenario: EngineParityScenario,
 ): string[] {
+  const stale = staleKnownDifferences(engine, actual);
+  if (stale.length > 0) return stale;
+
+  const plain = withKnownEngineDifferences(reference);
   const difference = scenario.differences?.[engine];
   const sharedIgnore = new Set(scenario.ignore ?? []);
   const raw = compareObservations(plain, actual, sharedIgnore);

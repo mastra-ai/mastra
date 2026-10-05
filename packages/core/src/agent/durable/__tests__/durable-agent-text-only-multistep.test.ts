@@ -5,7 +5,8 @@
  * second turn on the same thread must stream the same chunk shape and send
  * the full history to the model — identically on plain, durable and evented
  * agents. This file is the reference example for porting harness cases onto
- * `expectEngineParity`.
+ * `expectEngineParity`. The harness's engine comparison (chunk sequence, finish
+ * payload, usage, getFullOutput) is covered by the helper itself.
  */
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
@@ -47,8 +48,8 @@ describe('T29 text-only multistep (plain, durable, evented)', () => {
       const { turns, requests } = results[engine]!;
       const [turn] = turns;
       expect(turn!.chunks.filter(c => c.endsWith(':finish'))).toHaveLength(1);
-      expect(turn!.text).toBe('answer to: First question');
-      expect(turn!.streamedText).toBe(turn!.text);
+      expect(turn!.streamedText).toBe('answer to: First question');
+      expect(turn!.fullOutput.text).toBe(turn!.streamedText);
       expect(requests).toHaveLength(1);
       expect(await persistedRoles(engine)).toEqual(['user', 'assistant']);
     }
@@ -64,7 +65,7 @@ describe('T29 text-only multistep (plain, durable, evented)', () => {
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
-      expect(turns.map(t => t.text)).toEqual(['answer to: First question', 'answer to: Second question']);
+      expect(turns.map(t => t.streamedText)).toEqual(['answer to: First question', 'answer to: Second question']);
       expect(turns[1]!.chunks).toEqual(turns[0]!.chunks);
       expect(requests).toHaveLength(2);
       expect(requests[1]!.prompt.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
