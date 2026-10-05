@@ -15,12 +15,16 @@ export type MetricsCardGroupProps = {
  * card has room for its value, change badge and footer on one line each.
  * The group owns their width, so each card's own `min-w-*` is neutralised.
  */
+// No base `grid-cols-1` and no display switch: an app that loads this package's CSS next to
+// its own Tailwind output can emit the same plain utility later in the cascade, which would
+// beat a container-query utility of equal specificity. The single row is a grid track list,
+// marked important so it also wins over the `has-*` three-column rule.
 export function MetricsCardGroup({ children, className }: MetricsCardGroupProps) {
   return (
     <div className="@container">
       <div
         className={cn(
-          'grid grid-cols-1 gap-4 *:min-w-0! @xl:grid-cols-2 @3xl:has-[>:nth-child(5)]:grid-cols-3 @6xl:flex @6xl:*:flex-1',
+          'grid gap-4 *:min-w-0! @xl:grid-cols-2 @3xl:has-[>:nth-child(5)]:grid-cols-3 @6xl:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]!',
           className,
         )}
       >
