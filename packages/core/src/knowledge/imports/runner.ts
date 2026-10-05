@@ -9,8 +9,9 @@ import {
 import type { IMastraLogger } from '../../logger';
 import type { Knowledge } from '../index';
 import { runAgenticKnowledgeImport } from './agent-importer';
+import { KnowledgeCitationResolver } from './citations';
 import { createStaticKnowledgeImporterOperations } from './static-importer';
-import type { KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
+import type { KnowledgeCitationRef, KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
 
 const INTERNAL_STATE_PREFIX = '__mastra_internal/';
 const PAYLOAD_KEY_PREFIX = `${INTERNAL_STATE_PREFIX}import-payload/`;
@@ -234,6 +235,13 @@ export class KnowledgeImporterRunner {
         });
         return operations;
       };
+      const citations = importer.citations
+        ? new KnowledgeCitationResolver({
+            policy: importer.citations,
+            host: importerOperations,
+            signal: controller.signal,
+          })
+        : undefined;
       await importer.handler({
         knowledge: this.#knowledge,
         payload: (JSON.parse(payloadEntry.value) as { payload?: TPayload }).payload,
@@ -241,6 +249,7 @@ export class KnowledgeImporterRunner {
         signal: controller.signal,
         state,
         importer: importerOperations,
+        ...(citations ? { resolveCitations: (refs: readonly KnowledgeCitationRef[]) => citations.resolve(refs) } : {}),
         ...(importer.agentic
           ? {
               agentImport: async request => {
@@ -274,6 +283,11 @@ export class KnowledgeImporterRunner {
             }
           : {}),
       });
+      if (citations?.incomplete) {
+        throw new Error(
+          `Knowledge importer ${importer.importerId} left required citations unresolved (${citations.unresolvedSummary()})`,
+        );
+      }
       if (importer.agentic && !transcriptThreadId) {
         throw new Error(`Knowledge agentic importer ${importer.importerId} did not run its registered Agent`);
       }
