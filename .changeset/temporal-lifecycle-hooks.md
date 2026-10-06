@@ -19,4 +19,10 @@ const output = result.result;
 const stepResults = result.steps;
 ```
 
+Each entry in `result.steps` (and in the `steps` passed to `onFinish`/`onError`) now uses the standard step result shape, so read a step's output from `.output`:
+
+```ts
+const doubled = result.steps.double.output;
+```
+
 Request context values set in `onStart` are now sent to the Temporal workflow.

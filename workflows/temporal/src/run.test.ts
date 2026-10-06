@@ -86,7 +86,9 @@ describe('TemporalRun', () => {
   });
 
   describe('lifecycle hooks', () => {
-    const steps = { increment: { status: 'success', output: { ok: true } } };
+    const steps = {
+      increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
+    };
     const executionResult = (result: unknown) => ({ status: 'success', input: { value: 1 }, result, state: {}, steps });
 
     function createHookedWorkflow(

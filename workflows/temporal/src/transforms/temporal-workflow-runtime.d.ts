@@ -1,9 +1,17 @@
+export interface StepExecutionResult {
+  status: 'success';
+  payload: unknown;
+  output: unknown;
+  startedAt: number;
+  endedAt: number;
+}
+
 export interface WorkflowExecutionResult {
   status: 'success';
   input: unknown;
   result: unknown;
   state: unknown;
-  steps: Record<string, unknown>;
+  steps: Record<string, StepExecutionResult>;
 }
 
 export type StepEntry = {

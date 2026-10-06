@@ -76,6 +76,14 @@ afterEach(async () => {
   tempDirs.length = 0;
 });
 
+const succeeded = (output: unknown) =>
+  expect.objectContaining({
+    status: 'success',
+    output,
+    startedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  });
+
 describe('MastraPlugin', () => {
   it('retries prebuild after a failed build', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-prebuild-'));
@@ -267,11 +275,11 @@ describe('Temporal prebuild integration', () => {
       result: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       state: undefined,
       steps: {
-        step1: { value: 'test-step1' },
-        innerWorkflow: { value: 'test-step1-inner' },
-        step2: { step2: 'test-step1-inner-step2' },
-        step3: { step3: 'test-step1-inner-step3' },
-        step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        step1: succeeded({ value: 'test-step1' }),
+        innerWorkflow: succeeded({ value: 'test-step1-inner' }),
+        step2: succeeded({ step2: 'test-step1-inner-step2' }),
+        step3: succeeded({ step3: 'test-step1-inner-step3' }),
+        step4: succeeded({ result: 'test-step1-inner-step2|test-step1-inner-step3|final' }),
       },
     });
     const mappedWorkflow = workflowModule.mappedWorkflow;
@@ -286,7 +294,7 @@ describe('Temporal prebuild integration', () => {
       result: { doubled: 42 },
       state: undefined,
       steps: {
-        'mapping_mapped-workflow_0': { doubled: 42 },
+        'mapping_mapped-workflow_0': succeeded({ doubled: 42 }),
       },
     });
 

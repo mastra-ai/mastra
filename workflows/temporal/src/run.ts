@@ -95,7 +95,11 @@ export class TemporalRun<
     try {
       // The generated Temporal workflow returns the execution result ({ status, result, state, steps }).
       const output = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
-      result = { ...output, input: input as TInput };
+      result = {
+        ...output,
+        input: input as TInput,
+        steps: normalizeStepResults(output.steps),
+      } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
       result = this.failedResult(input, initialState, error);
     }
@@ -216,4 +220,27 @@ export class TemporalRun<
 
     return { runId: this.runId };
   }
+}
+
+function isStepResult(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    'output' in value &&
+    typeof (value as { startedAt?: unknown }).startedAt === 'number'
+  );
+}
+
+// Workers built before step results used the core StepResult shape return raw step outputs.
+function normalizeStepResults<T>(steps: T): T {
+  if (!steps || typeof steps !== 'object') {
+    return {} as T;
+  }
+  return Object.fromEntries(
+    Object.entries(steps).map(([id, value]) => [
+      id,
+      isStepResult(value) ? value : { status: 'success', output: value, startedAt: 0, endedAt: 0 },
+    ]),
+  ) as T;
 }

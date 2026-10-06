@@ -14,6 +14,14 @@ vi.mock('@temporalio/workflow', () => ({
   },
 }));
 
+const succeeded = (output: unknown) =>
+  expect.objectContaining({
+    status: 'success',
+    output,
+    startedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  });
+
 describe('temporal workflow runtime helper module', () => {
   beforeEach(() => {
     executeChild.mockReset();
@@ -53,7 +61,13 @@ describe('temporal workflow runtime helper module', () => {
       result: { city: 'SF', weather: 'sunny' },
       state: { started: true },
       steps: {
-        'fetch-weather': { city: 'SF', weather: 'sunny' },
+        'fetch-weather': {
+          status: 'success',
+          payload: { city: 'SF' },
+          output: { city: 'SF', weather: 'sunny' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       },
     });
   });
@@ -89,7 +103,7 @@ describe('temporal workflow runtime helper module', () => {
       result: { doubled: 42, initialValue: 21 },
       state: undefined,
       steps: {
-        [mappingId]: { doubled: 42, initialValue: 21 },
+        [mappingId]: succeeded({ doubled: 42, initialValue: 21 }),
       },
     });
   });
@@ -149,7 +163,7 @@ describe('temporal workflow runtime helper module', () => {
       result: { city: 'SF', child: true },
       state: undefined,
       steps: {
-        childWorkflow: { city: 'SF', child: true },
+        childWorkflow: succeeded({ city: 'SF', child: true }),
       },
     });
   });
@@ -200,8 +214,8 @@ describe('temporal workflow runtime helper module', () => {
       },
       state: undefined,
       steps: {
-        first: { first: 2 },
-        second: { second: 3 },
+        first: succeeded({ first: 2 }),
+        second: succeeded({ second: 3 }),
       },
     });
   });
@@ -227,7 +241,7 @@ describe('temporal workflow runtime helper module', () => {
       },
       state: undefined,
       steps: {
-        childWorkflow: { value: 'child-output' },
+        childWorkflow: succeeded({ value: 'child-output' }),
       },
     });
   });
@@ -260,8 +274,8 @@ describe('temporal workflow runtime helper module', () => {
         childWorkflow: { value: 'child-output' },
       },
       steps: {
-        activity: { value: 'parent-input-activity' },
-        childWorkflow: { value: 'child-output' },
+        activity: succeeded({ value: 'parent-input-activity' }),
+        childWorkflow: succeeded({ value: 'child-output' }),
       },
     });
   });
@@ -294,7 +308,7 @@ describe('temporal workflow runtime helper module', () => {
     expect(result).toMatchObject({
       result: [{ value: 11 }, { value: 12 }, { value: 13 }],
       steps: {
-        map: [{ value: 11 }, { value: 12 }, { value: 13 }],
+        map: succeeded([{ value: 11 }, { value: 12 }, { value: 13 }]),
       },
     });
   });
@@ -373,7 +387,7 @@ describe('temporal workflow runtime helper module', () => {
         smallStep: { path: 'small', value: 3 },
       },
       steps: {
-        smallStep: { path: 'small', value: 3 },
+        smallStep: succeeded({ path: 'small', value: 3 }),
       },
     });
   });
@@ -392,13 +406,13 @@ describe('temporal workflow runtime helper module', () => {
     await expect(doWhileWorkflow({ inputData: { value: 0 } })).resolves.toMatchObject({
       result: { value: 2 },
       steps: {
-        incrementWhile: { value: 2 },
+        incrementWhile: succeeded({ value: 2 }),
       },
     });
     await expect(doUntilWorkflow({ inputData: { value: 0 } })).resolves.toMatchObject({
       result: { value: 2 },
       steps: {
-        incrementUntil: { value: 2 },
+        incrementUntil: succeeded({ value: 2 }),
       },
     });
     expect(incrementWhile).toHaveBeenNthCalledWith(1, {
