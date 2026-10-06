@@ -335,7 +335,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             ? 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
           if (typeof abort === 'function') {
-            abort(abortMessage);
+            // Keep the turn so far in the thread: an observation failure is operational, not a policy block.
+            abort(abortMessage, { persist: true });
           }
           throw err;
         }

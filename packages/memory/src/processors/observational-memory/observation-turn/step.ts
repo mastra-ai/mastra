@@ -240,12 +240,13 @@ export class ObservationStep {
     let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
       if (this.stepNumber > 0) {
-        // Save messages from previous step
-        const newInput = messageList.clear.input.db();
-        const newOutput = messageList.clear.response.db();
-        const messagesToSave = [...newInput, ...newOutput];
+        // Save messages from previous step. Drain the buckets only after the save succeeds, so a
+        // failed save leaves them in place for the end-of-turn save.
+        const messagesToSave = [...messageList.get.input.db(), ...messageList.get.response.db()];
         if (messagesToSave.length > 0) {
           await om.persistMessages(messagesToSave, threadId, resourceId);
+          messageList.clear.input.db();
+          messageList.clear.response.db();
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
           }
