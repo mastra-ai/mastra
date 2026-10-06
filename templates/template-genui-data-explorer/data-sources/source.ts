@@ -71,7 +71,7 @@ const dateSchema = z
 export const dateRangeSchema = z
   .strictObject({ start: dateSchema, end: dateSchema })
   .refine((value) => value.start < value.end, "Start must precede exclusive end.");
-export const analysisRequestSchema = z.strictObject({
+const analysisRequestFields = {
   metric: z.string().min(1).max(80),
   period: dateRangeSchema.optional(),
   baseline: dateRangeSchema.optional(),
@@ -80,7 +80,65 @@ export const analysisRequestSchema = z.strictObject({
   filters: z.record(z.string().max(80), scalarSchema).optional(),
   groupBy: z.string().trim().min(1).max(80).optional(),
   records: z.boolean().optional(),
+};
+export const analysisRequestSchema = z.strictObject(analysisRequestFields).transform((request) => {
+  // Provider compatibility converts optional nulls to enumerable undefined fields.
+  // Omit only absent known fields after strict validation, before capability checks.
+  return Object.fromEntries(
+    Object.entries(request).filter(([, value]) => value !== undefined),
+  ) as typeof request;
 });
+
+/** Named filters are expressible in strict provider schemas; open-ended records are not. */
+export function analysisToolSchema(descriptor: SourceDescriptor) {
+  const filters = [...new Set(descriptor.capabilities.flatMap((entry) => entry.filters))];
+  const supportedBy = (field: SourceDescriptor["capabilities"][number]["fields"][number]) =>
+    descriptor.capabilities
+      .filter((entry) => entry.fields.includes(field))
+      .map((entry) => entry.metric)
+      .join(", ");
+  return z
+    .strictObject({
+      ...analysisRequestFields,
+      metric: z.enum(descriptor.capabilities.map((entry) => entry.metric)),
+      period: analysisRequestFields.period.describe(
+        `Start-inclusive/end-exclusive range. Only for: ${supportedBy("period")}.`,
+      ),
+      baseline: analysisRequestFields.baseline.describe(
+        `Explicit comparison range. Only for: ${supportedBy("baseline")}. Otherwise absent/null.`,
+      ),
+      horizon: analysisRequestFields.horizon.describe(
+        `Forecast range. Only for: ${supportedBy("horizon")}. Otherwise absent/null.`,
+      ),
+      asOf: analysisRequestFields.asOf.describe(
+        `Inclusive snapshot day. Only for: ${supportedBy("asOf")}. Not a general reference date; otherwise absent/null.`,
+      ),
+      filters: z
+        .strictObject(Object.fromEntries(filters.map((field) => [field, scalarSchema.optional()])))
+        .optional()
+        .describe(
+          "Only requested cohort filters. Leave unused filters absent/null; never replace filtering with grouping.",
+        ),
+      records: z
+        .literal(true)
+        .optional()
+        .describe(
+          "Use true only for underlying records and only if the metric advertises records; otherwise absent/null.",
+        ),
+    })
+    .transform((request) =>
+      analysisRequestSchema.parse({
+        ...request,
+        ...(request.filters
+          ? {
+              filters: Object.fromEntries(
+                Object.entries(request.filters).filter(([, value]) => value !== undefined),
+              ),
+            }
+          : {}),
+      }),
+    );
+}
 export const sourceCapabilitySchema = z
   .strictObject({
     metric: z.string().min(1),

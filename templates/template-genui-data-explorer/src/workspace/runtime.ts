@@ -129,17 +129,8 @@ export class WorkspaceAgent extends AbstractAgent {
             properties.correction,
           );
           send({ type: EventType.STATE_SNAPSHOT, snapshot: result.snapshot });
+          // Failure notices live in workspace status, never in accepted chat history.
           send({ type: EventType.MESSAGES_SNAPSHOT, messages: result.snapshot.workspace.messages });
-          if (result.snapshot.status !== "saved") {
-            const id = randomUUID();
-            send({ type: EventType.TEXT_MESSAGE_START, messageId: id, role: "assistant" });
-            send({
-              type: EventType.TEXT_MESSAGE_CONTENT,
-              messageId: id,
-              delta: result.snapshot.message,
-            });
-            send({ type: EventType.TEXT_MESSAGE_END, messageId: id });
-          }
           send({ type: EventType.RUN_FINISHED, threadId, runId: input.runId });
           subscriber.complete();
         } catch (error) {

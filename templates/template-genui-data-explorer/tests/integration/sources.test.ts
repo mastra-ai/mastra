@@ -8,6 +8,7 @@ import { SalesSource } from "../../data-sources/sales/source.ts";
 import { prepareSource, sources } from "../../scripts/sources.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";
 import { referenceFixture } from "../fixtures/reference.ts";
+import { analysisRequestSchema, analysisToolSchema } from "../../data-sources/source.ts";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -19,6 +20,66 @@ async function scratch() {
   directories.push(directory);
   return directory;
 }
+
+it("absent optional fields preserve source semantics without allowing unknown or unsupported values", async () => {
+  const path = join(await scratch(), "optional-fields.sqlite");
+  referenceFixture(path).db.close();
+  const source = new SalesSource(path);
+  try {
+    for (const example of source.describe().examples) {
+      const request = {
+        period: undefined,
+        baseline: undefined,
+        horizon: undefined,
+        asOf: undefined,
+        filters: undefined,
+        groupBy: undefined,
+        records: undefined,
+        ...example.request,
+      };
+      expect(analysisRequestSchema.parse(request)).toStrictEqual(example.request);
+      const actual = await source.execute(request);
+      const expected = await source.execute(example.request);
+      expect(actual).toEqual(expected);
+    }
+    const request = { metric: "bookings", period: { start: "2025-03-01", end: "2025-04-01" } };
+    expect(analysisRequestSchema.safeParse({ ...request, sql: undefined }).success).toBe(false);
+    expect(analysisRequestSchema.safeParse({ ...request, period: null }).success).toBe(false);
+    await expect(source.execute({ ...request, asOf: "2025-03-01" })).rejects.toThrow();
+    await expect(
+      source.execute({ metric: "customerChurn", period: request.period, filters: {} }),
+    ).rejects.toThrow();
+    expect((await source.execute({ ...request, records: false })).request.records).toBe(false);
+    const tool = analysisToolSchema(source.describe());
+    expect(
+      tool.parse({ ...request, filters: { segment: "SMB", region: undefined } }),
+    ).toStrictEqual({
+      ...request,
+      filters: { segment: "SMB" },
+    });
+    expect(tool.safeParse({ ...request, filters: { hidden: "value" } }).success).toBe(false);
+    expect(tool.safeParse({ ...request, records: false }).success).toBe(false);
+    expect(tool.parse({ ...request, records: true }).records).toBe(true);
+    const reference = new ReferenceSource();
+    const descriptor = reference.describe();
+    const customTool = analysisToolSchema({
+      ...descriptor,
+      capabilities: descriptor.capabilities.map((entry) => ({ ...entry, filters: ["team"] })),
+    });
+    expect(
+      customTool.parse({ metric: descriptor.capabilities[0]!.metric, filters: { team: "blue" } })
+        .filters,
+    ).toStrictEqual({ team: "blue" });
+    expect(
+      customTool.safeParse({
+        metric: descriptor.capabilities[0]!.metric,
+        filters: { segment: "SMB" },
+      }).success,
+    ).toBe(false);
+  } finally {
+    await source.close();
+  }
+});
 
 it("substitutes a non-SQL source without opening or preparing unselected or disabled Sales", async () => {
   const directory = await scratch();

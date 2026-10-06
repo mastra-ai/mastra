@@ -51,6 +51,15 @@ export const representationSchema = z.strictObject({
   role: z.enum(["scalar", "series", "ranked", "records"]),
   columns: z.array(tableColumnSchema).max(50),
   grouping: z.string().min(1).max(80).optional(),
+  compatibleComponents: z
+    .array(
+      z.object({
+        id: z.string(),
+        version: z.string(),
+        kind: z.string(),
+      }),
+    )
+    .optional(),
 });
 export function representation(result: VerifiedResult) {
   const table = result.data.table;

@@ -9,12 +9,29 @@ export const componentProperties = z.strictObject({
     .trim()
     .min(1)
     .max(100)
-    .refine(
-      (value) => !/\d|https?:|[<>]/i.test(value),
+    .regex(
+      /^[^\d<>]*$/,
       "Titles must be plain nonnumeric labels; numeric facts come from verified data.",
+    )
+    .refine(
+      (value) => !/https?:/i.test(value),
+      "Titles must be plain nonnumeric labels; numeric facts come from verified data.",
+    )
+    .describe(
+      "Short plain label without digits, dates, URLs or markup. Values and periods are rendered from verified data.",
     ),
-  x: z.string().max(80).optional(),
-  y: z.string().max(80).optional(),
+  x: z
+    .string()
+    .max(80)
+    .optional()
+    .describe(
+      "Charts only: exact returned grouping column key, not its label. Otherwise absent/null.",
+    ),
+  y: z
+    .string()
+    .max(80)
+    .optional()
+    .describe("Charts only: exact numeric column key with the metric unit. Otherwise absent/null."),
   scenario: z.boolean().optional(),
   options: z
     .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))

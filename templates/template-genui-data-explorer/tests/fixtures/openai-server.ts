@@ -56,11 +56,19 @@ export function deterministicOpenAI() {
           ? {
               name: "analyze",
               arguments: JSON.stringify({
+                // Real OpenAI strict outputs include unused optional fields as null.
+                baseline: null,
+                horizon: null,
+                asOf: null,
+                filters: /SMB/.test(question)
+                  ? { ownerId: null, segment: "SMB", region: null, stage: null }
+                  : null,
+                groupBy: records ? null : ranked ? "segment" : "month",
+                records: records ? true : null,
                 metric: "bookings",
                 period: records
                   ? { start: source.asOf.slice(0, 7) + "-01", end: source.coverage.end }
                   : source.coverage,
-                ...(records ? { records: true } : { groupBy: ranked ? "segment" : "month" }),
               }),
             }
           : tools.length === 1

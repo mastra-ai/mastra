@@ -3,7 +3,7 @@ import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import type { Memory } from "@mastra/memory";
-import { analysisRequestSchema, SourceError } from "../../data-sources/source.ts";
+import { analysisToolSchema, SourceError } from "../../data-sources/source.ts";
 import type { SourceDescriptor } from "../../data-sources/source.ts";
 import { agentCatalog, compositionSchema, validateComposition } from "../ui/catalog.ts";
 import type { ComponentDeclaration } from "../ui/catalog.ts";
@@ -22,7 +22,7 @@ export function explorerAgent(
     id: "analyze",
     description:
       "Execute a supported typed read-only metric. The server chooses the source, clock and limits. Never submit SQL, paths or numeric facts.",
-    inputSchema: analysisRequestSchema,
+    inputSchema: analysisToolSchema(descriptor),
     outputSchema: representationSchema,
     execute: async (inputData, context) => {
       const session = sessionFrom(context?.requestContext);
@@ -49,7 +49,22 @@ export function explorerAgent(
             )
           );
         sessionFrom(context?.requestContext);
-        return representation(output.result);
+        const view = representation(output.result);
+        return {
+          ...view,
+          ...(options.catalog
+            ? {
+                compatibleComponents: catalog
+                  .filter(
+                    (entry) =>
+                      entry.enabled &&
+                      entry.roles.includes(view.role) &&
+                      entry.units.includes(view.unit),
+                  )
+                  .map(({ id, version, kind }) => ({ id, version, kind })),
+              }
+            : {}),
+        };
       } catch (error) {
         session.failure =
           error instanceof SourceError
@@ -93,9 +108,11 @@ export function explorerAgent(
     instructions: ({ requestContext }) =>
       [
         "Select supported metrics with analyze. Use the source's saved clock for relative questions. Ask for clarification when ambiguous. Never claim causation from descriptive data, supply raw SQL, or invent facts. Return only a brief nonnumeric acknowledgement after tool calls.",
+        "Periods are start-inclusive and end-exclusive. For the last N complete months, if coverage.end is the first of a month, use it as the exclusive end and subtract N calendar months for the start. Do not use the inclusive asOf day as a period end. Prefer source example periods for matching relative questions.",
+        "Use only fields advertised for the chosen metric. Unused fields must be absent/null, including records; records is true only for record inspection. Apply a requested segment/owner/region as filters, not as a grouping substitute. A total for one segment needs its filter and no groupBy unless a breakdown is requested.",
         ...(options.catalog
           ? [
-              "After analyzing, use compose with verified result metadata for axes and units. Refine accepted card IDs to replace them; new IDs add cards.",
+              "After analyzing, use compose with the exact resultId, role, columns[].key and grouping returned by analyze. Choose only from that result's compatibleComponents list. Do not invent column names from metric names or column labels. Prefer line for series, bar for ranked, table for records, metric for scalar. Charts use x=returned grouping and y=the compatible numeric column key; scalar/table views have no x or y. Empty columns mean no chart axes exist: use a scalar component, including for a forecast. Titles must be short plain labels WITHOUT digits or dates. Set scenario=true for forecasts. Unused properties are absent/null. Refine accepted card IDs to replace them; new IDs add cards.",
             ]
           : []),
         `Source descriptor: ${JSON.stringify(descriptor)}`,
@@ -133,6 +150,17 @@ export function explorerAgent(
             "budget-exceeded",
             "The model exhausted its response or step budget. Ask a smaller question.",
           );
+        else if (
+          options.catalog &&
+          !session.failure &&
+          !session.composition &&
+          session.results.length &&
+          session.results.every((result) => result.data.status === "available")
+        )
+          session.failure = new SourceError(
+            "invalid-composition",
+            "No validated UI composition was selected. Ask for a supported view and retry.",
+          );
       },
       prepareStep: () => {
         const session = sessionFrom(requestContext);
@@ -144,6 +172,13 @@ export function explorerAgent(
           );
           throw session.failure;
         }
+        if (
+          options.catalog &&
+          !session.composition &&
+          session.results.length &&
+          session.results.every((result) => result.data.status === "available")
+        )
+          return { toolChoice: "required" as const };
         return {};
       },
     }),

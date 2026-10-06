@@ -104,6 +104,35 @@ test.afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
+test("a rejected or failed question can be followed by a valid question without reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const input = page.getByPlaceholder("Ask about Sales…");
+  for (const [question, message] of [
+    ["DELETE FROM opportunities", "Raw SQL, writes and internal stores are unavailable."],
+    ["Why did Sales fall?", "These descriptive data do not establish causes"],
+  ] as const) {
+    await input.fill(question);
+    await input.press("Enter");
+    await expect(page.locator('[data-status="incomplete"]')).toBeVisible();
+    await expect(page.locator('[data-status="incomplete"]')).toContainText(message);
+    expect((await saved(page)).revision).toBe(0);
+    expect((await saved(page)).messages).toEqual([]);
+  }
+  await ask(page, "Show monthly bookings", 1);
+  const before = await saved(page);
+  triggerSaveFailure(true);
+  await input.fill("Show ranked segment bookings");
+  await input.press("Enter");
+  await expect(page.getByText(/Workspace save failed/).first()).toBeVisible();
+  expect((await saved(page)).messages).toEqual(before.messages);
+  triggerSaveFailure(false);
+  await ask(page, "Show ranked segment bookings", 2);
+  expect((await saved(page)).components.some((view) => view.component === "bar")).toBe(true);
+  await expect(page.getByText(/Conversation history does not match/)).toHaveCount(0);
+});
+
 test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo) => {
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);

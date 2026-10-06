@@ -10,6 +10,107 @@ import { workspaceId, threadId } from "../../src/workspace/contracts.ts";
 import { referenceFixture } from "../fixtures/reference.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";
 import { workspaceModel } from "../fixtures/workspace-model.ts";
+import { deterministicOpenAI } from "../fixtures/openai-server.ts";
+import { DataExplorer } from "../../src/analysis/explorer.ts";
+import { SalesSource } from "../../data-sources/sales/source.ts";
+import { analysisModel } from "../fixtures/analysis-model.ts";
+
+it("a verified scalar cannot complete a visual request without composition", async () => {
+  const provider = analysisModel([
+    { metric: "bookings", period: { start: "2025-03-01", end: "2025-04-01" } },
+  ]);
+  const explorer = new DataExplorer(new ReferenceSource(), provider.model, { catalog: components });
+  let saved = false;
+  try {
+    const outcome = await explorer.analyze(
+      {
+        workspaceId,
+        threadId,
+        requestId: "missing-composition",
+        baseRevision: 0,
+        question: "Show bookings as a metric card",
+      },
+      {
+        onComplete: () => {
+          saved = true;
+        },
+      },
+    );
+    expect(outcome).toMatchObject({ status: "failed", code: "invalid-composition" });
+    expect(saved).toBe(false);
+    expect(explorer.lastComplete(workspaceId)).toEqual([]);
+    expect(provider.calls[1]?.toolChoice).toEqual({ type: "required" });
+  } finally {
+    await explorer.close();
+  }
+});
+
+it("OpenAI optional null arguments produce a verified composed result", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "provider-arguments-"));
+  const path = join(dir, "sales.sqlite");
+  const fixture = referenceFixture(path);
+  fixture.db.exec(
+    "INSERT INTO opportunities VALUES (6,2,'2025-01-01'); INSERT INTO opportunity_history VALUES (6,'2025-03-15','won',6000,'2025-03-15',2,'Enterprise');",
+  );
+  fixture.db.close();
+  const provider = deterministicOpenAI();
+  await new Promise<void>((resolve) => provider.server.listen(0, "127.0.0.1", resolve));
+  const address = provider.server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture address.");
+  const explorer = new DataExplorer(
+    new SalesSource(path),
+    {
+      providerId: "openai",
+      modelId: "gpt-4.1-mini",
+      apiKey: "synthetic-local-provider",
+      url: `http://127.0.0.1:${address.port}/v1`,
+      api: "chat",
+    },
+    { catalog: components },
+  );
+  let composed = false;
+  try {
+    const outcome = await explorer.analyze(
+      {
+        workspaceId,
+        threadId,
+        requestId: "nullable-provider",
+        baseRevision: 0,
+        question: "Show monthly bookings",
+      },
+      {
+        onComplete: (session) => {
+          composed = session.composition?.components[0]?.component === "line";
+        },
+      },
+    );
+    expect(outcome.status).toBe("complete");
+    expect(outcome.results[0]?.data.value).toBe(42000);
+    expect(outcome.results[0]?.data.request).toEqual({
+      metric: "bookings",
+      period: explorer.describe().coverage,
+      groupBy: "month",
+    });
+    expect(composed).toBe(true);
+    expect(provider.stages.map((stage) => stage.tools)).toEqual([0, 1, 2]);
+    const filtered = await explorer.analyze({
+      workspaceId,
+      threadId,
+      requestId: "nullable-filters",
+      baseRevision: 0,
+      question: "Show SMB monthly bookings",
+    });
+    expect(filtered.status).toBe("complete");
+    expect(filtered.results[0]?.data.request.filters).toStrictEqual({ segment: "SMB" });
+    expect(filtered.results[0]?.data.value).toBe(36000);
+  } finally {
+    await explorer.close();
+    await new Promise<void>((resolve, reject) =>
+      provider.server.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 it("official Mastra adapter streams verified compositions and saves a workspace", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workspace-transport-"));
