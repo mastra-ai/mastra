@@ -173,10 +173,12 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       () => {
         appendAttempts++;
         // Each attempt takes its own queue slot (no slot is held across retry backoff) and
-        // targets the head as it is when the slot runs.
+        // targets the head of this record's lineage as it is when the slot runs. If the record
+        // was cleared meanwhile, the thread's current record is unrelated: write nothing.
         return this.runCommit(async () => {
-          const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-          if (head) targetId = head.id;
+          const head = await getLineageHead(this.storage, record);
+          if (!head) return null;
+          targetId = head.id;
           const input = {
             id: targetId,
             chunk: {
@@ -202,6 +204,10 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       },
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
+    if (appendResult === null) {
+      omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record was cleared`);
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
+    }
     // Storage skips a chunk it already holds (same cycle) or whose messages the cursor already
     // covers. A first-attempt skip is final: this cycle's chunk never landed. A skip after a
     // retried write can mean an earlier attempt landed (and may already be activated), so look

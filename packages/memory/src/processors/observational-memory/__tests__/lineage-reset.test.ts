@@ -123,4 +123,56 @@ describe('a cycle that spans a clear', () => {
       }
     }
   }
+
+  it('a buffered chunk is not appended to a record created between its persist check and its commit slot', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const t0 = new Date(Date.now() - 60_000);
+    await storage.saveThread({ thread: { id: threadId, resourceId, title: 'old', createdAt: t0, updatedAt: t0 } });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1000, bufferTokens: 200 },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 2000 },
+    });
+    const origin = await om.getOrCreateRecord(threadId, resourceId);
+
+    // The first head read after the Observer returns is the persist check. Let it see the
+    // original record, then clear and recreate before the append's commit slot runs.
+    const read = storage.getObservationalMemory.bind(storage);
+    let recreated: Awaited<ReturnType<typeof om.getOrCreateRecord>> | undefined;
+    vi.spyOn(om.observer, 'call').mockImplementation(async () => {
+      vi.spyOn(storage, 'getObservationalMemory').mockImplementation(async (t, r) => {
+        const head = await read(t, r);
+        if (!recreated) {
+          vi.mocked(storage.getObservationalMemory).mockRestore();
+          await om.clear(threadId, resourceId);
+          recreated = await om.getOrCreateRecord(threadId, resourceId);
+        }
+        return head;
+      });
+      return { observations: DELETED_FACT } as any;
+    });
+
+    const messages: MastraDBMessage[] = [
+      {
+        id: `msg-${randomUUID()}`,
+        role: 'user',
+        type: 'text',
+        threadId,
+        resourceId,
+        createdAt: new Date(t0.getTime() + 1000),
+        content: { format: 2, parts: [{ type: 'text', text: `${DELETED_FACT} ${'words '.repeat(1500)}` }] },
+      },
+    ];
+    await storage.saveMessages({ messages });
+    await om.buffer({ threadId, resourceId, record: origin, messages }).catch(() => undefined);
+
+    expect(recreated).toBeDefined();
+    const head = (await storage.getObservationalMemory(threadId, resourceId))!;
+    expect(head.id).toBe(recreated!.id);
+    expect(head.bufferedObservationChunks ?? []).toHaveLength(0);
+    expect(JSON.stringify(head)).not.toContain(DELETED_FACT);
+  });
 });
