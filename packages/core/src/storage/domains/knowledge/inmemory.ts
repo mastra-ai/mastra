@@ -53,6 +53,7 @@ import type {
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   UpdateKnowledgeImportRunInput,
+  ReplaceKnowledgeNodeRecordsInput,
   UpdateKnowledgeNodeInput,
 } from './base';
 
@@ -703,40 +704,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  override async replaceNodeRecords(input: {
-    node: UpdateKnowledgeNodeInput;
-    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
-    visibilityScopeIds: KnowledgeScopeIds;
-  }): Promise<KnowledgeRecord> {
+  override async replaceNodeRecords(input: ReplaceKnowledgeNodeRecordsInput): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.node.importRunId);
     this.#assertImportRunExists(input.record.importRunId);
-    const scopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
     return this.#runAtomicMutation(() => {
-      const node = this.#updateNode(input.node);
-      let after = '';
-      while (true) {
-        const page = [...this.#db.knowledgeRecords.values()]
-          .filter(
-            record =>
-              record.nodeId === node.id &&
-              record.source === input.record.source &&
-              !record.deletedAt &&
-              record.id > after,
-          )
-          .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-          .slice(0, 100);
-        if (!page.length) break;
-        for (const record of page) {
-          if (this.#isRecordVisible(record, scopeIds))
-            this.#deleteRecord({
-              id: record.id,
-              version: record.version,
-              deletedBy: input.record.source,
-              importRunId: input.record.importRunId,
-            });
-          after = record.id;
-        }
+      this.#assertExpectedAccessEpoch(input.node.expectedAccessEpoch);
+      for (const replaced of input.replacedRecords) {
+        const record = this.#db.knowledgeRecords.get(replaced.id);
+        if (!record || record.nodeId !== input.node.id || record.deletedAt)
+          throw new KnowledgeConflictError(replaced.id);
+        this.#deleteRecord({
+          id: replaced.id,
+          version: replaced.version,
+          deletedBy: input.deletedBy,
+          importRunId: input.record.importRunId,
+        });
       }
+      const node = this.#updateNode(input.node);
       return this.#createRecord({ ...input.record, node });
     });
   }

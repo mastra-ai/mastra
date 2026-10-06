@@ -200,6 +200,11 @@ describe('KnowledgeLibSQL replacement rollback', () => {
       await expect(
         store.replaceNodeRecords({
           node: { id: node.id, version: node.version },
+          replacedRecords: Array.from({ length: 105 }, (_, index) => ({
+            id: `prior-${String(index).padStart(3, '0')}`,
+            version: 1,
+          })),
+          deletedBy: 'curator',
           record: {
             id: 'replacement',
             text: 'Replacement [[New link]]',
@@ -207,7 +212,6 @@ describe('KnowledgeLibSQL replacement rollback', () => {
             scopeIds: [scopeId],
             metadata: { sourceThreadId: 'new' },
           },
-          visibilityScopeIds: [scopeId],
         }),
       ).rejects.toThrow(stage === 'commit' ? /FOREIGN KEY/ : `injected ${stage} failure`);
       expect(await snapshot()).toEqual(before);
