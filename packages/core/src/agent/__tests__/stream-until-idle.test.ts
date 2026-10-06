@@ -195,6 +195,43 @@ describe('Agent.streamUntilIdle', () => {
     expect(getCallCount()).toBe(1);
   });
 
+  it('does not recurse when untilIdle comes from static defaultOptions (no bg manager)', async () => {
+    const plainMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    const agent = new Agent({ id: 'd1', name: 'd1', instructions: 'test', model, defaultOptions: { untilIdle: true } });
+    plainMastra.addAgent(agent, 'd1');
+
+    const result = await agent.stream('hi');
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    expect(chunks.some(c => c?.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(1);
+  });
+
+  it('does not recurse when untilIdle comes from dynamic defaultOptions with memory and a bg manager', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    let defaultsRead = 0;
+    const agent = new Agent({
+      id: 'd2',
+      name: 'd2',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (++defaultsRead > 20) throw new Error('untilIdle recursively re-entered defaultOptions');
+        return { untilIdle: true };
+      },
+    });
+    mastra.addAgent(agent, 'd2');
+
+    const result = await agent.stream('hi', { memory: { thread: 'thread-d2', resource: 'user-1' } });
+    await drain(result.fullStream as ReadableStream<any>);
+
+    expect(getCallCount()).toBe(1);
+    expect(defaultsRead).toBeLessThan(5);
+  });
+
   it('keeps a caller runId on the initial turn but not autonomous continuations', async () => {
     const memory = new MockMemory();
     const { model } = makeScriptedModel([textResponse('first response'), textResponse('continuation response')]);
