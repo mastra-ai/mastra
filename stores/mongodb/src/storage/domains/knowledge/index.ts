@@ -22,7 +22,6 @@ import {
   sanitizeKnowledgeImportError,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
   TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
@@ -38,6 +37,7 @@ import {
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
+  KnowledgeCurationCursor,
   ApplyKnowledgeProposalInput,
   ClaimKnowledgeImportRunInput,
   CreateKnowledgeProposalInput,
@@ -195,6 +195,10 @@ function assertImportRunTransition(
   if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
 }
 
+// Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
 export class KnowledgeMongoDB extends KnowledgeStorage {
   static readonly MANAGED_COLLECTIONS = [
     TABLE_KNOWLEDGE_NODES,
@@ -210,7 +214,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     TABLE_KNOWLEDGE_IMPORT_RUNS,
     TABLE_KNOWLEDGE_PROPOSALS,
     TABLE_KNOWLEDGE_SCHEMA,
-    TABLE_KNOWLEDGE_CURSORS,
     TABLE_KNOWLEDGE_ACTIVITY,
     TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   ] as const;
@@ -316,7 +319,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       { collection: TABLE_KNOWLEDGE_IMPORT_RUNS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_KNOWLEDGE_IMPORT_RUNS, keys: { importerId: 1, binding: 1, queuedAt: -1 } },
       { collection: TABLE_KNOWLEDGE_PROPOSALS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_KNOWLEDGE_CURSORS, keys: { sourceThreadId: 1, agent: 1 }, options: { unique: true } },
       { collection: TABLE_KNOWLEDGE_ACTIVITY, keys: { id: -1 } },
       { collection: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, keys: { idempotencyKey: 1 }, options: { unique: true } },
@@ -2738,40 +2740,24 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     );
   }
 
-  async getCurationCursor(input: {
-    sourceThreadId: string;
-    agent: string;
-  }): Promise<{ sourceThreadId: string; agent: string; lastKnowledgeId: string; updatedAt: Date } | null> {
-    const row = await (await this.#collection(TABLE_KNOWLEDGE_CURSORS)).findOne(input);
-    return row
-      ? {
-          sourceThreadId: String(row.sourceThreadId),
-          agent: String(row.agent),
-          lastKnowledgeId: String(row.lastKnowledgeId),
-          updatedAt: toDate(row.updatedAt),
-        }
-      : null;
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
-  async advanceCurationCursor(input: {
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
     sourceThreadId: string;
     agent: string;
     lastKnowledgeId: string;
-  }): Promise<{ sourceThreadId: string; agent: string; lastKnowledgeId: string; updatedAt: Date }> {
-    const updatedAt = new Date();
-    const row = await (
-      await this.#collection(TABLE_KNOWLEDGE_CURSORS)
-    ).findOneAndUpdate(
-      {
-        sourceThreadId: input.sourceThreadId,
-        agent: input.agent,
-        $or: [{ lastKnowledgeId: { $lt: input.lastKnowledgeId } }, { lastKnowledgeId: { $exists: false } }],
-      },
-      { $set: { ...input, updatedAt } },
-      { upsert: true, returnDocument: 'after' },
-    );
-    if (row) return { ...input, lastKnowledgeId: String(row.lastKnowledgeId), updatedAt: toDate(row.updatedAt) };
-    return (await this.getCurationCursor(input))!;
+  }): Promise<KnowledgeCurationCursor> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
   #activityVisibilityPipeline(scopeIds: string[], membershipScopeIds?: string[]): Document[] {
