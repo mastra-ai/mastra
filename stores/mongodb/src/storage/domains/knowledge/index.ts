@@ -81,6 +81,7 @@ import type {
   RestoreKnowledgeNodeInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
+  ReplaceKnowledgeNodeRecordsInput,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { MongoServerError } from 'mongodb';
@@ -1415,35 +1416,20 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return nodeFromDocument(targetRow);
   }
 
-  async replaceNodeRecords(input: {
-    node: UpdateKnowledgeNodeInput;
-    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
-    visibilityScopeIds: KnowledgeScopeIds;
-  }): Promise<KnowledgeRecord> {
+  async replaceNodeRecords(input: ReplaceKnowledgeNodeRecordsInput): Promise<KnowledgeRecord> {
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, input.node.expectedAccessEpoch);
-      const visibilityScopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
-      const records = await (
-        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-      )
-        .find(
-          { nodeId: input.node.id, source: input.record.source, deletedAt: { $exists: false } },
-          sessionOptions(session),
-        )
-        .toArray();
-      for (const document of records) {
-        const record = recordFromDocument(document);
-        if (!(await this.#isRecordVisible(record, visibilityScopeIds, session))) continue;
-        const scopeIds = await this.#getRecordScopeIds(record.id, session);
+      for (const replaced of input.replacedRecords) {
+        const scopeIds = await this.#getRecordScopeIds(replaced.id, session);
         const updatedAt = new Date();
         const result = await (
           await this.#collection(TABLE_KNOWLEDGE_RECORDS)
         ).findOneAndUpdate(
-          { id: record.id, version: record.version, deletedAt: { $exists: false } },
-          { $set: { deletedAt: updatedAt, deletedBy: input.record.source, updatedAt }, $inc: { version: 1 } },
+          { id: replaced.id, nodeId: input.node.id, version: replaced.version, deletedAt: { $exists: false } },
+          { $set: { deletedAt: updatedAt, deletedBy: input.deletedBy, updatedAt }, $inc: { version: 1 } },
           { ...sessionOptions(session), returnDocument: 'after' },
         );
-        if (!result) throw new KnowledgeConflictError(record.id);
+        if (!result) throw new KnowledgeConflictError(replaced.id);
         const deleted = recordFromDocument(result);
         await this.#activity(
           'delete',
