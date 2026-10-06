@@ -147,6 +147,18 @@ describe('handlePackFallbackState', () => {
     expect(ectx.state.fallbackStatus).toBeUndefined();
   });
 
+  it('clears the pending marker when pack application fails', async () => {
+    const { ectx, stateSet, threadSetSetting } = makeContext();
+    mocks.applyPackToSession.mockRejectedValueOnce(new Error('apply failed'));
+
+    await expect(handlePackFallbackState(ectx, { state: { [KEY]: pending() }, changedKeys: [KEY] })).rejects.toThrow(
+      'apply failed',
+    );
+
+    expect(threadSetSetting).toHaveBeenCalledWith({ threadId: 'thread-1', key: KEY, value: undefined });
+    expect(stateSet).toHaveBeenCalledWith({ [KEY]: null });
+  });
+
   it('clears a marker whose target entry is no longer a pack', async () => {
     const { ectx, threadSetSetting } = makeContext();
 

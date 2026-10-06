@@ -354,39 +354,44 @@ export async function handlePackFallbackState(
     failedPack: failedPack?.name ?? pending.fromEntryId,
   };
 
-  await applyPackToSession(ectx, pending.toEntryId, {
-    clearPendingFallback: false,
-    afterApply: async selection => {
-      if (!isOriginThreadActive()) return;
-      await setOriginThreadSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
-      if (!isOriginThreadActive()) return;
+  try {
+    await applyPackToSession(ectx, pending.toEntryId, {
+      clearPendingFallback: false,
+      afterApply: async selection => {
+        if (!isOriginThreadActive()) return;
+        await setOriginThreadSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
+        if (!isOriginThreadActive()) return;
 
-      const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
-        | string
-        | undefined;
-      const currentModeId = ectx.state.session.mode.get();
-      const runtimeSettings = {
-        ...settings,
-        models: { ...settings.models, activeModelPackId: pending.toEntryId },
-      };
-      const defaultThinking = resolveDefaultThinkingLevel(runtimeSettings, currentModeId);
-      const effectiveThinking = sessionOverride ?? defaultThinking.level;
-      const routeUsesOpenAI = selection.modelRoute.entries.some(entry => entry.modelId.startsWith('openai/'));
-      if (
-        routeUsesOpenAI &&
-        sessionOverride === undefined &&
-        defaultThinking.source === 'global' &&
-        defaultThinking.level === 'off'
-      ) {
-        await ectx.state.session.state.set({ thinkingLevel: 'low' });
-      } else if (selection.modelId.startsWith('openai/') && effectiveThinking === 'max') {
-        await ectx.state.session.state.set({ thinkingLevel: 'xhigh' });
-      }
+        const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
+          | string
+          | undefined;
+        const currentModeId = ectx.state.session.mode.get();
+        const runtimeSettings = {
+          ...settings,
+          models: { ...settings.models, activeModelPackId: pending.toEntryId },
+        };
+        const defaultThinking = resolveDefaultThinkingLevel(runtimeSettings, currentModeId);
+        const effectiveThinking = sessionOverride ?? defaultThinking.level;
+        const routeUsesOpenAI = selection.modelRoute.entries.some(entry => entry.modelId.startsWith('openai/'));
+        if (
+          routeUsesOpenAI &&
+          sessionOverride === undefined &&
+          defaultThinking.source === 'global' &&
+          defaultThinking.level === 'off'
+        ) {
+          await ectx.state.session.state.set({ thinkingLevel: 'low' });
+        } else if (selection.modelId.startsWith('openai/') && effectiveThinking === 'max') {
+          await ectx.state.session.state.set({ thinkingLevel: 'xhigh' });
+        }
 
-      ectx.state.fallbackStatus = fallbackStatus;
-      ectx.updateStatusLine();
-      await ectx.refreshModelAuthStatus();
-      await clearPending();
-    },
-  });
+        ectx.state.fallbackStatus = fallbackStatus;
+        ectx.updateStatusLine();
+        await ectx.refreshModelAuthStatus();
+        await clearPending();
+      },
+    });
+  } catch (error) {
+    await clearPending();
+    throw error;
+  }
 }
