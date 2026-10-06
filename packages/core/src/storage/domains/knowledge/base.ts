@@ -250,6 +250,8 @@ export interface ListKnowledgeScopeNodesInput {
   withinAddress?: string;
   /** Only the scopes at these exact addresses. */
   addresses?: string[];
+  /** Only the scope nodes with these UUIDs. Combines with the other filters, so `{ withinAddress, ids: [id] }` checks one scope's membership in a subtree. */
+  ids?: string[];
   /** `nextCursor` from the previous page of the same query. */
   cursor?: string;
   /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
@@ -265,7 +267,11 @@ export interface ListKnowledgeScopeNodesOutput {
 }
 
 function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
-  return JSON.stringify([input.withinAddress ?? null, input.addresses ? [...input.addresses].sort() : null]);
+  return JSON.stringify([
+    input.withinAddress ?? null,
+    input.addresses ? [...input.addresses].sort() : null,
+    input.ids ? [...input.ids].sort() : null,
+  ]);
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
