@@ -116,6 +116,7 @@ const pingTool = createTool({
   execute: async () => ({ ok: true }),
 });
 
+/** Creates a goal agent with in-memory storage and optional registered scorers. */
 function makeAgent(
   goal?: GoalConfig,
   model = singleStepModel(),
@@ -455,6 +456,35 @@ describe('in-loop goal scoring', () => {
     expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('done');
   });
 
+  it.each([
+    { reference: 'tests-pass', matchedBy: 'ID' },
+    { reference: 'testsPass', matchedBy: 'registration key' },
+  ])('ignores scorer names that collide with a goal scorer $matchedBy', async ({ reference }) => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const otherScorer = createScorer({
+      id: 'other-scorer',
+      name: reference,
+      description: 'Always fails',
+    }).generateScore(() => 0);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const otherRun = vi.spyOn(otherScorer, 'run');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: reference }, singleStepModel(), {
+      first: otherScorer,
+      testsPass: scorer,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    await stream.consumeStream();
+
+    expect(scorerRun).toHaveBeenCalledOnce();
+    expect(otherRun).not.toHaveBeenCalled();
+    expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({ status: 'done', runsUsed: 1 });
+  });
+
   it('pauses the goal when neither a scorer ID nor registration key matches', async () => {
     const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
     const scorerRun = vi.spyOn(scorer, 'run');
@@ -477,11 +507,11 @@ describe('in-loop goal scoring', () => {
     });
   });
 
-  it('does not fall back to a registration key when the scorer ID lookup fails unexpectedly', async () => {
+  it('does not fall back to a registration key when listing scorers fails unexpectedly', async () => {
     const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
     const scorerRun = vi.spyOn(scorer, 'run');
     const agent = makeAgent({ judge: 'mock-model-id', scorer: 'testsPass' }, singleStepModel(), { testsPass: scorer });
-    const lookup = vi.spyOn(Mastra.prototype, 'getScorerById').mockImplementation(() => {
+    const lookup = vi.spyOn(Mastra.prototype, 'listScorers').mockImplementation(() => {
       throw new Error('Scorer lookup failed');
     });
 

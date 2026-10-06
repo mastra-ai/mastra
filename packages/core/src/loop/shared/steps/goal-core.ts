@@ -11,7 +11,6 @@ import {
 import type { ResolvedGoalStore } from '../../../agent/goal';
 import type { MessageList } from '../../../agent/message-list';
 import type { GoalConfig, ToolsInput } from '../../../agent/types';
-import { MastraError } from '../../../error';
 import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
@@ -352,14 +351,12 @@ export async function evaluateGoal(deps: {
     let scorer: MastraScorer<any, any, any, any> | undefined;
     if (goal.scorer) {
       if (typeof goal.scorer === 'string') {
-        try {
-          scorer = mastra?.getScorerById?.(goal.scorer);
-        } catch (error) {
-          if (!(error instanceof MastraError) || error.id !== 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND') {
-            throw error;
-          }
-          scorer = mastra?.getScorer?.(goal.scorer);
-        }
+        const reference = goal.scorer;
+        const registeredScorers = mastra?.listScorers() ?? {};
+        // Match exact IDs before keys; display names must not select a scorer.
+        scorer =
+          Object.values(registeredScorers).find(registeredScorer => registeredScorer.id === reference) ??
+          mastra?.getScorer(reference);
       } else {
         scorer = goal.scorer;
       }
