@@ -169,7 +169,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
-      for (const table of KNOWLEDGE_TABLE_NAMES) {
+      for (const table of [...KNOWLEDGE_TABLE_NAMES, ...RETIRED_KNOWLEDGE_TABLE_NAMES]) {
         transformed = transformed.replaceAll(`"${table}"`, `${quotedSchema}."${table}"`);
       }
       return transformed;
