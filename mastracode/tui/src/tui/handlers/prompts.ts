@@ -428,6 +428,17 @@ export async function handlePlanApproval(
         state.ui.setFocus(state.editor);
       }
     };
+    const restoreApprovalAfterError = (error: unknown) => {
+      ctx.showError(`Failed to start plan: ${error instanceof Error ? error.message : String(error)}`);
+      approvalComponent.activate(approvalOptions);
+      state.activeInlinePlanApproval = approvalComponent;
+      state.ui.requestRender();
+      if (state.ui.hasOverlay()) {
+        state.pendingFocus = approvalComponent;
+      } else {
+        state.ui.setFocus(approvalComponent);
+      }
+    };
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -436,9 +447,14 @@ export async function handlePlanApproval(
       previousPlan,
       onApprove: async () => {
         releaseApprovalFocus();
-        firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        await switchModeWithPack(ctx, 'build');
+        try {
+          await switchModeWithPack(ctx, 'build');
+        } catch (error) {
+          restoreApprovalAfterError(error);
+          return;
+        }
+        firePermissionResult('approved');
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
         // The controller emits the resumed tool's terminal events while this
         // handler owns its serialized event queue. Let those events reach their
@@ -448,9 +464,14 @@ export async function handlePlanApproval(
       },
       onGoal: async () => {
         releaseApprovalFocus();
-        firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        await switchModeWithPack(ctx, 'build');
+        try {
+          await switchModeWithPack(ctx, 'build');
+        } catch (error) {
+          restoreApprovalAfterError(error);
+          return;
+        }
+        firePermissionResult('approved');
 
         // The approved run keeps going into implementation, so the plan has to
         // replace any active goal before it resumes: the core goal step reads

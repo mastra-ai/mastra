@@ -367,6 +367,35 @@ describe('handlePlanApproval goal mode', () => {
 });
 
 describe('handlePlanApproval regular approval', () => {
+  it.each([['onApprove'], ['onGoal']] as const)(
+    'restores the approval prompt when %s cannot switch to the build model',
+    async method => {
+      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+      const { state, ctx } = createPlanApprovalCtx(projectPath);
+      const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+      state.hookManager = { runPermissionResult };
+      mocks.switchModeWithPack.mockRejectedValueOnce(new Error('model persistence failed'));
+
+      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+      await (component as any)[method]();
+
+      expect(ctx.showError).toHaveBeenCalledWith('Failed to start plan: model persistence failed');
+      expect(state.activeInlinePlanApproval).toBe(component);
+      expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
+      expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+      expect(runPermissionResult).not.toHaveBeenCalled();
+
+      mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
+      await (component as any)[method]();
+      await promise;
+
+      expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+      expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
+        path: PLAN_PATH,
+      });
+    },
+  );
+
   it('activates an existing streamed submit_plan component in place', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
