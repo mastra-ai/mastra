@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ArrowUp, Paperclip } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from '../attachments/attachment-preview-dialog';
 import { ComposerAttachment } from '../attachments/composer-attachment';
 import { ComposerAttachmentList } from '../attachments/composer-attachment-list';
-import { Composer, ComposerBox, ComposerInput } from '@/ds/components/Composer';
+import { Button } from '@/ds/components/Button';
+import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 
 const meta = {
   title: 'AI/Composer Attachments',
@@ -26,14 +28,16 @@ const imageSrc = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://ww
 
 function AttachmentComposer({
   files = ['diagram.png', 'review-notes-with-a-long-filename-é日本語.csv', 'brief.pdf', 'clip.mp4'],
+  withActions = false,
 }: {
   files?: string[];
+  withActions?: boolean;
 }) {
   const [removed, setRemoved] = useState<string[]>([]);
   const attachments = files.filter(name => !removed.includes(name));
 
   return (
-    <Composer onSubmit={event => event.preventDefault()}>
+    <Composer aria-label="Message composer" onSubmit={event => event.preventDefault()}>
       <ComposerBox>
         {attachments.length > 0 && (
           <ComposerAttachmentList>
@@ -49,7 +53,21 @@ function AttachmentComposer({
             ))}
           </ComposerAttachmentList>
         )}
-        <ComposerInput placeholder="Message" aria-label="Message" />
+        <ComposerInput
+          placeholder="Message"
+          aria-label="Message"
+          defaultValue={withActions ? 'Summarize the attached notes.' : undefined}
+        />
+        {withActions && (
+          <ComposerActions>
+            <Button type="button" size="icon-md" aria-label="Attach file">
+              <Paperclip />
+            </Button>
+            <Button type="submit" size="icon-md" aria-label="Send message">
+              <ArrowUp />
+            </Button>
+          </ComposerActions>
+        )}
       </ComposerBox>
     </Composer>
   );
@@ -67,6 +85,10 @@ function AttachmentPreview({ name }: { name: string }) {
 
 export const Images: Story = {
   render: () => <AttachmentComposer files={['diagram.png']} />,
+};
+
+export const WithAttachmentsAndActions: Story = {
+  render: () => <AttachmentComposer files={['project-notes.txt']} withActions />,
 };
 
 export const MixedFiles: Story = {
