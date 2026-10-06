@@ -3,7 +3,9 @@ import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KnowledgeConflictError,
   KnowledgeSchemaError,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_RECORD_SCOPES,
@@ -186,6 +188,41 @@ describe('MongoDB canonical Knowledge support', () => {
     const outbox = await connector.getCollection('mastra_knowledge_semantic_outbox');
     expect(Object.keys(await nodes.indexInformation())).toContain('activeNameScopeKey_1');
     expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
+  });
+
+  it('rejects a fenced mutation when a grant change commits while it waits on the access epoch', async () => {
+    const store = createStore();
+    await store.init();
+    const scope = await store.createNode({ name: `Fence scope ${randomUUID()}`, isScope: true, scopeIds: [] });
+    const node = await store.createNode({ name: `Fenced ${randomUUID()}`, scopeIds: [scope.id] });
+    const epoch = await store.getAccessEpoch();
+    const client = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0');
+    const session = client.startSession();
+    try {
+      session.startTransaction();
+      await client
+        .db(process.env.MONGODB_DB_NAME || 'mastra-test-db')
+        .collection(TABLE_KNOWLEDGE_ACCESS_STATE)
+        .updateOne({ id: 'global' }, { $inc: { epoch: 1 } }, { session });
+      const mutation = store.updateNode({
+        id: node.id,
+        version: node.version,
+        name: 'Renamed',
+        expectedAccessEpoch: epoch,
+      });
+      const settled = mutation.then(
+        () => 'committed',
+        () => 'rejected',
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await session.commitTransaction();
+      await settled;
+      await expect(mutation).rejects.toBeInstanceOf(KnowledgeConflictError);
+    } finally {
+      await session.endSession();
+      await client.close();
+    }
+    expect((await store.getNode(node.id))?.name).toBe(node.name);
   });
 
   it('explicitly resets retired Knowledge collections and leaves other storage untouched', async () => {

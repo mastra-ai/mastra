@@ -2978,7 +2978,11 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async #assertExpectedAccessEpoch(executor: Executor, expectedAccessEpoch?: number): Promise<void> {
     if (expectedAccessEpoch === undefined) return;
-    const result = await executor.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+    // A locking read waits for an uncommitted grant change and blocks later ones until this mutation commits;
+    // a plain REPEATABLE READ snapshot would miss both.
+    const result = await executor.execute(
+      `SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global' FOR SHARE`,
+    );
     if (Number(result.rows[0]?.epoch ?? 0) !== expectedAccessEpoch) {
       throw new KnowledgeConflictError('Knowledge access changed during mutation authorization');
     }
