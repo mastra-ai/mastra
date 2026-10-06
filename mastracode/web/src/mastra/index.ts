@@ -738,9 +738,9 @@ export const factory = new MastraFactory({
           });
           return {
             id: `local-demo:${projectId}`,
-            rootScopeAddress: builtInScopes.org.address,
+            rootScopeAddress: builtInScopes.thread?.address ?? builtInScopes.resource.address,
             baselineScopes: [builtInScopes.org, builtInScopes.resource, repositoryScope],
-            vouchedScopeAddresses: [builtInScopes.org.address, builtInScopes.resource.address, repositoryScope.address],
+            ...(builtInScopes.thread ? { intakeScopes: [builtInScopes.thread] } : {}),
           };
         },
       }
