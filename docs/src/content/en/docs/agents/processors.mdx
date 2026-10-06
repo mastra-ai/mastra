@@ -123,7 +123,7 @@ Every agent adds whichever of these four your `errorProcessors` list doesn't alr
 
 1. `ProviderHistoryCompat`: repairs provider-specific history incompatibilities in the outbound prompt
 1. `PrefillErrorHandler`: recovers from assistant-response prefill rejections
-1. [`UnsupportedFileHandler`](/reference/processors/unsupported-file-handler): replaces a file the model rejects with a note and calls the model again
+1. [`UnsupportedFileHandler`](/reference/processors/unsupported-file-handler): takes a file the model rejects out of the prompt, uploads it to the agent's sandbox when there is one, and calls the model again
 1. `StreamErrorRetryProcessor`: retries transient API and stream failures
 
 A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one doesn't invert the pair. Supplying only your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` ahead of it.

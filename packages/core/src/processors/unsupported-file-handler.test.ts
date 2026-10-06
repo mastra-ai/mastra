@@ -1,10 +1,18 @@
+import { createHash } from 'node:crypto';
 import { UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
+import { InMemoryStore } from '../storage';
+import type { SandboxFileInput, WorkspaceSandbox } from '../workspace/sandbox/sandbox';
+import { Workspace } from '../workspace/workspace';
+import type { WorkspaceSandboxResolver } from '../workspace/workspace';
 
 const MEMORY = { thread: 'unsupported-file-thread', resource: 'unsupported-file-resource' };
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -60,16 +68,39 @@ function createModel(reject: Rejection) {
   return { model, prompts };
 }
 
-function createAgent(reject: Rejection, options: { errorProcessorDefaults?: false } = {}) {
+/** Sandbox double with the `writeFiles` fast path; records every write. */
+function createFakeSandbox(overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles'>> = {}) {
+  const writes: SandboxFileInput[][] = [];
+  const sandbox = {
+    id: 'fake-sandbox',
+    name: 'Fake Sandbox',
+    provider: 'fake',
+    status: 'running',
+    snapshot: async () => {},
+    writeFiles: async (files: SandboxFileInput[]) => {
+      writes.push(files);
+    },
+    executeCommand: async () => ({ success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 }),
+    ...overrides,
+  } as unknown as WorkspaceSandbox;
+  return { sandbox, writes };
+}
+
+function createAgent(
+  reject: Rejection,
+  options: { errorProcessorDefaults?: false; sandbox?: WorkspaceSandbox | WorkspaceSandboxResolver } = {},
+) {
   const { model, prompts } = createModel(reject);
   const memory = new MockMemory();
+  const { sandbox, ...agentOptions } = options;
   const agent = new Agent({
     id: 'unsupported-file-agent',
     name: 'unsupported-file-agent',
     instructions: 'Answer briefly.',
     model,
     memory,
-    ...options,
+    ...(sandbox ? { workspace: new Workspace({ sandbox }) } : {}),
+    ...agentOptions,
   });
   const recall = async () => (await memory.recall({ threadId: MEMORY.thread, resourceId: MEMORY.resource })).messages;
   return { agent, prompts, memory, recall };
@@ -235,5 +266,82 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       `file part media type ${XLSX}`,
     );
     expect(prompts).toHaveLength(1);
+  });
+
+  describe('when the agent has a sandbox', () => {
+    const workbook = 'PK workbook';
+    const uploadedNote = (path: string) =>
+      [
+        '[File uploaded to the sandbox]',
+        `path: ${path}`,
+        'name: leads.xlsx',
+        `type: ${XLSX}`,
+        `size: ${workbook.length} bytes`,
+      ].join('\n');
+    const workbookPath = `uploads/${MEMORY.thread}/${createHash('sha256').update(workbook).digest('hex')}.xlsx`;
+
+    it('uploads the rejected file to the sandbox and gives the model its path instead', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts, recall } = createAgent(rejectsTypes(XLSX), { sandbox });
+
+      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+      expect(result.text).toBe('ok');
+      expect(writes.flat().map(written => written.content.toString())).toEqual([workbook]);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', uploadedNote(workbookPath)]);
+      const stored = (await recall()).find(message => message.role === 'user');
+      expect(stored?.content.parts.map(part => part.type)).toEqual(['text', 'file']);
+    });
+
+    it('uploads the rejected file on a durable agent too', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX), { sandbox });
+      void new Mastra({ agents: { 'unsupported-file-agent': agent }, storage: new InMemoryStore() });
+      const pubsub = new EventEmitterPubSub();
+
+      try {
+        const result = await createDurableAgent({ agent, pubsub }).stream(
+          turnWith(file(workbook, 'leads.xlsx', XLSX)),
+          {
+            memory: MEMORY,
+            maxSteps: 1,
+          },
+        );
+        for await (const _chunk of result.fullStream) {
+          // drain
+        }
+      } finally {
+        await pubsub.close();
+      }
+
+      expect(writes.flat().map(written => written.content.toString())).toEqual([workbook]);
+      expect(userTexts(prompts.at(-1)!)).toEqual(['Read these', uploadedNote(workbookPath)]);
+    });
+
+    it('falls back to a note when the workspace resolves no sandbox', async () => {
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX), {
+        sandbox: (() => undefined) as unknown as WorkspaceSandboxResolver,
+      });
+
+      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+      expect(result.text).toBe('ok');
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+    });
+
+    it('falls back to a note when the upload fails, without stopping the turn', async () => {
+      const { sandbox } = createFakeSandbox({
+        writeFiles: async () => {
+          throw new Error('disk full');
+        },
+      });
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX), { sandbox });
+
+      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+      expect(result.text).toBe('ok');
+      expect(result.tripwire).toBeUndefined();
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+    });
   });
 });

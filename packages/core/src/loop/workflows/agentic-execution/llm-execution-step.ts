@@ -1885,6 +1885,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               prompt: inputMessages,
               model: currentStep.model,
               messageList,
+              workspace: currentStep.workspace,
               stepNumber: inputData.output?.steps?.length || 0,
               steps: inputData.output?.steps || [],
               retryCount: inputData.processorRetryCount || 0,

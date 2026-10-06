@@ -867,6 +867,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   prompt: inputMessages,
                   model: currentModel,
                   messageList,
+                  workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: inputData.accumulatedSteps ?? [],
                   retryCount: processorRetryCount,

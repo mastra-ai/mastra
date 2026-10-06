@@ -25,7 +25,8 @@ import { resolveWritableSandbox, uploadFiles } from './file-upload-writer';
 export { FILE_UPLOAD_ERROR_CODES } from './file-upload-errors';
 export type { FileUploadErrorCode, FileUploadTripwireMetadata } from './file-upload-errors';
 
-const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
+/** @internal Shared with `UnsupportedFileHandler`. */
+export const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 /** What the processor knows about a file before reading its bytes. Passed to `filter` and `maxFileSize`. */
 export interface FileUploadFileInfo {
@@ -145,50 +146,17 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
         this.filter,
       );
       if (files.length === 0) return;
-      const notes = await this.uploadPromptFiles(files, requestContext, cacheOf(state), abortSignal);
+      const notes = await uploadPromptFiles(files, {
+        workspace: this.workspace,
+        requestContext,
+        maxFileSize: this.maxFileSize,
+        cache: cacheOf(state),
+        abortSignal,
+      });
       return { prompt: replaceParts(prompt, notes) };
     } catch (error) {
       return this.failOn(error, abort);
     }
-  }
-
-  private async uploadPromptFiles(
-    files: PromptFile[],
-    requestContext: RequestContext,
-    cache: UploadCache,
-    abortSignal?: AbortSignal,
-  ): Promise<Map<PromptFilePart, string>> {
-    const directory = uploadDirectoryOf(requestContext);
-    const notes = new Map<PromptFilePart, string>();
-    const ready: ReadyFile[] = [];
-    for (const file of files) {
-      const loaded = loadPromptFile(file, this.maxFileSize, cache);
-      if ('rejection' in loaded) notes.set(file.part, rejectedNote(file.fileName, loaded.rejection));
-      else ready.push({ file, ...loaded, relativePath: buildUploadPath({ ...file, directory, hash: loaded.hash }) });
-    }
-    await this.placeFiles(ready, requestContext, cache, abortSignal);
-    for (const { file, relativePath, size } of ready) {
-      notes.set(file.part, uploadedNote({ ...file, path: cache.paths.get(relativePath)!, size }));
-    }
-    return notes;
-  }
-
-  // Each path is named after the content, so a path already placed during this request needs nothing more.
-  private async placeFiles(
-    ready: ReadyFile[],
-    requestContext: RequestContext,
-    cache: UploadCache,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
-    const pending = new Map<string, { path: string; content: Buffer }>();
-    for (const { file, relativePath } of ready) {
-      if (cache.paths.has(relativePath) || pending.has(relativePath)) continue;
-      pending.set(relativePath, { path: relativePath, content: decodePromptData(file) });
-    }
-    if (pending.size === 0) return;
-    const sandbox = await resolveWritableSandbox(this.workspace, requestContext);
-    const placed = await uploadFiles(sandbox, [...pending.values()], abortSignal);
-    [...pending.keys()].forEach((relativePath, index) => cache.paths.set(relativePath, placed[index]!.path));
   }
 
   // Only a `FileUploadError` is a reason to stop the turn; anything else is a bug and propagates.
@@ -302,10 +270,15 @@ function isInlineData(data: string): boolean {
 // ---------------------------------------------------------------------------
 
 type PromptUserMessage = Extract<LanguageModelV2Prompt[number], { role: 'user' }>;
-type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'file' }>;
+/** @internal */
+export type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'file' }>;
 
-/** A file the user sent, as the model is about to receive it. */
-interface PromptFile {
+/**
+ * A file the user sent, as the model is about to receive it.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
+ */
+export interface PromptFile {
   part: PromptFilePart;
   /** Base64 text, or the bytes of a link Mastra downloaded for the model. */
   data: string | Uint8Array;
@@ -321,20 +294,76 @@ interface ReadyFile {
 }
 
 /** What one request remembers between its model calls. */
-interface UploadCache {
+export interface UploadCache {
   /** Upload path relative to the command directory, mapped to the path the file was placed at. */
   paths: Map<string, string>;
   /** Hash and size of the data of a prompt file, so later calls don't decode it again. */
   digests: Map<string | Uint8Array, { hash: string; size: number }>;
 }
 
-function cacheOf(state: Record<string, unknown>): UploadCache {
+/** @internal Shared with `UnsupportedFileHandler`. */
+export interface PromptUploadOptions {
+  workspace: AnyWorkspace;
+  requestContext: RequestContext;
+  maxFileSize: FileUploadMaxFileSize;
+  cache: UploadCache;
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Uploads the files and returns, for each one, the note that replaces it in
+ * the prompt. A file that is too large or can't be decoded gets a note saying
+ * why; a setup problem throws a `FileUploadError` and uploads nothing.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
+ */
+export async function uploadPromptFiles(
+  files: PromptFile[],
+  { workspace, requestContext, maxFileSize, cache, abortSignal }: PromptUploadOptions,
+): Promise<Map<PromptFilePart, string>> {
+  const directory = uploadDirectoryOf(requestContext);
+  const notes = new Map<PromptFilePart, string>();
+  const ready: ReadyFile[] = [];
+  for (const file of files) {
+    const loaded = loadPromptFile(file, maxFileSize, cache);
+    if ('rejection' in loaded) notes.set(file.part, rejectedNote(file.fileName, loaded.rejection));
+    else ready.push({ file, ...loaded, relativePath: buildUploadPath({ ...file, directory, hash: loaded.hash }) });
+  }
+  await placeFiles(ready, workspace, requestContext, cache, abortSignal);
+  for (const { file, relativePath, size } of ready) {
+    notes.set(file.part, uploadedNote({ ...file, path: cache.paths.get(relativePath)!, size }));
+  }
+  return notes;
+}
+
+// Each path is named after the content, so a path already placed during this request needs nothing more.
+async function placeFiles(
+  ready: ReadyFile[],
+  workspace: AnyWorkspace,
+  requestContext: RequestContext,
+  cache: UploadCache,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  const pending = new Map<string, { path: string; content: Buffer }>();
+  for (const { file, relativePath } of ready) {
+    if (cache.paths.has(relativePath) || pending.has(relativePath)) continue;
+    pending.set(relativePath, { path: relativePath, content: decodePromptData(file) });
+  }
+  if (pending.size === 0) return;
+  const sandbox = await resolveWritableSandbox(workspace, requestContext);
+  const placed = await uploadFiles(sandbox, [...pending.values()], abortSignal);
+  [...pending.keys()].forEach((relativePath, index) => cache.paths.set(relativePath, placed[index]!.path));
+}
+
+/** @internal Shared with `UnsupportedFileHandler`. */
+export function cacheOf(state: Record<string, unknown>): UploadCache {
   state.uploads ??= { paths: new Map(), digests: new Map() } satisfies UploadCache;
   return state.uploads as UploadCache;
 }
 
 // Files produced by the assistant or returned by tools are the agent's own; only the user's are uploaded.
-function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Map<string, string>): PromptFile[] {
+/** @internal Shared with `UnsupportedFileHandler`. */
+export function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Map<string, string>): PromptFile[] {
   let names: Map<string, string> | undefined;
   const nameOf = (data: string | Uint8Array) =>
     typeof data === 'string' ? (names ??= lookUpNames()).get(data.replace(/\s+/g, '')) : undefined;
@@ -354,8 +383,10 @@ function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Map<strin
  * Names of the files of the messages, by their base64 content. The prompt
  * drops the name of a file sent as an attachment (AI SDK v4 UI messages), and
  * `filter` must see the same name it saw when the file was checked.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
  */
-function namesByContent(messageList: MessageList | undefined): Map<string, string> {
+export function namesByContent(messageList: MessageList | undefined): Map<string, string> {
   const names = new Map<string, string>();
   for (const { data, fileName } of collectCandidates(messageList?.get.all.db() ?? [])) {
     if (!fileName || typeof data !== 'string' || !isInlineData(data)) continue;
@@ -401,8 +432,12 @@ function decodePromptData({ data, fileName, mimeType }: PromptFile): Buffer {
   return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
-/** Swaps each replaced file part for a text part; the original prompt is left untouched. */
-function replaceParts(prompt: LanguageModelV2Prompt, notes: Map<PromptFilePart, string>): LanguageModelV2Prompt {
+/**
+ * Swaps each replaced file part for a text part; the original prompt is left untouched.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
+ */
+export function replaceParts(prompt: LanguageModelV2Prompt, notes: Map<PromptFilePart, string>): LanguageModelV2Prompt {
   return prompt.map(message =>
     message.role !== 'user'
       ? message

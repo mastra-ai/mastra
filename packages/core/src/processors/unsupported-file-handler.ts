@@ -1,7 +1,18 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 
 import type { MessageList } from '../agent/message-list';
-import { toDisplayName } from './processors/file-upload';
+import { RequestContext } from '../request-context';
+import {
+  cacheOf,
+  DEFAULT_MAX_FILE_SIZE,
+  namesByContent,
+  promptFiles,
+  replaceParts,
+  toDisplayName,
+  uploadPromptFiles,
+} from './processors/file-upload';
+import type { PromptFile, PromptFilePart } from './processors/file-upload';
+import { FileUploadError } from './processors/file-upload-errors';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -14,9 +25,6 @@ import type {
 const REJECTED_MEDIA_TYPE = /media type:?\s+(\S+)/i;
 const MAX_CAUSE_DEPTH = 5;
 
-type PromptUserMessage = Extract<LanguageModelV2Prompt[number], { role: 'user' }>;
-type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'file' }>;
-
 /**
  * Lets an agent keep working when the model rejects a file the user sent.
  *
@@ -24,9 +32,11 @@ type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'fil
  * by provider and changes over time, so nothing is guessed up front. When the
  * provider SDK refuses a file type before sending the request, this processor
  * replaces the rejected file, and every other file that isn't an image, a PDF,
- * or text, with a note in the prompt, then calls the model once more. The
- * stored messages keep their files, and a thread that already stores such a
- * file works again on its next turn.
+ * or text, then calls the model once more. When the agent's workspace has a
+ * sandbox, each file is uploaded there and the model gets its path; otherwise,
+ * or when the upload fails, it gets a note saying the file wasn't sent. Only the
+ * prompt changes: the stored messages keep their files, and a thread that
+ * already stores such a file works again on its next turn.
  *
  * Part of the default error processors of every agent; `errorProcessorDefaults: false` turns it off.
  */
@@ -49,20 +59,54 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
   }
 
   // Runs before every model call of the request; it only acts once a call was rejected for a file.
-  async processLLMRequest({ prompt, state }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+  async processLLMRequest({
+    prompt,
+    messageList,
+    workspace,
+    requestContext = new RequestContext(),
+    abortSignal,
+    state,
+  }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
     const rejected = rejectionsOf(state);
     if (rejected.size === 0) return;
-    let replaced = false;
-    const rewritten = prompt.map(message => {
-      if (message.role !== 'user') return message;
-      const content = message.content.map(part => {
-        if (part.type !== 'file' || !mayBeUnsupported(part, rejected)) return part;
-        replaced = true;
-        return { type: 'text' as const, text: unsentNote(part) };
-      });
-      return { ...message, content };
+    const parts = unsupportedParts(prompt, rejected);
+    if (parts.length === 0) return;
+    const named = promptFiles(prompt, () => namesByContent(messageList)).filter(file => parts.includes(file.part));
+    const notes = new Map(
+      parts.map(part => [part, unsentNote(part, named.find(file => file.part === part)?.fileName)]),
+    );
+    const uploaded = await uploadToSandbox(named, { workspace, requestContext, abortSignal, state });
+    uploaded?.forEach((note, part) => notes.set(part, note));
+    return { prompt: replaceParts(prompt, notes) };
+  }
+}
+
+/**
+ * The sandbox only improves on the note: a file the model can work on with its
+ * tools. Anything that keeps the sandbox out of reach leaves the note, so this
+ * processor never stops a turn.
+ */
+async function uploadToSandbox(
+  files: PromptFile[],
+  {
+    workspace,
+    requestContext,
+    abortSignal,
+    state,
+  }: Pick<ProcessLLMRequestArgs, 'workspace' | 'abortSignal' | 'state'> & { requestContext: RequestContext },
+): Promise<Map<PromptFilePart, string> | undefined> {
+  if (files.length === 0 || !workspace?.hasSandboxConfig()) return undefined;
+  try {
+    return await uploadPromptFiles(files, {
+      workspace,
+      requestContext,
+      maxFileSize: () => DEFAULT_MAX_FILE_SIZE,
+      cache: cacheOf(state),
+      abortSignal,
     });
-    return replaced ? { prompt: rewritten } : undefined;
+  } catch (error) {
+    if (error instanceof FileUploadError) return undefined;
+    throw error;
   }
 }
 
@@ -100,16 +144,26 @@ function hasFile(messageList: MessageList): boolean {
 }
 
 // The call is tried again only once, so every file that may not be readable goes, not just the one named.
+function unsupportedParts(prompt: LanguageModelV2Prompt, rejected: Set<string>): PromptFilePart[] {
+  return prompt.flatMap(message =>
+    message.role !== 'user'
+      ? []
+      : message.content.filter(
+          (part): part is PromptFilePart => part.type === 'file' && mayBeUnsupported(part, rejected),
+        ),
+  );
+}
+
 function mayBeUnsupported(part: PromptFilePart, rejected: Set<string>): boolean {
   const mediaType = part.mediaType.split(';')[0]!.trim().toLowerCase();
   if (rejected.has(mediaType)) return true;
   return !(mediaType.startsWith('image/') || mediaType.startsWith('text/') || mediaType === 'application/pdf');
 }
 
-function unsentNote(part: PromptFilePart): string {
+function unsentNote(part: PromptFilePart, fileName = part.filename): string {
   return [
     '[File not sent]',
-    `name: ${toDisplayName(part.filename)}`,
+    `name: ${toDisplayName(fileName)}`,
     `type: ${part.mediaType}`,
     'reason: The model does not support this type of file, so the file was not sent to it.',
   ].join('\n');
