@@ -444,12 +444,13 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         throw new Error('Session factory does not match the repository link.');
       }
       const factoryProjectId = connection.factoryProjectId;
-      const existing =
-        (await this.sessions.getForBranch({ factoryProjectId, userId: input.userId, branch: input.branch })) ??
-        (await this.sessions.getForBranch(input));
+      const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
       if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
         throw new UniqueViolationError('Source-control session ID already exists');
+      }
+      if (await this.sessions.getForBranch({ factoryProjectId, userId: input.userId, branch: input.branch })) {
+        throw new UniqueViolationError('Source-control session branch already exists in this factory');
       }
       const now = new Date();
       const session: SourceControlSession = {

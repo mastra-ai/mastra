@@ -613,9 +613,13 @@ describe('SourceControlStorage', () => {
       const elsewhere = await linkRepository({ factoryProjectId: other.id });
 
       const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000111', first.id));
-      // `create` returns the existing session of the (factory, user, branch) instead of inserting on the second link.
-      const again = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000112', second.id));
-      expect(again.id).toBe(session.id);
+      // Reuse stays keyed by the link; the same branch on another link of the factory is a violation.
+      expect((await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000111', first.id))).id).toBe(
+        session.id,
+      );
+      await expect(
+        github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000112', second.id)),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
       const forced = await insertLegacySession({
         sessionId: '00000000-0000-4000-8000-000000000113',
         projectRepositoryId: second.id,
@@ -816,7 +820,8 @@ describe('SourceControlStorage', () => {
 
       const session = await store.sessions.create(sessionInput('s-1', first.id));
       expect(session.factoryProjectId).toBe('project-1');
-      expect((await store.sessions.create(sessionInput('s-2', second.id))).id).toBe(session.id);
+      expect((await store.sessions.create(sessionInput('s-1', first.id))).id).toBe(session.id);
+      await expect(store.sessions.create(sessionInput('s-2', second.id))).rejects.toBeInstanceOf(UniqueViolationError);
       await expect(
         store.sessions.create({ ...sessionInput('s-3', first.id, 'user-1', 'y'), factoryProjectId: 'project-2' }),
       ).rejects.toThrow(/does not match/);
