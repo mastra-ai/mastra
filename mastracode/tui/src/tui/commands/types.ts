@@ -26,6 +26,7 @@ export interface SlashCommandContext {
   authStorage?: AuthStorage;
   processMemoryDiagnostics?: ProcessMemoryDiagnostics;
   knowledgeInspector?: KnowledgeInspector;
+  knowledgeInspectorUnavailableReason?: string;
   threadScheduler?: ThreadScheduler;
   customSlashCommands: SlashCommandMetadata[];
   showInfo: (message: string) => void;
