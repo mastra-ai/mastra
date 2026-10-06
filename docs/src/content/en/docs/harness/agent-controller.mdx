@@ -1,9 +1,9 @@
 ---
-title: "Agent Controller | Harness"
-description: "Build interactive Mastra agent applications with Agent Controller sessions, persistent threads, modes, approvals, subagents, channels, and runtime state."
+title: 'Agent Controller | Harness'
+description: 'Build interactive Mastra agent applications with Agent Controller sessions, persistent threads, modes, approvals, subagents, channels, and runtime state.'
 packages:
-  - "@mastra/core"
-  - "@mastra/client-js"
+  - '@mastra/core'
+  - '@mastra/client-js'
 ---
 
 # Agent Controller
@@ -97,7 +97,7 @@ The controller, Session, and thread have different lifetimes:
 - **Session**: An isolated live runtime for one user, task, or concurrent work scope. It owns the active mode, model, state, event bus, run state, grants, and current thread binding.
 - **Thread**: A stored conversation containing messages and thread settings. Threads can survive controller and process recreation when you configure storage.
 
-A Session is live state. Arbitrary [`session.state`](/reference/agent-controller/session#state), permission grants, pending approvals, and active runs don't automatically survive process recreation. Thread messages and selected thread settings, including mode and per-mode model choices, can persist through storage.
+A Session is live state. Arbitrary [`session.state`](/reference/agent-controller/session#state), permission grants, pending approvals, and active runs don't automatically survive process recreation. Thread messages and selected thread settings, including the active mode and the current model, can persist through storage, but switching modes doesn't change the model.
 
 ## Sessions and threads
 
@@ -197,18 +197,13 @@ console.log(session.mode.get()) // "build"
 console.log(session.mode.resolve().instructions)
 ```
 
-Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitch-modelid-scope-modeid-), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). Thread-scoped selections are stored per mode and restored when the Session returns to that mode:
+Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitchmodelid-options), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). The selection is stored as the thread's current model and remains active when the Session changes modes:
 
 ```typescript
-await session.model.switch({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  scope: 'thread',
-})
+await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__')
 
 console.log(session.model.get())
 ```
-
-Use `scope: 'global'` for an in-memory selection that shouldn't be written to thread settings.
 
 ## Manage threads and state
 
@@ -358,7 +353,7 @@ const controller = new AgentController({
     },
     onSessionStart: async ({ session, thread }) => {
       const plan = await billing.planFor(thread.resourceId)
-      await session.model.switch({ modelId: plan.modelId })
+      await session.model.switch(plan.modelId)
     },
   },
 })

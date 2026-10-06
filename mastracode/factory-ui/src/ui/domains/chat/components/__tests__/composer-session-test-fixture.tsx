@@ -78,7 +78,6 @@ export function stubPreparingSession({
     attachSse = resolve;
   });
   const encoder = new TextEncoder();
-  let sessionPackId: string | null = null;
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
     emit: async event => {
@@ -117,39 +116,7 @@ export function stubPreparingSession({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
-      HttpResponse.json({
-        packs: [
-          {
-            id: 'balanced',
-            name: 'Balanced',
-            description: '',
-            models: {
-              build: 'openai/gpt-4o-mini',
-              plan: 'openai/gpt-4o-mini',
-              fast: 'openai/gpt-4o-mini',
-            },
-            custom: false,
-            active: true,
-          },
-          {
-            id: 'mine',
-            name: 'Mine',
-            description: '',
-            models: { build: 'openai/gpt-5.4-mini', plan: 'openai/gpt-5.4-mini', fast: 'openai/gpt-5.4-mini' },
-            custom: true,
-            active: false,
-          },
-        ],
-        activePackId: 'balanced',
-        sessionPackId,
-      }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/config/model-packs/:packId/activate`, async ({ params }) => {
-      sessionPackId = String(params.packId);
-      result.operations.push(`pack:${sessionPackId}`);
-      return HttpResponse.json({ ok: true, target: 'session', sessionPackId });
-    }),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-4o-mini' })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [

@@ -126,7 +126,6 @@ function createMockSettings() {
       omPackId: null,
     },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -187,7 +186,8 @@ const mastraStub = {
   addProcessorConfiguration: vi.fn(),
 };
 
-vi.mock('@mastra/core/agent-controller', () => ({
+vi.mock('@mastra/core/agent-controller', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/core/agent-controller')>()),
   AgentController: class {
     constructor(config: unknown) {
       controllerConstructorMock(config);
@@ -385,7 +385,6 @@ vi.mock('../onboarding/settings.js', () => ({
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
   saveSettings: vi.fn(),
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
   toCustomProviderModelId: vi.fn(),
 }));
 
@@ -803,7 +802,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(getAvailableModePacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
+    expect(getAvailableModePacksMock).not.toHaveBeenCalled();
     expect(getAvailableOmPacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
   });
 
@@ -823,9 +822,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ vector: vector as any });
 
-    // Third argument is the settings path threaded through for pack-driven
-    // observational-memory resolution; no `settingsPath` was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined);
+    // The settings path and model-pack option are threaded through for
+    // observational-memory resolution; neither was configured here.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
+      disableSettingsOmSeed: undefined,
+    });
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
@@ -1818,10 +1819,20 @@ describe('createMastraCode', () => {
     controllerGetCurrentThreadIdMock.mockReturnValue('active-thread');
     controllerModeMock = 'plan';
     controllerModelMock = 'openai/gpt-5.6-sol';
-    controllerStateMock = { activeModelPackId: 'openai', yolo: false, sandboxAllowedPaths: ['/active-only'] };
+    controllerStateMock = {
+      modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
+      yolo: false,
+      sandboxAllowedPaths: ['/active-only'],
+    };
     controllerThreadMetadataMock = {
+      currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
-      activeModelPackId: 'anthropic',
+      modelRoute: {
+        entries: [
+          { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
+          { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        ],
+      },
       subagentModelId_explore: 'openai/gpt-5.6-mini',
       yolo: true,
     };
@@ -1847,8 +1858,28 @@ describe('createMastraCode', () => {
 
     expect(controllerContext.session.modeId).toBe('build');
     expect(controllerContext.session.modelId).toBe('anthropic/claude-fable-5-1');
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'currentModelId',
+      value: 'anthropic/claude-fable-5-1',
+    });
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'modelPersistenceVersion',
+      value: 2,
+    });
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'modeModelId_build',
+      value: undefined,
+    });
     expect(controllerContext.getState()).toMatchObject({
-      activeModelPackId: 'anthropic',
+      modelRoute: {
+        entries: [
+          { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
+          { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        ],
+      },
       yolo: false,
       sandboxAllowedPaths: [],
     });
@@ -1856,16 +1887,23 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions.requireToolApproval).toBe(true);
     controllerSetStateMock.mockClear();
 
-    await controllerContext.setThreadSetting({ key: 'mastracodePendingPackFallback', value: { toPackId: 'openai' } });
-    await controllerContext.setState({ mastracodePendingPackFallback: { toPackId: 'openai' } });
-    controllerContext.emitEvent({ type: 'info', message: 'Switched model pack' });
+    const pendingFallback = {
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      reason: 'pool-exhausted',
+      at: '2026-10-05T00:00:00.000Z',
+    };
+    await controllerContext.setThreadSetting({ key: 'mastracodePendingModelFallback', value: pendingFallback });
+    await controllerContext.setState({ mastracodePendingModelFallback: pendingFallback });
+    controllerContext.emitEvent({ type: 'info', message: 'Switched model route' });
 
     expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
       threadId: 'notification-thread',
-      key: 'mastracodePendingPackFallback',
-      value: { toPackId: 'openai' },
+      key: 'mastracodePendingModelFallback',
+      value: pendingFallback,
     });
-    expect(controllerContext.getState()).toMatchObject({ mastracodePendingPackFallback: { toPackId: 'openai' } });
+    expect(controllerContext.getState()).toMatchObject({ mastracodePendingModelFallback: pendingFallback });
     expect(controllerSetStateMock).not.toHaveBeenCalled();
     expect(controllerEmitMock).not.toHaveBeenCalled();
   });
