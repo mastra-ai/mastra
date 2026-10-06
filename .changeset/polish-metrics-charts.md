@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Polished the metrics charts and KPI cards, and added the pieces to build a full metrics page from them: a share list, chart loading ghosts and a card toolbar.
