@@ -85,6 +85,32 @@ describe('Knowledge access frontier evaluator', () => {
     }
   });
 
+  it('keeps a reached scope at the arriving role even when that scope owns itself', () => {
+    const frontier = evaluateKnowledgeAccessFrontier({
+      vouchedScopeIds: [PRINCIPAL],
+      grants: [
+        grant(PROJECT, PROJECT, 'owner'),
+        grant(PROJECT, PRINCIPAL, 'readonly', true),
+        grant(TEAM, TEAM, 'owner'),
+        grant(TEAM, PRINCIPAL, 'readonly'),
+        grant(SIBLING, TEAM, 'edit'),
+      ],
+      accessEpoch: 1,
+    });
+
+    expect(frontier.scopes[PROJECT]).toMatchObject({ read: true, suggest: true, edit: false, manageAccess: false });
+    expect(frontier.scopes[TEAM]).toMatchObject({ read: true, edit: false, manageAccess: false });
+    // Chains through other scopes still resolve at the arriving grant's role.
+    expect(frontier.scopes[SIBLING]).toMatchObject({ read: true, edit: true, manageAccess: false });
+
+    const owner = evaluateKnowledgeAccessFrontier({
+      vouchedScopeIds: [PROJECT],
+      grants: [grant(PROJECT, PROJECT, 'owner')],
+      accessEpoch: 1,
+    });
+    expect(owner.scopes[PROJECT]).toMatchObject({ read: true, manageAccess: true });
+  });
+
   it('does not make a host-vouched seed readable or mirror capability it never had (S1)', () => {
     const SUGGEST_ONLY = '10000000-0000-4000-8000-000000000006';
     const frontier = evaluateKnowledgeAccessFrontier({

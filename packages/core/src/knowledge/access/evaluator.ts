@@ -40,13 +40,18 @@ export function evaluateKnowledgeAccessFrontier(input: {
   // Monotone fixed point: a scope is reprocessed whenever its capability set grows, so later owner or
   // suggest paths still reach every mirror dependent. Host vouching only makes a scope eligible to
   // activate ordinary grants that reference it; it never grants readability or owner by itself.
+  // A scope's grant to itself is identity ownership: only vouching as that scope activates it.
+  // Reaching a scope through another grant keeps the arriving role, so a readonly share of a
+  // self-owned scope never escalates to owner.
   while (pending.size > 0) {
     const referencedScopeId = pending.values().next().value!;
     pending.delete(referencedScopeId);
     const referencedCapabilities = capabilitiesByScopeId.get(referencedScopeId) ?? NO_KNOWLEDGE_CAPABILITIES;
-    const activatesRoleGrants = seedScopeIds.has(referencedScopeId) || referencedCapabilities.read;
+    const isSeed = seedScopeIds.has(referencedScopeId);
+    const activatesRoleGrants = isSeed || referencedCapabilities.read;
     for (const grant of grantsByReference.get(referencedScopeId) ?? []) {
       if (grant.role !== 'mirror' && !activatesRoleGrants) continue;
+      if (grant.scopeNodeId === referencedScopeId && !isSeed) continue;
       const grantedCapabilities = resolveKnowledgeGrantCapabilities(grant, referencedCapabilities);
       const current = capabilitiesByScopeId.get(grant.scopeNodeId);
       const combined = combineKnowledgeCapabilities(current ? [current, grantedCapabilities] : [grantedCapabilities]);
