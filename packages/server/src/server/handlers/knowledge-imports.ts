@@ -34,6 +34,10 @@ export const RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE = createRoute({
   pathParamSchema: knowledgeImporterWebhookPathParams,
   bodySchema: knowledgeImporterWebhookBody,
   responseSchema: knowledgeImportRunSchema,
+  summary: 'Run a Knowledge importer from a webhook',
+  description:
+    'Queues a run of a webhook-triggered Knowledge importer and returns the queued run. Poll run history for the terminal state.',
+  tags: ['Knowledge'],
   handler: async ({ mastra, instanceKey, importerId, payload, request, requestContext }) => {
     let knowledge;
     try {
