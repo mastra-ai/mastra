@@ -795,9 +795,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === false
       ? undefined
       : (config?.memory ??
-        getDynamicMemory(storage, vector, config?.settingsPath, {
-          disableSettingsOmSeed: config?.disableSettingsOmSeed,
-        }, knowledge));
+        getDynamicMemory(
+          storage,
+          vector,
+          config?.settingsPath,
+          {
+            disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          },
+          knowledge,
+        ));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
