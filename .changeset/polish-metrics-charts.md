@@ -36,9 +36,10 @@ New `MetricsShareList` ranks rows by their share of a total: one strip on top, t
 
 ```tsx
 <MetricsCard.Toolbar>
-  <Tabs value={tab} onValueChange={setTab}>
-    <TabList variant="pill-ghost" size="sm">…</TabList>
-  </Tabs>
+  <MetricsCard.Tabs value={tab} onValueChange={setTab}>
+    <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
+    <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
+  </MetricsCard.Tabs>
   <MetricsShareList.Header columns={[{ label: 'Error rate' }]} valueLabel="Runs" />
 </MetricsCard.Toolbar>
 <MetricsShareList
@@ -51,7 +52,8 @@ New `MetricsShareList` ranks rows by their share of a total: one strip on top, t
 
 **Cards and loading**
 
-- New `MetricsCard.Toolbar` for a row of small tabs, a legend or list headers under the top bar.
+- New `MetricsCard.Toolbar` for a row of tabs, a legend or list headers under the top bar.
+- New `MetricsCard.Tabs` and `MetricsCard.Tab`: the compact view switch for a card's toolbar (24px, 12px labels), for metrics cards only.
 - `MetricsCard.Actions` takes `reveal="hover"` to show its buttons while the card is hovered or focused.
 - `MetricsCard.Summary`, `MetricsKpiCard.ValueRow` and `MetricsKpiCard.Footer` take `isLoading`, with skeletons sized to the real text so nothing moves when data lands.
 - New `SkeletonText` (a skeleton in a line of text) and `ChartSkeleton`. Skeletons now animate their shimmer; the animation was missing.
