@@ -74,6 +74,11 @@ export interface KnowledgeAccessProfile {
    * otherwise only organization administrators are.
    */
   importOperator?: boolean;
+  /**
+   * Existing scopes the host vouches for this caller, such as reconciled principal scopes.
+   * They are resolved, never materialized; a missing address makes the profile unavailable.
+   */
+  vouchedScopeAddresses?: string[];
 }
 
 export interface KnowledgeAccessProfileInput {
@@ -814,7 +819,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const profileScopesByAddress = new Map(
       [...profile.baselineScopes, ...(profile.intakeScopes ?? [])].map(scope => [scope.address, scope]),
     );
-    if (profileScopesByAddress.size === 0 || !profileScopesByAddress.has(profile.rootScopeAddress)) return undefined;
+    const existingVouchedAddresses = [
+      ...new Set((profile.vouchedScopeAddresses ?? []).filter(address => !profileScopesByAddress.has(address))),
+    ];
+    if (profileScopesByAddress.size === 0 && existingVouchedAddresses.length === 0) return undefined;
     const scopesByAddress = new Map(
       [
         builtInScopes.org,
@@ -848,7 +856,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       const resolved = resolvedScopes[index];
       if (resolved) resolvedByAddress.set(address, resolved.scopeNodeId);
     });
-    const vouchedScopeAddresses = [...profileScopesByAddress.keys()];
+    // Vouched and root scopes outside the materialized set must already exist; the profile cannot create them.
+    for (const address of new Set([...existingVouchedAddresses, profile.rootScopeAddress])) {
+      if (resolvedByAddress.has(address)) continue;
+      const existing = await input.knowledge.resolveScopeAddress(address);
+      if (existing) resolvedByAddress.set(address, existing.scopeNodeId);
+    }
+    const vouchedScopeAddresses = [...profileScopesByAddress.keys(), ...existingVouchedAddresses];
     if (vouchedScopeAddresses.some(address => !resolvedByAddress.has(address))) return undefined;
     const scopeIds = vouchedScopeAddresses
       .flatMap(address => {
