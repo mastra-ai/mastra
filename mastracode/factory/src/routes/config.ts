@@ -14,6 +14,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
+import { z } from 'zod';
 import {
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
@@ -905,14 +906,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             modelDefaults: options.modelDefaults,
           });
           if ('response' in context) return context.response;
-          let body: { modelId?: unknown };
+          let body: unknown;
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-          if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
+          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
+          const { modelId } = parsed.data;
           try {
             await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
             return c.json({ ok: true, modelId });

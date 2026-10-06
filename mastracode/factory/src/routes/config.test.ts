@@ -572,6 +572,14 @@ describe('default model routes with a tenant', () => {
     const invalid = await putDefault(buildApp(userA), { modelId: '   ' });
     expect(invalid.status).toBe(400);
 
+    const nullBody = await putDefault(buildApp(userA), null);
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+
+    const oversized = await putDefault(buildApp(userA), { modelId: 'm'.repeat(257) });
+    expect(oversized.status).toBe(400);
+    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+
     const saved = await putDefault(buildApp(userA), { modelId: ' openai/gpt-5.6 ' });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ ok: true, modelId: 'openai/gpt-5.6' });
