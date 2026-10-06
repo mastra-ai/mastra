@@ -209,7 +209,7 @@ test.describe('Viewer Role', () => {
 
     test('viewer cannot access tool execution', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Viewer has no tools:read permission. The old tool URL now lands on the Tools page
       // (`/tools?tool=weatherInfo`), which RoutePermissionGuard sends to the first accessible route.
@@ -325,7 +325,7 @@ test.describe('Viewer Role', () => {
     test('viewer has fewer permissions than member for tools', async ({ page }) => {
       // Viewer has no tools permission at all
       await setupViewerAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Wait for page to load
       await page.waitForLoadState('domcontentloaded');
@@ -336,8 +336,8 @@ test.describe('Viewer Role', () => {
         permissions: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
       });
 
-      // Go back to the tool: the viewer was redirected away, so a reload would stay on that page.
-      await page.goto('/tools/weatherInfo');
+      // Go back to the tool: the viewer was sent away from it, so a reload would stay on that page.
+      await page.goto('/tools?tool=weatherInfo');
 
       // Member should see tool execution panel on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();

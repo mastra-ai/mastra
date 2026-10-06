@@ -198,7 +198,7 @@ test.describe('Admin Role', () => {
 
     test('admin can see tool execution panel', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // The execution form lives on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();
@@ -207,7 +207,7 @@ test.describe('Admin Role', () => {
 
     test('admin does not see permission denied for tool execution', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Admin should NOT see permission denied message
       const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);

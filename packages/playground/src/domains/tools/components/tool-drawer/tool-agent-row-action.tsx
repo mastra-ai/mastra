@@ -10,7 +10,7 @@ export interface ToolAgentRowActionProps {
 
 /** "Current" for the agent the drawer was opened from, a link to the agent otherwise. */
 export function ToolAgentRowAction({ agent, isCurrent }: ToolAgentRowActionProps) {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
 
   if (isCurrent) {
     return (
@@ -22,12 +22,7 @@ export function ToolAgentRowAction({ agent, isCurrent }: ToolAgentRowActionProps
 
   return (
     // Pull the ghost button's own padding out so its text lines up with the types above.
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-mr-3"
-      render={<Link href={`/agents/${encodeURIComponent(agent.id)}`} />}
-    >
+    <Button variant="ghost" size="sm" className="-mr-3" render={<Link href={paths.agentLink(agent.id)} />}>
       Open
     </Button>
   );

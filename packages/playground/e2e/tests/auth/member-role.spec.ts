@@ -223,7 +223,7 @@ test.describe('Member Role', () => {
 
     test('member can see tool execution panel', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // The execution form lives on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();
@@ -232,7 +232,7 @@ test.describe('Member Role', () => {
 
     test('member does not see permission denied for tool execution', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Member has tools:execute permission
       const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
@@ -336,7 +336,7 @@ test.describe('Member Role', () => {
     test('member has more permissions than viewer for tools', async ({ page }) => {
       // Member can execute tools
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Member should see tool execution panel on the Playground tab
       await page.getByRole('tab', { name: 'Playground' }).click();

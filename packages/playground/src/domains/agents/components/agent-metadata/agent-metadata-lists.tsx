@@ -5,10 +5,10 @@ import { useActivatedSkills } from '@mastra/playground-ui/domains/agents/context
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useParams } from 'react-router';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
-import { useToolDrawerHref } from '@/domains/tools/hooks/use-tool-drawer-param';
 
 const metadataLinkClassName =
   'pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';
@@ -38,13 +38,14 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 };
 
 export interface AgentMetadataToolListProps {
+  agentId: string;
   tools: GetToolResponse[];
 }
 
-export const AgentMetadataToolList = ({ tools }: AgentMetadataToolListProps) => {
-  const { Link } = useLinkComponent();
-  // Tools open in a drawer over the agent page you're on (see ToolDrawer in the agent layout).
-  const toolDrawerHref = useToolDrawerHref();
+export const AgentMetadataToolList = ({ agentId, tools }: AgentMetadataToolListProps) => {
+  const { Link, paths } = useLinkComponent();
+  // A tool opens in a drawer over the conversation you're in, so reading it doesn't leave the thread.
+  const { threadId } = useParams();
 
   if (tools.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -55,7 +56,11 @@ export const AgentMetadataToolList = ({ tools }: AgentMetadataToolListProps) => 
       items={tools}
       getKey={tool => tool.id}
       renderItem={tool => (
-        <Link href={toolDrawerHref(tool.id)} data-testid="tool-badge" className={metadataLinkClassName}>
+        <Link
+          href={paths.agentToolLink(agentId, tool.id, threadId)}
+          data-testid="tool-badge"
+          className={metadataLinkClassName}
+        >
           <Badge>{tool.id}</Badge>
         </Link>
       )}

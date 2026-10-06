@@ -66,7 +66,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       <KeyboardScope>
         <AgentShortcuts agentId={agentId!} />
         <OverviewPanelShortcuts />
-        <ToolDrawer>{toolId => <AgentToolDrawerBody agentId={agentId!} toolId={toolId} />}</ToolDrawer>
+        <ToolDrawer>
+          <AgentToolDrawerBody agentId={agentId!} />
+        </ToolDrawer>
 
         <PageLayout
           variant="fit"

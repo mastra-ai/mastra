@@ -15,9 +15,6 @@ import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page
 import { PostHogProvider } from './lib/analytics';
 import {
   agentIndexLoader,
-  legacyAgentToolLoader,
-  legacyMcpServerToolLoader,
-  legacyToolLoader,
   agentThreadsIndexLoader,
   legacyAgentChatLoader,
   legacyAgentSettingsLoader,
@@ -358,10 +355,6 @@ export const routes: RouteObject[] = [
         element: <CmsPromptBlocksEditPage />,
       },
       {
-        path: '/agents/:agentId/tools/:toolId',
-        loader: legacyAgentToolLoader,
-      },
-      {
         path: '/agents/:agentId',
         element: (
           <AgentLayout>
@@ -391,10 +384,6 @@ export const routes: RouteObject[] = [
       },
 
       { path: '/tools', element: <Tools /> },
-      {
-        path: '/tools/:toolId',
-        loader: legacyToolLoader,
-      },
 
       {
         path: '/integrations',
@@ -411,10 +400,6 @@ export const routes: RouteObject[] = [
       {
         path: '/mcps/:serverId',
         element: <McpServerPage />,
-      },
-      {
-        path: '/mcps/:serverId/tools/:toolId',
-        loader: legacyMcpServerToolLoader,
       },
 
       { path: '/workspaces', element: <Workspace /> },

@@ -15,15 +15,6 @@ export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) =
 
 const toolSearch = (toolId: string) => `?${new URLSearchParams({ tool: toolId }).toString()}`;
 
-/** Tools open in a drawer now; old tool page URLs land on the page that hosts the drawer. */
-export const legacyToolLoader = ({ params }: LoaderFunctionArgs) => redirect(`/tools${toolSearch(params.toolId!)}`);
-
-export const legacyAgentToolLoader = ({ params }: LoaderFunctionArgs) =>
-  redirect(`/agents/${params.agentId}/threads/new${toolSearch(params.toolId!)}`);
-
-export const legacyMcpServerToolLoader = ({ params }: LoaderFunctionArgs) =>
-  redirect(`/mcps/${params.serverId}${toolSearch(params.toolId!)}`);
-
 export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
   return redirect(`/agents/${params.agentId}/threads/new${search}`);
@@ -55,7 +46,8 @@ export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string 
 
 export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/threads/new${toolSearch(toolId)}`,
+  agentToolLink: (agentId: string, toolId: string, threadId?: string) =>
+    `/agents/${agentId}/threads/${threadId ?? 'new'}${toolSearch(toolId)}`,
   agentSkillLink: (_agentId: string, _skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceSkillFileLink(workspaceId, skillPath),
   agentsLink: () => `/agents`,
