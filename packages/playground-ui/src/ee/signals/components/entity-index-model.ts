@@ -4,6 +4,9 @@ import { formatDate } from '@/utils/date-format';
 export type TraceIntelligenceEntitySort = 'default' | 'entity-asc' | 'entity-desc';
 export type TraceIntelligenceEntityView = 'compact' | 'list';
 
+export const entityIndexColumns =
+  'minmax(12rem,1.5fr) minmax(7rem,0.6fr) minmax(8rem,0.7fr) minmax(8rem,0.7fr) minmax(12rem,1fr)';
+
 const numberFormatter = new Intl.NumberFormat('en-US');
 
 export type EntityIndexMetadata = {
@@ -34,7 +37,7 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
   const readySignalCount =
     entity.readySignalCount ?? enabledCatalog?.filter(signal => signal.status === 'ready').length;
   return {
-    traceCount: entity.traceCount === undefined ? '—' : numberFormatter.format(entity.traceCount),
+    traceCount: formatEntityTraceCount(entity.traceCount),
     signalsSet:
       readySignalCount === undefined || enabledSignalCount === undefined
         ? '—'
@@ -47,4 +50,8 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
 export function entityStatusLabel(status: EntityLearningProgressStatus | undefined): string {
   if (!status) return 'Unavailable';
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+export function formatEntityTraceCount(traceCount: number | undefined): string {
+  return traceCount === undefined ? '—' : numberFormatter.format(traceCount);
 }

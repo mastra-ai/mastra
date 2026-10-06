@@ -11,7 +11,12 @@ import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityIndex } from '../trace-intelligence-entity-index';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from '../trace-intelligence-entity-index';
-import { customSignalEntityResponse, entityIndexResponse } from './fixtures/entity-index';
+import {
+  collectingEntityResponse,
+  customSignalEntityResponse,
+  entityIndexResponse,
+  processingEntityResponse,
+} from './fixtures/entity-index';
 
 afterEach(() => cleanup());
 
@@ -85,7 +90,7 @@ describe('TraceIntelligenceEntityIndex', () => {
 
       renderIndex();
 
-      expect(screen.getByRole('status', { name: 'Loading Trace Intelligence entities' })).toBeTruthy();
+      expect(screen.getByRole('status', { name: 'Loading Trace Intelligence agents' })).toBeTruthy();
     });
   });
 
@@ -138,7 +143,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       useEntityFixture();
       renderIndex();
 
-      await screen.findByRole('region', { name: 'Trace Intelligence entities' });
+      await screen.findByRole('region', { name: 'Trace Intelligence agents' });
       const row = closestEntityRow('support-agent');
       expect(within(row).getByText('12,480')).toBeTruthy();
       expect(within(row).getByText('5 of 5')).toBeTruthy();
@@ -146,13 +151,34 @@ describe('TraceIntelligenceEntityIndex', () => {
       expect(row.getAttribute('href')).toBe('/intelligence/entities/agent/support-agent');
     });
 
-    it('keeps collecting entities visible', async () => {
+    it('keeps collecting agents visible without a detail link', async () => {
       useEntityFixture();
       renderIndex();
 
       await screen.findByText('billing-agent');
-      const collectingRow = closestEntityRow('billing-agent');
-      expect(within(collectingRow).getByText('Collecting')).toBeTruthy();
+      const agentName = screen.getByText('billing-agent');
+      expect(agentName.closest('a')).toBeNull();
+      expect(screen.getByText('Waiting for Traces')).toBeTruthy();
+    });
+
+    it('explains collected traces when the waiting status receives focus', async () => {
+      useEntityFixture();
+      renderIndex();
+
+      await screen.findByText('billing-agent');
+      fireEvent.focus(screen.getByRole('note', { name: 'Waiting for traces for billing-agent' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain('42 traces collected');
+    });
+
+    it('keeps collecting agents non-clickable in compact view', async () => {
+      useEntityFixture();
+      renderIndex({ initialView: 'compact' });
+
+      const agentName = await screen.findByText('billing-agent');
+      const card = agentName.closest('[data-entity-card]');
+      expect(card?.querySelector('a')).toBeNull();
+      expect(screen.getByRole('link', { name: 'Open agent support-agent' })).toBeTruthy();
     });
 
     it('filters entity identifiers', async () => {
@@ -160,13 +186,13 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'billing' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'billing' } });
 
       await waitFor(() => expect(screen.queryByText('support-agent')).not.toBeTruthy());
       expect(screen.getByText('billing-agent')).toBeTruthy();
 
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'missing' } });
-      expect(await screen.findByText('No entities match your search')).toBeTruthy();
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'missing' } });
+      expect(await screen.findByText('No agents match your search')).toBeTruthy();
     });
 
     it('sorts entities from Z to A', async () => {
@@ -174,15 +200,13 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('support-agent');
-      fireEvent.click(screen.getByRole('combobox', { name: 'Sort entities' }));
-      const descendingOption = await screen.findByRole('option', { name: 'Entity: Z–A' });
+      fireEvent.click(screen.getByRole('combobox', { name: 'Sort agents' }));
+      const descendingOption = await screen.findByRole('option', { name: 'Agent: Z–A' });
       fireEvent.pointerDown(descendingOption, { pointerType: 'mouse' });
       fireEvent.click(descendingOption, { detail: 1 });
 
       await waitFor(() => {
-        const entityIds = Array.from(
-          document.querySelectorAll<HTMLAnchorElement>('a[href^="/intelligence/entities/agent/"]'),
-        ).map(row => row.getAttribute('href')?.split('/').at(-1));
+        const entityIds = screen.getAllByTitle(/-agent$/).map(name => name.textContent);
         expect(entityIds).toEqual(['support-agent', 'research-agent', 'billing-agent']);
       });
     });
@@ -198,6 +222,33 @@ describe('TraceIntelligenceEntityIndex', () => {
       expect(within(card).getByText('12,480')).toBeTruthy();
       expect(within(card).getByText('5 of 5')).toBeTruthy();
       expect(within(card).getByText('Ready')).toBeTruthy();
+    });
+  });
+
+  describe.each(['list', 'compact'] as const)('when an agent is processing in %s view', view => {
+    it('keeps the detail link available', async () => {
+      useEntityFixture(processingEntityResponse);
+      renderIndex({ initialView: view });
+
+      expect((await screen.findByRole('link', { name: 'Open agent processing-agent' })).getAttribute('href')).toBe(
+        '/intelligence/entities/agent/processing-agent',
+      );
+    });
+  });
+
+  describe.each([
+    [undefined, 'Trace count is unavailable'],
+    [0, '0 traces collected'],
+    [1, '1 trace collected'],
+  ])('when a collecting agent has trace count %s', (traceCount, expectedDescription) => {
+    it('explains the reported count without inventing a value', async () => {
+      useEntityFixture(collectingEntityResponse(traceCount));
+      renderIndex();
+
+      await screen.findByText('new-agent');
+      fireEvent.focus(screen.getByRole('note', { name: 'Waiting for traces for new-agent' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain(expectedDescription);
     });
   });
 
@@ -248,7 +299,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       useEntityFixture({ entities: [] });
       renderIndex();
 
-      expect(await screen.findByText('No Trace Intelligence entities yet')).toBeTruthy();
+      expect(await screen.findByText('No Trace Intelligence agents yet')).toBeTruthy();
     });
   });
 
@@ -290,12 +341,12 @@ describe('TraceIntelligenceEntityIndex', () => {
       );
 
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'support' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'support' } });
       await waitFor(() => expect(onSearchChange).toHaveBeenCalledWith('support'));
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
       expect(onViewChange).toHaveBeenCalledWith('compact');
-      fireEvent.click(screen.getByRole('combobox', { name: 'Sort entities' }));
-      const ascendingOption = await screen.findByRole('option', { name: 'Entity: A–Z' });
+      fireEvent.click(screen.getByRole('combobox', { name: 'Sort agents' }));
+      const ascendingOption = await screen.findByRole('option', { name: 'Agent: A–Z' });
       fireEvent.pointerDown(ascendingOption, { pointerType: 'mouse' });
       fireEvent.click(ascendingOption, { detail: 1 });
       expect(onSortChange.mock.calls[0]?.[0]).toBe('entity-asc');

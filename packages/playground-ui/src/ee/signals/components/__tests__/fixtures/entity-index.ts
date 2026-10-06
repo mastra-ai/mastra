@@ -81,3 +81,21 @@ export const customSignalEntityResponse: ThemeEntitiesResponse = {
 };
 
 export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };
+
+export function collectingEntityResponse(traceCount: number | undefined): ThemeEntitiesResponse {
+  return {
+    entities: [{ entityId: 'new-agent', entityType: 'agent', availableSignals: [], status: 'collecting', traceCount }],
+  };
+}
+
+export const processingEntityResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'processing-agent',
+      entityType: 'agent',
+      availableSignals: ['goal'],
+      traceCount: 512,
+      status: 'processing',
+    },
+  ],
+};
