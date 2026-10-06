@@ -1,7 +1,11 @@
-import { KnowledgeStorage, KnowledgeUnsupportedError } from '@mastra/core/storage';
+import { createKnowledgeCoreLoader } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import { KnowledgeStorage } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
+
+const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
 /**
  * MySQL does not yet implement the canonical Knowledge storage contract.
@@ -19,6 +23,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   async init(): Promise<void> {}
 
   async dangerouslyClearAll(): Promise<void> {
+    const { KnowledgeUnsupportedError } = await loadKnowledgeCore();
     throw new KnowledgeUnsupportedError('MySQL');
   }
 }

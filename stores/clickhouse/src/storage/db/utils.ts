@@ -40,19 +40,11 @@ import {
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-  TABLE_KNOWLEDGE_NODE_SCOPES,
-  TABLE_KNOWLEDGE_RECORD_SCOPES,
-  TABLE_KNOWLEDGE_SCOPE_GRANTS,
-  TABLE_KNOWLEDGE_ACCESS_STATE,
-  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-  TABLE_KNOWLEDGE_NODE_ADDRESSES,
-  TABLE_KNOWLEDGE_IMPORT_STATE,
-  TABLE_KNOWLEDGE_IMPORT_RUNS,
-  TABLE_KNOWLEDGE_PROPOSALS,
-  TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import type { ClickhouseReplicationConfig } from './replication';
 
+// Tables whose name constants are newer than the `@mastra/core` peer floor use literal keys; the record type still
+// enforces that every table is listed.
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
@@ -100,16 +92,16 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_KNOWLEDGE_MENTIONS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_ACTIVITY]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_NODE_SCOPES]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_RECORD_SCOPES]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_SCOPE_GRANTS]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_ACCESS_STATE]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_SCOPE_ADDRESSES]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_NODE_ADDRESSES]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_IMPORT_STATE]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_IMPORT_RUNS]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_PROPOSALS]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_SCHEMA]: `ReplacingMergeTree()`,
+  mastra_knowledge_node_scopes: `ReplacingMergeTree()`,
+  mastra_knowledge_record_scopes: `ReplacingMergeTree()`,
+  mastra_knowledge_scope_grants: `ReplacingMergeTree()`,
+  mastra_knowledge_access_state: `ReplacingMergeTree()`,
+  mastra_knowledge_scope_addresses: `ReplacingMergeTree()`,
+  mastra_knowledge_node_addresses: `ReplacingMergeTree()`,
+  mastra_knowledge_import_state: `ReplacingMergeTree()`,
+  mastra_knowledge_import_runs: `ReplacingMergeTree()`,
+  mastra_knowledge_proposals: `ReplacingMergeTree()`,
+  mastra_knowledge_schema: `ReplacingMergeTree()`,
 };
 
 /**
