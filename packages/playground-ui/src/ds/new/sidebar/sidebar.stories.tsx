@@ -1,0 +1,355 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import {
+  AlertTriangle,
+  Bell,
+  Box,
+  Database,
+  FlaskConical,
+  Home,
+  Key,
+  LayoutGrid,
+  ListTodo,
+  Plug,
+  Search,
+  Settings,
+  Users,
+  Waypoints,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Sidebar, useSidebar } from '.';
+import { Avatar } from '@/ds/components/Avatar';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/ds/components/Dialog';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Input } from '@/ds/components/Input';
+import { LogoWithoutText } from '@/ds/components/Logo';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
+import { focusRing } from '@/ds/primitives/transitions';
+import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
+import { useKeydown } from '@/lib/keyboard/use-keydown';
+import { cn } from '@/lib/utils';
+
+const meta: Meta<typeof Sidebar> = {
+  title: 'New/Sidebar',
+  component: Sidebar,
+  decorators: [
+    (Story, context) => (
+      <KeyboardShortcutsProvider>
+        <Sidebar.Provider
+          defaultWidth={240}
+          minWidth={200}
+          maxWidth={480}
+          collapseBelow={180}
+          storageKey={`sidebar-story:${context.id}`}
+        >
+          <SidebarStoryShortcuts />
+          <TooltipProvider>
+            <Story />
+          </TooltipProvider>
+        </Sidebar.Provider>
+      </KeyboardShortcutsProvider>
+    ),
+  ],
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'A composable product-navigation shell. Use Header for contextual product controls or the optional CommandHeader for compact brand and search utilities. FooterMeta supports self-hosted version metadata and a relocated collapse control.',
+      },
+    },
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof Sidebar>;
+
+function SidebarStoryShortcuts() {
+  const { toggleSidebar } = useSidebar();
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
+  return null;
+}
+
+type SidebarStoryProps = {
+  header?: 'default' | 'command';
+  version?: string;
+  variant?: 'default' | 'raised';
+};
+
+function SidebarSearchDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K">
+            <Search />
+          </Sidebar.SearchTrigger>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Search</DialogTitle>
+          <DialogDescription>Find projects, pages, and settings.</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <Input aria-label="Search projects, pages, and settings" placeholder="Search" autoFocus />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SidebarStory({ header = 'default', version, variant = 'default' }: SidebarStoryProps) {
+  const { state, expand } = useSidebar();
+  const [view, setView] = useState('root');
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+
+  function openView(nextView: string) {
+    expand();
+    setView(nextView);
+  }
+
+  return (
+    <div className={variant === 'raised' ? 'flex h-dvh w-dvw bg-sidebar' : 'flex h-dvh w-dvw bg-background'}>
+      <Sidebar variant={variant} className={variant === 'default' ? 'border-r border-border' : undefined}>
+        {header === 'command' ? (
+          <Sidebar.CommandHeader>
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
+              <Sidebar.Brand
+                logo={<LogoWithoutText className="size-6" />}
+                title={
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">Mastra</span>
+                    <span className="inline-flex h-5 items-center rounded bg-muted px-1.5 text-meta text-muted-foreground">
+                      Beta
+                    </span>
+                  </span>
+                }
+              />
+            </a>
+            <SidebarSearchDialog />
+          </Sidebar.CommandHeader>
+        ) : (
+          <Sidebar.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
+              <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
+            </a>
+            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
+              Staging
+            </span>
+            <Sidebar.Trigger />
+          </Sidebar.Header>
+        )}
+
+        <Sidebar.Nav>
+          <Sidebar.NavStack value={view} onValueChange={setView}>
+            <Sidebar.NavStack.Root>
+              <Sidebar.Sections
+                sections={[
+                  {
+                    key: 'overview',
+                    links: [{ name: 'Overview', url: '/', icon: <Home /> }],
+                  },
+                  {
+                    key: 'observability',
+                    title: 'Observability',
+                    links: [
+                      { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
+                      { name: 'Traces', url: '/traces', icon: <TraceIcon />, isActive: true },
+                      { name: 'Intelligence', url: '/intelligence', icon: <LayoutGrid /> },
+                      { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
+                    ],
+                  },
+                  {
+                    key: 'infrastructure',
+                    title: 'Infrastructure',
+                    links: [
+                      { name: 'Deploys', url: '/deploys', icon: <Box /> },
+                      { name: 'Gateway', url: '/gateway', icon: <Workflow />, opensView: true },
+                      { name: 'Databases', url: '/databases', icon: <Database /> },
+                    ],
+                    moreLinks: [
+                      { name: 'Tools', url: '/tools', icon: <Wrench /> },
+                      { name: 'Workspaces', url: '/workspaces', icon: <LayoutGrid /> },
+                    ],
+                  },
+                  {
+                    key: 'evals',
+                    title: 'Evals',
+                    links: [{ name: 'Experiments', url: '/experiments', icon: <FlaskConical /> }],
+                  },
+                  {
+                    key: 'agent-learning',
+                    title: 'Agent Learning',
+                    links: [{ name: 'Issues', url: '/issues', icon: <ListTodo /> }],
+                  },
+                  {
+                    key: 'project-settings',
+                    separator: true,
+                    links: [
+                      { name: 'Environments', url: '/environments', icon: <Waypoints />, opensView: true },
+                      { name: 'Settings', url: '/settings', icon: <Settings />, opensView: true },
+                    ],
+                  },
+                ]}
+              />
+            </Sidebar.NavStack.Root>
+
+            <Sidebar.NavStack.View value="gateway" title="Gateway" returnFocusRef={menuTriggerRef}>
+              <Sidebar.NavList>
+                <Sidebar.NavLink link={{ name: 'API keys', url: '/gateway/api-keys', icon: <Key /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Usage', url: '/gateway/usage', icon: <MetricsIcon /> }} />
+                <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <Workflow /> }} />
+                <Sidebar.NavLink link={{ name: 'Logs', url: '/gateway/logs', icon: <LogsIcon /> }} />
+                <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <Settings /> }} />
+              </Sidebar.NavList>
+            </Sidebar.NavStack.View>
+
+            <Sidebar.NavStack.View value="environments" title="Environments" returnFocusRef={menuTriggerRef}>
+              <Sidebar.NavList>
+                <Sidebar.NavLink link={{ name: 'Environments', url: '/environments', icon: <Waypoints /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Environment variables', url: '/variables', icon: <Key /> }} />
+              </Sidebar.NavList>
+            </Sidebar.NavStack.View>
+
+            <Sidebar.NavStack.View value="settings" title="Settings" returnFocusRef={menuTriggerRef}>
+              <Sidebar.NavList>
+                <Sidebar.NavLink link={{ name: 'General', url: '/settings', icon: <Settings /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Connect', url: '/settings/connect', icon: <Plug /> }} />
+              </Sidebar.NavList>
+            </Sidebar.NavStack.View>
+          </Sidebar.NavStack>
+        </Sidebar.Nav>
+
+        <Sidebar.Footer>
+          <Sidebar.Meter
+            label="Credits"
+            value="$4"
+            status="Credits are low"
+            tone="warning"
+            icon={<AlertTriangle className="size-3 shrink-0 text-warning-foreground" aria-hidden />}
+            href="/organization/billing"
+            linkLabel="Credit balance"
+          />
+          <DropdownMenu>
+            <Sidebar.NavList>
+              <Sidebar.NavLink
+                link={{ name: 'Justin Levine', url: '#', icon: <Avatar name="Justin Levine" size="sm" /> }}
+                render={
+                  <DropdownMenu.Trigger
+                    ref={menuTriggerRef}
+                    aria-label={state === 'collapsed' ? 'Justin Levine menu' : undefined}
+                  >
+                    <Avatar name="Justin Levine" size="sm" />
+                    <Sidebar.NavLabel state={state}>Justin Levine</Sidebar.NavLabel>
+                  </DropdownMenu.Trigger>
+                }
+              />
+            </Sidebar.NavList>
+            <DropdownMenu.Content
+              align="start"
+              sideOffset={8}
+              className="w-64 border-border bg-popover text-foreground"
+            >
+              <div className="px-2 py-1 text-meta text-muted-foreground">justin@mastra.ai</div>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item onSelect={() => openView('gateway')}>
+                <Workflow />
+                Gateway
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => openView('environments')}>
+                <Waypoints />
+                Environments
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => openView('settings')}>
+                <Settings />
+                Settings
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <div className="px-2 py-1 text-meta text-muted-foreground">Mastra</div>
+              <DropdownMenu.Item>
+                <Users />
+                Organization settings
+              </DropdownMenu.Item>
+              <DropdownMenu.Item>
+                <Bell />
+                Notifications
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+          {header === 'command' || version ? (
+            <Sidebar.FooterMeta action={header === 'command' ? <Sidebar.Trigger /> : undefined}>
+              {version}
+            </Sidebar.FooterMeta>
+          ) : null}
+        </Sidebar.Footer>
+      </Sidebar>
+
+      <main className="min-w-0 flex-1 p-6">
+        <Sidebar.MobileTrigger className="mb-4" />
+        <h1 className="text-heading text-foreground">Main content</h1>
+        <p className="mt-2 text-body text-muted-foreground">
+          Product navigation stays compact while route-derived views take over the sidebar body.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+export const Default: Story = {
+  render: () => <SidebarStory />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The standard header keeps contextual controls and collapse together. It does not include global search.',
+      },
+    },
+  },
+};
+
+export const CommandHeader: Story = {
+  render: () => <SidebarStory header="command" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The optional command header pairs compact product identity with a global search trigger. Collapse moves to the footer.',
+      },
+    },
+  },
+};
+
+export const SelfHostedCommandHeader: Story = {
+  render: () => <SidebarStory header="command" version="Mastra v0.24.6" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Self-hosted products may add their running version through FooterMeta without changing the sidebar root API.',
+      },
+    },
+  },
+};
+
+export const Raised: Story = {
+  render: () => <SidebarStory variant="raised" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The raised variant places the sidebar contents on a raised surface that bleeds off the left edge. On mobile it falls back to the standard drawer.',
+      },
+    },
+  },
+};

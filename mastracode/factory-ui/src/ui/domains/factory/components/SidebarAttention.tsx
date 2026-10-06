@@ -1,7 +1,7 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -85,7 +85,7 @@ export function SidebarAttention() {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <MainSidebar.NavLink asChild link={{ name: 'Needs attention', url: '#', icon: <Inbox /> }} isActive={open}>
+      <Sidebar.NavLink asChild link={{ name: 'Needs attention', url: '#', icon: <Inbox /> }} isActive={open}>
         <PopoverTrigger id="attention-trigger" type="button" aria-label={triggerLabel(openCount, unreadCount)}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Inbox size={16} />
@@ -93,16 +93,16 @@ export function SidebarAttention() {
               <span className="bg-warning-indicator absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
             ) : null}
           </span>
-          <MainSidebar.NavLabel className="flex items-center gap-2">
+          <Sidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>
             {unreadCount > 0 ? (
               <Badge variant="orange" size="sm">
                 {unreadCount}
               </Badge>
             ) : null}
-          </MainSidebar.NavLabel>
+          </Sidebar.NavLabel>
         </PopoverTrigger>
-      </MainSidebar.NavLink>
+      </Sidebar.NavLink>
       <PopoverContent
         side="right"
         align="end"

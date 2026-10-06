@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider, useSidebar } from '@mastra/playground-ui/new/sidebar';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,18 +24,18 @@ const mockMatchMedia = (matches: boolean) => {
 };
 
 const StateProbe = () => {
-  const { state } = useMainSidebar();
+  const { state } = useSidebar();
   return <div data-testid="sidebar-state">{state}</div>;
 };
 
 const renderSidebar = () =>
   render(
     <KeyboardShortcutsProvider>
-      <MainSidebarProvider>
+      <SidebarProvider>
         <SidebarShortcuts />
         <StateProbe />
         <textarea data-testid="composer" />
-      </MainSidebarProvider>
+      </SidebarProvider>
     </KeyboardShortcutsProvider>,
   );
 

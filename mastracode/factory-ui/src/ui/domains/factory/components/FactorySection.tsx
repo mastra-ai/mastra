@@ -1,4 +1,4 @@
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
@@ -18,7 +18,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
-      <SidebarNew.NavList>
+      <Sidebar.NavList>
         <FactoryLink to={`/factories/${factoryId}/overview`} icon={House} label="Overview" />
         <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
         <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
@@ -26,10 +26,10 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         {features.data?.knowledge ? (
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
         ) : null}
-      </SidebarNew.NavList>
+      </Sidebar.NavList>
       <section className="flex flex-col gap-1" aria-label="Boards">
-        <SidebarNew.NavHeader icon={<SquareKanban />}>Boards</SidebarNew.NavHeader>
-        <SidebarNew.NavList>
+        <Sidebar.NavHeader icon={<SquareKanban />}>Boards</Sidebar.NavHeader>
+        <Sidebar.NavList>
           {catalog.isPending ? (
             <li role="status">Loading boards…</li>
           ) : catalog.isError ? (
@@ -46,7 +46,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
               />
             ))
           )}
-        </SidebarNew.NavList>
+        </Sidebar.NavList>
       </section>
       {children}
     </nav>
@@ -60,13 +60,13 @@ function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentTyp
   const isActive = pathname === targetPathname || pathname.startsWith(`${targetPathname}/`);
 
   return (
-    <SidebarNew.NavLink
+    <Sidebar.NavLink
       link={{ name: label, url: to }}
       isActive={isActive}
       render={
         <NavLink to={to} onClick={() => overlays.close('sidebar')}>
           <Icon />
-          <SidebarNew.NavLabel>{label}</SidebarNew.NavLabel>
+          <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
         </NavLink>
       }
     />

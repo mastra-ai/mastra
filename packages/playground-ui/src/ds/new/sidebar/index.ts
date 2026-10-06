@@ -1,28 +1,33 @@
-export { SidebarNew } from './sidebar-new';
-export { SidebarNewBrand, type SidebarNewBrandProps } from './sidebar-new-brand';
-export { SidebarNewCommandHeader, type SidebarNewCommandHeaderProps } from './sidebar-new-command-header';
-export { SidebarNewFooter, type SidebarNewFooterProps } from './sidebar-new-footer';
-export { SidebarNewFooterMeta, type SidebarNewFooterMetaProps } from './sidebar-new-footer-meta';
-export { SidebarNewHeader, type SidebarNewHeaderProps } from './sidebar-new-header';
-export { SidebarNewMeter, type SidebarNewMeterProps, type SidebarNewMeterTone } from './sidebar-new-meter';
-export { SidebarNewNav, type SidebarNewNavProps } from './sidebar-new-nav';
-export { SidebarNewNavHeader, type SidebarNewNavHeaderProps } from './sidebar-new-nav-header';
+export { Sidebar } from './sidebar';
+export { SidebarBrand, type SidebarBrandProps } from './header/sidebar-brand';
+export { SidebarCommandHeader, type SidebarCommandHeaderProps } from './header/sidebar-command-header';
+export { SidebarFooter, type SidebarFooterProps } from './footer/sidebar-footer';
+export { SidebarFooterMeta, type SidebarFooterMetaProps } from './footer/sidebar-footer-meta';
+export { SidebarHeader, type SidebarHeaderProps } from './header/sidebar-header';
+export { SidebarMeter, type SidebarMeterProps, type SidebarMeterTone } from './footer/sidebar-meter';
+export { SidebarNav, type SidebarNavProps } from './nav/sidebar-nav';
+export { SidebarNavHeader, type SidebarNavHeaderProps } from './nav/sidebar-nav-header';
+export { SidebarNavLink, type SidebarLink, type SidebarNavLinkProps } from './nav/sidebar-nav-link';
+export { navItemClasses, type SidebarNavItemSize } from './nav/sidebar-nav-item-classes';
+export { getIsLinkActive } from './nav/sidebar-link-active';
 export {
-  SidebarNewNavStack,
-  type SidebarNewNavStackProps,
-  type SidebarNewNavStackRootViewProps,
-  type SidebarNewNavStackViewProps,
-} from './sidebar-new-nav-stack';
-export { SidebarNewRoot, type SidebarNewRootProps } from './sidebar-new-root';
-export { SidebarNewSearchTrigger, type SidebarNewSearchTriggerProps } from './sidebar-new-search-trigger';
-export { SidebarNewSections, type SidebarNewSection, type SidebarNewSectionsProps } from './sidebar-new-sections';
-export { SidebarNewTrigger, type SidebarNewTriggerProps } from './sidebar-new-trigger';
+  SidebarNavStack,
+  type SidebarNavStackProps,
+  type SidebarNavStackRootViewProps,
+  type SidebarNavStackViewProps,
+} from './nav-stack/sidebar-nav-stack';
 export {
-  getIsLinkActive,
-  MainSidebarProvider as SidebarNewProvider,
-  type MainSidebarProviderProps as SidebarNewProviderProps,
-  navItemClasses,
-  type MainSidebarNavItemSize as SidebarNewNavItemSize,
-  type NavLink as SidebarNewLink,
-  useMainSidebar as useSidebarNew,
-} from '@/ds/components/MainSidebar/main-sidebar';
+  useMaybeSidebar,
+  useMaybeSidebarState,
+  useMobileDrawer,
+  useSidebar,
+  type MobileDrawerContextValue,
+  type SidebarState,
+  type SidebarStateContextValue,
+} from './root/sidebar-context';
+export { SidebarMobileTrigger, type SidebarMobileTriggerProps } from './root/sidebar-mobile-trigger';
+export { SidebarProvider, type SidebarProviderProps } from './root/sidebar-provider';
+export { SidebarRoot, type SidebarRootProps } from './root/sidebar-root';
+export { SidebarTrigger, type SidebarTriggerProps } from './root/sidebar-trigger';
+export { SidebarSearchTrigger, type SidebarSearchTriggerProps } from './header/sidebar-search-trigger';
+export { SidebarSections, type SidebarSection, type SidebarSectionsProps } from './sections/sidebar-sections';

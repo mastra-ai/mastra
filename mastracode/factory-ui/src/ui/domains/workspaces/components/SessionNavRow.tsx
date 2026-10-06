@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/new/sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
@@ -15,7 +15,7 @@ import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 /**
- * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
+ * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
  * hover, and active states. Lifecycle lives on the left as an activity belt;
  * the trailing slot beside the label is left to the spinner, the merge badge
@@ -82,7 +82,7 @@ export function SessionNavRow({
       }}
       title={preview ? undefined : title}
     >
-      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
+      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -124,7 +124,7 @@ export function SessionNavRow({
     </>
   );
   const row = (
-    <MainSidebar.NavLink
+    <Sidebar.NavLink
       ref={anchor}
       link={{ name, url }}
       isActive={active}

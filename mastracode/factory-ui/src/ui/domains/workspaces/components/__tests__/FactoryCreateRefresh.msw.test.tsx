@@ -3,7 +3,7 @@
  * switcher must list it right away — the factories query is invalidated before
  * the wizard hands over to the new Factory.
  */
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -99,12 +99,12 @@ describe('factory creation refresh', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/fp-host/new-factory']}>
-        <MainSidebarProvider storageKey="repro" mobileBreakpoint={768}>
+        <SidebarProvider storageKey="repro" mobileBreakpoint={768}>
           <FactorySwitcher />
           <Routes>
             <Route path="/factories/:factoryId/new-factory" element={<CreateFactoryWizard />} />
           </Routes>
-        </MainSidebarProvider>
+        </SidebarProvider>
       </MemoryRouter>,
     );
 

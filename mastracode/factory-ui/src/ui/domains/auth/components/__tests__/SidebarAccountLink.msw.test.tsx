@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -16,7 +16,7 @@ function CurrentPath() {
 function renderAccountLink() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/work']}>
-      <MainSidebarProvider storageKey="sidebar-account-link-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="sidebar-account-link-test" mobileBreakpoint={0}>
         <Routes>
           <Route
             path="/factories/:factoryId/*"
@@ -28,7 +28,7 @@ function renderAccountLink() {
             }
           />
         </Routes>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }

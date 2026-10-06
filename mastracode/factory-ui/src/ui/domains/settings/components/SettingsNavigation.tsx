@@ -1,5 +1,5 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
@@ -130,7 +130,7 @@ export function SettingsNavigation() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
-  const { state } = useMainSidebar();
+  const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
@@ -142,14 +142,14 @@ export function SettingsNavigation() {
 
   return (
     <>
-      <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+      <Sidebar.NavList>
+        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
-            <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
+            <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
           </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
+        </Sidebar.NavLink>
+      </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
           <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
@@ -159,17 +159,17 @@ export function SettingsNavigation() {
         filteredGroups.map(group => {
           const headerId = group.label ? `settings-${group.id}` : undefined;
           return (
-            <MainSidebar.NavSection
+            <Sidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
               aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
-              {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
-              <MainSidebar.NavList>
+              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+              <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;
                   return (
-                    <MainSidebar.NavLink
+                    <Sidebar.NavLink
                       key={id}
                       asChild
                       isActive={isActive}
@@ -182,13 +182,13 @@ export function SettingsNavigation() {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <Icon aria-hidden="true" />
-                        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+                        <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
                       </Link>
-                    </MainSidebar.NavLink>
+                    </Sidebar.NavLink>
                   );
                 })}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
+              </Sidebar.NavList>
+            </Sidebar.NavSection>
           );
         })
       ) : (

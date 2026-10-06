@@ -4,7 +4,7 @@
  * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
  * undifferentiated list, and the reader had no way to cut it down to their own work.
  */
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -55,7 +55,7 @@ function stubSessions(sessions: FactoryUserSession[]) {
 
 function renderSection(defaultState: 'default' | 'collapsed' = 'default') {
   return renderWithProviders(
-    <SidebarNew.Provider defaultState={defaultState} collapsedWidth={0} storageKey="owner-scope-test">
+    <Sidebar.Provider defaultState={defaultState} collapsedWidth={0} storageKey="owner-scope-test">
       <MemoryRouter initialEntries={['/factories/fp-1']}>
         <ChatSessionContext.Provider
           value={{
@@ -75,7 +75,7 @@ function renderSection(defaultState: 'default' | 'collapsed' = 'default') {
           </Routes>
         </ChatSessionContext.Provider>
       </MemoryRouter>
-    </SidebarNew.Provider>,
+    </Sidebar.Provider>,
   );
 }
 

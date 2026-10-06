@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -296,13 +296,13 @@ export function renderThread() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="preparing-test">
+            <SidebarProvider storageKey="preparing-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <ThreadSurface />
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
         <Route
@@ -338,13 +338,13 @@ function UserThreadRouteSurface() {
 /** Mirrors the provider stack `AppLayout` mounts around routed chat pages. */
 function ChatRouteShell() {
   return (
-    <MainSidebarProvider>
+    <SidebarProvider>
       <OverlaysProvider>
         <ChatSessionRouteProvider>
           <Outlet />
         </ChatSessionRouteProvider>
       </OverlaysProvider>
-    </MainSidebarProvider>
+    </SidebarProvider>
   );
 }
 

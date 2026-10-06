@@ -1,5 +1,5 @@
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { Search } from 'lucide-react';
 
 import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
@@ -10,7 +10,7 @@ export function SidebarGlobalSearchButton() {
   const shortcutLabel = useKeyboardShortcutLabel('K');
 
   return (
-    <SidebarNew.SearchTrigger
+    <Sidebar.SearchTrigger
       id="global-search-sidebar-trigger"
       aria-label="Search and navigate"
       shortcut={shortcutLabel}
@@ -18,6 +18,6 @@ export function SidebarGlobalSearchButton() {
       onClick={event => openSearch(event.currentTarget)}
     >
       <Search />
-    </SidebarNew.SearchTrigger>
+    </Sidebar.SearchTrigger>
   );
 }

@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -145,7 +145,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
   );
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/${kind}${initialSearch}`]}>
-      <MainSidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Location />
           <Routes>
@@ -155,7 +155,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
             </Route>
           </Routes>
         </OverlaysProvider>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }

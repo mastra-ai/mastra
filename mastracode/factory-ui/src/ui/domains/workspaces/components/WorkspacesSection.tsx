@@ -1,4 +1,4 @@
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest, SquareKanban } from 'lucide-react';
 import { useState } from 'react';
@@ -309,7 +308,7 @@ function WorkspaceGroup({
   const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
-      <SidebarNew.NavHeader
+      <Sidebar.NavHeader
         icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
         action={
           viewerUserId ? (
@@ -318,8 +317,8 @@ function WorkspaceGroup({
         }
       >
         {title}
-      </SidebarNew.NavHeader>
-      <MainSidebar.NavList>
+      </Sidebar.NavHeader>
+      <Sidebar.NavList>
         {visibleRows.map(row => (
           <SessionNavRow
             key={row.workspace.sessionId}
@@ -349,7 +348,7 @@ function WorkspaceGroup({
             onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
-      </MainSidebar.NavList>
+      </Sidebar.NavList>
       {visibleRows.length === 0 ? (
         <Txt as="p" variant="caption" tone="muted" role="status" className="m-0 pl-3">
           No sessions of your own.

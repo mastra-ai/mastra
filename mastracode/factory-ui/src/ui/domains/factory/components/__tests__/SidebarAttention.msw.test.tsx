@@ -1,4 +1,4 @@
-import { MainSidebar, MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -174,22 +174,22 @@ function activityItem(workItemId = 'item-2', title = 'Ship the retry banner'): F
 function renderAttention() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
-      <MainSidebarProvider storageKey="sidebar-attention-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="sidebar-attention-test" mobileBreakpoint={0}>
         <Routes>
           <Route
             path="/factories/:factoryId/*"
             element={
-              <MainSidebar>
-                <MainSidebar.Bottom>
-                  <MainSidebar.NavList>
+              <Sidebar>
+                <Sidebar.Footer>
+                  <Sidebar.NavList>
                     <SidebarAttention />
-                  </MainSidebar.NavList>
-                </MainSidebar.Bottom>
-              </MainSidebar>
+                  </Sidebar.NavList>
+                </Sidebar.Footer>
+              </Sidebar>
             }
           />
         </Routes>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -465,25 +465,25 @@ describe('Sidebar attention', () => {
     const api = stubAttention([attentionItem()]);
     const { client } = renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
-        <MainSidebarProvider storageKey="sidebar-attention-shared" mobileBreakpoint={0}>
+        <SidebarProvider storageKey="sidebar-attention-shared" mobileBreakpoint={0}>
           <Routes>
             <Route
               path="/factories/:factoryId/*"
               element={
                 <>
-                  <MainSidebar>
-                    <MainSidebar.Bottom>
-                      <MainSidebar.NavList>
+                  <Sidebar>
+                    <Sidebar.Footer>
+                      <Sidebar.NavList>
                         <SidebarAttention />
-                      </MainSidebar.NavList>
-                    </MainSidebar.Bottom>
-                  </MainSidebar>
+                      </Sidebar.NavList>
+                    </Sidebar.Footer>
+                  </Sidebar>
                   <AttentionPreview factoryProjectId={FACTORY_ID} />
                 </>
               }
             />
           </Routes>
-        </MainSidebarProvider>
+        </SidebarProvider>
       </MemoryRouter>,
     );
 

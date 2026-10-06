@@ -2,26 +2,26 @@
 '@mastra/playground-ui': minor
 ---
 
-Changed the sidebar More row to work like Linear's. More opens a floating menu with the hidden links and a "Customize sidebar" submenu where each optional link can be shown or hidden. Choices are saved in local storage and survive reloads. Opening More no longer pushes the rest of the sidebar down. A hidden link still appears in place while you are on its page, and disappears again when you leave.
+Changed the sidebar More row to work like Linear's.
 
-Pass `visibilityStorageKey` to `SidebarNew.Sections` to scope saved choices per product, and `defaultVisible` on an optional link to show it by default. A section with a single optional link keeps showing it without a More row. `recentItemsStorageKey` is replaced by `visibilityStorageKey`, and links are no longer promoted automatically after a visit.
+**More menu.** More opens a floating menu sized to its content, listing the optional links you moved out of the sidebar, then "Customize sidebar". Opening it no longer pushes the rest of the sidebar down. A link from the More menu appears in place while you are on its page and leaves when you navigate away.
 
-Replace the removed storage-key prop when upgrading:
+**Customize sidebar.** "Customize sidebar" opens a dialog listing every optional link per section. Each link has one of three placements:
+
+- **Always show**: stays in the sidebar.
+- **Hide in More menu**: reachable from More.
+- **Never show**: hidden from both the sidebar and More.
+
+Right-click an optional link in the sidebar to change its placement without opening the dialog. Choices save in local storage and survive reloads.
+
+Pass `visibilityStorageKey` to `Sidebar.Sections` to scope saved choices per product, and `defaultVisible` on an optional link to show it by default. A section with a single optional link keeps showing it without a More row. `recentItemsStorageKey` is replaced by `visibilityStorageKey`, and links are no longer promoted automatically after a visit.
 
 ```tsx
 // Before
 <SidebarNew.Sections sections={sections} recentItemsStorageKey="my-app:sidebar" />
 
 // After
-<SidebarNew.Sections sections={sections} visibilityStorageKey="my-app:sidebar-visibility" />
-```
-
-Saved visit history is not migrated. Users can show optional links again through More → Customize sidebar. Changing `visibilityStorageKey` loads the saved choices for the new scope.
-
-`MainSidebar.NavHeader` and `MainSidebar.Sections` now render the `SidebarNew` versions, so their section headers use `SidebarNew` spacing and text colour.
-
-```tsx
-<SidebarNew.Sections
+<Sidebar.Sections
   visibilityStorageKey="my-app:sidebar"
   sections={[
     {
@@ -35,3 +35,5 @@ Saved visit history is not migrated. Users can show optional links again through
   ]}
 />
 ```
+
+Saved visit history is not migrated. Users can pick placements again through More → Customize sidebar.

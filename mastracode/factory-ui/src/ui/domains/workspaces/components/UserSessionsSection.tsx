@@ -1,4 +1,4 @@
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/new/sidebar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -129,7 +128,7 @@ export function UserSessionsSection() {
 
   return (
     <section className="flex flex-col gap-1" aria-label="User sessions">
-      <SidebarNew.NavHeader
+      <Sidebar.NavHeader
         icon={<MessageSquare />}
         action={
           <div className="flex items-center gap-0.5">
@@ -153,10 +152,10 @@ export function UserSessionsSection() {
         }
       >
         User Sessions
-      </SidebarNew.NavHeader>
+      </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-1">
-        <MainSidebar.NavList>
+        <Sidebar.NavList>
           {sessions.map(session => {
             const name = getUserSessionLabel(session);
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
@@ -190,7 +189,7 @@ export function UserSessionsSection() {
               />
             );
           })}
-        </MainSidebar.NavList>
+        </Sidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
             <Txt as="p" variant="meta" className="text-destructive-foreground m-0">

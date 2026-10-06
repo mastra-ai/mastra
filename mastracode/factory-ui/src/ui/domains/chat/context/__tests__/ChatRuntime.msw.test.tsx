@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -83,13 +83,13 @@ function renderRuntime(resetState?: SessionStateSnapshot) {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="runtime-test">
+            <SidebarProvider storageKey="runtime-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <RuntimeSurface resetState={resetState} />
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
       </Routes>

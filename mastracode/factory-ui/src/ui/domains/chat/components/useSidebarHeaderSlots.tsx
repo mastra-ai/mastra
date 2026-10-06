@@ -1,4 +1,4 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/new/sidebar';
 import type { PageLayoutProps } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
@@ -16,7 +16,7 @@ export function useSidebarHeaderSlots({
   PageLayoutProps,
   'breadcrumbs' | 'headerActions'
 > {
-  const { isMobile, desktopState } = useMainSidebar();
+  const { isMobile, desktopState } = useSidebar();
   const collapsed = !isMobile && desktopState === 'collapsed';
 
   return {

@@ -1,4 +1,4 @@
-import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider, useSidebar } from '@mastra/playground-ui/new/sidebar';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatPageLayout } from '../ChatPageLayout';
 
 function DesktopSidebarStateProbe() {
-  const { desktopState } = useMainSidebar();
+  const { desktopState } = useSidebar();
   return <output data-testid="desktop-sidebar-state">{desktopState}</output>;
 }
 
@@ -36,11 +36,11 @@ describe('ChatPageLayout', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
-        <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+        <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
             <ChatPageLayout>body</ChatPageLayout>
           </OverlaysProvider>
-        </MainSidebarProvider>
+        </SidebarProvider>
       </MemoryRouter>,
     );
 
@@ -51,11 +51,11 @@ describe('ChatPageLayout', () => {
   it('renders page content without shell controls while the desktop sidebar is open', () => {
     mockMobileViewport(false);
     render(
-      <MainSidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
+      <SidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
         <OverlaysProvider>
           <ChatPageLayout crumbs={<li>Page title</li>}>body</ChatPageLayout>
         </OverlaysProvider>
-      </MainSidebarProvider>,
+      </SidebarProvider>,
     );
 
     const header = screen.getByRole('banner');
@@ -68,7 +68,7 @@ describe('ChatPageLayout', () => {
     mockMobileViewport(false);
 
     render(
-      <MainSidebarProvider
+      <SidebarProvider
         defaultState="collapsed"
         storageKey="chat-header-desktop-test"
         collapsedWidth={0}
@@ -78,7 +78,7 @@ describe('ChatPageLayout', () => {
           <ChatPageLayout>body</ChatPageLayout>
           <DesktopSidebarStateProbe />
         </OverlaysProvider>
-      </MainSidebarProvider>,
+      </SidebarProvider>,
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });

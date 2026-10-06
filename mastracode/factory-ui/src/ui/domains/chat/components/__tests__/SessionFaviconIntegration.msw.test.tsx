@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -24,7 +24,7 @@ function renderThread() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="favicon-integration-test">
+            <SidebarProvider storageKey="favicon-integration-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <ChatMessageBoundary>
@@ -32,7 +32,7 @@ function renderThread() {
                   </ChatMessageBoundary>
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
       </Routes>

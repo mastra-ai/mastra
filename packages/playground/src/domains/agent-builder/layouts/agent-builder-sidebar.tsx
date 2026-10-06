@@ -1,8 +1,8 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
-import type { SidebarNewLink } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
+import type { SidebarLink } from '@mastra/playground-ui/new/sidebar';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
@@ -12,31 +12,31 @@ import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
-const agentsLink: SidebarNewLink = {
+const agentsLink: SidebarLink = {
   name: 'My agents',
   url: '/agent-builder/agents',
   icon: <AgentIcon />,
 };
 
-const favoritesLink: SidebarNewLink = {
+const favoritesLink: SidebarLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
   icon: <StarIcon />,
 };
 
-const libraryLink: SidebarNewLink = {
+const libraryLink: SidebarLink = {
   name: 'Library',
   url: '/agent-builder/library',
   icon: <LibraryIcon />,
 };
 
-const skillsLink: SidebarNewLink = {
+const skillsLink: SidebarLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
   icon: <Blocks className="h-4 w-4" />,
 };
 
-const infrastructureLink: SidebarNewLink = {
+const infrastructureLink: SidebarLink = {
   name: 'Infrastructure',
   url: '/agent-builder/infrastructure',
   icon: <ServerCogIcon className="h-4 w-4" />,
@@ -48,7 +48,7 @@ type AgentBuilderSidebarProps = {
 
 export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSidebarProps = {}) {
   const { Link } = useLinkComponent();
-  const { state: contextState, isMobile } = useSidebarNew();
+  const { state: contextState, isMobile } = useSidebar();
   const { pathname } = useLocation();
   const features = useBuilderAgentFeatures();
   const { canManageSkills, canUseFavorites } = useBuilderAgentAccess();
@@ -58,7 +58,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   const { data: capabilities } = useAuthCapabilities();
   const isUserAuthenticated = capabilities && isAuthenticated(capabilities);
 
-  const links: SidebarNewLink[] = [agentsLink];
+  const links: SidebarLink[] = [agentsLink];
   if (features.skills && canManageSkills) links.push(skillsLink);
   if (canUseFavorites) links.push(favoritesLink);
   links.push(libraryLink);
@@ -69,57 +69,51 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   );
 
   return (
-    <SidebarNew className="h-full" mobileMode="drawer">
+    <Sidebar className="h-full" mobileMode="drawer">
       {!forceExpanded && (
-        <SidebarNew.Header collapsedLogo={backToStudio} actions={isUserAuthenticated && <AuthStatus />}>
+        <Sidebar.Header collapsedLogo={backToStudio} actions={isUserAuthenticated && <AuthStatus />}>
           <Link href="/agents" aria-label="Back to Mastra Studio" className="min-w-0 flex-1">
-            <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />
+            <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />
           </Link>
-          {!isMobile && <SidebarNew.Trigger />}
-        </SidebarNew.Header>
+          {!isMobile && <Sidebar.Trigger />}
+        </Sidebar.Header>
       )}
 
       <ImpersonationBanner />
 
-      <SidebarNew.Nav>
-        <SidebarNew.NavSection>
-          <SidebarNew.NavList>
+      <Sidebar.Nav>
+        <Sidebar.NavSection>
+          <Sidebar.NavList>
             {links.map(link => {
               const isActive = pathname.startsWith(link.url);
 
               return (
-                <SidebarNew.NavLink
-                  key={link.name}
-                  LinkComponent={Link}
-                  state={state}
-                  link={link}
-                  isActive={isActive}
-                />
+                <Sidebar.NavLink key={link.name} LinkComponent={Link} state={state} link={link} isActive={isActive} />
               );
             })}
-          </SidebarNew.NavList>
-        </SidebarNew.NavSection>
-      </SidebarNew.Nav>
+          </Sidebar.NavList>
+        </Sidebar.NavSection>
+      </Sidebar.Nav>
 
       {!forceExpanded && (
-        <SidebarNew.Footer>
+        <Sidebar.Footer>
           {canViewInfrastructure && (
             <>
-              <SidebarNew.NavSeparator />
-              <SidebarNew.NavSection>
-                <SidebarNew.NavList>
-                  <SidebarNew.NavLink
+              <Sidebar.NavSeparator />
+              <Sidebar.NavSection>
+                <Sidebar.NavList>
+                  <Sidebar.NavLink
                     LinkComponent={Link}
                     state={state}
                     link={infrastructureLink}
                     isActive={pathname.startsWith(infrastructureLink.url)}
                   />
-                </SidebarNew.NavList>
-              </SidebarNew.NavSection>
+                </Sidebar.NavList>
+              </Sidebar.NavSection>
             </>
           )}
-        </SidebarNew.Footer>
+        </Sidebar.Footer>
       )}
-    </SidebarNew>
+    </Sidebar>
   );
 }
