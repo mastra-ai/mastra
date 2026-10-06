@@ -73,7 +73,9 @@ describe('Subconscious configuration', () => {
 
   it('validates custom agents, duplicate names, and bounds', () => {
     expect(() => new Subconscious({ observation: ['remind', 'remind'] })).toThrow(/Duplicate/);
-    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(/Unknown/);
+    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(
+      'Unknown Subconscious observation agent: unknown. Use "curate" for observation-time ingestion or "remind" for retrieval.',
+    );
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
       /requires schema and onExtracted/,
     );
@@ -113,15 +115,14 @@ describe('Subconscious configuration', () => {
     await expect((dynamicModel as (context: unknown) => Promise<unknown>)({})).resolves.toEqual([]);
   });
 
-  it('keeps non-semantic Subconscious features available without vector infrastructure', async () => {
-    const memory = new Memory({
-      storage: new InMemoryStore(),
-      options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
-    });
-
-    expect(memory.listTools()).toHaveProperty('knowledge_browse');
-    await expect(memory.getKnowledgeSemanticIndex()).resolves.toBeUndefined();
-    await expect(memory.drainKnowledgeSemanticIndex()).resolves.toBe(0);
+  it('fails initialization explicitly when semantic infrastructure is missing', () => {
+    expect(
+      () =>
+        new Memory({
+          storage: new InMemoryStore(),
+          options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
+        }),
+    ).toThrow(/requires a vector store/);
   });
 
   it('fails OM initialization when the storage adapter has no knowledge domain', async () => {

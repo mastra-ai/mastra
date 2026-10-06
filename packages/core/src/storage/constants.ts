@@ -791,23 +791,20 @@ export const KNOWLEDGE_V2_NODES_SCHEMA: Record<string, StorageColumn> = {
   mergedInto: { type: 'text', nullable: true },
 };
 
-/** Normalized Knowledge v2 record schema plus nullable v1 facade columns. */
+/** Knowledge v2 record schema. Scope rules live in `mastra_knowledge_record_scopes`. */
 export const KNOWLEDGE_V2_RECORDS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  node: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
   text: { type: 'text', nullable: false },
   metadata: { type: 'jsonb', nullable: true },
-  source: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
-  createdAt: { type: 'timestamp', nullable: false },
+  capturedAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
   deletedAt: { type: 'timestamp', nullable: true },
   deletedBy: { type: 'text', nullable: true },
-  node: { type: 'text', nullable: true },
   scope: { type: 'jsonb', nullable: true },
   scopeKey: { type: 'text', nullable: true },
   sourceThreadId: { type: 'text', nullable: true },
-  capturedAt: { type: 'timestamp', nullable: true },
   when: { type: 'timestamp', nullable: true },
   maxScope: { type: 'text', nullable: true },
 };

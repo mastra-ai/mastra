@@ -1,11 +1,84 @@
 export const KNOWLEDGE_V2_CORE_FEATURE = 'knowledge-v2';
-export const KNOWLEDGE_V2_MINIMUM_CORE_VERSION = '1.65.0-0';
 
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
 export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 
 /** Hard cap on scope nodes returned by one `listScopeNodes` read. */
 export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+export interface ListKnowledgeScopeNodesInput {
+  /** Only the scope at this address and the scopes beneath it, following parent edges transitively. */
+  withinAddress?: string;
+  /** Only the scopes at these exact addresses. */
+  addresses?: string[];
+  /** `nextCursor` from the previous page of the same query. */
+  cursor?: string;
+  /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
+  limit?: number;
+}
+
+export interface ListKnowledgeScopeNodesOutput {
+  /** Scope nodes ordered by name, then id. */
+  scopes: KnowledgeScopeNodeSummary[];
+  /** Pass back as `cursor` for the next page; `null` when this is the last page. */
+  nextCursor: string | null;
+}
+
+function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
+  return JSON.stringify([input.withinAddress ?? null, input.addresses ? [...input.addresses].sort() : null]);
+}
+
+export function createKnowledgeScopeNodeCursor(
+  scope: Pick<KnowledgeScopeNodeSummary, 'name' | 'id'>,
+  input: ListKnowledgeScopeNodesInput,
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: 'scope',
+      name: scope.name,
+      id: scope.id,
+      filter: knowledgeScopeNodeFilterKey(input),
+    }),
+  );
+}
+
+/** Validates the page size and cursor of a `listScopeNodes` query; throws on a cursor from a different query. */
+export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodesInput = {}): {
+  limit: number;
+  after: { name: string; id: string } | null;
+} {
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? MAX_KNOWLEDGE_SCOPE_NODES), 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope node cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    parsed.filter !== knowledgeScopeNodeFilterKey(input)
+  ) {
+    throw new Error('Knowledge scope node cursor does not match this query.');
+  }
+  return { limit, after: { name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` name/id-ordered scope nodes. */
+export function pageKnowledgeScopeNodes(
+  rows: KnowledgeScopeNodeSummary[],
+  limit: number,
+  input: ListKnowledgeScopeNodesInput,
+): ListKnowledgeScopeNodesOutput {
+  const scopes = rows.slice(0, limit);
+  const last = scopes.at(-1);
+  return { scopes, nextCursor: rows.length > limit && last ? createKnowledgeScopeNodeCursor(last, input) : null };
+}
 
 /** A reconciled structural scope node with its containing scope nodes. */
 export interface KnowledgeScopeNodeSummary {
@@ -55,6 +128,26 @@ export const KNOWLEDGE_TABLE_NAMES = [
 /** Knowledge v1 tables with no v2 equivalent; an explicit schema reset drops them. */
 export const RETIRED_KNOWLEDGE_TABLE_NAMES = ['mastra_knowledge_cursors'] as const;
 
+/** Tables and indexes published v1 adapters created for every app, whether or not it used Knowledge. */
+export const PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES: ReadonlySet<string> = new Set([
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  ...RETIRED_KNOWLEDGE_TABLE_NAMES,
+]);
+export const PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
+  'idx_knowledge_nodes_identity',
+  'idx_knowledge_nodes_scope',
+  'idx_knowledge_records_node_latest',
+  'idx_knowledge_records_thread_latest',
+  'idx_knowledge_mentions_record',
+  'idx_knowledge_activity_latest',
+  'idx_knowledge_outbox_idempotency',
+  'idx_knowledge_outbox_claim',
+]);
+
 type KnowledgeStorageColumn = {
   type: 'text' | 'timestamp' | 'integer' | 'bigint' | 'jsonb' | 'boolean';
   nullable: boolean;
@@ -89,20 +182,17 @@ export const KNOWLEDGE_V2_NODES_SCHEMA = {
 
 export const KNOWLEDGE_V2_RECORDS_SCHEMA = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  node: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
   text: { type: 'text', nullable: false },
   metadata: { type: 'jsonb', nullable: true },
-  source: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
-  createdAt: { type: 'timestamp', nullable: false },
+  capturedAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
   deletedAt: { type: 'timestamp', nullable: true },
   deletedBy: { type: 'text', nullable: true },
-  node: { type: 'text', nullable: true },
   scope: { type: 'jsonb', nullable: true },
   scopeKey: { type: 'text', nullable: true },
   sourceThreadId: { type: 'text', nullable: true },
-  capturedAt: { type: 'timestamp', nullable: true },
   when: { type: 'timestamp', nullable: true },
   maxScope: { type: 'text', nullable: true },
 } as const satisfies KnowledgeSchema;
@@ -225,7 +315,7 @@ interface KnowledgeV2Core {
 export function assertKnowledgeV2CoreSupport(features: ReadonlySet<string>): void {
   if (!features.has(KNOWLEDGE_V2_CORE_FEATURE)) {
     throw new Error(
-      `Knowledge v2 requires @mastra/core >=${KNOWLEDGE_V2_MINIMUM_CORE_VERSION} with the "${KNOWLEDGE_V2_CORE_FEATURE}" feature`,
+      `Knowledge v2 requires a @mastra/core release with the "${KNOWLEDGE_V2_CORE_FEATURE}" feature. Upgrade @mastra/core to use Knowledge; other storage domains keep working on this version.`,
     );
   }
 }

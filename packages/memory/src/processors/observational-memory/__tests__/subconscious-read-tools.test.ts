@@ -28,7 +28,7 @@ function createSemanticDependencies(ignoreFilters = false) {
     }),
     query: vi.fn(async ({ topK, filter }: any) =>
       [...documents.entries()]
-        .filter(([, document]) => ignoreFilters || document.metadata.scope_key === filter.scope_key)
+        .filter(([, document]) => ignoreFilters || filter.scope_key.$in.includes(document.metadata.scope_key))
         .map(([id, document], index) => ({ id, score: 1 - index / 100, metadata: document.metadata }))
         .slice(0, topK),
     ),
@@ -167,6 +167,36 @@ describe('Subconscious knowledge read tools', () => {
       expect.arrayContaining([expect.objectContaining({ type: 'record', name: '(private node)' })]),
     );
     expect((result as any).results.some((result: any) => result.sources.includes('semantic'))).toBe(true);
+  });
+
+  it('searches every visible scope with one vector query', async () => {
+    const memory = await createMemory();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    await store.createNode({
+      name: 'Deployment runbook',
+      kind: 'document',
+      content: 'The cobalt rollout procedure.',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    await store.createNode({
+      name: 'Alpha notes',
+      kind: 'document',
+      content: 'Cobalt rollout notes for this session.',
+      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+    });
+    await memory.drainKnowledgeSemanticIndex();
+    const vector = memory.vector!;
+
+    const result = await memory.listTools().knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
+
+    expect(vector.query).toHaveBeenCalledTimes(1);
+    expect(vector.query).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { scope_key: { $in: expect.any(Array) } } }),
+    );
+    const semanticNames = (result as any).results
+      .filter((result: any) => result.sources.includes('semantic'))
+      .map((result: any) => result.name);
+    expect(semanticNames).toEqual(expect.arrayContaining(['Deployment runbook', 'Alpha notes']));
   });
 
   it('fails explicitly when the semantic index is unavailable', async () => {

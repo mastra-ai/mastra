@@ -56,6 +56,7 @@ describe('Knowledge structure reconciliation', () => {
           ],
         },
       ],
+      retrofit: false,
     });
   });
 

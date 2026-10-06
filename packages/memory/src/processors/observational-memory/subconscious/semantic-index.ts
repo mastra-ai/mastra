@@ -79,19 +79,14 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const visibleScopeKeys = knowledgeVisibleScopeKeys(scope);
-    const batches = await Promise.all(
-      visibleScopeKeys.map(scopeKey =>
-        this.#vector.query({
-          indexName,
-          queryVector: embedding,
-          topK: limit,
-          filter: { scope_key: scopeKey },
-        }),
-      ),
-    );
-    const deduped = new Map<string, (typeof batches)[number][number]>();
-    for (const candidate of batches.flat()) {
+    const candidates = await this.#vector.query({
+      indexName,
+      queryVector: embedding,
+      topK: limit,
+      filter: { scope_key: { $in: knowledgeVisibleScopeKeys(scope) } },
+    });
+    const deduped = new Map<string, (typeof candidates)[number]>();
+    for (const candidate of candidates) {
       const candidateScope = candidate.metadata?.scope;
       if (!Array.isArray(candidateScope)) continue;
       let visible = false;

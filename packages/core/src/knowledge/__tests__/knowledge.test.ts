@@ -47,6 +47,52 @@ describe('Knowledge', () => {
     expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
   });
 
+  it('applies rules added to static structure after first boot', async () => {
+    const storage = new InMemoryStore({ id: 'static-structure-growth' });
+    const org = { address: 'org:acme', name: 'Acme' };
+    const firstBoot = await new Knowledge({
+      storage,
+      structure: { scopes: [org, { address: 'team', name: 'Team' }] },
+    }).reconcile();
+
+    const secondBoot = await new Knowledge({
+      storage,
+      structure: {
+        scopes: [
+          org,
+          {
+            address: 'team',
+            name: 'Team',
+            parentAddresses: ['org:acme'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' }],
+          },
+        ],
+      },
+    }).reconcile();
+
+    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: firstBoot.accessEpoch + 1 });
+    const team = (await storage.stores.knowledge!.listScopeNodes({ addresses: ['team'] })).scopes[0];
+    expect(team?.parentIds).toEqual([firstBoot.scopes['org:acme']]);
+  });
+
+  it('keeps materialized scopes as created when their scope type template changes', async () => {
+    const storage = new InMemoryStore({ id: 'materialized-template-change' });
+    const structure = { scopes: [{ address: 'org:acme', name: 'Acme' }] };
+    const input = { address: 'project:atlas', contextualScopeAddress: 'org:acme', parentAddresses: ['org:acme'] };
+    const before = new Knowledge({ storage, structure, scopes: { 'project:$projectId': { access: [] } } });
+    await before.reconcile();
+    const created = await before.materializeScope(input);
+
+    const after = new Knowledge({
+      storage,
+      structure,
+      scopes: { 'project:$projectId': { access: [{ principal: 'org:acme', role: 'readonly' }] } },
+    });
+    const rematerialized = await after.materializeScope(input);
+
+    expect(rematerialized).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
+  });
+
   it('keeps same-named scopes from different sources distinct by address across replays', async () => {
     const scopes = [
       { address: 'org:acme', name: 'Acme' },
