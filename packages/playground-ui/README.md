@@ -21,6 +21,42 @@ export function SaveButton() {
 }
 ```
 
+### Tool approvals
+
+`ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
+with its decision status, the full tool arguments (file previews included), and the Approve and
+Decline actions.
+
+```tsx
+import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<ToolApproval
+  toolName="write_file"
+  args={{ path: 'src/agent.ts', content: 'export const name = "Assistant";' }}
+  disabled={isSubmitting}
+  status={decision}
+  onApprove={approve}
+  onDecline={decline}
+/>;
+```
+
+A tool that already renders its own activity composes the parts instead: `ToolApprovalStatus` beside
+the tool name, `ToolApprovalActions` in the details while the request is pending.
+
+```tsx
+import { ToolApprovalActions, ToolApprovalStatus } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<>
+  <ActivityHeadline icon={icon} label={label} badges={<ToolApprovalStatus status={decision} />} />
+  {!decision && <ToolApprovalActions toolName="write_file" onApprove={approve} onDecline={decline} />}
+</>;
+```
+
+The consumer owns submission, error feedback, and the optional `approved` or `declined` status.
+A decision removes the actions; clearing it restores them for a retry. `disabled` blocks both
+decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
+`children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
