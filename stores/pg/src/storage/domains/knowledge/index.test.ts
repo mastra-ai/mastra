@@ -70,9 +70,9 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_nodes_identity');
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgePG.getExportDDL();
-    expect(ddl).toHaveLength(14);
+    expect(ddl).toHaveLength(13);
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
-    expect(ddl.join('\n')).toMatch(/PRIMARY KEY \("sourceThreadId", "agent"\)/);
+    expect(ddl.join('\n')).not.toContain('mastra_knowledge_cursors');
 
     const schemaName = 'mastra_knowledge_export_test';
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
@@ -112,7 +112,6 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
       const store = new KnowledgePG({ pool, schemaName });
       await store.init();
       const node = await store.createNode({ name: 'Custom schema', kind: 'test', scope: ['org:acme'] });
-      await store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' });
       expect(await store.getNode(node.id)).toMatchObject({ name: 'Custom schema' });
       expect(await store.claimSemanticOutbox({ workerId: 'worker', limit: 10 })).toHaveLength(1);
       const indexes = await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1', [schemaName]);
@@ -155,18 +154,6 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     ]);
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-  });
-
-  it('advances concurrent cursors monotonically', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    await Promise.allSettled([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01B' }),
-    ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastKnowledgeId).toBe('01C');
   });
 });
 

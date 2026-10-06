@@ -238,7 +238,9 @@ export interface KnowledgeMention {
   node: string;
 }
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
+/**
+ * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no cursor.
+ */
 export interface KnowledgeCurationCursor {
   sourceThreadId: string;
   agent: string;
@@ -629,6 +631,9 @@ export function knowledgeSemanticIdempotencyKey(
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
 export abstract class KnowledgeStorage extends StorageDomain {
   constructor() {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
@@ -676,17 +681,31 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
-  abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
-  abstract advanceCurationCursor(input: {
-    sourceThreadId: string;
-    agent: string;
-    lastKnowledgeId: string;
-  }): Promise<KnowledgeCurationCursor>;
   abstract listActivity(input: {
     scope: KnowledgeScope;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]>;
+
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
+  }
+
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
+    sourceThreadId: string;
+    agent: string;
+    lastKnowledgeId: string;
+  }): Promise<KnowledgeCurationCursor> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
+  }
 
   abstract listSemanticOutbox(input?: {
     status?: KnowledgeSemanticOutboxEntry['status'];
