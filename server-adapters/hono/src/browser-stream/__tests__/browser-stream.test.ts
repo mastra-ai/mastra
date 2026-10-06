@@ -1,8 +1,22 @@
 import type { MastraBrowser } from '@mastra/core/browser';
+import type { Mastra } from '@mastra/core/mastra';
+import type { MastraAuthConfig } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { setupBrowserStream } from '../index.js';
+
+/**
+ * Minimal Mastra stand-in. `createAuthMiddleware` only reads `getServer().auth`,
+ * so a stub keeps these tests from booting a full Mastra instance.
+ */
+function createStubMastra(auth?: MastraAuthConfig): Mastra {
+  return {
+    getServer: () => ({ auth }),
+    getStudio: () => undefined,
+    getLogger: () => undefined,
+  } as unknown as Mastra;
+}
 
 interface MockMastraBrowser {
   hasThreadSession: ReturnType<typeof vi.fn>;
@@ -30,7 +44,7 @@ describe('hono browser-stream routes', () => {
     app = new Hono();
     toolsets = new Map();
     getToolset = ((agentId: string) => toolsets.get(agentId)) as (agentId: string) => MastraBrowser | undefined;
-    await setupBrowserStream(app, { getToolset });
+    await setupBrowserStream(app, { mastra: createStubMastra(), getToolset });
   });
 
   describe('GET /api/agents/:agentId/browser/session (probe)', () => {
@@ -187,7 +201,11 @@ describe('hono browser-stream routes', () => {
         agentId: string,
       ) => MastraBrowser | undefined;
 
-      await setupBrowserStream(customApp, { getToolset: customGetToolset, apiPrefix: '/custom/v1' });
+      await setupBrowserStream(customApp, {
+        mastra: createStubMastra(),
+        getToolset: customGetToolset,
+        apiPrefix: '/custom/v1',
+      });
 
       const toolset = createMockToolset({ hasThreadSession: vi.fn().mockReturnValue(true) });
       customToolsets.set('agent-1', toolset);
@@ -212,10 +230,110 @@ describe('hono browser-stream routes', () => {
       const customApp = new Hono();
       const customGetToolset = (() => undefined) as (agentId: string) => MastraBrowser | undefined;
 
-      await setupBrowserStream(customApp, { getToolset: customGetToolset, apiPrefix: '/api/' });
+      await setupBrowserStream(customApp, {
+        mastra: createStubMastra(),
+        getToolset: customGetToolset,
+        apiPrefix: '/api/',
+      });
 
       const probe = await customApp.request('http://localhost/api/agents/agent-1/browser/session');
       expect(probe.status).toBe(200);
+    });
+  });
+
+  describe('authentication', () => {
+    const authConfig: MastraAuthConfig = {
+      authenticateToken: async (token, request) => {
+        // `Request` (fetch) and `HonoRequestLike` are both accepted here; only the
+        // latter exposes `header()`, which is what the adapter passes.
+        const cookie = (request as { header?: (name: string) => string | undefined }).header?.('cookie');
+        const credential = token || cookie?.match(/session=([^;]+)/)?.[1];
+        return credential === 'valid-token' ? { id: 'user-1', role: 'user' } : null;
+      },
+    };
+
+    let authedApp: Hono;
+    let authedToolsets: Map<string, MockMastraBrowser>;
+    let authedGetToolset: (agentId: string) => MastraBrowser | undefined;
+
+    beforeEach(async () => {
+      authedApp = new Hono();
+      authedToolsets = new Map();
+      authedGetToolset = ((agentId: string) => authedToolsets.get(agentId)) as (
+        agentId: string,
+      ) => MastraBrowser | undefined;
+
+      await setupBrowserStream(authedApp, {
+        mastra: createStubMastra(authConfig),
+        getToolset: authedGetToolset,
+      });
+    });
+
+    it('rejects an unauthenticated session probe', async () => {
+      const response = await authedApp.request('http://localhost/api/agents/agent-1/browser/session?threadId=thread-1');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('rejects an unauthenticated close request without closing the browser', async () => {
+      const toolset = createMockToolset();
+      authedToolsets.set('agent-1', toolset);
+
+      const response = await authedApp.request('http://localhost/api/agents/agent-1/browser/close', { method: 'POST' });
+
+      expect(response.status).toBe(401);
+      expect(toolset.close).not.toHaveBeenCalled();
+      expect(toolset.closeThreadSession).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unauthenticated WebSocket upgrade', async () => {
+      // The upgrade path is not under apiPrefix, so this proves the route itself is
+      // gated rather than relying on the `/api/*` protected pattern.
+      const response = await authedApp.request('http://localhost/browser/agent-1/stream?threadId=thread-1');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('allows the session probe with a valid Authorization header', async () => {
+      const response = await authedApp.request(
+        'http://localhost/api/agents/agent-1/browser/session?threadId=thread-1',
+        {
+          headers: { Authorization: 'Bearer valid-token' },
+        },
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('allows the session probe with a valid apiKey query param', async () => {
+      const response = await authedApp.request(
+        'http://localhost/api/agents/agent-1/browser/session?apiKey=valid-token',
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('allows the session probe with a valid session cookie', async () => {
+      const response = await authedApp.request(
+        'http://localhost/api/agents/agent-1/browser/session?threadId=thread-1',
+        {
+          headers: { Cookie: 'session=valid-token' },
+        },
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('allows the close request with a valid token', async () => {
+      authedToolsets.set('agent-1', createMockToolset());
+
+      const response = await authedApp.request('http://localhost/api/agents/agent-1/browser/close', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ success: true });
     });
   });
 });

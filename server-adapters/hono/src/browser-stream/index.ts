@@ -1,7 +1,26 @@
 import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
+import type { Mastra } from '@mastra/core/mastra';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
 import type { Env, Hono, Schema } from 'hono';
+
+import { createAuthMiddleware } from '../auth-middleware';
+
+/**
+ * Hono-specific browser stream configuration.
+ */
+export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
+  /**
+   * Mastra instance used to authenticate requests to the browser stream routes.
+   *
+   * Every route registered by {@link setupBrowserStream} — the WebSocket upgrade,
+   * the session probe, and the close endpoint — is gated by the server auth
+   * middleware. Without this, an unauthenticated caller could watch and drive an
+   * agent's browser. When the instance has no `server.auth` configured the
+   * middleware is a no-op.
+   */
+  mastra: Mastra;
+}
 
 /**
  * Set up WebSocket-based browser stream endpoint for real-time screencast viewing.
@@ -11,6 +30,11 @@ import type { Env, Hono, Schema } from 'hono';
  * - Starts screencast when first viewer connects
  * - Broadcasts frames to all connected viewers
  * - Stops screencast when last viewer disconnects
+ *
+ * All routes are authenticated with the server's auth configuration. Browsers
+ * cannot attach an `Authorization` header to a WebSocket upgrade, so
+ * session-cookie providers authenticate from the upgrade request's cookies while
+ * token-based clients pass the token as the `apiKey` query parameter.
  *
  * **Note**: Requires `ws` package to be installed. If not available, returns null
  * and logs a warning. Browser streaming will be disabled but everything else works.
@@ -27,6 +51,7 @@ import type { Env, Hono, Schema } from 'hono';
  *
  * const app = new Hono();
  * const browserStream = await setupBrowserStream(app, {
+ *   mastra,
  *   getToolset: (agentId) => browserToolsets.get(agentId),
  * });
  *
@@ -36,7 +61,7 @@ import type { Env, Hono, Schema } from 'hono';
  */
 export async function setupBrowserStream<E extends Env, S extends Schema, B extends string>(
   app: Hono<E, S, B>,
-  config: BrowserStreamConfig,
+  config: HonoBrowserStreamConfig,
 ): Promise<BrowserStreamResult | null> {
   // Dynamic import to avoid bundling ws into non-Node environments (e.g. Cloudflare Workers).
   // The variable-based specifier prevents bundlers from resolving the module at build time.
@@ -62,8 +87,23 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const trimmed = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
   const apiPrefix = trimmed || '/api';
 
+  // Authenticate every browser stream route before it runs.
+  //
+  // These routes are registered as raw Hono handlers rather than ServerRoutes, so
+  // they never pass through the per-route `checkRouteAuth` middleware the adapter
+  // applies elsewhere. Without this gate an unauthenticated caller could open the
+  // screencast, inject input, and force-close an agent's browser.
+  //
+  // The middleware marks the request path as protected itself, which also covers
+  // the WebSocket upgrade path (`/browser/:agentId/stream`) that falls outside
+  // `apiPrefix`. Because browsers cannot set an `Authorization` header on a
+  // WebSocket upgrade, session-cookie providers authenticate from the upgrade
+  // request's cookies and token-based clients pass `?apiKey=`.
+  const authenticate = createAuthMiddleware({ mastra: config.mastra });
+
   app.get(
     '/browser/:agentId/stream',
+    authenticate,
     upgradeWebSocket(c => {
       const agentId = c.req.param('agentId')!;
       const threadId = c.req.query('threadId');
@@ -107,7 +147,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // Returns:
   //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
   //   - hasSession: whether the agent has an active browser session for the given thread
-  app.get(`${apiPrefix}/agents/:agentId/browser/session`, async c => {
+  app.get(`${apiPrefix}/agents/:agentId/browser/session`, authenticate, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
@@ -125,7 +165,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   });
 
   // Close browser session endpoint
-  app.post(`${apiPrefix}/agents/:agentId/browser/close`, async c => {
+  app.post(`${apiPrefix}/agents/:agentId/browser/close`, authenticate, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);

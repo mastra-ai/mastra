@@ -240,6 +240,7 @@ export async function createHonoServer(
     options.browserStream === false
       ? null
       : await setupBrowserStream(app, {
+          mastra,
           getToolset: async (agentId: string) => {
             // Look up agent and return its browser if configured.
             // First try the runtime registry (code-defined + previously hydrated agents),
