@@ -70,7 +70,7 @@ Use `--no-skills` or `--no-git` to skip these steps. Skills and Git setup failur
 - `--llm` and `--llm-api-key` are only valid for the default starter project.
 - The project name must be a safe, lowercase, single directory name and the target must not already exist.
 
-Invalid input is rejected before templates are fetched or files are created.
+Invalid flags, project names, and GitHub URLs are rejected before any files are created. An unknown template name is rejected after the template list is fetched, and the CLI prints the available templates.
 
 ## Arguments and flags
 

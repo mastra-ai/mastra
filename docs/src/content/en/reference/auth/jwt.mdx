@@ -32,8 +32,10 @@ export const mastra = new Mastra({
   {
     name: 'secret',
     type: 'string',
-    description: 'A unique string used to sign and verify JSON Web Tokens (JWTs) for authenticating incoming requests.',
-    isOptional: false,
+    description:
+      'A unique string used to sign and verify JSON Web Tokens (JWTs) for authenticating incoming requests. The constructor throws an error if neither this option nor `JWT_AUTH_SECRET` is set.',
+    isOptional: true,
+    defaultValue: 'process.env.JWT_AUTH_SECRET',
   },
 ]}
 />
