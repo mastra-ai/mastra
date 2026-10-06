@@ -57,8 +57,15 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         expect(turn.stepCount).toBe(2);
         expect(turn.finishReason).toBe('stop');
         expect(turn.text).toBe('Echoed: hi');
-        // Tool step (15/10/25) plus text step (10/20/30).
-        expect(turn.usage).toEqual({ inputTokens: 25, outputTokens: 30, totalTokens: 55 });
+        // Tool step (15/10/25) plus text step (10/20/30). `raw` mirrors the last
+        // step's provider usage rather than being summed; it is identical on
+        // every engine and would differ here if the workflow dropped it.
+        expect(turn.usage).toEqual({
+          inputTokens: 25,
+          outputTokens: 30,
+          totalTokens: 55,
+          raw: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        });
       }
     });
   });

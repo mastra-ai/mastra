@@ -9,13 +9,17 @@
  * What we compare, per turn (and why):
  * - `text`           → user-visible final text
  * - `finishReason`   → terminal state
- * - `usage`          → token accounting (must round-trip through the workflow)
+ * - `usage`          → token accounting, including the raw provider object (must round-trip through the workflow)
  * - `toolCalls`      → tool routing (id, name, args), independent of order
  * - `toolResults`    → tool outputs, independent of order
  * - `stepCount`      → loop-iteration count (catches stopWhen drift)
  * - `chunks`         → `from:type` sequence of `fullStream` (`from:type:toolName` for tool chunks)
+ * - `chunkTypes`     → each chunk's `type`, in order, for exact matching (`chunksOfType`)
+ * - `chunkPayloads`  → every chunk's payload, normalised (see below), so tool args,
+ *                      tool results, tool errors, approvals/suspensions, tripwires,
+ *                      reasoning, sources, objects and step boundaries are compared
  * - `streamedText`   → concatenated `text-delta` payloads
- * - `finishChunk`    → payload keys, reason and usage of the last `finish` chunk
+ * - `finishChunk`    → payload keys, reason, usage and normalised payload contents
  * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
  * Plus, across the whole run:
  * - `requests`       → every request sent to the model, with per-message
@@ -26,6 +30,10 @@
  * - `response.id` / response.modelId        → set per-call, may differ
  * - `traceId` / span ids                    → see `tracing_parity` task
  * - `request` on the output                 → not a user contract
+ *
+ * Those are stripped everywhere they appear, including inside chunk payloads:
+ * `normalizePayload` removes volatile keys recursively (see
+ * `VOLATILE_PAYLOAD_KEYS`) and drops values a transport cannot carry.
  *
  * Single turn:
  *
@@ -48,6 +56,24 @@
  *     });
  *     for (const r of Object.values(results)) expect(r.requests).toHaveLength(2);
  *
+ * A turn that suspends or awaits approval is driven to completion in the same
+ * turn: `options.resume` names the continuation, and the helper calls the
+ * matching API (`resumeStream` / `approveToolCall` / `declineToolCall`) with the
+ * run id and tool call id it took from the suspension chunk. The continuation's
+ * chunks are merged into the same turn, so `chunks`, `chunkPayloads` and the
+ * resumed output are compared as one unit. A suspension always needs a
+ * continuation — a turn left suspended never finishes.
+ *
+ *     await expectEngineParity({
+ *       model: { tapes: [toolCallTape('ask', {}), textOnlyTape('Done.')] },
+ *       buildAgent: ({ model }) => new Agent({ ..., model, memory: new MockMemory(), tools: { ask } }),
+ *       input: 'Start',
+ *       // `{ resumeData }` for a suspendSchema tool, `{ approve: true }` for
+ *       // `requireToolApproval`, `{ decline: true }` to decline. An array does
+ *       // several continuations in order.
+ *       options: { maxSteps: 3, resume: { resumeData: { approved: true } } },
+ *     });
+ *
  * Documented engine differences are declared, never silently ignored:
  *
  *     differences: {
@@ -57,8 +83,8 @@
  *
  * A declared difference that no longer reproduces fails the test, so fixed
  * bugs force their override to be removed. Differences every scenario hits
- * (see `FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`) are declared once here, under
- * the same rule.
+ * (see `KNOWN_CHUNK_DIFFERENCES` and `KNOWN_TURN_DIFFERENCES`) are declared
+ * once here, under the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
@@ -86,6 +112,8 @@ export interface ParitySnapshot {
     inputTokens: number | undefined;
     outputTokens: number | undefined;
     totalTokens: number | undefined;
+    /** The provider's raw usage object; deterministic with the mock model, so it is compared. */
+    raw: unknown;
   };
   /** Sorted by `toolCallId` then `toolName` for order-independent comparison. */
   toolCalls: Array<{ toolCallId: string; toolName: string; args: unknown }>;
@@ -94,12 +122,80 @@ export interface ParitySnapshot {
   stepCount: number;
   /** `${from}:${type}` for every chunk on `fullStream`, in order, with `:${toolName}` appended when the payload has one. */
   chunks: string[];
+  /** Each chunk's `type`, in the same order as `chunks`, for exact type matching (use with `chunksOfType`). */
+  chunkTypes: string[];
+  /** Each chunk's payload, in the same order as `chunks`, normalised by `normalizePayload`. */
+  chunkPayloads: unknown[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
-  /** Sorted defined payload keys, reason and usage of the last `finish` chunk. */
-  finishChunk: { payloadKeys: string[]; reason: unknown; usage: unknown };
+  /** Sorted defined payload keys, reason, usage and normalised contents of the last `finish` chunk. */
+  finishChunk: { payloadKeys: string[]; reason: unknown; usage: unknown; payload: unknown };
   /** `getFullOutput()` as a non-streaming consumer reads it. */
   fullOutput: { text: string | undefined; finishReason: string | undefined; usage: unknown; keys: string[] };
+  /**
+   * Whether the turn ran a continuation after suspending. Scenario bookkeeping
+   * rather than consumer output, but it is derived from the chunk sequence both
+   * sides already compare, and COR-1398 is scoped to these turns.
+   */
+  resumed: boolean;
+  /** Whether an approval request is what suspended the turn, the case COR-1399 is scoped to. */
+  approvalSuspended: boolean;
+}
+
+/**
+ * Keys whose values are expected to differ between engines or between runs, so
+ * they are stripped from chunk payloads before comparison. Everything else in a
+ * payload (tool args, tool results, approval/suspend payloads, tripwire
+ * reasons, reasoning text, step contents, ...) is compared.
+ *
+ * Caveat: this matches by key name at any depth, so a tool result that happens
+ * to contain a key called `timestamp` or `id` loses it too.
+ */
+export const VOLATILE_PAYLOAD_KEYS = new Set([
+  'runId',
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'messageId',
+  'responseId',
+  'id',
+  'modelId',
+  'createdAt',
+  'updatedAt',
+  'timestamp',
+  'startedAt',
+  'endedAt',
+  'request',
+  'abortSignal',
+]);
+
+/**
+ * Recursively strips volatile keys in `VOLATILE_PAYLOAD_KEYS` and values no
+ * transport can carry, so two engines' chunk payloads compare on what a
+ * consumer actually receives. Only true cycles (an object containing itself)
+ * become `'[circular]'`; an object shared twice is serialised twice.
+ */
+export function normalizePayload(value: unknown, ancestors: readonly object[] = []): unknown {
+  if (value === null) return null;
+  if (typeof value === 'function' || typeof value === 'symbol') return undefined;
+  if (typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Uint8Array) return Buffer.from(value).toString('base64');
+  if (ancestors.includes(value)) return '[circular]';
+  const nested = [...ancestors, value];
+
+  if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested) ?? null);
+  if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested);
+  if (value instanceof Set) return normalizePayload([...value], nested);
+
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (VOLATILE_PAYLOAD_KEYS.has(key)) continue;
+    const normalized = normalizePayload(entry, nested);
+    // An absent key and a `undefined` value are the same thing to a consumer.
+    if (normalized !== undefined) out[key] = normalized;
+  }
+  return out;
 }
 
 function sortByCallId<T extends { toolCallId: string; toolName: string }>(arr: T[]): T[] {
@@ -109,19 +205,77 @@ function sortByCallId<T extends { toolCallId: string; toolName: string }>(arr: T
   });
 }
 
-export async function snapshotFromOutput(output: MastraModelOutput<any>): Promise<ParitySnapshot> {
-  // Reading fullStream to the end drains the output, so its promises resolve.
-  const chunks: string[] = [];
-  let streamedText = '';
-  let finishPayload: any;
-  for await (const chunk of output.fullStream as AsyncIterable<{ from?: string; type: string; payload?: any }>) {
+/** Chunks collected while draining every stream one turn produced. */
+interface TurnChunks {
+  chunks: string[];
+  chunkTypes: string[];
+  chunkPayloads: unknown[];
+  streamedText: string;
+  finishPayload: any;
+  /** See `ParitySnapshot.resumed`. */
+  resumed: boolean;
+  /** See `ParitySnapshot.approvalSuspended`. */
+  approvalSuspended: boolean;
+  /** The stream the turn's output fields are read from: the last one to run. */
+  lastOutput: MastraModelOutput<any>;
+}
+
+/** `from`/`type`/`payload` are shared by every chunk `fullStream` emits. */
+type StreamChunk = { from?: string; type: string; payload?: any };
+
+/**
+ * Drains one stream into `acc`, returning the suspended tool call's id when the
+ * turn stopped at a suspension.
+ *
+ * A suspending turn ends at its suspension chunk on every engine: durable and
+ * evented keep the stream open until the run is resumed, so reading on would
+ * never finish, and plain is stopped at the same point so the engines are
+ * compared over the same span. Whatever a `resume` produced is drained into the
+ * same turn, which is why draining is separate from building the snapshot.
+ */
+async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promise<string | undefined> {
+  let suspendedToolCallId: string | undefined;
+  for await (const chunk of output.fullStream as AsyncIterable<StreamChunk>) {
     // Tool chunks carry their tool name so a swapped tool order shows up here;
     // toolCallIds are compared through `toolCalls`/`toolResults`.
     const toolName = chunk.payload?.toolName;
-    chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
-    if (chunk.type === 'text-delta') streamedText += chunk.payload?.text ?? '';
-    if (chunk.type === 'finish') finishPayload = chunk.payload ?? {};
+    acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
+    acc.chunkTypes.push(chunk.type);
+    acc.chunkPayloads.push(normalizePayload(chunk.payload));
+    if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
+    if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
+    if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+      if (chunk.type === 'tool-call-approval') acc.approvalSuspended = true;
+      suspendedToolCallId = chunk.payload?.toolCallId;
+      break;
+    }
   }
+  return suspendedToolCallId;
+}
+
+export async function snapshotFromOutput(output: MastraModelOutput<any>): Promise<ParitySnapshot> {
+  const acc = emptyTurnChunks(output);
+  await drainInto(acc, output);
+  return snapshotFromDrainedTurn(acc);
+}
+
+function emptyTurnChunks(output?: MastraModelOutput<any>): TurnChunks {
+  return {
+    chunks: [],
+    chunkTypes: [],
+    chunkPayloads: [],
+    streamedText: '',
+    finishPayload: undefined,
+    resumed: false,
+    approvalSuspended: false,
+    lastOutput: output as MastraModelOutput<any>,
+  };
+}
+
+/** Builds a turn's snapshot from the chunks its streams produced. */
+async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot> {
+  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed, approvalSuspended } = acc;
+  const output = acc.lastOutput;
 
   const full = await output.getFullOutput();
   const [text, finishReason, usage, toolCalls, toolResults, steps] = await Promise.all([
@@ -140,6 +294,8 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
       totalTokens: usage?.totalTokens,
+      // Deterministic with the mock model, so compare it rather than dropping it.
+      raw: (usage as { raw?: unknown } | undefined)?.raw,
     },
     toolCalls: sortByCallId(
       (toolCalls ?? []).map((c: any) => ({
@@ -157,6 +313,8 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
     ),
     stepCount: steps?.length ?? 0,
     chunks,
+    chunkTypes,
+    chunkPayloads,
     streamedText,
     finishChunk: {
       // Keys holding `undefined` are not observable over any serialized transport.
@@ -165,6 +323,7 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
         .sort(),
       reason: finishPayload?.stepResult?.reason ?? finishPayload?.finishReason,
       usage: finishPayload?.usage ?? finishPayload?.output?.usage,
+      payload: normalizePayload(finishPayload),
     },
     fullOutput: {
       text: full.text,
@@ -172,7 +331,17 @@ export async function snapshotFromOutput(output: MastraModelOutput<any>): Promis
       usage: full.usage,
       keys: Object.keys(full).sort(),
     },
+    resumed,
+    approvalSuspended,
   };
+}
+
+/**
+ * How many chunks of a given `type` a turn streamed. Matches the type exactly,
+ * so a tool named `finish` does not count as a finish chunk.
+ */
+export function chunksOfType(turn: ParitySnapshot, type: string): number {
+  return turn.chunkTypes.filter(t => t === type).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,8 +410,11 @@ export function lastUserText(request: CapturedRequest): string {
  * Strips values that legitimately differ between engines or runs: the
  * `providerOptions.mastra.createdAt` stamp Mastra puts on each prompt message
  * and part, and `includeRawChunks: false` (plain sends `false`, durable and
- * evented leave it unset; providers treat both as off, `true` is still
- * compared). Nothing else, and nowhere else, is touched.
+ * evented leave it unset). Core treats both the same: `loop.ts` passes
+ * `includeRawChunks: !!includeRawChunks` to the model, and
+ * `llm-execution-step.ts` / `stream/base/output.ts` only emit `raw` chunks when
+ * that flag is truthy. `true` is still compared. Nothing else, and nowhere
+ * else, is touched.
  */
 export function normalizeRequest(request: CapturedRequest): unknown {
   const withoutCreatedAt = <T extends { providerOptions?: unknown }>(node: T): T => {
@@ -343,8 +515,26 @@ export interface EngineHandle {
   /** The plain Agent this engine wraps (or runs, for `plain`). */
   agent: Agent<string, any, any>;
   /** Streams one turn on this engine, drains it and records its snapshot. */
-  turn: (messages: MessageListInput, options?: ParityStreamOptions) => Promise<ParitySnapshot>;
+  turn: (messages: MessageListInput, options?: EngineTurnOptions) => Promise<ParitySnapshot>;
 }
+
+/**
+ * How to continue a turn that suspended, applied in the order given. The
+ * suspended tool call to continue is read from the suspension chunk, so it is
+ * never passed here. A turn streams straight to its suspension chunk first:
+ * one `resume` then produces a second stream, and both are recorded as the same
+ * turn because the turn is one input from the caller's point of view.
+ */
+export type TurnResume =
+  /** `agent.resumeStream(resumeData, …)` — the resumed tool returns `resumeData`. */
+  | { resumeData: unknown }
+  /** `agent.approveToolCall(…)` — approval, equivalent to `resumeData: { approved: true }`. */
+  | { approve: true }
+  /** `agent.declineToolCall(…)`. */
+  | { decline: true };
+
+/** `ParityStreamOptions` plus the helper-only `resume` continuations. */
+export type EngineTurnOptions = ParityStreamOptions & { resume?: TurnResume | readonly TurnResume[] };
 
 export interface EngineParityScenario {
   /** Scripted model. A fresh recording model is built for every engine. */
@@ -354,7 +544,7 @@ export interface EngineParityScenario {
   /** Single-turn input. Ignored when `run` is given. */
   input?: MessageListInput;
   /** Single-turn stream options. Ignored when `run` is given. */
-  options?: ParityStreamOptions;
+  options?: EngineTurnOptions;
   /** Drives the scenario on one engine. Defaults to one turn of `input`/`options`. */
   run?: (handle: EngineHandle) => Promise<void>;
   /** Engines to run. Defaults to all three; must include `plain` and one other. */
@@ -412,11 +602,16 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
     wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
-    new Mastra({
-      agents: { [agent.id]: wrapper },
-      storage: scenario.createStorage?.() ?? new InMemoryStore(),
-      logger: false,
-    });
+  }
+
+  // Every engine runs on a host, as it would in a real app: a suspended run is
+  // only resumable when the run's snapshot reached storage.
+  const host = new Mastra({
+    agents: { [agent.id]: wrapper ?? agent },
+    storage: scenario.createStorage?.() ?? new InMemoryStore(),
+    logger: false,
+  });
+  if (wrapper && engine === 'evented') {
     // Without atomic storage the evented agent silently runs on the default
     // engine, which would make "evented == plain" a durable-vs-plain check.
     const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
@@ -426,22 +621,48 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
   }
 
   const turns: ParitySnapshot[] = [];
-  const cleanups: Array<() => void> = [];
+  const cleanups: Array<() => void | Promise<void>> = [];
   const handle: EngineHandle = {
     engine,
     agent,
     turn: async (messages, options) => {
+      const { resume, ...streamOptions } = options ?? {};
+      const continuations: readonly TurnResume[] =
+        resume === undefined ? [] : Array.isArray(resume) ? resume : [resume as TurnResume];
       // Vitest stubs randomUUID per test, so give every run its own id.
-      const runOptions = { ...options, runId: options?.runId ?? `parity-${engine}-${turns.length}` };
-      let output: MastraModelOutput<any>;
+      const runId = streamOptions.runId ?? `parity-${engine}-${turns.length}`;
+      // `wrapper` is a DurableAgent whose overridden option types are narrower
+      // than Agent's, so only the shared resume surface is typed here.
+      const target: Pick<Agent<string, any, any>, 'resumeStream' | 'approveToolCall' | 'declineToolCall'> = wrapper ??
+      agent;
+      const acc = emptyTurnChunks();
+
       if (wrapper) {
-        const result = await wrapper.stream(messages, runOptions);
+        const result = await wrapper.stream(messages, { ...streamOptions, runId });
         cleanups.push(result.cleanup);
-        output = result.output;
+        acc.lastOutput = result.output;
       } else {
-        output = await agent.stream(messages, runOptions);
+        acc.lastOutput = await agent.stream(messages, { ...streamOptions, runId });
       }
-      const snapshot = await snapshotFromOutput(output);
+      let suspendedToolCallId = await drainInto(acc, acc.lastOutput);
+
+      for (const continuation of continuations) {
+        if (!suspendedToolCallId) {
+          throw new Error('expectEngineParity: turn() was given a `resume`, but the turn did not suspend');
+        }
+        const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
+        if ('resumeData' in continuation) {
+          acc.lastOutput = await target.resumeStream(continuation.resumeData, resumeOptions);
+        } else if ('approve' in continuation) {
+          acc.lastOutput = await target.approveToolCall(resumeOptions);
+        } else {
+          acc.lastOutput = await target.declineToolCall(resumeOptions);
+        }
+        suspendedToolCallId = await drainInto(acc, acc.lastOutput);
+        acc.resumed = true;
+      }
+
+      const snapshot = await snapshotFromDrainedTurn(acc);
       turns.push(snapshot);
       return snapshot;
     },
@@ -459,10 +680,17 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
     const errors: unknown[] = [];
     for (const cleanup of cleanups) {
       try {
-        cleanup();
+        await cleanup();
       } catch (error) {
         errors.push(error);
       }
+    }
+    // The host starts workers; stop it so many scenarios in one file don't
+    // pile up. Done last, after the runs' own cleanups.
+    try {
+      await host.shutdown();
+    } catch (error) {
+      errors.push(error);
     }
     if (errors.length > 0 && !scenarioFailed) throw errors[0];
   }
@@ -471,48 +699,319 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
 }
 
 /**
- * Keys plain's `finish` chunk payload carries that durable and evented omit.
- * Found by harness case T29 (engine comparison FAIL, batch
- * 2026-09-25T16-30-32.791Z); tracked as COR-1390. Every scenario hits it, so it is
- * declared once here instead of in each case's `differences`. Which of these
- * keys plain emits depends on the scenario (`response` only appears with
- * memory), so only the keys plain emits on a turn are excused, and the check
- * fails once a wrapped engine emits one of them or plain emits none.
+ * Documented chunk-payload differences between plain and the wrapped engines.
+ *
+ * Durable and evented re-emit the loop's chunks after round-tripping them
+ * through workflow step state, so some payloads are slimmed, some gain workflow
+ * bookkeeping and some lose fields the loop set. Each divergence is a real
+ * product difference tracked by a ticket, so it is declared here once instead of
+ * being repeated in every case's `differences`.
+ *
+ * A declaration removes only the named paths, from BOTH sides, before comparing:
+ * everything else in those payloads is still compared, and nothing is added to
+ * `VOLATILE_PAYLOAD_KEYS`. `staleKnownDifferences` fails as soon as a declared
+ * path matches on both sides, a wrapped engine starts emitting a declared
+ * missing key, or the declared difference stops reproducing at all.
+ *
+ * Differences in a turn's assembled output rather than in a chunk are declared
+ * in `KNOWN_TURN_DIFFERENCES` below, under the same rules.
  */
-const FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES = ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'];
+interface KnownChunkDifference {
+  /** Ticket tracking the divergence. */
+  ticket: string;
+  /** Why the wrapped engines legitimately differ here. */
+  reason: string;
+  /** Chunk `type` in the `fullStream` sequence. */
+  chunkType: string;
+  /** Dot paths inside that chunk's payload, removed from both sides before comparing. */
+  paths: readonly string[];
+  /**
+   * Declared paths the wrapped engines omit entirely, so they are also left out
+   * of the finish chunk's compared key list. Only the `finish` entry has them.
+   */
+  missingKeys?: readonly string[];
+  /**
+   * Restricts the declaration to the turns it was filed for; omitted means every
+   * turn the chunk type appears in. Turns that fail this keep their payload
+   * compared, so a scenario that never reaches the divergence still compares it.
+   */
+  scope?: (turn: ParitySnapshot) => boolean;
+}
 
-function withKnownEngineDifferences(plain: EngineObservation): EngineObservation {
+const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
+  {
+    ticket: 'COR-1390',
+    reason:
+      'Durable and evented omit the finish envelope keys plain emits, and structure `output`/`stepResult` differently ' +
+      '(plain keeps `steps[].content`/`response`; they emit slimmer steps plus `warnings`/`totalUsage`).',
+    chunkType: 'finish',
+    // Which of these plain emits depends on the scenario (`response` and
+    // `messageId` only appear with memory), so the check below only requires
+    // plain to emit some of them and a wrapped engine to emit none.
+    missingKeys: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'],
+    paths: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response', 'output', 'stepResult'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason: 'Durable and evented add the workflow step id to the step-start chunk payload.',
+    chunkType: 'step-start',
+    paths: ['stepId'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason:
+      'Durable and evented re-emit the loop step-finish payload as the serialised workflow step envelope: extra ' +
+      '`type`/`_durableStepContent`, empty `messages`, `metadata` without model metadata, a slim `output` and no ' +
+      '`processorRetryCount`.',
+    chunkType: 'step-finish',
+    paths: [
+      'type',
+      '_durableStepContent',
+      'processorRetryCount',
+      'metadata.modelMetadata',
+      'messages.all',
+      'messages.user',
+      'messages.nonUser',
+      'output.text',
+      'output.steps',
+      'output.toolCalls',
+    ],
+  },
+  {
+    ticket: 'COR-1393',
+    reason: 'Durable and evented drop `providerExecuted` from tool-result chunk payloads.',
+    chunkType: 'tool-result',
+    paths: ['providerExecuted'],
+  },
+  {
+    ticket: 'COR-1399',
+    reason:
+      'Wrapped engines serialise the approval `resumeSchema` from a hand-written literal, without the `$schema` ' +
+      'and the field descriptions plain emits for the same schema. Scoped to the approval flow: a suspended ' +
+      '(non-approval) tool keeps its own schema on every engine.',
+    chunkType: 'tool-call-approval',
+    paths: ['resumeSchema'],
+    scope: turn => turn.approvalSuspended,
+  },
+  {
+    ticket: 'COR-1399',
+    reason: 'The resumed chunk of an approved tool call carries the same hand-written approval `resumeSchema`.',
+    chunkType: 'tool-call-resumed',
+    paths: ['resumeSchema'],
+    scope: turn => turn.approvalSuspended,
+  },
+];
+
+/**
+ * Documented differences in a turn's assembled output rather than in one chunk.
+ *
+ * Same rule as `KNOWN_CHUNK_DIFFERENCES`: each entry names the turns and the
+ * exact shape it was filed for, so a different value in the same field is still
+ * a failure, and `staleKnownDifferences` fails once the difference stops
+ * reproducing.
+ */
+interface KnownTurnDifference {
+  /** Ticket tracking the divergence. */
+  ticket: string;
+  /** Why the wrapped engines legitimately differ here. */
+  reason: string;
+  /** The `ParitySnapshot` field the wrapped engines differ in. */
+  field: keyof ParitySnapshot;
+  /** Turns the divergence applies to. */
+  appliesTo: (turn: ParitySnapshot) => boolean;
+  /** The shape that was filed; any other value in that field still fails. */
+  matches: (wrapped: unknown, plain: unknown) => boolean;
+}
+
+const KNOWN_TURN_DIFFERENCES: readonly KnownTurnDifference[] = [
+  {
+    ticket: 'COR-1398',
+    reason:
+      'Durable and evented rebuild their output from the resumed chunks only, so after a resume they keep the ' +
+      '`toolResults` entry for the tool call that suspended but not the matching `toolCalls` entry.',
+    field: 'toolCalls',
+    appliesTo: turn => turn.resumed,
+    matches: (wrapped, plain) => isEmptyValue(wrapped) && !isEmptyValue(plain),
+  },
+];
+
+function declaredMissingKeysFor(chunkType: string): string[] {
+  return KNOWN_CHUNK_DIFFERENCES.filter(d => d.chunkType === chunkType).flatMap(d => [...(d.missingKeys ?? [])]);
+}
+
+/** Indexes of every chunk of one type in a turn, in order. */
+function indexesOfType(turn: ParitySnapshot, chunkType: string): number[] {
+  return turn.chunkTypes.flatMap((type, index) => (type === chunkType ? [index] : []));
+}
+
+/** Whether a value carries no content, so two of them differ in nothing. */
+function isEmptyValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value as object).length === 0;
+  return false;
+}
+
+function getAtPath(target: unknown, path: string): unknown {
+  let node: unknown = target;
+  for (const part of path.split('.')) {
+    if (node === null || typeof node !== 'object') return undefined;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return node;
+}
+
+function deleteAtPath(target: unknown, path: string): void {
+  const parts = path.split('.');
+  let node: unknown = target;
+  for (const part of parts.slice(0, -1)) {
+    if (node === null || typeof node !== 'object') return;
+    node = (node as Record<string, unknown>)[part];
+  }
+  if (node !== null && typeof node === 'object') delete (node as Record<string, unknown>)[parts[parts.length - 1]!];
+}
+
+/** A copy of a chunk payload with the declared differences removed. */
+function withoutDeclaredPayloadDifferences(chunkType: string, payload: unknown, turn: ParitySnapshot): unknown {
+  const declarations = KNOWN_CHUNK_DIFFERENCES.filter(d => d.chunkType === chunkType && (!d.scope || d.scope(turn)));
+  if (declarations.length === 0) return payload;
+  const copy = structuredClone(payload);
+  for (const declared of declarations) {
+    for (const path of declared.paths) deleteAtPath(copy, path);
+  }
+  return copy;
+}
+
+/**
+ * Aligns the output-level declared differences with the reference, so a wrapped
+ * engine's field is not compared. Applied to the wrapped side only, because the
+ * declared shape names what the wrapped engine does.
+ */
+function withoutKnownTurnDifferences(reference: ParitySnapshot | undefined, turn: ParitySnapshot): ParitySnapshot {
+  if (!reference) return turn;
+  let stripped = turn;
+  for (const declared of KNOWN_TURN_DIFFERENCES) {
+    if (!declared.appliesTo(turn) || !declared.appliesTo(reference)) continue;
+    if (!declared.matches(turn[declared.field], reference[declared.field])) continue;
+    stripped = { ...stripped, [declared.field]: reference[declared.field] };
+  }
+  return stripped;
+}
+
+/**
+ * Removes the declared differences from an observation. `side` says whose
+ * observation this is: chunk-level declarations apply to both sides equally,
+ * while output-level ones only ever describe the wrapped side.
+ */
+function withoutKnownEngineDifferences(
+  reference: EngineObservation,
+  observation: EngineObservation,
+  side: 'plain' | 'wrapped',
+): EngineObservation {
   return {
-    ...plain,
-    turns: plain.turns.map(turn => ({
-      ...turn,
-      finishChunk: {
-        ...turn.finishChunk,
-        payloadKeys: turn.finishChunk.payloadKeys.filter(k => !FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.includes(k)),
-      },
-    })),
+    ...observation,
+    turns: observation.turns.map((turn, index) => {
+      const stripped: ParitySnapshot = {
+        ...turn,
+        chunkPayloads: turn.chunkPayloads.map((payload, i) =>
+          withoutDeclaredPayloadDifferences(turn.chunkTypes[i] ?? '', payload, turn),
+        ),
+        // The finish chunk is compared twice: as `finishChunk` and in `chunkPayloads`.
+        finishChunk: {
+          ...turn.finishChunk,
+          payloadKeys: turn.finishChunk.payloadKeys.filter(k => !declaredMissingKeysFor('finish').includes(k)),
+          payload: withoutDeclaredPayloadDifferences('finish', turn.finishChunk.payload, turn),
+        },
+      };
+      return side === 'wrapped' ? withoutKnownTurnDifferences(reference.turns[index], stripped) : stripped;
+    }),
   };
 }
 
-/** Failures when the built-in finish-key difference no longer reproduces. */
+/**
+ * Failures when a declared chunk difference no longer reproduces. Chunks are
+ * paired by index within their type, which is enough because the `chunks` field
+ * already reports a sequence mismatch.
+ */
 export function staleKnownDifferences(engine: string, plain: EngineObservation, actual: EngineObservation): string[] {
   const failures: string[] = [];
-  plain.turns.forEach((turn, i) => {
-    if (turn.finishChunk.payloadKeys.length === 0) return;
-    const wrappedKeys = actual.turns[i]?.finishChunk.payloadKeys ?? [];
-    const onPlain = FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES.filter(k => turn.finishChunk.payloadKeys.includes(k));
-    const nowOnWrapped = onPlain.filter(k => wrappedKeys.includes(k));
-    if (onPlain.length === 0) {
+  for (const declared of KNOWN_CHUNK_DIFFERENCES) {
+    // A scenario that never reaches the declared turns says nothing about
+    // whether the difference is still there, so it need not reproduce.
+    const inScope = (turn: ParitySnapshot) => !declared.scope || declared.scope(turn);
+    const plainHasChunks = plain.turns.some(
+      turn => inScope(turn) && indexesOfType(turn, declared.chunkType).length > 0,
+    );
+    let sawDifference = false;
+    let plainEmitsMissingKey = false;
+
+    plain.turns.forEach((turn, i) => {
+      if (!inScope(turn)) return;
+      const wrapped = actual.turns[i];
+      if (!wrapped) return;
+      const wrappedIndexes = indexesOfType(wrapped, declared.chunkType);
+      indexesOfType(turn, declared.chunkType).forEach((plainIndex, n) => {
+        const wrappedIndex = wrappedIndexes[n];
+        if (wrappedIndex === undefined) return;
+        const plainPayload = turn.chunkPayloads[plainIndex];
+        const wrappedPayload = wrapped.chunkPayloads[wrappedIndex];
+
+        for (const path of declared.paths) {
+          const plainValue = getAtPath(plainPayload, path);
+          const wrappedValue = getAtPath(wrappedPayload, path);
+          // Two empty values are no difference to declare, and none to fix:
+          // e.g. a message list the run never filled in on either engine.
+          if (isDeepStrictEqual(plainValue, wrappedValue) && (isEmptyValue(plainValue) || isEmptyValue(wrappedValue))) {
+            continue;
+          }
+          if (isDeepStrictEqual(plainValue, wrappedValue)) {
+            failures.push(
+              `${engine}: turns[${i}] ${declared.chunkType} payload '${path}' no longer differs from plain; ` +
+                `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+            );
+          } else {
+            sawDifference = true;
+          }
+        }
+        for (const key of declared.missingKeys ?? []) {
+          if (key in (plainPayload as Record<string, unknown>)) plainEmitsMissingKey = true;
+          if (key in (wrappedPayload as Record<string, unknown>)) {
+            failures.push(
+              `${engine}: turns[${i}] ${declared.chunkType} payload now includes '${key}'; ` +
+                `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+            );
+          }
+        }
+      });
+    });
+
+    if (plainHasChunks && !sawDifference) {
       failures.push(
-        `${engine}: turns[${i}] plain's finish payload has none of FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES; update it`,
+        `${engine}: the declared ${declared.chunkType} chunk difference no longer reproduces; ` +
+          `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
       );
     }
-    if (nowOnWrapped.length > 0) {
+    if (declared.missingKeys && plainHasChunks && !plainEmitsMissingKey) {
       failures.push(
-        `${engine}: turns[${i}] finish payload now includes ${nowOnWrapped.join(', ')}; remove them from FINISH_KEYS_MISSING_ON_WRAPPED_ENGINES`,
+        `${engine}: plain's ${declared.chunkType} payload no longer includes any of ` +
+          `${declared.missingKeys.join(', ')}; update KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
       );
     }
-  });
+  }
+
+  for (const declared of KNOWN_TURN_DIFFERENCES) {
+    const reproduced = plain.turns.some((turn, i) => {
+      if (!declared.appliesTo(turn)) return false;
+      const wrapped = actual.turns[i];
+      return !!wrapped && declared.matches(wrapped[declared.field], turn[declared.field]);
+    });
+    if (!reproduced && plain.turns.some(declared.appliesTo)) {
+      failures.push(
+        `${engine}: the declared ${declared.field} difference no longer reproduces; ` +
+          `remove it from KNOWN_TURN_DIFFERENCES (${declared.ticket})`,
+      );
+    }
+  }
   return failures;
 }
 
@@ -525,9 +1024,10 @@ function checkEngine(
   const stale = staleKnownDifferences(engine, reference, actual);
   if (stale.length > 0) return stale;
 
-  const plain = withKnownEngineDifferences(reference);
+  const plain = withoutKnownEngineDifferences(reference, reference, 'plain');
+  const observed = withoutKnownEngineDifferences(reference, actual, 'wrapped');
   const difference = scenario.differences?.[engine];
-  const raw = compareObservations(plain, actual, new Set());
+  const raw = compareObservations(plain, observed, new Set());
 
   if (!difference) return raw.map(m => `${engine} differs from plain at ${m.path}:\n${m.message}`);
 
@@ -556,7 +1056,7 @@ function checkEngine(
       );
     }
   }
-  for (const m of compareObservations(expected, actual, ignore)) {
+  for (const m of compareObservations(expected, observed, ignore)) {
     failures.push(
       `${engine} differs from its declared expectation at ${m.path} (reason: ${difference.reason}):\n${m.message}`,
     );

@@ -11,13 +11,62 @@
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
-import type { EngineParityScenario, ParityEngine, ParitySnapshot } from './parity-harness';
-import { expectEngineParity, lastUserText, textOnlyTape } from './parity-harness';
+import type { EngineParityResults, EngineParityScenario, ParityEngine, ParitySnapshot } from './parity-harness';
+import { chunksOfType, expectEngineParity, lastUserText, textOnlyTape } from './parity-harness';
 
 const THREAD = 'thread-t29';
 const RESOURCE = 'resource-t29';
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const TURN_OPTIONS = { maxSteps: 2, memory: { thread: THREAD, resource: RESOURCE } };
+
+/**
+ * Literal contract for the plain engine, which the helper treats as the
+ * reference. Pinning it here stops a plain-side change from silently moving
+ * that reference and keeping the engines "in parity".
+ */
+const PLAIN_FINISH_KEYS = [
+  'messageId',
+  'messages',
+  'metadata',
+  'output',
+  'processorRetryCount',
+  'response',
+  'stepResult',
+];
+const PLAIN_FULL_OUTPUT_KEYS = [
+  'error',
+  'files',
+  'finishReason',
+  'messages',
+  'object',
+  'providerMetadata',
+  'reasoning',
+  'reasoningText',
+  'rememberedMessages',
+  'request',
+  'response',
+  'resumeSchema',
+  'runId',
+  'sources',
+  'spanId',
+  'steps',
+  'suspendPayload',
+  'text',
+  'toolCalls',
+  'toolResults',
+  'totalUsage',
+  'traceId',
+  'tripwire',
+  'usage',
+  'usedFallbackValue',
+  'warnings',
+];
+const PLAIN_USAGE = {
+  inputTokens: 10,
+  outputTokens: 20,
+  totalTokens: 30,
+  raw: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+};
 
 /** Runs the T29 scenario; returns each engine's results and persisted message roles. */
 async function runT29(run: EngineParityScenario['run']) {
@@ -40,9 +89,18 @@ async function runT29(run: EngineParityScenario['run']) {
 
 /** Checks the harness applies to turn 1 in both variants. */
 function expectTurnOneAnswered(turn: ParitySnapshot | undefined) {
-  expect(turn!.chunks.filter(c => c.endsWith(':finish'))).toHaveLength(1);
+  expect(chunksOfType(turn!, 'finish')).toBe(1);
   expect(turn!.streamedText).toBe('answer to: First question');
   expect(turn!.fullOutput.text).toBe(turn!.streamedText);
+}
+
+/** Pins the plain reference to its literal contract so it cannot drift unnoticed. */
+function expectPlainReference(results: EngineParityResults) {
+  for (const turn of results.plain!.turns) {
+    expect(turn.finishChunk.payloadKeys).toEqual(PLAIN_FINISH_KEYS);
+    expect(turn.fullOutput.keys).toEqual(PLAIN_FULL_OUTPUT_KEYS);
+    expect(turn.usage).toEqual(PLAIN_USAGE);
+  }
 }
 
 describe('T29 text-only multistep (plain, durable, evented)', () => {
@@ -50,6 +108,8 @@ describe('T29 text-only multistep (plain, durable, evented)', () => {
     const { results, persistedRoles } = await runT29(async handle => {
       await handle.turn('First question', TURN_OPTIONS);
     });
+
+    expectPlainReference(results);
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
@@ -64,6 +124,8 @@ describe('T29 text-only multistep (plain, durable, evented)', () => {
       await handle.turn('First question', TURN_OPTIONS);
       await handle.turn('Second question', TURN_OPTIONS);
     });
+
+    expectPlainReference(results);
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
