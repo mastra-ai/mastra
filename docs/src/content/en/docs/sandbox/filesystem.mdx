@@ -24,15 +24,15 @@ Configuring a filesystem gives the agent these tools:
 
 | Tool | Does |
 | - | - |
-| `read_file` | Reads all or part of a file. |
-| `write_file` | Creates or overwrites a file. |
-| `edit_file` | Replaces matching text in an existing file. |
-| `list_files` | Lists files and directories. |
-| `delete` | Deletes a file or directory. |
-| `file_stat` | Returns metadata about a file or directory. |
-| `mkdir` | Creates a directory and any missing parent directories. |
-| `grep` | Searches file contents with a regular expression. |
-| `ast_edit` | Applies structural code edits. Available when `@ast-grep/napi` is installed. |
+| `mastra_workspace_read_file` | Reads all or part of a file. |
+| `mastra_workspace_write_file` | Creates or overwrites a file. |
+| `mastra_workspace_edit_file` | Replaces matching text in an existing file. |
+| `mastra_workspace_list_files` | Lists files and directories. |
+| `mastra_workspace_delete` | Deletes a file or directory. |
+| `mastra_workspace_file_stat` | Returns metadata about a file or directory. |
+| `mastra_workspace_mkdir` | Creates a directory and any missing parent directories. |
+| `mastra_workspace_grep` | Searches file contents with a regular expression. |
+| `mastra_workspace_ast_edit` | Applies structural code edits. Available when `@ast-grep/napi` is installed. |
 
 ## Supported filesystems
 
@@ -74,7 +74,7 @@ const workspace = new Workspace({
 })
 ```
 
-The agent receives tools such as `read_file`, `write_file`, `list_files`, and `grep`. Paths are resolved under `./knowledge-base`, and no sandbox or command tools are required.
+The agent receives tools such as `mastra_workspace_read_file`, `mastra_workspace_write_file`, `mastra_workspace_list_files`, and `mastra_workspace_grep`. Paths are resolved under `./knowledge-base`, and no sandbox or command tools are required.
 
 See [Search](/docs/sandbox/search) to index the files for keyword or semantic retrieval. See the [filesystem tools reference](/reference/workspace/workspace-class#filesystem-tools) for every generated tool and its policies.
 

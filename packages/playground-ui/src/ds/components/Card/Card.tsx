@@ -1,10 +1,9 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
-import type { TxtProps } from '../Txt';
-import { Txt } from '../Txt';
 import { surfaceRimFocus } from '@/ds/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -68,17 +67,21 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ c
 ));
 CardHeader.displayName = 'CardHeader';
 
-export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement> & { as?: TxtProps['as'] };
+export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement> & { as?: 'h3' | 'p' };
 
-export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ as = 'h3', ...props }, ref) => (
-  <Txt ref={ref} as={as} variant="subheading" tone="ink" {...props} />
-));
+export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
+  ({ as: Component = 'h3', className, ...props }, ref) => (
+    <Component ref={ref} className={cn(textStyle({ variant: 'subheading', tone: 'ink' }), className)} {...props} />
+  ),
+);
 CardTitle.displayName = 'CardTitle';
 
-export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement> & { as?: TxtProps['as'] };
+export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement> & { as?: 'p' | 'div' };
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
-  ({ as = 'p', ...props }, ref) => <Txt ref={ref} as={as} variant="caption" tone="muted" {...props} />,
+  ({ as: Component = 'p', className, ...props }, ref) => (
+    <Component ref={ref} className={cn(textStyle({ variant: 'caption', tone: 'muted' }), className)} {...props} />
+  ),
 );
 CardDescription.displayName = 'CardDescription';
 

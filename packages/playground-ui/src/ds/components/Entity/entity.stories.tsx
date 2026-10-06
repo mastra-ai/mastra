@@ -13,7 +13,25 @@ const meta = {
   title: 'Composite/Entity',
   component: Entity,
   args: { children: null },
-  parameters: { layout: 'padded' },
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        component: `Entity is a card used in Studio's agent configuration, integrations, and MCP tools. EntityHeader and EntityBody compose the expandable Memory settings sections. Page-level headings use PageHeader.
+
+Real call sites:
+
+- [Message History](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/agents/components/agent-cms-pages/memory/last-messages-entity.tsx)
+- [Observational Memory](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/agents/components/agent-cms-pages/memory/observational-memory-entity.tsx)
+- [Semantic Recall](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/agents/components/agent-cms-pages/memory/semantic-recall-entity.tsx)
+- [Agent tools](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/agents/components/agent-cms-pages/tools-page.tsx)
+- [Integration providers](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/tool-providers/components/integration-tools-section.tsx)
+- [MCP clients](https://github.com/mastra-ai/mastra/blob/refactor/entity-card-composition/packages/playground/src/domains/mcps/components/mcp-client-list/mcp-client-list.tsx)
+
+The agent configuration tabs for Agents, Workflows, Skills, and Scorers also use these cards.`,
+      },
+    },
+  },
   decorators: [
     Story => (
       <div className="mx-auto w-full max-w-2xl">

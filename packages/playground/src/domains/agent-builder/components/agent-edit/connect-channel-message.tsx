@@ -43,7 +43,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
         <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-        <Txt variant="body" tone="muted" className="flex-1" as="div">
+        <Txt as="p" variant="body" tone="muted" className="flex-1">
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (
