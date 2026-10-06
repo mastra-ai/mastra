@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
@@ -38,14 +38,12 @@ function segmentShape({
   fill,
   color,
   capped,
-  hovered,
   keys,
   dataKey,
 }: {
   fill: string;
   color: string;
   capped: boolean;
-  hovered: number | null;
   /** The column's data keys, bottom to top. */
   keys: string[];
   dataKey: string;
@@ -62,21 +60,38 @@ function segmentShape({
     if (!laid) return <g />;
     const { y, height: h } = laid;
     const radius = Math.min(RADIUS, Math.floor(h / 3));
-    const opacity = hovered !== null && hovered !== index ? DIMMED : 1;
-    const style = { transition: 'opacity 150ms ease-out' };
+    // Dimming is a CSS rule keyed on `data-bucket` (see `HoverDim`), so hovering re-renders no bars.
+    const bucket = { 'data-bucket': index, style: { transition: 'opacity 150ms ease-out' } };
 
     if (capped) {
       return (
-        <g opacity={opacity} style={style}>
+        <g {...bucket}>
           <Rectangle x={x} y={y} width={width} height={h} radius={radius} fill={color} fillOpacity={CAP_BODY} />
           <Rectangle x={x} y={y} width={width} height={Math.min(CAP_HEIGHT, h)} radius={radius} fill={color} />
         </g>
       );
     }
     return (
-      <Rectangle x={x} y={y} width={width} height={h} radius={radius} fill={fill} opacity={opacity} style={style} />
+      <g {...bucket}>
+        <Rectangle x={x} y={y} width={width} height={h} radius={radius} fill={fill} />
+      </g>
     );
   };
+}
+
+/**
+ * Dims every column but the hovered one. Its own tiny state, so a hover only re-renders this
+ * <style> tag: with hundreds of buckets, re-rendering the bars on each move froze the pointer.
+ */
+function HoverDim({ scope, setter }: { scope: string; setter: { current: (index: number | null) => void } }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    setter.current = setHovered;
+  }, [setter]);
+  if (hovered === null) return null;
+  return (
+    <style>{`[data-chart-scope="${scope}"] [data-bucket]:not([data-bucket="${hovered}"]){opacity:${DIMMED}}`}</style>
+  );
 }
 
 /** A line drawn over the bars on its own scale, e.g. average wake time over cold starts. */
@@ -146,10 +161,27 @@ export function MetricsStackedBarChart({
   className?: string;
 }) {
   const id = useChartDefsId();
-  const [hovered, setHovered] = useState<number | null>(null);
+  const setHovered = useRef<(index: number | null) => void>(() => {});
   const { size, onResize, ref } = useChartSize();
   const fill = height === 'fill';
   const root = cn(fill && 'flex min-h-0 flex-1 flex-col', className);
+
+  const keyList = series.map(s => s.dataKey).join('\u0000');
+  const colorList = series.map(s => s.color).join('\u0000');
+  // Stable shapes, so Recharts doesn't re-render every bar when the parent re-renders.
+  const shapes = useMemo(() => {
+    const keys = keyList.split('\u0000');
+    const colors = colorList.split('\u0000');
+    return keys.map((dataKey, i) =>
+      segmentShape({
+        fill: `url(#${id}-bar-${i})`,
+        color: colors[i] ?? '',
+        capped: variant === 'capped',
+        keys,
+        dataKey,
+      }),
+    );
+  }, [keyList, colorList, variant, id]);
 
   const legend = overlay ? [...series, { ...overlay, dashed: true }] : series;
   // The legend stays while loading: it comes from the series, not the data.
@@ -163,11 +195,11 @@ export function MetricsStackedBarChart({
   }
 
   const format = valueFormatter ?? compactNumber.format;
-  const keys = series.map(s => s.dataKey);
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
 
   return (
-    <div className={root}>
+    <div className={root} data-chart-scope={id}>
+      <HoverDim scope={id} setter={setHovered} />
       {showLegend && <MetricsLineChartLegend data={data} series={legend} className="mb-4" />}
       <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
         <ComposedChart
@@ -175,9 +207,9 @@ export function MetricsStackedBarChart({
           margin={CHART_MARGIN}
           onMouseMove={state => {
             const index = state?.activeTooltipIndex;
-            setHovered(index === undefined || index === null ? null : Number(index));
+            setHovered.current(index === undefined || index === null ? null : Number(index));
           }}
-          onMouseLeave={() => setHovered(null)}
+          onMouseLeave={() => setHovered.current(null)}
           onClick={state => {
             const i = state?.activeTooltipIndex;
             const row = i === undefined || i === null ? undefined : data[Number(i)];
@@ -223,14 +255,7 @@ export function MetricsStackedBarChart({
               fill={s.color}
               maxBarSize={28}
               isAnimationActive={false}
-              shape={segmentShape({
-                fill: `url(#${id}-bar-${i})`,
-                color: s.color,
-                capped: variant === 'capped',
-                hovered,
-                keys,
-                dataKey: s.dataKey,
-              })}
+              shape={shapes[i]}
             />
           ))}
           {overlay && (
