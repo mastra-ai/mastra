@@ -60,17 +60,21 @@ export interface ToolsOptions {
   /** Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID. */
   projectId?: string;
   /**
-   * Providers to enable, in one of two shapes:
-   * - `["linear", "github"]` — string array shorthand for enabling providers
-   *   with no per-provider options.
-   * - `{ linear: { allowTools: [...] }, github: { disallowTools: [...] } }` —
-   *   object form for per-provider overrides. Each provider may set at most
-   *   one of `allowTools` and `disallowTools`; supplying both throws.
+   * Which providers to resolve, in one of two shapes:
+   * - `["linear", "github"]` — an allowlist: only the listed providers
+   *   resolve, with default options. Anything else connected to the project
+   *   is ignored.
+   * - `{ linear: true, github: { allowTools: [...] }, notion: false }` —
+   *   per-provider configuration. Every connected provider still resolves
+   *   unless excluded: `true` (or `{}`) enables with defaults, `false` (or
+   *   `{ disabled: true }`) excludes, and an options object configures tool
+   *   filters, approval policy, or a pinned connection. Each provider may set
+   *   at most one of `allowTools` and `disallowTools`; supplying both throws.
    *
-   * Both forms may be combined by passing the object form; use the array
-   * shorthand only when no overrides are needed.
+   * Omit the option entirely to resolve every provider the project has a
+   * connection for.
    */
-  providers?: string[] | Record<string, ToolsProviderOptions>;
+  providers?: string[] | Record<string, boolean | ToolsProviderOptions>;
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -143,7 +147,8 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   // Keyed by `${integrationId}::${connectionId}` so multiple active
   // connections for the same provider each get their own MCP client.
   const mcpClients = new Map<string, { integrationId: string; connectionId: string; client: MCPClient }>();
-  const providerOverrides = normalizeProviderOverrides(options.providers);
+  const normalizedProviders = normalizeProviderOverrides(options.providers);
+  const providerOverrides = normalizedProviders.overrides;
   validateProviderIds(providerOverrides);
   validateProviderXor(providerOverrides);
   validateRequireApproval(providerOverrides);
@@ -176,7 +181,8 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       connection =>
         connection.status === 'active' &&
         !checkedIn.has(connection.integrationId) &&
-        !providerOverrides[connection.integrationId]?.disabled,
+        !providerOverrides[connection.integrationId]?.disabled &&
+        (normalizedProviders.only === undefined || normalizedProviders.only.has(connection.integrationId)),
     );
     if (needsCatalog) throw catalogResult.reason;
     const reason = catalogResult.reason;
@@ -196,7 +202,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       inflight = (async () => {
         try {
           const { connections, catalog } = await loadSnapshotInputs();
-          const requests = buildRequests(providerOverrides, catalog);
+          const requests = buildRequests(normalizedProviders, catalog);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
@@ -263,17 +269,29 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   });
 }
 
+/** Internal normalization of the `providers` option. */
+interface NormalizedProviders {
+  /** Per-provider options with boolean shorthands expanded. */
+  overrides: Record<string, ToolsProviderOptions>;
+  /**
+   * Set when the array form was used: only these providers resolve. The
+   * record form never restricts — unlisted providers keep resolving.
+   */
+  only: Set<string> | undefined;
+}
+
 /**
- * Turns the two accepted `providers` shapes into the internal Record form.
- * The string-array shorthand (`["linear", "github"]`) becomes
- * `{ linear: {}, github: {} }`; the object form passes through unchanged.
- * Also rejects malformed inputs early (non-string array entries, duplicates)
- * so a bad option throws at tools() time rather than at first refresh.
+ * Turns the two accepted `providers` shapes into the internal form. The
+ * array form (`["linear", "github"]`) becomes an allowlist with default
+ * options; the record form expands boolean shorthands (`true` → `{}`,
+ * `false` → `{ disabled: true }`). Malformed inputs (non-string array
+ * entries, duplicates, non-boolean/non-object record values) throw at
+ * tools() time rather than at first refresh.
  */
-function normalizeProviderOverrides(providers: ToolsOptions['providers']): Record<string, ToolsProviderOptions> {
-  if (providers === undefined) return {};
+function normalizeProviderOverrides(providers: ToolsOptions['providers']): NormalizedProviders {
+  if (providers === undefined) return { overrides: {}, only: undefined };
   if (Array.isArray(providers)) {
-    const record: Record<string, ToolsProviderOptions> = {};
+    const overrides: Record<string, ToolsProviderOptions> = {};
     for (const entry of providers) {
       if (typeof entry !== 'string') {
         throw new MastraConnectError(
@@ -281,14 +299,30 @@ function normalizeProviderOverrides(providers: ToolsOptions['providers']): Recor
           `Invalid providers entry: expected a string provider id, got ${typeof entry}.`,
         );
       }
-      if (record[entry] !== undefined) {
+      if (overrides[entry] !== undefined) {
         throw new MastraConnectError('invalid_options', `Duplicate provider '${entry}' in providers array.`);
       }
-      record[entry] = {};
+      overrides[entry] = {};
     }
-    return record;
+    return { overrides, only: new Set(Object.keys(overrides)) };
   }
-  return providers;
+  const overrides: Record<string, ToolsProviderOptions> = {};
+  for (const [providerId, value] of Object.entries(providers)) {
+    if (value === undefined) continue;
+    if (value === true) {
+      overrides[providerId] = {};
+    } else if (value === false) {
+      overrides[providerId] = { disabled: true };
+    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      overrides[providerId] = value;
+    } else {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Invalid providers entry for '${providerId}': expected true, false, or an options object, got ${value === null ? 'null' : Array.isArray(value) ? 'an array' : typeof value}.`,
+      );
+    }
+  }
+  return { overrides, only: undefined };
 }
 
 /**
@@ -345,11 +379,8 @@ function rejectRemovedAutoApproveTools(providers: Record<string, ToolsProviderOp
   }
 }
 
-function buildRequests(
-  providers: Record<string, ToolsProviderOptions>,
-  catalog: IntegrationCatalogEntry[],
-): NormalizedRequest[] {
-  const overrides = providers;
+function buildRequests(providers: NormalizedProviders, catalog: IntegrationCatalogEntry[]): NormalizedRequest[] {
+  const { overrides, only } = providers;
   const registrations = new Map(TOOLS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
@@ -367,6 +398,7 @@ function buildRequests(
   }
   const requests: NormalizedRequest[] = [];
   for (const registration of registrations.values()) {
+    if (only !== undefined && !only.has(registration.integrationId)) continue;
     const providerOptions = overrides[registration.integrationId] ?? {};
     if (providerOptions.disabled) continue;
     requests.push({ registration, options: providerOptions });

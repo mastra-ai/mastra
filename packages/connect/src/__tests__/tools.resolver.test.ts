@@ -399,6 +399,45 @@ describe('connect resolver caching and liveness', () => {
   });
 });
 
+describe('providers option shapes', () => {
+  it('treats a false provider entry as excluded, like disabled: true', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: false } });
+    expect(await tools()).toEqual({});
+  });
+
+  it('treats a true provider entry as enabled with default options', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: true } });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('restricts to the listed providers when providers is an array', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_not1', integrationId: 'notion' }),
+    ]);
+    const tools = connect({ ...options, providers: ['linear'] });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('rejects a providers record value that is neither boolean nor object', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, providers: { linear: 'yes' } as unknown as Record<string, boolean> })).toThrow(
+      /expected true, false, or an options object/,
+    );
+  });
+
+  it('rejects a duplicate provider id in the array form', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, providers: ['linear', 'linear'] })).toThrow(/Duplicate provider 'linear'/);
+  });
+});
+
 describe('catalog availability', () => {
   it('resolves checked-in providers when the catalog request fails', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');

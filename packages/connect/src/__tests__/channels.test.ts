@@ -735,6 +735,56 @@ describe('channels()', () => {
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
+  it('treats a false provider entry as excluded, like disabled: true', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': false } }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeUndefined();
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
+  });
+
+  it('treats a true provider entry as enabled with default options', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': true } }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeDefined();
+    expect(resolver.getRoutes().map(route => route.path)).toContain('/slack/webhook');
+  });
+
+  it('restricts to the listed channels when providers is an array', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: ['telegram'] }));
+    const providers = await resolver();
+    // slack-channels has the only active connection, but it isn't allowlisted.
+    expect(providers['slack-channels']).toBeUndefined();
+    const paths = resolver.getRoutes().map(route => route.path);
+    expect(paths).toContain('/telegram/webhook');
+    expect(paths).not.toContain('/slack/webhook');
+  });
+
+  it('rejects a providers record value that is neither boolean nor object', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(
+        options(platformFetch({ connections: [] }), {
+          providers: { telegram: 'yes' as unknown as { disabled?: boolean } },
+        }),
+      ),
+    ).rejects.toThrow(/expected true, false, or an options object/);
+  });
+
   it('honors a pinned connectionId when multiple are present', async () => {
     const fetchMock = platformFetch({
       connections: [

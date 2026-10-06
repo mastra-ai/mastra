@@ -56,23 +56,35 @@ export interface ChannelsProviderOptions<ProviderOptions = Record<string, unknow
 }
 
 /**
- * Integration overrides map, typed per known channel id. Unknown ids are
- * allowed with a generic option shape so future channels don't need a type
- * change here.
+ * Per-provider configuration map, typed per known channel id. `true` enables
+ * a channel with default options and `false` excludes it, mirroring the
+ * `tools()` shorthand. Unknown ids are allowed with a generic option shape so
+ * future channels don't need a type change here.
  */
 export interface ChannelsProviders {
-  'slack-channels'?: ChannelsProviderOptions<SlackChannelsProviderOptions>;
-  telegram?: ChannelsProviderOptions<TelegramChannelsProviderOptions>;
-  discord?: ChannelsProviderOptions<DiscordChannelsProviderOptions>;
-  'microsoft-teams'?: ChannelsProviderOptions<TeamsChannelsProviderOptions>;
-  [integrationId: string]: ChannelsProviderOptions | undefined;
+  'slack-channels'?: boolean | ChannelsProviderOptions<SlackChannelsProviderOptions>;
+  telegram?: boolean | ChannelsProviderOptions<TelegramChannelsProviderOptions>;
+  discord?: boolean | ChannelsProviderOptions<DiscordChannelsProviderOptions>;
+  'microsoft-teams'?: boolean | ChannelsProviderOptions<TeamsChannelsProviderOptions>;
+  [integrationId: string]: boolean | ChannelsProviderOptions | undefined;
 }
 
 export interface ChannelsOptions {
   /** Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID. */
   projectId?: string;
-  /** Optional per-provider overrides keyed by integrationId. */
-  providers?: ChannelsProviders;
+  /**
+   * Which channels to resolve, in one of two shapes:
+   * - `["discord", "telegram"]` — an allowlist: only the listed channels are
+   *   constructed and mounted.
+   * - `{ discord: true, telegram: { connectionId: "..." }, "slack-channels": false }` —
+   *   per-channel configuration. Every registered channel still resolves
+   *   unless excluded: `true` (or `{}`) enables with defaults, `false` (or
+   *   `{ disabled: true }`) excludes, and an options object pins a connection
+   *   or passes provider-specific options.
+   *
+   * Omit the option entirely to resolve every registered channel.
+   */
+  providers?: string[] | ChannelsProviders;
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -175,7 +187,8 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
       `Invalid ttlMs (${options.ttlMs}): expected a finite number of milliseconds >= 0.`,
     );
   }
-  validateProviderIds(options.providers);
+  const { overrides: providerOverrides, only } = normalizeChannelProviders(options.providers);
+  validateProviderIds(providerOverrides);
 
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   const client = resolveClient(options.client);
@@ -185,7 +198,8 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   // synchronous and the instances survive across resolutions.
   const states: IntegrationState[] = [];
   for (const registration of CHANNELS) {
-    const overrides = options.providers?.[registration.integrationId] ?? {};
+    if (only !== undefined && !only.has(registration.integrationId)) continue;
+    const overrides = providerOverrides[registration.integrationId] ?? {};
     if (overrides.disabled) continue;
 
     const state: IntegrationState = { registration, instance: undefined as never, connectionId: undefined };
@@ -262,7 +276,7 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
 
     for (const state of states) {
       const integrationId = state.registration.integrationId;
-      const overrides = options.providers?.[integrationId] ?? {};
+      const overrides = providerOverrides[integrationId] ?? {};
       const candidates = byIntegrationId.get(integrationId) ?? [];
 
       const connectionId =
@@ -345,6 +359,60 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
     cache = undefined;
   };
   return invocable;
+}
+
+/** Internal normalization of the `providers` option. */
+interface NormalizedChannelProviders {
+  /** Per-channel options with boolean shorthands expanded. */
+  overrides: Record<string, ChannelsProviderOptions>;
+  /**
+   * Set when the array form was used: only these channels are constructed.
+   * The record form never restricts — unlisted channels keep resolving.
+   */
+  only: Set<string> | undefined;
+}
+
+/**
+ * Turns the two accepted `providers` shapes into the internal form, mirroring
+ * `tools()`. The array form becomes an allowlist with default options; the
+ * record form expands boolean shorthands (`true` → `{}`, `false` →
+ * `{ disabled: true }`). Malformed inputs throw at channels() time.
+ */
+function normalizeChannelProviders(providers: ChannelsOptions['providers']): NormalizedChannelProviders {
+  if (providers === undefined) return { overrides: {}, only: undefined };
+  if (Array.isArray(providers)) {
+    const overrides: Record<string, ChannelsProviderOptions> = {};
+    for (const entry of providers) {
+      if (typeof entry !== 'string') {
+        throw new MastraConnectError(
+          'invalid_options',
+          `Invalid providers entry: expected a string channel id, got ${typeof entry}.`,
+        );
+      }
+      if (overrides[entry] !== undefined) {
+        throw new MastraConnectError('invalid_options', `Duplicate provider '${entry}' in providers array.`);
+      }
+      overrides[entry] = {};
+    }
+    return { overrides, only: new Set(Object.keys(overrides)) };
+  }
+  const overrides: Record<string, ChannelsProviderOptions> = {};
+  for (const [providerId, value] of Object.entries(providers)) {
+    if (value === undefined) continue;
+    if (value === true) {
+      overrides[providerId] = {};
+    } else if (value === false) {
+      overrides[providerId] = { disabled: true };
+    } else if (typeof value === 'object' && !Array.isArray(value)) {
+      overrides[providerId] = value;
+    } else {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Invalid providers entry for '${providerId}': expected true, false, or an options object, got ${Array.isArray(value) ? 'an array' : typeof value}.`,
+      );
+    }
+  }
+  return { overrides, only: undefined };
 }
 
 /**
