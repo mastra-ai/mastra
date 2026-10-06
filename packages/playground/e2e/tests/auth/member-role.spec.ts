@@ -15,7 +15,7 @@ import { test, expect } from '@playwright/test';
 import { setupMemberAuth, setupMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
-import { revealFoldedSidebarItems } from '../__utils__/sidebar';
+import { openSidebarMoreMenu, sidebarDestination } from '../__utils__/sidebar';
 
 test.describe('Member Role', () => {
   test.afterEach(async () => {
@@ -33,8 +33,8 @@ test.describe('Member Role', () => {
       // Member should see main navigation links
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
       await expect(page.getByRole('link', { name: /^Workflows$/i })).toBeVisible();
-      await revealFoldedSidebarItems(page);
-      await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
+      await openSidebarMoreMenu(page);
+      await expect(sidebarDestination(page, /^Tools$/i)).toBeVisible();
     });
 
     test('member can navigate to agents, workflows, and tools', async ({ page }) => {
