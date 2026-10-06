@@ -1,7 +1,7 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import React from 'react';
 import { GrainFill } from '@/ds/components/GrainFill';
-import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
@@ -58,23 +58,23 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
         />
       )}
       {title && (
-        <Txt as="div" variant="subheading" tone="ink" className="flex min-w-0 items-start gap-2">
+        <div className={cn(textStyle({ variant: 'subheading', tone: 'ink' }), 'flex min-w-0 items-start gap-2')}>
           <span className="min-w-0 flex-1 truncate">{title}</span>
           {lastRow === 'title' && glyph}
-        </Txt>
+        </div>
       )}
       {children && (
-        <Txt as="div" {...messageText} className="flex min-w-0 items-end gap-2">
+        <div className={cn(textStyle(messageText), 'flex min-w-0 items-end gap-2')}>
           {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
           <div className="flex min-w-0 flex-1 flex-col gap-2 wrap-anywhere">{children}</div>
           {lastRow === 'message' && glyph}
-        </Txt>
+        </div>
       )}
       {action && (
-        <Txt as="div" variant="label" className="flex min-w-0 items-center justify-between gap-2">
+        <div className={cn(textStyle({ variant: 'label' }), 'flex min-w-0 items-center justify-between gap-2')}>
           <div className="flex min-w-0">{action}</div>
           {glyph}
-        </Txt>
+        </div>
       )}
     </div>
   );
