@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildUploadPath, toDisplayName } from './file-upload-filename';
+import { buildUploadPath, toDisplayName } from './file-upload';
 
 const UUID = '11111111-2222-4333-8444-555555555555';
 

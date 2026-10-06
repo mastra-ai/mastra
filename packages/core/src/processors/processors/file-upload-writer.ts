@@ -1,7 +1,8 @@
+import type { RequestContext } from '../../request-context';
 import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { shellQuote } from '../../workspace/sandbox/utils';
-import { describeError, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
-import type { Result } from './file-upload-errors';
+import type { AnyWorkspace } from '../../workspace/workspace';
+import { describeError, FILE_UPLOAD_ERROR_CODES, FileUploadError } from './file-upload-errors';
 
 /** Max shell-command payload per chunk; stays under the per-argument limit of `sh -c`. */
 const UPLOAD_CHUNK_SIZE = 96_000;
@@ -11,9 +12,37 @@ export interface SandboxUpload {
   content: Buffer;
 }
 
-export function hasWriteCapability(sandbox: WorkspaceSandbox): boolean {
-  return typeof sandbox.writeFiles === 'function' || typeof sandbox.executeCommand === 'function';
+/** The sandbox to upload to for this request, once it is known to accept files. */
+export async function resolveWritableSandbox(
+  workspace: AnyWorkspace,
+  requestContext: RequestContext,
+): Promise<WorkspaceSandbox> {
+  const sandbox = await resolveSandbox(workspace, requestContext);
+  if (typeof sandbox.writeFiles === 'function' || typeof sandbox.executeCommand === 'function') return sandbox;
+  throw new FileUploadError(
+    FILE_UPLOAD_ERROR_CODES.NO_WRITE_CAPABILITY,
+    `Sandbox "${sandbox.name}" supports neither writeFiles nor executeCommand, so files cannot be uploaded to it.`,
+  );
 }
+
+// A sandbox resolver is user code: it can throw, or resolve nothing.
+async function resolveSandbox(workspace: AnyWorkspace, requestContext: RequestContext): Promise<WorkspaceSandbox> {
+  let sandbox: WorkspaceSandbox | undefined;
+  try {
+    sandbox = await workspace.resolveSandbox({ requestContext });
+  } catch (error) {
+    throw noSandbox(describeError(error));
+  }
+  if (!sandbox) throw noSandbox();
+  return sandbox;
+}
+
+const noSandbox = (cause?: string) =>
+  new FileUploadError(
+    FILE_UPLOAD_ERROR_CODES.NO_SANDBOX,
+    'The workspace resolved no sandbox to upload files to.',
+    cause === undefined ? {} : { cause },
+  );
 
 /**
  * Writes with the provider's batch upload when it exists, otherwise through
@@ -28,17 +57,17 @@ export async function writeFilesToSandbox<T extends SandboxUpload>(
   sandbox: WorkspaceSandbox,
   files: T[],
   abortSignal?: AbortSignal,
-): Promise<Result<T[]>> {
+): Promise<T[]> {
   let placed = files;
   try {
     const root = await createDirectories(sandbox, files, abortSignal);
     placed = root ? files.map(file => ({ ...file, path: `${root.replace(/\/+$/, '')}/${file.path}` })) : files;
     if (sandbox.writeFiles) await sandbox.writeFiles(placed.map(toSandboxFile), { abortSignal });
     else await writeWithCommands(sandbox, placed, abortSignal);
-    return ok(placed);
+    return placed;
   } catch (error) {
     const orphanPaths = await removeUploaded(sandbox, placed);
-    return failed(FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED, 'Files could not be written to the sandbox.', {
+    throw new FileUploadError(FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED, 'Files could not be written to the sandbox.', {
       cause: describeError(error),
       ...(orphanPaths.length > 0 ? { orphanPaths } : {}),
     });

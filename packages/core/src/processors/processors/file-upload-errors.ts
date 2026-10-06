@@ -1,5 +1,3 @@
-import { toDisplayName } from './file-upload-filename';
-
 /** Every reason the file upload processor can stop a turn, as reported in the tripwire metadata. */
 export const FILE_UPLOAD_ERROR_CODES = {
   /** The agent has no memory, the call has no thread, or memory is read-only. */
@@ -43,33 +41,19 @@ export interface FileUploadTripwireMetadata {
 
 export type FileUploadFailureDetails = Omit<FileUploadTripwireMetadata, 'processorId' | 'code'>;
 
-export interface FileUploadFailure {
-  code: FileUploadErrorCode;
-  message: string;
-  details: FileUploadFailureDetails;
-}
-
-export type Result<T> = { ok: true; value: T } | { ok: false; failure: FileUploadFailure };
-
-export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
-
-export const failed = (
-  code: FileUploadErrorCode,
-  message: string,
-  details: FileUploadFailureDetails = {},
-): Result<never> => ({ ok: false, failure: { code, message, details } });
-
-/** Returns every value, or the first failure. */
-export function collect<T>(results: Result<T>[]): Result<T[]> {
-  const values: T[] = [];
-  for (const result of results) {
-    if (!result.ok) return result;
-    values.push(result.value);
+/**
+ * Thrown by the steps of an upload and caught once by the processor, which
+ * turns it into the tripwire. Never leaves the processor.
+ */
+export class FileUploadError extends Error {
+  constructor(
+    readonly code: FileUploadErrorCode,
+    message: string,
+    readonly details: FileUploadFailureDetails = {},
+  ) {
+    super(message);
+    this.name = 'FileUploadError';
   }
-  return ok(values);
 }
-
-export const describeFile = (fileName: string | undefined): string =>
-  fileName ? `File "${toDisplayName(fileName)}"` : 'An unnamed file';
 
 export const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
