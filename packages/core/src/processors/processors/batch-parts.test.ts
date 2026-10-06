@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
-import { BatchPartsProcessor } from './batch-parts';
+import { BatchPartsProcessor, dropBatchedParts } from './batch-parts';
 import type { BatchPartsState } from './batch-parts';
 
 describe('BatchPartsProcessor', () => {
@@ -854,5 +854,40 @@ describe('BatchPartsProcessor', () => {
       // Should emit the object part immediately, not accumulate it
       expect(result2).toEqual(objectChunk);
     });
+  });
+});
+
+describe('dropBatchedParts', () => {
+  const reasoning = (id: string): ChunkType => ({
+    type: 'reasoning-delta',
+    runId: 'run',
+    from: ChunkFrom.AGENT,
+    payload: { id, text: id },
+  });
+
+  it.each([true, false])(
+    'drops only the cancelled request parts it buffered (emitOnNonText=%s)',
+    async emitOnNonText => {
+      const processor = new BatchPartsProcessor({ batchSize: 100, emitOnNonText, maxWaitTime: 60_000 });
+      const state: Record<string, any> = {};
+      const kept = reasoning('kept');
+      const cancelled = [reasoning('cancelled'), { ...reasoning('cancelled'), type: 'reasoning-end' } as ChunkType];
+      for (const part of [kept, ...cancelled]) {
+        await processor.processOutputStream({ part, streamParts: [], state, abort: () => undefined as never });
+      }
+      dropBatchedParts(state, cancelled);
+      expect(state.batch.filter((part: ChunkType) => cancelled.includes(part))).toEqual([]);
+      expect(state.pendingNonText && cancelled.includes(state.pendingNonText)).toBeFalsy();
+      if (!emitOnNonText) {
+        expect(state.batch).toEqual([kept]);
+        expect(processor.flush(state as BatchPartsState)).not.toBeNull();
+      }
+    },
+  );
+
+  it('ignores states that are not batch buffers', () => {
+    const state = { other: [1] };
+    dropBatchedParts(state, [1]);
+    expect(state).toEqual({ other: [1] });
   });
 });

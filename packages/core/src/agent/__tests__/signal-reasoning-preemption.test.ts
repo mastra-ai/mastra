@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AISDKV5LanguageModel } from '../../llm/model/aisdk/v5/model';
 import { loop } from '../../loop/loop';
-import { getModelAttempt } from '../../loop/shared/model-attempt';
 import { createMessageListWithUserMessage, defaultSettings } from '../../loop/test-utils/utils';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
@@ -257,7 +256,6 @@ describe('queued signals preempt default-loop reasoning', () => {
           }),
         };
       });
-      const settled = deferred<void>();
       const settings = defaultSettings();
       const messageList = createMessageListWithUserMessage();
       const pending: ReturnType<typeof createSignal>[] = [];
@@ -286,13 +284,6 @@ describe('queued signals preempt default-loop reasoning', () => {
               id: 'pause-reasoning',
               async processOutputStream({ part }) {
                 if (part.type === 'reasoning-delta') {
-                  const attempt = getModelAttempt(part);
-                  if (!attempt) throw new Error('Missing model attempt');
-                  const dispose = attempt.dispose.bind(attempt);
-                  vi.spyOn(attempt, 'dispose').mockImplementation(() => {
-                    dispose();
-                    settled.resolve();
-                  });
                   entered.resolve();
                   await release.promise;
                 }
@@ -321,7 +312,6 @@ describe('queued signals preempt default-loop reasoning', () => {
         if (cancellation === 'caller') runController.abort();
         else await new Promise(resolve => setTimeout(resolve, 150));
         release.resolve();
-        await settled.promise;
         await consumption;
         await stream._waitUntilFinished();
         expect(doStream).toHaveBeenCalledTimes(prior ? 2 : 1);
@@ -708,5 +698,86 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(JSON.stringify(recalled.messages)).toContain('QUEUED_SIGNAL_5');
     expect(recalled.messages.filter(message => message.role === 'assistant')).toHaveLength(1);
     expect(JSON.stringify(recalled.messages)).not.toContain('STALE_ATTEMPT_');
+  });
+
+  it('keeps discarded reasoning out of processor stream parts and the structuring prompt', async () => {
+    const started = deferred<void>();
+    const memory = new MockMemory();
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }) => {
+        calls++;
+        if (calls > 1) return { stream: convertArrayToReadableStream(answer('{"answer":"ok"}')), warnings: [] };
+        return {
+          warnings: [],
+          stream: new ReadableStream<LanguageModelV2StreamPart>({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'reasoning-start', id: 'discarded-block' });
+              controller.enqueue({
+                type: 'reasoning-delta',
+                id: 'discarded-block',
+                delta: 'STALE_REASONING_FINGERPRINT',
+              });
+              abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+              started.resolve();
+            },
+          }),
+        };
+      },
+    });
+    const structuringPrompts: unknown[] = [];
+    const structuringModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        structuringPrompts.push(prompt);
+        return {
+          warnings: [],
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'object' },
+            { type: 'text-delta', id: 'object', delta: '{"answer":"ok"}' },
+            { type: 'text-end', id: 'object' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const partsAtStepFinish: string[][] = [];
+    const observer: Processor = {
+      id: 'observe-parts',
+      processOutputStream({ part, streamParts }) {
+        if (part.type === 'step-finish') partsAtStepFinish.push(streamParts.map(p => JSON.stringify(p)));
+        return part;
+      },
+    };
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const agent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Structured preemption test',
+      instructions: 'Test',
+      model,
+      memory,
+      outputProcessors: [observer],
+    });
+    const stream = await agent.stream('initial question', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      structuredOutput: { schema: z.object({ answer: z.string() }), model: structuringModel },
+    });
+    const chunks: string[] = [];
+    const consumption = (async () => {
+      for await (const chunk of stream.fullStream) chunks.push(chunk.type);
+    })();
+    await started.promise;
+    await vi.waitFor(() => expect(chunks).toContain('reasoning-delta'));
+    const signal = await agent.sendSignal({ type: 'user-message', contents: 'SYNTHETIC_SIGNAL_MARKER' }, scope);
+    await expect(signal.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+    await consumption;
+    await stream._waitUntilFinished();
+    expect(calls).toBe(2);
+    expect(structuringPrompts).toHaveLength(1);
+    expect(JSON.stringify(structuringPrompts)).not.toContain('STALE_REASONING_FINGERPRINT');
+    expect(partsAtStepFinish).toHaveLength(1);
+    expect(partsAtStepFinish[0]?.join()).not.toContain('STALE_REASONING_FINGERPRINT');
+    expect(partsAtStepFinish[0]?.filter(part => part.includes('"step-start"'))).toHaveLength(1);
   });
 });

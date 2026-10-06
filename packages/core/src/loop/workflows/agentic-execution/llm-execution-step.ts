@@ -36,6 +36,7 @@ import type {
   ProcessorStreamWriter,
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
+import { dropBatchedParts } from '../../../processors/processors/batch-parts';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
@@ -79,10 +80,8 @@ import {
   INITIAL_SIGNAL_ECHOES_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
-  MODEL_ATTEMPT_KEY,
   RESOURCE_ID_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
-  TRANSCRIPT_STEPS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
@@ -96,11 +95,12 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
-import { bindModelAttempt, getModelAttempt, getTranscriptStepContent, ModelAttempt } from '../../shared/model-attempt';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
-import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { startsResponseContent, STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import type { TranscriptStep } from '../../shared/transcript-step';
+import { getTranscriptStepContent } from '../../shared/transcript-step';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -730,9 +730,7 @@ async function processOutputStream<OUTPUT = undefined>({
     });
   };
 
-  const modelAttempt = getModelAttempt(outputStream);
   for await (let chunk of outputStream._getBaseStream()) {
-    modelAttempt?.throwIfDiscarded();
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
     // so we must check the signal on each iteration to avoid accumulating the full
@@ -1148,7 +1146,6 @@ async function processOutputStream<OUTPUT = undefined>({
   }
   clientToolArgsTextByToolCallId.clear();
 
-  modelAttempt?.throwIfDiscarded();
   return { collectedChunks, toolResultTripwire };
 }
 
@@ -1156,7 +1153,7 @@ function executeStreamWithFallbackModels<T>(
   models: ModelManagerModelConfig[],
   logger?: IMastraLogger,
   startIndex = 0,
-  modelAttempt?: ModelAttempt,
+  throwIfInterrupted?: () => void,
 ): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = startIndex;
@@ -1177,7 +1174,7 @@ function executeStreamWithFallbackModels<T>(
         finalResult = result;
         done = true;
       } catch (err) {
-        modelAttempt?.throwIfDiscarded();
+        throwIfInterrupted?.();
         // TripWire errors should be re-thrown immediately - they are intentional aborts
         // from processors (e.g., processInputStep) and should not trigger model retries
         if (err instanceof TripWire) {
@@ -1251,7 +1248,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
-  outputWriter: runOutputWriter,
+  outputWriter,
   mastra,
   rotateResponseMessageId: rotateLoopResponseMessageId,
   eagerCoordinator,
@@ -1262,12 +1259,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   eagerCoordinator?: EagerToolExecutionCoordinator;
   eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
 }) {
-  const runController = controller;
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
+  // Where each accepted step's content sits in the response, by step index. A queued
+  // signal can rotate the response message mid-run, so counting step-start markers
+  // would read the wrong parts.
+  const transcriptSteps: (TranscriptStep | undefined)[] = [];
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1280,7 +1280,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     pendingProviderToolCallsByToolCallId.clear();
   };
 
-  const step = createStep({
+  return createStep({
     id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
@@ -1289,27 +1289,30 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
-      const modelAttempt = readScoped(scopeCtx, MODEL_ATTEMPT_KEY, 'modelAttempt');
-      const modelOptions = modelAttempt ? { ...options, abortSignal: modelAttempt.controller.signal } : options;
-      const transcriptSteps = readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps');
 
-      const outputWriter: typeof runOutputWriter = async (chunk, writerOptions) => {
-        const writing = runOutputWriter(chunk, writerOptions);
-        await (modelAttempt ? modelAttempt.trackProcessing(writing) : writing);
+      // Input queued while this request has produced only reasoning cancels the request
+      // (not the run), and the step returns so the loop asks again with that input.
+      const subscribePendingSignals = readScoped(scopeCtx, SUBSCRIBE_PENDING_SIGNALS_KEY, 'subscribePendingSignals');
+      const interruption = new AbortController();
+      let interruptible = false;
+      const stopListening = subscribePendingSignals?.(runId, () => {
+        if (interruptible && !options?.abortSignal?.aborted)
+          interruption.abort(new Error('Interrupted by a queued signal'));
+      });
+      const throwIfInterrupted = () => {
+        if (interruption.signal.aborted) throw interruption.signal.reason;
       };
-      const controller = modelAttempt
+      const modelOptions = subscribePendingSignals
         ? {
-            enqueue(chunk: ChunkType<OUTPUT>) {
-              runController.enqueue(chunk);
-              modelAttempt.recordEmitted(chunk);
-            },
-            close: () => runController.close(),
-            error: (reason: unknown) => runController.error(reason),
-            get desiredSize() {
-              return runController.desiredSize;
-            },
+            ...options,
+            abortSignal: options?.abortSignal
+              ? AbortSignal.any([options.abortSignal, interruption.signal])
+              : interruption.signal,
           }
-        : runController;
+        : options;
+      const openReasoningIds = new Set<string>();
+      let processorPartCounts = new Map<ProcessorState, number>();
+      let appendedStepBoundary: unknown;
 
       /**
        * This attempt is being thrown away: the error handling either retries the request
@@ -1485,10 +1488,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       ];
       if (queuedSignals.length) currentMessageId = rotateLoopResponseMessageId();
       for (const signal of queuedSignals) safeEnqueue(controller, messageList.addSignal(signal).toDataPart());
-      if (modelAttempt) {
-        modelAttempt.messageId = currentMessageId;
-        modelAttempt.arm();
-      }
+      // Subscribed before the drain above, so nothing queued in between is missed.
+      interruptible = true;
+      processorPartCounts = new Map(
+        [...(processorStates?.values() ?? [])].map(state => [state, state.streamParts.length]),
+      );
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -1501,22 +1505,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // append to — both roll the message back whole, which is what the rejection means there.
       const openedBoundary = currentIteration > 1 ? messageList.openStepBoundary() : undefined;
       const iterationBoundary = openedBoundary?.boundary;
-      if (openedBoundary?.appended && iterationBoundary) {
-        modelAttempt?.addDiscardCleanup(iterationBoundary, () => {
-          for (const message of messageList.get.response.db()) {
-            const index = message.content.parts.indexOf(iterationBoundary);
-            if (index !== -1) message.content.parts.splice(index, 1);
-          }
-        });
-      }
-
-      if (modelAttempt) {
-        modelAttempt.transcriptStep = {
-          messageId: currentMessageId,
-          start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
-          end: 0,
-        };
-      }
+      if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
+      let transcriptStep: TranscriptStep = {
+        messageId: currentMessageId,
+        start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
+        end: 0,
+      };
 
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
@@ -1534,16 +1528,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         agentId,
         logger,
       });
-      const {
-        outputStream,
-        callBail,
-        bailReason,
-        runState,
-        stepTools,
-        stepWorkspace,
-        processAPIErrorRetry,
-        toolResultTripwire: toolResultTripwireFromStreamOuter,
-      } = await executeStreamWithFallbackModels<{
+      const execution = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
@@ -1556,11 +1541,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         models,
         logger,
         activeFallbackModelIndex,
-        modelAttempt,
+        throwIfInterrupted,
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
-        modelAttempt?.throwIfDiscarded();
-        if (modelAttempt) modelAttempt.fallbackModelIndex = activeFallbackModelIndex;
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1720,7 +1703,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               writer: inputStepWriter,
               abortSignal: modelOptions?.abortSignal,
             });
-            modelAttempt?.throwIfDiscarded();
             const mergedStepInput = composeStepInput(
               {
                 messageId: currentStep.messageId,
@@ -1834,7 +1816,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               currentStep.tools = convertedTools as TOOLS;
             }
           } catch (error) {
-            modelAttempt?.throwIfDiscarded();
+            throwIfInterrupted();
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
               logger?.warn('Streaming input processor tripwire triggered', {
@@ -1953,11 +1935,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               writer: requestStepWriter,
               abortSignal: modelOptions?.abortSignal,
             });
-            modelAttempt?.throwIfDiscarded();
             inputMessages = requestStepResult.prompt;
             cachedResponse = requestStepResult.response;
           } catch (error) {
-            modelAttempt?.throwIfDiscarded();
+            throwIfInterrupted();
             if (error instanceof TripWire) {
               logger?.warn('Streaming request processor tripwire triggered', {
                 reason: error.message,
@@ -2040,7 +2021,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             },
           }) as unknown as ReturnType<typeof execute>;
         } else if (isSupportedLanguageModel(currentStep.model)) {
-          modelAttempt?.throwIfDiscarded();
+          throwIfInterrupted();
           validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
 
           // Apply request-side context to MODEL_INFERENCE using the post-processor
@@ -2134,12 +2115,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           );
         }
 
-        if (modelAttempt) {
-          modelAttempt.messageId = currentStep.messageId;
-          if (modelAttempt.transcriptStep?.messageId !== currentStep.messageId) {
-            modelAttempt.transcriptStep = { messageId: currentStep.messageId, start: 0, end: 0 };
-          }
-          bindModelAttempt(modelResult, modelAttempt);
+        if (transcriptStep.messageId !== currentStep.messageId) {
+          transcriptStep = { messageId: currentStep.messageId, start: 0, end: 0 };
         }
         const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
@@ -2147,7 +2124,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
+          stream: subscribePendingSignals
+            ? ((modelResult as ReadableStream<ChunkType<OUTPUT>>).pipeThrough(
+                // Read the provider's own chunks, before output processors can hold or drop them.
+                new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+                  start(streamController) {
+                    // End the stream cleanly so in-flight processors finish before the step returns.
+                    interruption.signal.addEventListener('abort', () => streamController.terminate(), { once: true });
+                  },
+                  transform(chunk, streamController) {
+                    if (startsResponseContent(chunk)) interruptible = false;
+                    if (chunk.type === 'reasoning-start') openReasoningIds.add(chunk.payload.id);
+                    if (chunk.type === 'reasoning-end') openReasoningIds.delete(chunk.payload.id);
+                    streamController.enqueue(chunk);
+                  },
+                }),
+              ) as ReadableStream<ChunkType<OUTPUT>>)
+            : (modelResult as ReadableStream<ChunkType<OUTPUT>>),
           messageList,
           messageId: currentStep.messageId,
           options: {
@@ -2172,7 +2165,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
         });
 
-        if (modelAttempt) bindModelAttempt(outputStream, modelAttempt);
         let transportResolver: (() => StreamTransport | undefined) | undefined;
         if (currentStep.model instanceof ModelRouterLanguageModel) {
           const routerModel = currentStep.model;
@@ -2366,8 +2358,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   }
                 : undefined,
           });
-          modelAttempt?.throwIfDiscarded();
-          modelAttempt?.accept();
+          throwIfInterrupted();
+          interruptible = false;
           toolResultTripwireFromStream = streamToolResultTripwire;
 
           // Backstop for the paths that never reach a terminal chunk at all: a tripwire,
@@ -2481,7 +2473,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
         } catch (error) {
-          modelAttempt?.throwIfDiscarded();
+          throwIfInterrupted();
           // Force-close any server tool spans opened during the failed stream
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
@@ -2670,8 +2662,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
-        modelAttempt?.throwIfDiscarded();
-
         // Handle abort detected via signal check in processOutputStream (loop broke early).
         // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
         // so this handles the case where processOutputStream completed normally via `break`.
@@ -2697,7 +2687,63 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           stepWorkspace: currentStep.workspace,
           toolResultTripwire: toolResultTripwireFromStream,
         };
-      });
+      })
+        .catch(error => {
+          if (!interruption.signal.aborted) throw error;
+        })
+        .finally(() => stopListening?.());
+
+      if (!execution) {
+        // Discard what this request left behind, then hand the loop an empty, continuing
+        // step so it asks again with the queued input. A run abort that raced the
+        // interruption still ends the run, without the discarded output.
+        for (const state of processorStates?.values() ?? []) {
+          const dropped = state.streamParts.splice(processorPartCounts.get(state) ?? 0);
+          if (dropped.length) dropBatchedParts(state.customState, dropped);
+        }
+        for (const message of messageList.get.response.db()) {
+          const index = message.content.parts.indexOf(appendedStepBoundary as (typeof message.content.parts)[number]);
+          if (index !== -1) message.content.parts.splice(index, 1);
+        }
+        for (const id of openReasoningIds) {
+          safeEnqueue(controller, { type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } });
+        }
+        const steps = inputData.output?.steps ?? [];
+        const aborted = options?.abortSignal?.aborted === true;
+        const result = {
+          messageId: currentMessageId,
+          stepResult: {
+            reason: aborted ? ('abort' as const) : ('other' as const),
+            isContinued: !aborted,
+            signalPreempted: true,
+            warnings: [],
+          },
+          metadata: {},
+          output: { text: '', toolCalls: [], usage: {}, steps },
+          messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
+          processorRetryCount: inputData.processorRetryCount,
+          ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
+          ...(inputData.skipUnavailableAttachments ? { skipUnavailableAttachments: true } : {}),
+        };
+        if (!aborted) return result;
+        const abortReason = options?.abortSignal?.reason;
+        if (!isMastraTimeoutError(abortReason) || abortReason.timeoutType !== 'total') {
+          await options?.onAbort?.({ steps, text: '' });
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+        }
+        return bail(result);
+      }
+
+      const {
+        outputStream,
+        callBail,
+        bailReason,
+        runState,
+        stepTools,
+        stepWorkspace,
+        processAPIErrorRetry,
+        toolResultTripwire: toolResultTripwireFromStreamOuter,
+      } = execution;
 
       if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
@@ -3150,14 +3196,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       const steps = inputData.output?.steps || [];
 
-      if (modelAttempt?.transcriptStep) {
-        modelAttempt.transcriptStep.end =
-          messageList.get.response.aiV5.ui().find(message => message.id === modelAttempt.transcriptStep?.messageId)
-            ?.parts.length ?? 0;
-      }
-      const currentIterationContent = modelAttempt?.transcriptStep
-        ? getTranscriptStepContent(messageList, modelAttempt.transcriptStep)
-        : messageList.get.response.aiV5.modelContent(steps.length + 1);
+      transcriptStep.end =
+        messageList.get.response.aiV5.ui().find(message => message.id === transcriptStep?.messageId)?.parts.length ?? 0;
+      transcriptSteps[steps.length] = transcriptStep;
+      const currentIterationContent = getTranscriptStepContent(messageList, transcriptStep);
 
       // Build tripwire data if this step is being rejected
       // This includes both retry scenarios and max retries exceeded
@@ -3296,58 +3338,4 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       };
     },
   });
-
-  const executeAttempt = step.execute;
-  step.execute = async context => {
-    const scopeCtx: RunScopeContext = { mastra, runId, _internal };
-    const subscribe = readScoped(scopeCtx, SUBSCRIBE_PENDING_SIGNALS_KEY, 'subscribePendingSignals');
-    const attempt = new ModelAttempt(options?.abortSignal, subscribe && (listener => subscribe(runId, listener)));
-    const previousSteps = context.inputData.output?.steps ?? [];
-    const attemptIndex = previousSteps.length;
-    const transcriptSteps =
-      readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps') ?? previousSteps.map(() => undefined);
-    writeScoped(scopeCtx, MODEL_ATTEMPT_KEY, 'modelAttempt', attempt);
-    writeScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps', transcriptSteps);
-    try {
-      const result = await executeAttempt(context);
-      if (result && 'output' in result && result.output?.steps && result.output.steps.length > attemptIndex) {
-        transcriptSteps.push(attempt.transcriptStep);
-      }
-      return result;
-    } catch (error) {
-      if (!attempt.discarded) throw error;
-      await attempt.discardOutput();
-      attempt.closeReasoning(chunk => safeEnqueue(runController, chunk));
-      const steps = previousSteps;
-      const aborted = options?.abortSignal?.aborted === true;
-      const result = {
-        messageId: attempt.messageId ?? context.inputData.messageId,
-        stepResult: {
-          reason: aborted ? ('abort' as const) : ('other' as const),
-          isContinued: !aborted,
-          signalPreempted: true,
-          warnings: [],
-        },
-        metadata: {},
-        output: { text: '', toolCalls: [], usage: {}, steps },
-        messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
-        processorRetryCount: context.inputData.processorRetryCount,
-        fallbackModelIndex: attempt.fallbackModelIndex ?? context.inputData.fallbackModelIndex,
-        ...(context.inputData.skipUnavailableAttachments ? { skipUnavailableAttachments: true } : {}),
-      };
-      if (aborted) {
-        const abortReason = options?.abortSignal?.reason;
-        if (!isMastraTimeoutError(abortReason) || abortReason.timeoutType !== 'total') {
-          await options?.onAbort?.({ steps, text: '' });
-          safeEnqueue(runController, { type: 'abort', runId: context.runId, from: ChunkFrom.AGENT, payload: {} });
-        }
-        return context.bail(result);
-      }
-      return result;
-    } finally {
-      attempt.dispose();
-      writeScoped(scopeCtx, MODEL_ATTEMPT_KEY, 'modelAttempt', undefined);
-    }
-  };
-  return step;
 }
