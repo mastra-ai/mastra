@@ -667,7 +667,7 @@ describe('createRepoTemplate with repos', () => {
     const guardStep = {
       method: 'runCmd',
       args: [
-        `( cd "widgets" && ( exit 7\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'widgets' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
+        `( cd "widgets" && sh -c 'exit 7' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'widgets' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
       ],
     };
     expect(guardedOps[1]).toEqual(guardStep);

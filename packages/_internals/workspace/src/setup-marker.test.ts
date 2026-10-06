@@ -67,7 +67,7 @@ describe('guardedSetupCommand', () => {
 
   it('wraps the command and appends the repo dir to the failure list when the guard is on', () => {
     expect(guardedSetupCommand({ repoDir: 'x', command: 'pnpm i && pnpm build', continueOnFailure: true })).toBe(
-      `( cd "x" && ( pnpm i && pnpm build\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
+      `( cd "x" && sh -c 'pnpm i && pnpm build' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
     );
   });
 
@@ -110,6 +110,17 @@ describe('guardedSetupCommand', () => {
       run(guardedSetupCommand({ repoDir: 'x', command: 'exit 1', continueOnFailure: true }));
       run(guardedSetupCommand({ repoDir: 'ax', command: 'exit 1', continueOnFailure: true }));
       expect(readFileSync(failed(), 'utf8')).toBe('xy\nx\nax\n');
+    });
+
+    it('keeps the step on one line, so a Dockerfile RUN can carry it', () => {
+      expect(guardedSetupCommand({ repoDir: 'x', command: 'exit 7', continueOnFailure: true })).not.toContain('\n');
+    });
+
+    it('passes single quotes in the command through intact', () => {
+      setup('x');
+      const out = run(guardedSetupCommand({ repoDir: 'x', command: "printf '%s' \"it's\"", continueOnFailure: true }));
+      expect(out.toString()).toBe("it's");
+      expect(existsSync(failed())).toBe(false);
     });
 
     it('survives a command that ends in a shell comment', () => {
