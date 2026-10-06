@@ -116,6 +116,29 @@ describe('KnowledgePG schema completion marker', () => {
     );
     expect(tables.rows.map(row => row.table_name)).toEqual(['mastra_knowledge_nodes']);
   });
+  it('explicitly resets retired Knowledge tables and leaves other storage untouched', async () => {
+    const schemaName = `knowledge_reset_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_knowledge_cursors (id TEXT PRIMARY KEY)`);
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_threads (id TEXT PRIMARY KEY)`);
+    await pool.query(`INSERT INTO "${schemaName}".mastra_threads (id) VALUES ('preserved')`);
+    const store = new KnowledgePG({ pool, schemaName });
+    await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    await store.dangerouslyReset();
+
+    const tables = await pool.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name LIKE 'mastra_knowledge_%'`,
+      [schemaName],
+    );
+    const names = tables.rows.map(row => row.table_name);
+    expect(names).not.toContain('mastra_knowledge_cursors');
+    expect(names).toContain(TABLE_KNOWLEDGE_SCHEMA);
+    const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
+    expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+    await new KnowledgePG({ pool, schemaName }).init();
+  });
 });
 
 describe('PostgreSQL knowledge SQL normalization', () => {

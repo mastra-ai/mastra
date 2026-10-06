@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -595,6 +596,15 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#executor.execute(
       `INSERT INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id,"version") VALUES ('canonical',${KNOWLEDGE_STORAGE_SCHEMA_VERSION}) ON CONFLICT (id) DO NOTHING`,
     );
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    const schema = this.#schemaName ? `"${parseSchemaName(this.#schemaName)}".` : '';
+    const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
+      .map(table => `${schema}"${table}"`)
+      .join(', ');
+    await this.#client.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {

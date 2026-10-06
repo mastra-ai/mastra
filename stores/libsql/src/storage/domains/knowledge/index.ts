@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
+import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -438,6 +439,19 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id, version) VALUES ('canonical', ?)`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    await withClientWriteLock(this.#client, async () => {
+      await this.#client.batch(
+        [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].map(table => ({
+          sql: `DROP TABLE IF EXISTS "${table}"`,
+          args: [],
+        })),
+        'write',
+      );
+    });
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {
