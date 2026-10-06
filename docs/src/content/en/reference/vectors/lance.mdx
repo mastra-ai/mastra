@@ -103,7 +103,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
             name: 'ivfflat',
             type: 'ivfflat',
             description:
-              'Clusters vectors into partitions and stores full vectors for exact distances within each partition.',
+              'Clusters vectors into partitions and stores full vectors. Searches compute exact distances only within the probed partitions, so closer vectors in other partitions can be missed.',
           },
           {
             name: 'ivfpq',
