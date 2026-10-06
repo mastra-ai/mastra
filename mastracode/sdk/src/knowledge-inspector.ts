@@ -512,7 +512,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const resourceAddress = `resource:${binding.resourceId}`;
     const resource = await this.#runtime.materializeScope({
       address: resourceAddress,
-      contextualScopeAddress: orgAddress,
+      contextualScopeAddress: resourceAddress,
       parentAddresses: [orgAddress],
       parameters: { resourceId: binding.resourceId },
     });
@@ -525,7 +525,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const threadAddress = `${resourceAddress}:thread:${binding.threadId}`;
     const thread = await this.#runtime.materializeScope({
       address: threadAddress,
-      contextualScopeAddress: resourceAddress,
+      contextualScopeAddress: threadAddress,
       parentAddresses: [resourceAddress],
       parameters: { threadId: binding.threadId },
     });
