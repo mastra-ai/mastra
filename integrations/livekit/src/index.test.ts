@@ -28,13 +28,7 @@ describe('root entry (@mastra/livekit)', () => {
       'liveKitConnectionRoute',
       'liveKitRecordingRoute',
       'pipeAgentReplyToWriter',
-      'runVoiceBenchmarks',
       'serializeSessionMetadata',
-      'summarizeVoiceBenchmarks',
-      'voiceBenchmarkObservationSchema',
-      'voiceBenchmarkScenarioSchema',
-      'voiceBenchmarkScenarios',
-      'voiceBenchmarkToExperimentResult',
     ]);
   });
 });

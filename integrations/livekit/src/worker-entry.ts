@@ -71,5 +71,3 @@ export type {
   VoiceSpeechResult,
   VoiceSpeechCompleteHook,
 } from './turn-metrics';
-
-export { createVoiceBenchmarkReplyGenerator } from './benchmark-fixture';
