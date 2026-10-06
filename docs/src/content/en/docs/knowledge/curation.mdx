@@ -30,7 +30,7 @@ export const memory = new Memory({
 })
 ```
 
-Use the installed package types for the complete configuration shape. There is no curator profile, curator registration, worklist, cadence, or curation cursor to configure.
+Use the installed package types for the complete configuration shape.
 
 ## Lifecycle
 
@@ -55,4 +55,4 @@ Revoking the parent's access revokes the curator's access on the next operation.
 
 The curator writes into the session's authorized resource and thread scopes, or into host-configured structural scopes inside that frontier. Scope descriptions guide placement but don't grant authority.
 
-Provisional scopes are optional. A host can configure a provisional scope with a mirror from its public parent for staging. That scope has exactly the parent's effective capabilities, so it isn't private. Names and suffixes such as `:internal` or `:uncurated` never establish privacy. See [access and scopes](/docs/knowledge/access) for explicit private placement.
+Provisional scopes are optional. A host can configure a provisional scope with a mirror from its public parent for staging. That scope has exactly the parent's effective capabilities, so it isn't private. Names and suffixes such as `:internal` never establish privacy. See [access and scopes](/docs/knowledge/access) for explicit private placement.
