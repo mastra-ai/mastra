@@ -811,7 +811,7 @@ describe('model-route OM models', () => {
     });
   });
 
-  it('lets an explicit role override win over the route memory chain', async () => {
+  it("lets the route's memory model win over per-role settings while the route is active", async () => {
     loadSettingsMock.mockReturnValue({
       models: { observerModelOverride: 'openai/gpt-5-mini', reflectorModelOverride: null },
     });
@@ -834,7 +834,7 @@ describe('model-route OM models', () => {
     });
 
     const om = config.options.observationalMemory;
-    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5-mini' });
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 

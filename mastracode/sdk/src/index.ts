@@ -1270,7 +1270,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Input-lane notice ONLY (no processAPIError — see the class doc): the
         // runner walks input processors first in runProcessAPIError, so an
         // input-lane processAPIError would rotate before transient retries run.
-        new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
+        new AccountStartNoticeProcessor({ credentialStore: authStorage }),
         ...readPluginProcessors().input.map(entry => entry.value),
         ...(pluginSignalLane?.getInputProcessors() ?? []),
       ];

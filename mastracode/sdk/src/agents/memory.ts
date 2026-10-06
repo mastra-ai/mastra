@@ -25,7 +25,7 @@ type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
  */
 function resolveRouteMemoryModels(
   state: MastraCodeState | undefined,
-  threadId: string | undefined,
+  threadId: string | null | undefined,
   resolve: (modelId: string) => GatewayLanguageModel,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
   const memoryRoute = getActiveMemoryRoute(state, threadId);

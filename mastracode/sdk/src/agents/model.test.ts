@@ -249,8 +249,6 @@ describe('getDynamicModel model route', () => {
   });
 
   it('labels a custom-provider model with its provider/model ID', () => {
-    seedSettings({});
-
     const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
 
     expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
@@ -260,12 +258,12 @@ describe('getDynamicModel model route', () => {
     const model = getDynamicModel(requestWithSession('openai/gpt-5.4-mini', { route }));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('gpt-5.4-mini');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.4-mini');
   });
 
   it('builds a fallback array from the host-supplied route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', { route }));
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
     expect(entries.map(entry => entry.model.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
@@ -291,7 +289,7 @@ describe('getDynamicModel model route', () => {
         },
       }),
     );
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
     expect(entries.map(entry => entry.model.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
@@ -334,7 +332,7 @@ describe('getDynamicModel model route', () => {
     );
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('gpt-5.4-mini');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.4-mini');
   });
 
   it('caps route resolution for persisted state that bypassed schema validation', () => {
@@ -357,7 +355,7 @@ describe('getDynamicModel model route', () => {
     );
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
   });
 
   it('gives a revisited entry id a unique occurrence suffix', () => {
