@@ -45,9 +45,10 @@ export function chartYTickCount(height: number) {
   return Math.min(5, Math.max(3, Math.round(plot / 48) + 1));
 }
 
-const HOUR = 3_600_000;
-/** Round label steps, in hours: 1h ... 12h, then days and a week. */
-const STEPS = [1, 2, 3, 4, 6, 12, 24, 48, 168];
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+/** Round label steps, in minutes: 5m ... 30m, 1h ... 12h, then days and a week. */
+const STEPS = [5, 10, 15, 30, 60, 120, 180, 240, 360, 720, 1440, 2880, 10080];
 /** Minimum clear space between two x-axis labels. */
 const LABEL_GAP = 48;
 /** Rough label width at the axis font size. */
@@ -66,6 +67,7 @@ export function pickTimeTicks(
   mode: ChartXLabels = 'auto',
 ): Set<number> {
   const last = labels.length - 1;
+  if (last < 0) return new Set();
   const ends = new Set([0, last]);
   if (mode === 'edges' || labels.length < 3) return ends;
   const widest = Math.max(...labels.map(l => labelWidth(l)));
@@ -73,8 +75,12 @@ export function pickTimeTicks(
   if (fit < 3) return ends;
   const ts = timestamps.every(t => typeof t === 'number' && Number.isFinite(t)) ? (timestamps as number[]) : null;
   const bucket = ts ? (ts[1] ?? 0) - (ts[0] ?? 0) : 0;
-  if (!ts || !(bucket > 0)) {
-    // No time grid to align to: every `every`-th bucket, ending on the last one.
+  const span = (labels.length * bucket) / MINUTE;
+  // The smallest round step that is a whole number of buckets and whose labels fit.
+  const step = ts ? STEPS.find(n => n * MINUTE >= bucket && (n * MINUTE) % bucket === 0 && span / n <= fit) : undefined;
+  if (!ts || !(bucket > 0) || step === undefined) {
+    // No time grid to align to (or buckets longer than a week): every `every`-th bucket,
+    // ending on the last one.
     const every = Math.ceil(labels.length / fit);
     const even = new Set<number>();
     for (let i = 0; i <= last; i += every) even.add(i);
@@ -84,16 +90,14 @@ export function pickTimeTicks(
     }
     return even.size < 3 ? ends : even;
   }
-  const span = (ts.length * bucket) / HOUR;
-  const step = STEPS.find(n => n * HOUR >= bucket && (n * HOUR) % bucket === 0 && span / n <= fit) ?? 168;
   const picked = new Set<number>();
   ts.forEach((t, i) => {
     const d = new Date(t);
     const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const onStep =
-      step < 24
-        ? d.getMinutes() === 0 && d.getHours() % step === 0
-        : d.getHours() === 0 && Math.round(midnight / (24 * HOUR)) % (step / 24) === 0;
+      step < 1440
+        ? d.getSeconds() === 0 && (d.getHours() * 60 + d.getMinutes()) % step === 0
+        : d.getHours() === 0 && d.getMinutes() === 0 && Math.round(midnight / DAY) % (step / 1440) === 0;
     if (onStep) picked.add(i);
   });
   // Two clock labels land off-centre (one mid-plot, one at an edge): label the ends instead.

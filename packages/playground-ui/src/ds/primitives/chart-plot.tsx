@@ -20,8 +20,11 @@ export function ChartPlot({
   clickable?: boolean;
   children: ReactNode;
 }) {
+  // Recharts makes parts of the plot focusable for keyboard use; a mouse click shouldn't leave a
+  // focus ring around the chart, keyboard focus still shows one.
   const surface = cn(
     'w-full [&_.recharts-surface]:overflow-visible [&_.recharts-surface]:outline-none',
+    '[&_*:focus:not(:focus-visible)]:outline-none',
     clickable && '[&_.recharts-surface]:cursor-pointer',
   );
   if (height === 'fill') {
