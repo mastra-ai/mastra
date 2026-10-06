@@ -290,6 +290,24 @@ export async function fetchKnowledgeActivity(
   );
 }
 
+export interface KnowledgeApprovalsCountPayload {
+  pending: number;
+  capped: boolean;
+}
+
+export async function fetchKnowledgeApprovalsCount(
+  baseUrl: string,
+  factoryProjectId: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeApprovalsCountPayload> {
+  const suffix = threadId ? `?${new URLSearchParams({ threadId }).toString()}` : '';
+  return requestJson<KnowledgeApprovalsCountPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/proposals/count${suffix}`,
+    { signal },
+  );
+}
+
 export async function fetchKnowledgeProposals(
   baseUrl: string,
   factoryProjectId: string,

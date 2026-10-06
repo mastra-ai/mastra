@@ -16,6 +16,7 @@ import {
   fetchKnowledgeNode,
   fetchKnowledgeGraph,
   fetchKnowledgeProposal,
+  fetchKnowledgeApprovalsCount,
   fetchKnowledgeProposals,
   fetchKnowledgeScopes,
   fetchKnowledgeSearch,
@@ -127,6 +128,17 @@ export function useKnowledgeProposals(
     initialPageParam: '',
     getNextPageParam: page => page.nextCursor,
     enabled: Boolean(factoryProjectId),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useKnowledgeApprovalsCount(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: [...queryKeys.knowledgeProposals(factoryProjectId), 'count', threadId ?? null],
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeApprovalsCount(baseUrl, factoryProjectId, threadId, signal)
+      : skipToken,
     refetchInterval: 5_000,
   });
 }
