@@ -483,6 +483,24 @@ describe('KnowledgeRoutes', () => {
     );
   });
 
+  it('pages a structural scope lens across storage batches', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.createNode({ name: 'Child scope', isScope: true, scopeIds: [projectScopeId] });
+    await Promise.all(
+      Array.from({ length: 150 }, (_, index) =>
+        h.knowledge.createNode({ name: `Member ${String(index).padStart(3, '0')}`, scopeIds: [projectScopeId] }),
+      ),
+    );
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    const response = await rawGraph(h, `?scopeId=${scopeBody.scope.id}`);
+    expect(response.status).toBe(200);
+    expect(response.body.nodes.filter(item => item.name.startsWith('Member '))).toHaveLength(150);
+    expect(response.body.nodes.some(item => item.name === 'Child scope')).toBe(true);
+  });
+
   // 1
   it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();
