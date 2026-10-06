@@ -130,7 +130,7 @@ export const ImageEntry = ({ src, name }: ImageEntryProps) => {
         className={ctaClassName}
         aria-label={name ? `Preview ${name}` : 'Preview image'}
       >
-        <ComposerAttachmentEntry>
+        <ComposerAttachmentEntry variant="image">
           <img src={src} className="aspect-ratio max-h-35 max-w-full object-cover" alt={name ?? 'Preview'} />
         </ComposerAttachmentEntry>
       </button>

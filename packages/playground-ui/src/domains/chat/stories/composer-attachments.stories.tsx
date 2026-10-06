@@ -99,7 +99,25 @@ export const MixedFiles: Story = {
     const removeTop = removeButtons[0]?.getBoundingClientRect().top;
     for (const button of removeButtons) {
       await expect(button.getBoundingClientRect().top).toBe(removeTop);
+      const card = button.parentElement;
+      if (!card) throw new Error('Missing attachment card');
+      await expect(button.getBoundingClientRect().top).toBe(card.getBoundingClientRect().top);
+      await expect(button.getBoundingClientRect().right).toBe(card.getBoundingClientRect().right);
+      await expect(getComputedStyle(button).borderTopRightRadius).toBe(getComputedStyle(card).borderTopRightRadius);
     }
+    const image = canvas.getByRole('img', { name: 'diagram.png' });
+    const imageTile = image.parentElement;
+    const imageCard = image.closest('[title="diagram.png"]');
+    if (!imageTile || !imageCard) throw new Error('Missing image attachment');
+    const tileRect = imageTile.getBoundingClientRect();
+    const cardRect = imageCard.getBoundingClientRect();
+    const inset = tileRect.left - cardRect.left;
+    await expect(tileRect.top - cardRect.top).toBe(inset);
+    await expect(cardRect.bottom - tileRect.bottom).toBe(inset);
+    await expect(tileRect.width).toBe(tileRect.height);
+    await expect(parseFloat(getComputedStyle(imageTile).borderTopLeftRadius) + inset).toBe(
+      parseFloat(getComputedStyle(imageCard).borderTopLeftRadius),
+    );
     const longFilename = canvas.getByText('review-notes-with-a-long-filename-é日本語.csv');
     await expect(longFilename.scrollWidth).toBeGreaterThan(longFilename.clientWidth);
     await expect(getComputedStyle(longFilename).textOverflow).toBe('ellipsis');
@@ -147,7 +165,22 @@ export const PreviewAndRemove: Story = {
     await waitFor(() => expect(textPreview).toHaveFocus());
     await userEvent.click(canvas.getByRole('button', { name: /Remove review-notes/ }));
     await expect(canvas.queryByRole('button', { name: /Preview review-notes/ })).not.toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Remove brief.pdf' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Remove clip.mp4' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Remove brief.pdf' })).toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Remove clip.mp4' })).toBeInTheDocument();
+  },
+};
+
+export const KeyboardRemove: Story = {
+  render: () => <AttachmentComposer />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const preview = canvas.getByRole('button', { name: 'Preview diagram.png' });
+    const remove = canvas.getByRole('button', { name: 'Remove diagram.png' });
+    preview.focus();
+    await waitFor(() => expect(getComputedStyle(remove).opacity).toBe('1'));
+    remove.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.queryByRole('button', { name: 'Preview diagram.png' })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Remove brief.pdf' })).toBeInTheDocument();
   },
 };
