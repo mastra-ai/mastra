@@ -90,6 +90,23 @@ function prefillRepairs(requests: ModelRequest[]) {
   };
 }
 
+// Requests that end on an assistant turn, split by provider. Anthropic rejects these (the prefill 400
+// the repair has to fix); OpenAI accepts a wake-up ending on an assistant `item_reference`, so those
+// are reported separately. This is the harness's `assistantEndedAccepted` observation.
+function assistantEndedRequests(requests: ModelRequest[]) {
+  const ended = requests
+    .map((r, i) => ({
+      i,
+      provider: r.endpoint.includes('anthropic') ? 'anthropic' : 'openai',
+      last: lastTurn(r.body),
+    }))
+    .filter(r => r.last === 'assistant');
+  return {
+    rejected: ended.filter(r => r.provider === 'anthropic'),
+    accepted: ended.filter(r => r.provider !== 'anthropic'),
+  };
+}
+
 function createOmegaScorer(scores: number[]) {
   return createScorer({ id: 't78-scorer', description: 'requires OMEGA after one failure' })
     .generateScore(async () => {
@@ -229,8 +246,12 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       expect(recalled.messages.some(m => m.role === 'assistant')).toBe(true);
       expect(stored).not.toContain('Continue.');
 
-      // Anthropic must actually take the rejection -> repair path; OpenAI never does.
+      // Anthropic must actually take the rejection -> repair path. OpenAI never rejects: an OpenAI
+      // request ending on an assistant turn is accepted as-is (the control), so it must stay
+      // unrepaired rather than being "fixed" before it is ever sent.
+      const endedByProvider = assistantEndedRequests(requests);
       if (provider === 'anthropic') {
+        expect(endedByProvider.accepted).toEqual([]);
         expect(repairs.ended.length).toBeGreaterThan(0);
         for (const { i } of repairs.ended) {
           expect(requests[i]!.status).toBe(400);
@@ -240,6 +261,13 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       } else {
         expect(repairs.ended).toEqual([]);
         expect(repairs.spurious).toEqual([]);
+        // The control has to see the contrast: an assistant-ended OpenAI request that the provider
+        // accepted (200) and that was not pre-repaired.
+        expect(endedByProvider.accepted.length).toBeGreaterThan(0);
+        for (const { i } of endedByProvider.accepted) {
+          expect(requests[i]!.status).toBe(200);
+          expect(bodies[i]!).not.toContain(PREFILL_REPAIR_MARKER);
+        }
       }
     }, 120_000);
   });
