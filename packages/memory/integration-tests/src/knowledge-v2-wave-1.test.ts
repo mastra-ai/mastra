@@ -113,6 +113,7 @@ function deterministicObservationModel(curate = false) {
       specificationVersion: 'v2' as const,
       provider: 'aimock',
       modelId: 'deterministic-wave-1',
+      supportedUrls: {},
       doStream,
       doGenerate,
     },
