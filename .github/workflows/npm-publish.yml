@@ -16,6 +16,7 @@ on:
           - stable
           - enter-prerelease
           - snapshot
+          - playground-snapshot
         default: prerelease
       tag:
         description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
@@ -487,6 +488,104 @@ jobs:
           git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+  # ===========================================
+  # PLAYGROUND SNAPSHOT: UI library and its workspace dependencies only
+  # ===========================================
+  playground-snapshot:
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish_type == 'playground-snapshot' &&
+      github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
+        with:
+          node-version: 24.18.0
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+          package-manager-cache: false
+
+      - name: Determine snapshot tag
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          SLUG=$(echo "$GITHUB_REF_NAME" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+|-+$//g' | tr 'A-Z' 'a-z')
+          FINAL_TAG="${REQUESTED_TAG:-$SLUG}"
+          if [[ ! "$FINAL_TAG" =~ ^[a-zA-Z][a-zA-Z0-9-]*$ ]] || [[ "$FINAL_TAG" =~ ^(latest|next|alpha|beta|rc|stable)$ ]]; then
+            echo "::error::Use a non-release snapshot tag starting with a letter and containing only letters, numbers, or hyphens."
+            exit 1
+          fi
+          echo "FINAL_TAG=$FINAL_TAG" >> "$GITHUB_ENV"
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build playground UI and dependencies
+        run: pnpm turbo build --filter '@mastra/playground-ui...'
+
+      - name: Version playground UI snapshot packages
+        run: |
+          pnpm --filter-prod '@mastra/playground-ui...' list --depth -1 --json > "$RUNNER_TEMP/playground-snapshot-packages.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const packages = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'playground-snapshot-packages.json'), 'utf8'))
+            .map(pkg => ({ path: path.join(pkg.path, 'package.json'), manifest: JSON.parse(fs.readFileSync(path.join(pkg.path, 'package.json'), 'utf8')) }))
+            .filter(pkg => !pkg.manifest.private);
+          if (!packages.some(pkg => pkg.manifest.name === '@mastra/playground-ui')) {
+            throw new Error('Playground UI is missing from the snapshot package set');
+          }
+          const names = new Set(packages.map(pkg => pkg.manifest.name));
+          const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+          const version = `0.0.0-${process.env.FINAL_TAG}-${timestamp}`;
+          // Global Changesets versioning would also bump unrelated fixed groups and dependents.
+          for (const { path: file, manifest } of packages) {
+            manifest.version = version;
+            for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+              for (const name of Object.keys(manifest[field] || {})) {
+                if (names.has(name)) manifest[field][name] = 'workspace:*';
+              }
+            }
+            fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+            console.log(`${manifest.name}@${version}`);
+          }
+          NODE
+
+      - name: Publish playground UI and dependencies
+        env:
+          NPM_CONFIG_PROVENANCE: true
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ "$DRY_RUN" == 'true' ]]; then
+            args+=(--dry-run)
+          fi
+          pnpm --filter '@mastra/playground-ui...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
 
   # ===========================================
   # SNAPSHOT: Manual trigger only (non-main branches)

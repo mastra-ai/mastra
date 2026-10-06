@@ -55,7 +55,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           {label}: {description}
         </TooltipContent>
       </Tooltip>
-      <Txt as="span" variant="meta" className="text-muted-foreground truncate">
+      <Txt tone="muted" as="span" variant="meta" className="truncate">
         {model || '—'}
       </Txt>
     </span>
@@ -133,7 +133,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
   return (
     <div className="flex flex-col gap-3">
-      <Txt as="p" variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" as="p" variant="caption">
         Set your default for new interactive chats. Choose a different pack from within a specific chat. Factory work
         runs continue to use the Factory default model.
       </Txt>
@@ -181,7 +181,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
       {loading ? (
         <SkeletonRows label="Loading model packs" rows={3} rowClassName="h-9 w-full" />
       ) : packs.length === 0 && !draft ? (
-        <Txt as="p" variant="caption" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption">
           No model packs available. Configure provider keys or add a custom pack.
         </Txt>
       ) : (
@@ -191,7 +191,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   {p.active && <Check size={13} className="text-success-indicator shrink-0" />}
-                  <Txt as="span" variant="body" className="text-foreground truncate">
+                  <Txt tone="ink" as="span" variant="body" className="truncate">
                     {p.name}
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}

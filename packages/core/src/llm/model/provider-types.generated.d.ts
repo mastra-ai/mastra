@@ -5845,6 +5845,7 @@ export type ProviderModelsMap = {
     'qwen3.7-plus',
     'qwen3.8-flash',
     'qwen3.8-max',
+    'space-bunny',
     'space-bunny-free',
   ];
   readonly openreason: readonly [
@@ -5854,7 +5855,7 @@ export type ProviderModelsMap = {
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly 'aki-io': readonly [
-    'deepseek-v4-flash-0731-284b',
+    'deepseek-v4.1-flash-552b',
     'gemma4-26b',
     'glm5.3-754b',
     'gpt-oss-120b',
