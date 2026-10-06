@@ -8,7 +8,12 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useKnowledgeActivity, useKnowledgeGraph, useKnowledgeScopes } from '../../hooks/useKnowledgeGraph';
+import {
+  useKnowledgeActivity,
+  useKnowledgeApprovalsCount,
+  useKnowledgeGraph,
+  useKnowledgeScopes,
+} from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -387,7 +392,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // `?scope=` is an identity rung ('org', 'resource', or 'thread' alongside
   // ?thread=) or a scope-tree node id; without it the view resolves the
   // project scope (or the session scope inside a thread).
-  const selection: { scopeLevel: 'org' | 'resource' | 'thread'; scopeNodeId?: never } | { scopeNodeId: string; scopeLevel?: never } =
+  const selection:
+    | { scopeLevel: 'org' | 'resource' | 'thread'; scopeNodeId?: never }
+    | { scopeNodeId: string; scopeLevel?: never } =
     requestedScopeId === 'org' || requestedScopeId === 'resource' || (requestedScopeId === 'thread' && threadId)
       ? { scopeLevel: requestedScopeId }
       : requestedScopeId
@@ -406,6 +413,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // under someone mid-interaction.
   const { idle, onActivity } = useInteractionIdle(10_000);
   const scopeQuery = useKnowledgeScopes(factoryProjectId, requestedScopeId, threadId);
+  const approvalsCount = useKnowledgeApprovalsCount(factoryProjectId, threadId);
   const selectedScopeId = requestedScopeId ?? scopeQuery.data?.scope.id;
   const graphQuery = useKnowledgeGraph(factoryProjectId, selectedScopeId, threadId, { paused: !idle });
 
@@ -608,6 +616,16 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                 onClick={() => setView(view)}
               >
                 {view}
+                {view === 'approvals' && approvalsCount.data && approvalsCount.data.pending > 0 ? (
+                  <span
+                    className="bg-fill text-foreground ml-1.5 rounded-full px-1.5 text-xs tabular-nums"
+                    aria-hidden="true"
+                    data-testid="knowledge-approvals-count"
+                  >
+                    {approvalsCount.data.pending}
+                    {approvalsCount.data.capped ? '+' : ''}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

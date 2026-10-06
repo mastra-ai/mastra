@@ -234,6 +234,9 @@ function stubKnowledgeRoute(
             : [],
       });
     }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/count`, () =>
+      HttpResponse.json({ pending: proposalStatus === 'pending' ? 1 : 0, capped: false }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-reference-1`, () =>
       HttpResponse.json({
         id: 'proposal-1',
@@ -454,13 +457,16 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     renderRoute();
 
-    await user.click(await screen.findByRole('tab', { name: 'approvals' }));
+    const approvalsTab = await screen.findByRole('tab', { name: 'approvals' });
+    expect(await within(approvalsTab).findByTestId('knowledge-approvals-count')).toHaveTextContent('1');
+    await user.click(approvalsTab);
     expect(await screen.findByText('The current name is stale')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Payments Service' })).toBeInTheDocument();
     expect(screen.getByText('Proposer: private')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.getByText('No pending proposals.')).toBeInTheDocument());
+    await waitFor(() => expect(within(approvalsTab).queryByTestId('knowledge-approvals-count')).toBeNull());
   });
 
   it('keeps proposal deep links addressable and loads authorized continuation pages', async () => {
