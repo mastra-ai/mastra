@@ -557,22 +557,25 @@ describe('TracesListView — custom columns', () => {
 });
 
 describe('TracesListView — scrolling back to the top', () => {
-  it('re-reads the scroll position once a fresh query resolves', () => {
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-    dispatchEvent.mockClear();
+  const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
 
-    rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
+  it('scrolls back to the top when a fresh query starts, keeping the same container', () => {
+    const { container, rerender } = render(
+      <TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />,
+    );
+    const gridBefore = gridOf(container);
+    const setScrollTop = vi.spyOn(Element.prototype, 'scrollTop', 'set');
 
-    // The list swapped its scroll container, so the virtualizer has to be told
-    // to read the new element's scrollTop rather than keep the old offset.
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
-    dispatchEvent.mockRestore();
+    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+
+    expect(setScrollTop).toHaveBeenCalledWith(0);
+    expect(gridOf(container)).toBe(gridBefore);
+    setScrollTop.mockRestore();
   });
 
   it('leaves the scroll position alone while paginating', () => {
     const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
+    const setScrollTop = vi.spyOn(Element.prototype, 'scrollTop', 'set');
 
     rerender(
       <TracesListView
@@ -582,18 +585,17 @@ describe('TracesListView — scrolling back to the top', () => {
       />,
     );
 
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(setScrollTop).not.toHaveBeenCalled();
+    setScrollTop.mockRestore();
   });
 
-  it('leaves the scroll position alone when a query starts', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
+  it('keeps the same scroll container once a query resolves', () => {
+    const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    const gridBefore = gridOf(container);
 
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
 
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(gridOf(container)).toBe(gridBefore);
   });
 });
 
