@@ -137,6 +137,31 @@ createKnowledgeSchemaResetTests(async () => {
   };
 });
 
+describe('PostgreSQL knowledge schema reset dependents', () => {
+  it('refuses to reset when unrelated objects depend on Knowledge tables', async () => {
+    const schemaName = `knowledge_reset_dependent_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const node = await store.createNode({ name: 'Kept', kind: 'test', scope: ['org:acme'] });
+      await pool.query(
+        `CREATE VIEW "${schemaName}".unrelated_report AS SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`,
+      );
+
+      await expect(store.dangerouslyReset()).rejects.toThrow();
+
+      const views = await pool.query('SELECT table_name FROM information_schema.views WHERE table_schema=$1', [
+        schemaName,
+      ]);
+      expect(views.rows.map(row => row.table_name)).toEqual(['unrelated_report']);
+      expect((await pool.query(`SELECT id FROM "${schemaName}".unrelated_report`)).rows).toEqual([{ id: node.id }]);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+});
+
 describe('PostgreSQL knowledge legacy schema boundary', () => {
   it('rejects an unrecognized v1 layout without mutation', async () => {
     const schemaName = `knowledge_unknown_${Date.now()}`;
