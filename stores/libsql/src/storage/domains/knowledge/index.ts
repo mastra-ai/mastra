@@ -11,6 +11,8 @@ import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   createKnowledgeV2CoreLoader,
   KNOWLEDGE_V2_ACTIVITY_SCHEMA,
@@ -284,7 +286,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async #initializeSchema(tx: Executor): Promise<void> {
     const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
-    const inspection = await this.#inspectSchema(tx);
+    let inspection = await this.#inspectSchema(tx);
+    if (inspection.status === 'incompatible-reset-required' && (await this.#isEmptyPublishedV1Layout(tx))) {
+      // Earlier releases created empty Knowledge tables for every app. Replacing them loses nothing.
+      for (const table of [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]) {
+        await tx.execute(`DROP TABLE IF EXISTS "${table}"`);
+      }
+      inspection = await this.#inspectSchema(tx);
+    }
     assertKnowledgeSchemaCompatible(inspection);
 
     const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
@@ -349,6 +358,33 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?)`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
+  }
+
+  /**
+   * True when the only Knowledge objects are the empty tables and indexes published v1 adapters
+   * created for every app. Anything else (rows, v2 tables, unknown tables, views, triggers) needs an
+   * explicit reset.
+   */
+  async #isEmptyPublishedV1Layout(executor: Executor): Promise<boolean> {
+    const objects = await executor.execute(
+      "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+    );
+    const tables: string[] = [];
+    for (const row of objects.rows) {
+      const type = String(row.type);
+      const name = String(row.name);
+      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) {
+        tables.push(name);
+        continue;
+      }
+      const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
+      if (type !== 'index' || !knownIndex) return false;
+    }
+    for (const table of tables) {
+      const rows = await executor.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
+      if (rows.rows.length > 0) return false;
+    }
+    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -568,8 +604,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,nodeId=?,version=version+1,updatedAt=? WHERE node=?`,
-        args: [target.id, target.id, new Date().toISOString(), source.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,version=version+1,updatedAt=? WHERE node=?`,
+        args: [target.id, new Date().toISOString(), source.id],
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
@@ -647,10 +683,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,nodeId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,createdAt,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,NULL,NULL)`,
         args: [
           record.id,
-          record.node,
           record.node,
           record.text,
           JSON.stringify(scope),
@@ -661,7 +696,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           record.maxScope ?? null,
           record.metadata ? JSON.stringify(record.metadata) : null,
           1,
-          record.capturedAt.toISOString(),
           record.capturedAt.toISOString(),
         ],
       });
