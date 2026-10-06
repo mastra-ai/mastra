@@ -2,7 +2,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
@@ -73,6 +73,10 @@ async function scopeIdsFor(memory: Memory, threadId = 'alpha', resourceId = 'use
 }
 
 describe('Subconscious knowledge read tools', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('registers all three tools by default and honors tools: false', async () => {
     expect(Object.keys((await createMemory()).listTools())).toEqual(
       expect.arrayContaining(['knowledge_search', 'knowledge_read', 'knowledge_browse']),
@@ -81,15 +85,21 @@ describe('Subconscious knowledge read tools', () => {
   });
 
   it('reads and browses visible records without exposing another organization', async () => {
+    // Node pages order by updatedAt, so give each write its own millisecond.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const tick = (ms: number) => vi.setSystemTime(new Date(Date.UTC(2026, 0, 1, 0, 0, 0, ms)));
+    tick(0);
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const alphaScopeIds = await scopeIdsFor(memory);
     const betaScopeIds = await scopeIdsFor(memory, 'beta', 'beta-user', 'beta-org');
+    tick(1);
     const shared = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
       scopeIds: [alphaScopeIds[1]!],
     });
+    tick(2);
     await store.createNode({
       name: 'Shared Brief',
       kind: 'note',
@@ -100,6 +110,7 @@ describe('Subconscious knowledge read tools', () => {
       kind: 'secret',
       scopeIds: [betaScopeIds[2]!],
     });
+    tick(3);
     await store.createRecord({
       node: shared,
       text: '[[Maya Chen]] owns Atlas.',
@@ -125,6 +136,7 @@ describe('Subconscious knowledge read tools', () => {
     expect((firstPage as any).nodes).toHaveLength(1);
     expect((firstPage as any).nextCursor).toBeTruthy();
     const cursorNode = await store.getNode((firstPage as any).nodes[0].id);
+    tick(4);
     await store.updateNode({
       id: cursorNode!.id,
       version: cursorNode!.version,
