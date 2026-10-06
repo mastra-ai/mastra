@@ -41,8 +41,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   // Nested rows mount late, once expansion opens, so scroll on mount as well as on change.
   useEffect(() => {
     if (!shouldScrollIntoView) return;
-    rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [shouldScrollIntoView]);
+    // A highlighted span is centered so it never sits at the panel's edge; a clicked one only moves if hidden.
+    rowRef.current?.scrollIntoView({ block: isRevealed ? 'center' : 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView, isRevealed]);
 
   const { startShiftMs, leftPercent, widthPercent } = getSpanTimingLayout(span, overallLatency, overallStartTime);
   const toggleLabel = isExpanded
