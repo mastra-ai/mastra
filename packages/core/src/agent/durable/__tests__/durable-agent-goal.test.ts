@@ -14,6 +14,7 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createScorer } from '../../../evals';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
@@ -75,6 +76,38 @@ describe('DurableAgent goal step', () => {
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  it.each(['tests-pass', 'testsPass'])('resolves a registered goal scorer by ID or key: %s', async reference => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const threadId = 'registered-goal-thread';
+    const resourceId = 'user-1';
+    const baseAgent = new Agent({
+      id: 'registered-goal-agent',
+      name: 'Registered Goal Agent',
+      instructions: 'Work toward the goal.',
+      model: createTextModel('Done.') as LanguageModelV2,
+      memory: new MockMemory(),
+      goal: { judge: 'mock-judge', scorer: reference },
+    });
+    const agent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { worker: agent },
+      scorers: { testsPass: scorer },
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    await agent.setObjective('Reach the goal', { threadId, resourceId });
+
+    const stream = await agent.stream('go', { maxSteps: 1, memory: { thread: threadId, resource: resourceId } });
+    const chunks = await drain(stream.fullStream);
+    const goalChunks = chunks.filter(chunk => chunk.type === 'goal' && !chunk.payload?.pending);
+
+    expect(scorerRun).toHaveBeenCalledOnce();
+    expect(goalChunks).toHaveLength(1);
+    expect(goalChunks[0].payload).toMatchObject({ passed: true, status: 'done' });
+    expect(await agent.getObjective({ threadId })).toMatchObject({ status: 'done', runsUsed: 1 });
   });
 
   it('durable wrappers expose the wrapped agent goal config', () => {

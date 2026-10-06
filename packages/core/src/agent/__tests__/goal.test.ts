@@ -2,6 +2,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { createScorer } from '../../evals';
+import type { MastraScorer } from '../../evals';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
@@ -114,7 +116,11 @@ const pingTool = createTool({
   execute: async () => ({ ok: true }),
 });
 
-function makeAgent(goal?: GoalConfig, model = singleStepModel()) {
+function makeAgent(
+  goal?: GoalConfig,
+  model = singleStepModel(),
+  scorers?: Record<string, MastraScorer<any, any, any, any>>,
+) {
   const agent = new Agent({
     id: 'goal-agent',
     name: 'goal-agent',
@@ -123,7 +129,7 @@ function makeAgent(goal?: GoalConfig, model = singleStepModel()) {
     memory: new MockMemory(),
     ...(goal ? { goal } : {}),
   });
-  new Mastra({ agents: { 'goal-agent': agent }, storage: new InMemoryStore(), logger: false });
+  new Mastra({ agents: { 'goal-agent': agent }, scorers, storage: new InMemoryStore(), logger: false });
   return agent;
 }
 
@@ -405,6 +411,98 @@ describe('in-loop goal scoring', () => {
   function passingScorer(score = 1, reason = 'done') {
     return { id: 'goal-test-scorer', name: 'Goal Test Scorer', run: vi.fn().mockResolvedValue({ score, reason }) };
   }
+
+  it.each(['tests-pass', 'testsPass'])('resolves a registered goal scorer by ID or key: %s', async reference => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: reference }, singleStepModel(), { testsPass: scorer });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    const goalChunks = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal' && !chunk.payload.pending) goalChunks.push(chunk);
+    }
+
+    expect(scorerRun).toHaveBeenCalledOnce();
+    expect(goalChunks).toHaveLength(1);
+    expect(goalChunks[0]?.payload).toMatchObject({ passed: true, status: 'done' });
+    expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({ status: 'done', runsUsed: 1 });
+  });
+
+  it('prefers a goal scorer ID over another scorer registered under that key', async () => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const otherScorer = createScorer({ id: 'other-scorer', description: 'Always fails' }).generateScore(() => 0);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const otherRun = vi.spyOn(otherScorer, 'run');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: 'tests-pass' }, singleStepModel(), {
+      'tests-pass': otherScorer,
+      testsPass: scorer,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    await stream.consumeStream();
+
+    expect(scorerRun).toHaveBeenCalledOnce();
+    expect(otherRun).not.toHaveBeenCalled();
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('done');
+  });
+
+  it('pauses the goal when neither a scorer ID nor registration key matches', async () => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: 'missing-scorer' }, singleStepModel(), {
+      testsPass: scorer,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    await stream.consumeStream();
+
+    expect(scorerRun).not.toHaveBeenCalled();
+    expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({
+      status: 'paused',
+      runsUsed: 0,
+      pausedReason: 'Goal evaluation failed: Scorer with missing-scorer not found',
+    });
+  });
+
+  it('does not fall back to a registration key when the scorer ID lookup fails unexpectedly', async () => {
+    const scorer = createScorer({ id: 'tests-pass', description: 'Always passes' }).generateScore(() => 1);
+    const scorerRun = vi.spyOn(scorer, 'run');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: 'testsPass' }, singleStepModel(), { testsPass: scorer });
+    const lookup = vi.spyOn(Mastra.prototype, 'getScorerById').mockImplementation(() => {
+      throw new Error('Scorer lookup failed');
+    });
+
+    try {
+      await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+      const stream = await agent.stream('go', {
+        memory: { resource: RESOURCE, thread: { id: THREAD } },
+        maxSteps: 1,
+      });
+      await stream.consumeStream();
+
+      expect(scorerRun).not.toHaveBeenCalled();
+      expect(await agent.getObjective({ threadId: THREAD })).toMatchObject({
+        status: 'paused',
+        runsUsed: 0,
+        pausedReason: 'Goal evaluation failed: Scorer lookup failed',
+      });
+    } finally {
+      lookup.mockRestore();
+    }
+  });
 
   it('does nothing when an objective is set but no judge model resolves', async () => {
     // goal config present (so the loop step is wired) but no judge anywhere.

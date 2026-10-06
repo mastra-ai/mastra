@@ -11,6 +11,7 @@ import {
 import type { ResolvedGoalStore } from '../../../agent/goal';
 import type { MessageList } from '../../../agent/message-list';
 import type { GoalConfig, ToolsInput } from '../../../agent/types';
+import { MastraError } from '../../../error';
 import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
@@ -350,10 +351,18 @@ export async function evaluateGoal(deps: {
     // resolving (and potentially failing on) the judge model in that case.
     let scorer: MastraScorer<any, any, any, any> | undefined;
     if (goal.scorer) {
-      scorer =
-        typeof goal.scorer === 'string'
-          ? (mastra?.getScorer?.(goal.scorer as any) as MastraScorer<any, any, any, any> | undefined)
-          : goal.scorer;
+      if (typeof goal.scorer === 'string') {
+        try {
+          scorer = mastra?.getScorerById?.(goal.scorer);
+        } catch (error) {
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND') {
+            throw error;
+          }
+          scorer = mastra?.getScorer?.(goal.scorer);
+        }
+      } else {
+        scorer = goal.scorer;
+      }
     }
     if (!scorer) {
       // Resolve a bare model id (string) through the model router/gateways so
