@@ -448,10 +448,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const factoryProjectId = connection.factoryProjectId;
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      // Both checks stay synchronous with the push below so concurrent creates see each other, as a unique index would.
       if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
         throw new UniqueViolationError('Source-control session ID already exists');
       }
-      if (await this.sessions.getForBranch({ factoryProjectId, userId: input.userId, branch: input.branch })) {
+      if (
+        this.sessionsRows.some(
+          row =>
+            row.factoryProjectId === factoryProjectId && row.userId === input.userId && row.branch === input.branch,
+        )
+      ) {
         throw new UniqueViolationError('Source-control session branch already exists in this factory');
       }
       const now = new Date();
