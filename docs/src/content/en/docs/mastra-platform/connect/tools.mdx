@@ -7,7 +7,7 @@ packages:
 
 # Tools
 
-[`tools()`](/reference/connect/tools) gives an agent tools for every provider connected to your project. Each provider has its own toolset, such as `linear_list_issues` and `linear_create_issue` for Linear. A tool call goes through the platform proxy, which adds the connection's credential before forwarding the request.
+[`tools()`](/reference/connect/tools) gives an agent ready-made tools for every provider connected to your project, such as `linear_list_issues` and `linear_create_issue` for Linear. You write no tool code and store no provider credential: each call goes through the platform proxy, which adds the connection's credential before forwarding the request.
 
 ## Add tools to an agent
 

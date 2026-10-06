@@ -7,11 +7,11 @@ packages:
 
 # Channels
 
-[`channels()`](/reference/connect/channels) turns the Slack, Telegram, and Discord connections in your project into [channels](/docs/channels), so people can talk to your agents there. The platform stores each token, and your app fetches it when it needs it.
+[Channels](/docs/channels) let people talk to your agents from Slack, Telegram, and Discord. Setting one up yourself means creating a bot in the vendor's console and passing its token to a channel package like `@mastra/telegram`. With [`channels()`](/reference/connect/channels), you connect the account to your platform project instead: the platform stores the token, and `channels()` configures the same channel packages with it for you.
 
-Each platform needs a different credential:
+Each platform's connection holds a different credential:
 
-- **Slack**: A **Slack channels** (`slack-channels`) connection, which holds an app configuration token. Mastra creates a Slack app for each agent from it. This is a different connection from **Slack** (`slack`), which gives agents Slack tools.
+- **Slack**: An app configuration token, from which Mastra creates a Slack app for each agent. Slack tools use a different kind of credential (a workspace authorization), so Slack appears as two providers on the platform: **Slack channels** (`slack-channels`) for channels and **Slack** (`slack`) for [tools](/docs/mastra-platform/connect/tools).
 - **Telegram**: A bot token from BotFather.
 - **Discord**: A bot token from a Discord application you create. The same connection also gives agents Discord [tools](/docs/mastra-platform/connect/tools).
 
@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 
 `channels()` returns a promise. It creates a provider for each channel before `Mastra` starts. Their webhook routes exist from the first request. A provider starts working when the project gets an active connection for it, without a redeploy. A missing project ID or platform token makes the awaited call throw, which stops app startup. See the [errors table](/reference/connect/channels#errors) in the reference.
 
-The providers come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, which `@mastra/connect` installs for you.
+The providers are the same `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord` packages the [Channels](/docs/channels) guides configure by hand, installed for you by `@mastra/connect`. The only difference is where the credential comes from: your connection on the platform instead of an environment variable you manage.
 
 ## Configure a channel
 
@@ -50,7 +50,7 @@ channels({
 })
 ```
 
-An array also works as an allowlist: `channels({ providers: ['discord', 'telegram'] })` exposes only those channels. `slack` is accepted as an alias for the connection's `slack-channels` provider ID, and using both spellings in one config throws. A provider ID that matches no channel throws when you call `channels()`.
+An array also works as an allowlist: `channels({ providers: ['discord', 'telegram'] })` exposes only those channels. The key for Slack is `slack`. The connection's provider ID `slack-channels` is also accepted, but using both spellings in one config throws. A provider ID that matches no channel throws when you call `channels()`.
 
 See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `false` to leave one out.
 
@@ -88,6 +88,25 @@ export const assistant = new Agent({
 
 The channel context carries the platform, the channel and thread IDs, and the sender's identity, so the same pattern can branch per platform or per user. The [Slack guide](/integrations/channels/slack#request-context) lists every field.
 
-## Bring your own app instead
+## Mix with a self-managed channel
 
-To configure a Slack app, Telegram bot, or Discord bot yourself, skip Connect and follow the platform guides on [Channels](/docs/channels).
+`new Mastra({ channels })` takes either a record of providers or one resolver. To run Connect channels next to a channel you configure yourself, merge them into one resolver: spread the Connect result in the callable and concatenate the routes:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+import { TelegramProvider } from '@mastra/telegram'
+import { assistant } from './agents/assistant'
+
+const connect = await channels({ providers: ['slack', 'discord'] })
+const telegram = new TelegramProvider()
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  channels: Object.assign(async () => ({ ...(await connect()), telegram }), {
+    getRoutes: () => [...connect.getRoutes(), ...telegram.getRoutes()],
+  }),
+})
+```
+
+The self-managed provider keeps its own credential flow, so configure it as its [reference](/reference/channels/telegram-provider) describes. To configure every channel yourself, skip Connect entirely and follow the guides on [Channels](/docs/channels).

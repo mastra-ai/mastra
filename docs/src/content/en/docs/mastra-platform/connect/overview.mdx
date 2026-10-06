@@ -7,7 +7,7 @@ packages:
 
 # Connect
 
-Connect stores your accounts on third-party providers like Linear, Notion, Slack, and GitHub in your Mastra platform project. You authorize an account once, and the `@mastra/connect` package makes it available to your app in three ways:
+Connect stores your accounts on third-party providers like Linear, Notion, Slack, and GitHub in your [Mastra platform](/docs/mastra-platform/overview) project. You authorize an account once, and the `@mastra/connect` package makes it available to your app in three ways:
 
 | Use | Function | Page |
 | - | - | - |
@@ -15,7 +15,9 @@ Connect stores your accounts on third-party providers like Linear, Notion, Slack
 | Put agents in Slack, Telegram, or Discord | `channels()` | [Channels](/docs/mastra-platform/connect/channels) |
 | Call the provider's SDK from your own code | `credential()` | [Use a raw credential](#use-a-raw-credential) |
 
-Your app never stores provider credentials. Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider.
+Giving an agent a provider normally means setting that provider up yourself: create an OAuth app or API key in the vendor's console, store the credential with your app, keep tokens refreshed, and write or configure a tool for the agent. Connect replaces that setup with one `mastra connect add` per account. Your app never stores provider credentials. Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider. Adding, replacing, or removing an account happens on the platform and takes effect in the running app without a redeploy.
+
+Connect requires a Mastra platform project. Everything it produces also exists without the platform: you can write your own [tools](/docs/agents/tools), add an [MCP server](/docs/connections/mcp), or run a [channel](/docs/channels) with a bot you create and a token you manage. Connect is the managed path to the same results.
 
 This page connects Linear and gives an agent its tools.
 

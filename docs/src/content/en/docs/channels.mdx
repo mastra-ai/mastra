@@ -28,9 +28,9 @@ Use channels when an agent needs to:
 - Support multiplayer agents where several people interact with the same agent in a shared channel or thread.
 - Integrate with collaboration workflows like GitHub issues, pull request threads, and Linear comments.
 
-## Use a Mastra platform connection
+## Skip the bot setup on Mastra platform
 
-The guides on this page create a bot or app on each platform and pass its credentials to an adapter. If your project runs on [Mastra platform](/docs/mastra-platform/overview), you can connect the Slack, Telegram, or Discord account there instead. [`channels()`](/reference/connect/channels) from `@mastra/connect` turns those connections into channels, and the same connection can also give agents tools. See [Connect channels](/docs/mastra-platform/connect/channels).
+The guides on this page have you create a bot or app on each platform and manage its credentials yourself. Projects on [Mastra platform](/docs/mastra-platform/overview) can skip that: authorize the Slack, Telegram, or Discord account on the platform once, and [Connect](/docs/mastra-platform/connect/channels) sets the channel up from it. The platform stores the credentials instead of your environment. Everything else on this page applies either way.
 
 ## Configure an agent
 
