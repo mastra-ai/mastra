@@ -14,6 +14,14 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Board filters
+
+Open **Filter cards**, then choose **Intake source** to filter every column by provider (for example, Linear or GitHub). Choose **Linear project** to narrow Linear cards to one or more projects, including issues routed through a Linear team. Values within each filter match any selected value; separate filters combine with each other and with text, teammate, relevance, and label filters.
+
+An active source or Linear project filter selects the matching Intake feeds across the board. Clear those filters to return to the Intake column's source selector. The filtered card counts include matching live candidates and filed cards in all stages.
+
+Filters round-trip through the URL and can be stored with **Save as view**. Project filters use live issue metadata when loaded and stored project metadata for filed cards outside the loaded pages. Saved custom views are stored in this browser; URL filters can be shared directly.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.

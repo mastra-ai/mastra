@@ -26,6 +26,7 @@ import {
   pullRequestCandidate,
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
+import type { BoardFilterState } from '../boardFilters';
 import { hasLabel } from '../boardItems';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
@@ -48,6 +49,7 @@ export function useBoardIntake({
   definition,
   knownSourceKeys,
   elsewhereSourceKeys = EMPTY_KEYS,
+  sourceFilters,
 }: {
   factoryProjectId: string;
   repository: LinkedRepositoryPayload;
@@ -55,6 +57,7 @@ export function useBoardIntake({
   knownSourceKeys: ReadonlySet<string>;
   /** Subset of `knownSourceKeys` whose card lives on another board. */
   elsewhereSourceKeys?: ReadonlySet<string>;
+  sourceFilters?: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>;
 }) {
   const kind = definition.id;
   const review = kind === 'review';
@@ -149,12 +152,23 @@ export function useBoardIntake({
   );
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
+  const sourceFiltered = Boolean(
+    sourceFilters && (sourceFilters.sources.size > 0 || sourceFilters.linearProjectIds.size > 0),
+  );
+  const browsedSources = available.filter(source => {
+    if (!sourceFiltered) return source === active;
+    const provider = source.split('-')[0];
+    if (sourceFilters && sourceFilters.sources.size > 0 && !sourceFilters.sources.has(provider)) return false;
+    return !sourceFilters?.linearProjectIds.size || source === 'linear';
+  });
+  const browsesGithub = browsedSources.includes('github');
+
   // Fetch every configured source so teammate filters can include provider identities
-  // even when a different intake feed is visible. Only the active feed affects loading.
+  // even when a different intake feed is visible. Only the browsed feeds affect loading.
   const issues = useProjectIssuesQuery(!review && githubIntakeActive ? projectRepositoryId : undefined);
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
-    kind === 'work' && active === 'github' ? projectRepositoryId : undefined,
+    kind === 'work' && browsesGithub ? projectRepositoryId : undefined,
     AUTO_TRIAGED_LABEL,
   );
   // Mirrors the server's resolution: the first route (in listing order) whose
@@ -247,22 +261,20 @@ export function useBoardIntake({
     ],
   );
   const { candidates, alreadyMaterialized } = useMemo(() => {
-    const all: BoardCandidate[] = review
-      ? participantCandidates
-      : active === 'gitlab'
-        ? boardGitLabIssues.map(issue => ({ ...gitlabCandidate(issue), column: initialPhase }))
-        : active === 'linear'
-          ? boardLinearIssues.map(issue => ({ ...linearCandidate(issue), column: initialPhase }))
-          : active === 'jira'
-            ? boardJiraIssues.map(issue => ({ ...jiraCandidate(issue), column: initialPhase }))
-            : active === 'incidentio'
-              ? boardIncidentioIssues.map(issue => ({ ...incidentioCandidate(issue), column: initialPhase }))
-              : active === 'github'
-                ? [
-                    ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
-                    ...(triageIssues.data ?? []).map(issueCandidate),
-                  ]
-                : [];
+    const inInitialPhase = (candidate: BoardCandidate) => ({ ...candidate, column: initialPhase });
+    const candidatesBySource: Record<IntakeSource, BoardCandidate[]> = {
+      github: [
+        ...intakeIssues.map(issueCandidate).map(inInitialPhase),
+        ...(triageIssues.data ?? []).map(issueCandidate),
+      ],
+      'github-prs': (pulls.data ?? []).map(pullRequestCandidate).map(inInitialPhase),
+      'gitlab-prs': (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate).map(inInitialPhase),
+      gitlab: boardGitLabIssues.map(gitlabCandidate).map(inInitialPhase),
+      linear: boardLinearIssues.map(linearCandidate).map(inInitialPhase),
+      jira: boardJiraIssues.map(jiraCandidate).map(inInitialPhase),
+      incidentio: boardIncidentioIssues.map(incidentioCandidate).map(inInitialPhase),
+    };
+    const all = browsedSources.flatMap(source => candidatesBySource[source]);
     // A source materializes once per Factory, so items that already have a card
     // are held back. Only those carded on another board get counted: a card on
     // this board is visible in a column, so it needs no explanation.
@@ -281,6 +293,10 @@ export function useBoardIntake({
     active,
     review,
     initialPhase,
+    browsedSources,
+    pulls.data,
+    mergeRequests.data,
+    boardIncidentioIssues,
   ]);
 
   const githubFeed = routesFailed
@@ -337,11 +353,26 @@ export function useBoardIntake({
     jira: jiraFeed,
     incidentio: incidentioFeed,
   };
-  const feed = active ? browsed[active] : undefined;
+  const feeds = browsedSources.map(source => browsed[source]);
+  const failedSource = browsedSources.find(source => browsed[source].error);
+  const failedFeed = failedSource ? browsed[failedSource] : undefined;
+  const feed = sourceFiltered
+    ? {
+        error: failedFeed?.error ?? null,
+        isPending: feeds.some(query => query.isPending),
+        isFetchNextPageError: failedFeed?.isFetchNextPageError ?? false,
+        hasNextPage: feeds.some(query => query.hasNextPage),
+        isFetchingNextPage: feeds.some(query => query.isFetchingNextPage),
+        fetchNextPage: () => Promise.all(feeds.filter(query => query.hasNextPage).map(query => query.fetchNextPage())),
+        refetch: () => Promise.all(feeds.map(query => query.refetch())),
+      }
+    : active
+      ? browsed[active]
+      : undefined;
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
-    ...(kind === 'work' && active === 'github' ? { triage: triageIssues } : {}),
+    ...(kind === 'work' && browsesGithub ? { triage: triageIssues } : {}),
   };
 
   // Discovery can add more source tabs without holding the selected feed's
@@ -354,13 +385,13 @@ export function useBoardIntake({
     bindingsPending ||
     routesPending;
   const isConfigurationPending = !review && configQuery.isPending;
-  const isSourcePending = !active && discoveringSources;
-  const isRoutingPending = active === 'github' && routesPending;
+  const isSourcePending = (sourceFiltered || !active) && discoveringSources;
+  const isRoutingPending = browsesGithub && routesPending;
   const isPending = isConfigurationPending || isSourcePending || isRoutingPending || Boolean(feed?.isPending);
 
   return {
     available,
-    active,
+    active: sourceFiltered ? (failedSource ?? browsedSources[0] ?? active) : active,
     showSwitch: available.length > 1,
     select: setSelected,
     candidates,
@@ -368,6 +399,6 @@ export function useBoardIntake({
     participantCandidates,
     feedByColumn,
     isPending,
-    isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
+    isTriagePending: kind === 'work' && browsesGithub && triageIssues.isPending,
   };
 }

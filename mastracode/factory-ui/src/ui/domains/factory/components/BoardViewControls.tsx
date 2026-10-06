@@ -12,6 +12,7 @@ import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardViewSettings } from '../boardSavedViews';
 import type { BoardKind } from '../boardStages';
+import type { LinearProject } from '../services/linear';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, BoardFilters, boardFilterFields } from './BoardFilters';
 import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
@@ -31,6 +32,7 @@ export function BoardViewControls({
   view,
   participants,
   availableLabels,
+  linearProjects,
   currentUserId,
   aside,
 }: {
@@ -38,6 +40,7 @@ export function BoardViewControls({
   view: BoardView;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
+  linearProjects?: readonly LinearProject[];
   currentUserId?: string;
   aside?: ReactNode;
 }) {
@@ -47,6 +50,7 @@ export function BoardViewControls({
     kind,
     participants,
     availableLabels,
+    linearProjects,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });

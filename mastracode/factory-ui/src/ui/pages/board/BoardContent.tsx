@@ -3,6 +3,8 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
+import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../hooks/useLinearData';
+import { cardMatchesSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
 import type { IntakeSource } from '../../domains/factory/boardCandidates';
@@ -117,7 +119,11 @@ export function BoardContent({
     definition,
     knownSourceKeys: items.knownSourceKeys,
     elsewhereSourceKeys: items.elsewhereSourceKeys,
+    sourceFilters: filters,
   });
+  const linearStatus = useLinearStatusQuery();
+  const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
+  const sourceFiltered = filters.sources.size > 0 || filters.linearProjectIds.size > 0;
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
@@ -144,6 +150,7 @@ export function BoardContent({
     candidate =>
       candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes) &&
       candidateMatchesLabels(candidate, filters.labels) &&
+      cardMatchesSourceFilters(candidate, filters) &&
       cardMatchesViewSearch(candidate),
   );
   const setIntakeSource = (source: IntakeSource) => {
@@ -158,6 +165,7 @@ export function BoardContent({
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
       if (item.id === targetItemId) return true;
+      if (sourceFiltered) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
@@ -173,6 +181,7 @@ export function BoardContent({
         return (
           workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate) &&
           workItemMatchesLabels(item, filters.labels, liveCandidate) &&
+          cardMatchesSourceFilters(item, filters, liveCandidate) &&
           cardMatchesViewSearch(item)
         );
       }),
@@ -207,7 +216,10 @@ export function BoardContent({
   const visibleWorkItems = new Set(boardWorkItems);
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
-  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
+  const unfilteredCandidateCount = sourceFiltered
+    ? intake.participantCandidates.filter(candidate => !items.knownSourceKeys.has(candidate.sourceKey)).length
+    : intake.candidates.length;
+  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
@@ -244,7 +256,7 @@ export function BoardContent({
         />
       ) : undefined,
       intakeSwitch:
-        stage.id === definition.initialPhase && intake.showSwitch ? (
+        stage.id === definition.initialPhase && intake.showSwitch && !sourceFiltered ? (
           <IntakeSourceSwitch available={intake.available} active={intake.active} onSelect={setIntakeSource} />
         ) : undefined,
       cards: (
@@ -358,6 +370,7 @@ export function BoardContent({
             view={view}
             participants={participants}
             availableLabels={availableLabels}
+            linearProjects={linearProjects.data}
             currentUserId={currentUserId}
             aside={
               builtin && (
