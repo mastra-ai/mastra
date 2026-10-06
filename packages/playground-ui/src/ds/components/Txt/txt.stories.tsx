@@ -1,4 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../Button';
+import { Input } from '../Input';
+import { Tree } from '../Tree';
 import { Txt } from './Txt';
 import { TextRoles } from '@/ds/tokens/fonts';
 
@@ -23,7 +26,7 @@ const meta: Meta<typeof Txt> = {
     },
     font: {
       control: { type: 'inline-radio' },
-      options: ['body', 'mono'],
+      options: ['body', 'display', 'mono'],
     },
   },
 };
@@ -44,6 +47,10 @@ export const Default: Story = {
 export const Roles: Story = {
   render: () => (
     <div className="flex max-w-xl flex-col gap-3">
+      <Txt as="h1" variant="hero">
+        hero · responsive welcome-page headline
+      </Txt>
+      <Txt variant="lead">lead · responsive introduction</Txt>
       <Txt as="h1" variant="display">
         display · 22/500 · onboarding hero
       </Txt>
@@ -64,6 +71,7 @@ export const Roles: Story = {
       <Txt variant="body-sm">body-sm · 13/400 · table cells, menus, field values</Txt>
       <Txt variant="column">column · 12/500 · column headers</Txt>
       <Txt variant="caption">caption · 12/400 · secondary copy</Txt>
+      <Txt variant="eyebrow">eyebrow · 12/500 · section label</Txt>
       <Txt variant="meta">meta · 10/500 · badges and keycaps</Txt>
     </div>
   ),
@@ -150,4 +158,67 @@ export const AsLabel: Story = {
     variant: 'label',
     htmlFor: 'input-field',
   },
+};
+
+export const TechnicalValues: Story = {
+  render: () => (
+    <div className="flex w-80 max-w-full flex-col gap-5">
+      <div className="grid gap-2">
+        <Txt as="label" htmlFor="review-command" variant="label">
+          Setup command
+        </Txt>
+        <Input className="font-mono" id="review-command" defaultValue="pnpm install && pnpm test" />
+      </div>
+      <Tree>
+        <Tree.File id="src/index.ts">
+          <Tree.Label className="font-mono">src/index.ts</Tree.Label>
+        </Tree.File>
+      </Tree>
+      <Txt variant="caption" tone="muted">
+        Run{' '}
+        <Txt as="span" variant="caption" font="mono" tone="ink">
+          run_01JQX8K2M4
+        </Txt>
+      </Txt>
+      <Txt variant="caption" tone="muted">
+        <Txt as="time" variant="caption" font="mono" dateTime="2026-10-02T12:42:07Z">
+          12:42:07
+        </Txt>
+        {' · '}
+        <Txt as="span" variant="caption" font="mono">
+          412ms
+        </Txt>
+        {' · '}
+        <span className="tabular-nums">1,204 tokens</span>
+      </Txt>
+    </div>
+  ),
+};
+
+export const TextLeaves: Story = {
+  render: () => (
+    <div className="flex w-80 max-w-full flex-col gap-5">
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <Txt as="span" variant="label">
+          Layout stays on the div
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted">
+          42 items
+        </Txt>
+      </div>
+      <div className="flex overflow-hidden rounded-lg border border-border">
+        <button type="button" className="bg-fill px-3 py-1.5" aria-pressed="true">
+          <Txt as="span" variant="column" className="block">
+            Agents
+          </Txt>
+        </button>
+        <button type="button" className="px-3 py-1.5" aria-pressed="false">
+          <Txt as="span" variant="column" className="block">
+            Skills
+          </Txt>
+        </button>
+      </div>
+      <Button>Standard button owns its label style</Button>
+    </div>
+  ),
 };

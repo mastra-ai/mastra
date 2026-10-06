@@ -138,7 +138,7 @@ export function PlanIntro({ children, className, ...props }: PlanIntroProps) {
   );
 }
 
-export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 'children' | 'variant'> {
+export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt<'h3'>>, 'as' | 'children' | 'variant'> {
   children: ReactNode;
 }
 
@@ -151,7 +151,7 @@ export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
 }
 
 export interface PlanPathProps extends Omit<
-  ComponentProps<typeof Txt>,
+  ComponentProps<typeof Txt<'p'>>,
   'as' | 'children' | 'font' | 'title' | 'variant'
 > {
   children: string;

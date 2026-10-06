@@ -321,11 +321,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  /**
-   * Checks if the installed pgvector version supports halfvec type.
-   * halfvec was introduced in pgvector 0.7.0.
-   */
-  private supportsHalfvec(): boolean {
+  /** Checks if the installed pgvector version is at least the given major.minor version. */
+  private isVectorExtensionAtLeast(minMajor: number, minMinor: number): boolean {
     if (!this.vectorExtensionVersion) {
       return false;
     }
@@ -333,12 +330,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const parts = this.vectorExtensionVersion.split('.');
     const major = parseInt(parts[0] ?? '', 10);
     const minor = parseInt(parts[1] ?? '', 10);
-    // If parsing failed (NaN), assume version doesn't support halfvec
+    // If parsing failed (NaN), assume the version is too old
     if (isNaN(major) || isNaN(minor)) {
       return false;
     }
-    // halfvec was introduced in pgvector 0.7.0
-    return major > 0 || (major === 0 && minor >= 7);
+    return major > minMajor || (major === minMajor && minor >= minMinor);
+  }
+
+  /**
+   * Checks if the installed pgvector version supports halfvec type.
+   * halfvec was introduced in pgvector 0.7.0.
+   */
+  private supportsHalfvec(): boolean {
+    return this.isVectorExtensionAtLeast(0, 7);
+  }
+
+  /** Checks if pgvector >= 0.8.0 (required for the hnsw.iterative_scan setting). */
+  private supportsIterativeScan(): boolean {
+    return this.isVectorExtensionAtLeast(0, 8);
   }
 
   /** Checks if pgvector >= 0.7.0 (required for bit type). */
@@ -813,7 +822,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
-        await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        if (this.supportsIterativeScan()) {
+          await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        }
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {

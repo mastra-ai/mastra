@@ -209,7 +209,7 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
+        className="min-h-[40px] border-dashed bg-card px-2 py-1"
         size="sm"
         disabled={readOnly}
       />

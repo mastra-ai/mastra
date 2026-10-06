@@ -35,7 +35,7 @@ export function DayHeading({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <span aria-hidden className="bg-border h-px flex-1" />
-      <Txt as="h3" variant="meta" className="text-muted-foreground m-0 tracking-wider uppercase">
+      <Txt tone="muted" as="h3" variant="meta" className="m-0 uppercase">
         {children}
       </Txt>
       <span aria-hidden className="bg-border h-px flex-1" />
