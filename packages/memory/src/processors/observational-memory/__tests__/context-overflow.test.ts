@@ -40,6 +40,13 @@ describe('isContextOverflowError', () => {
     ['local server', apiError(400, 'the request exceeds the available context size, try increasing it')],
     ['code only in response body', apiError(400, 'Bad Request', '{"error":{"code":"context_length_exceeded"}}')],
     ['wrapped cause', new Error('Model call failed', { cause: apiError(400, 'prompt is too long: 1 > 0 maximum') })],
+    [
+      'stream error payload without an HTTP status',
+      {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'prompt is too long: 210345 tokens > 200000 maximum' },
+      },
+    ],
   ])('detects %s overflow errors', (_name, error) => {
     expect(isContextOverflowError(error)).toBe(true);
   });
@@ -51,6 +58,15 @@ describe('isContextOverflowError', () => {
         429,
         'Request too large for gpt-4o: Limit 30000, Requested 45000 tokens per min. Please reduce the length of the messages.',
       ),
+    ],
+    [
+      'wrapped token-per-minute rate limit',
+      new Error('Model call failed', {
+        cause: apiError(
+          429,
+          'Request too large for gpt-4o: Limit 30000, Requested 45000 tokens per min. Please reduce the length of the messages.',
+        ),
+      }),
     ],
     ['authentication', apiError(401, 'Incorrect API key provided')],
     ['server error', apiError(500, 'The server had an error while processing your request')],
