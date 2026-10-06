@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import type { KnowledgeScopeNodeSummary } from '@internal/core/knowledge-compat';
+import type { ListKnowledgeScopeNodesInput, ListKnowledgeScopeNodesOutput } from '@internal/core/knowledge-compat';
 import {
-  MAX_KNOWLEDGE_SCOPE_NODES,
+  pageKnowledgeScopeNodes,
+  parseListKnowledgeScopeNodesInput,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -823,13 +824,37 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+  override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    if (input.addresses?.length === 0) return { scopes: [], nextCursor: null };
+    const args: Array<string | number> = [];
+    const where = [`n."isScope"`, `n."deletedAt" IS NULL`];
+    let within = '';
+    if (input.withinAddress !== undefined) {
+      // The subtree follows parent edges transitively; UNION dedupes scopes reachable through several parents.
+      within = `WITH RECURSIVE within_scope(id) AS (SELECT r.id FROM "${TABLE_KNOWLEDGE_NODES}" r JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" ra ON ra."scopeNodeId"=r.id WHERE ra.address=? AND r."isScope" AND r."deletedAt" IS NULL UNION SELECT ns."nodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN within_scope w ON ns."scopeNodeId"=w.id JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns."nodeId" WHERE c."isScope" AND c."deletedAt" IS NULL) `;
+      args.push(input.withinAddress);
+      where.push('n.id IN (SELECT id FROM within_scope)');
+    }
+    if (input.addresses) {
+      where.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
+      args.push(...input.addresses);
+    }
+    if (after) {
+      where.push('(n.name COLLATE "C" > ? OR (n.name = ? AND n.id > ?))');
+      args.push(after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
     const scopes = await this.#readExecutor.execute({
-      sql: `SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a."scopeNodeId"=n.id WHERE n."isScope" AND n."deletedAt" IS NULL ORDER BY n.name LIMIT ${MAX_KNOWLEDGE_SCOPE_NODES}`,
+      sql: `${within}SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a."scopeNodeId"=n.id WHERE ${where.join(' AND ')} ORDER BY n.name COLLATE "C", n.id LIMIT ?`,
+      args,
     });
-    if (scopes.rows.length === 0) return [];
+    const rows = scopes.rows as Array<Record<string, unknown>>;
+    if (rows.length === 0) return { scopes: [], nextCursor: null };
+    // Parent edges for this page only, so the read stays bounded by the page size.
     const parents = await this.#readExecutor.execute({
-      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns."nodeId" WHERE c."isScope" AND c."deletedAt" IS NULL`,
+      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId" IN (${rows.map(() => '?').join(',')})`,
+      args: rows.map(row => String(row.id)),
     });
     const parentsByScopeId = new Map<string, string[]>();
     for (const row of parents.rows as Array<Record<string, unknown>>) {
@@ -839,14 +864,18 @@ export class KnowledgePG extends KnowledgeStorage {
       if (existing) existing.push(parentId);
       else parentsByScopeId.set(scopeId, [parentId]);
     }
-    return (scopes.rows as Array<Record<string, unknown>>).map(row => ({
-      id: String(row.id),
-      address: String(row.address),
-      name: String(row.name),
-      ...(row.kind == null ? {} : { kind: String(row.kind) }),
-      ...(row.description == null ? {} : { description: String(row.description) }),
-      parentIds: parentsByScopeId.get(String(row.id)) ?? [],
-    }));
+    return pageKnowledgeScopeNodes(
+      rows.map(row => ({
+        id: String(row.id),
+        address: String(row.address),
+        name: String(row.name),
+        ...(row.kind == null ? {} : { kind: String(row.kind) }),
+        ...(row.description == null ? {} : { description: String(row.description) }),
+        parentIds: parentsByScopeId.get(String(row.id)) ?? [],
+      })),
+      limit,
+      input,
+    );
   }
 
   override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {

@@ -541,7 +541,7 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
       };
       const { scopes } = await store.reconcileStructure(plan);
 
-      const nodes = await store.listScopeNodes();
+      const { scopes: nodes } = await store.listScopeNodes();
       expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
       const mastra = nodes.find(node => node.name === 'mastra')!;
       const features = nodes.find(node => node.name === 'features')!;

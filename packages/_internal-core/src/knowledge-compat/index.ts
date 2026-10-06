@@ -6,6 +6,80 @@ export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 /** Hard cap on scope nodes returned by one `listScopeNodes` read. */
 export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
 
+export interface ListKnowledgeScopeNodesInput {
+  /** Only the scope at this address and the scopes beneath it, following parent edges transitively. */
+  withinAddress?: string;
+  /** Only the scopes at these exact addresses. */
+  addresses?: string[];
+  /** `nextCursor` from the previous page of the same query. */
+  cursor?: string;
+  /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
+  limit?: number;
+}
+
+export interface ListKnowledgeScopeNodesOutput {
+  /** Scope nodes ordered by name, then id. */
+  scopes: KnowledgeScopeNodeSummary[];
+  /** Pass back as `cursor` for the next page; `null` when this is the last page. */
+  nextCursor: string | null;
+}
+
+function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
+  return JSON.stringify([input.withinAddress ?? null, input.addresses ? [...input.addresses].sort() : null]);
+}
+
+export function createKnowledgeScopeNodeCursor(
+  scope: Pick<KnowledgeScopeNodeSummary, 'name' | 'id'>,
+  input: ListKnowledgeScopeNodesInput,
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: 'scope',
+      name: scope.name,
+      id: scope.id,
+      filter: knowledgeScopeNodeFilterKey(input),
+    }),
+  );
+}
+
+/** Validates the page size and cursor of a `listScopeNodes` query; throws on a cursor from a different query. */
+export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodesInput = {}): {
+  limit: number;
+  after: { name: string; id: string } | null;
+} {
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? MAX_KNOWLEDGE_SCOPE_NODES), 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope node cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    parsed.filter !== knowledgeScopeNodeFilterKey(input)
+  ) {
+    throw new Error('Knowledge scope node cursor does not match this query.');
+  }
+  return { limit, after: { name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` name/id-ordered scope nodes. */
+export function pageKnowledgeScopeNodes(
+  rows: KnowledgeScopeNodeSummary[],
+  limit: number,
+  input: ListKnowledgeScopeNodesInput,
+): ListKnowledgeScopeNodesOutput {
+  const scopes = rows.slice(0, limit);
+  const last = scopes.at(-1);
+  return { scopes, nextCursor: rows.length > limit && last ? createKnowledgeScopeNodeCursor(last, input) : null };
+}
+
 /** A reconciled structural scope node with its containing scope nodes. */
 export interface KnowledgeScopeNodeSummary {
   /** UUID of the `isScope` node. */

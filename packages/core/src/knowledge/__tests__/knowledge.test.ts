@@ -71,7 +71,7 @@ describe('Knowledge', () => {
     }).reconcile();
 
     expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: firstBoot.accessEpoch + 1 });
-    const team = (await storage.stores.knowledge!.listScopeNodes()).find(scope => scope.address === 'team');
+    const team = (await storage.stores.knowledge!.listScopeNodes({ addresses: ['team'] })).scopes[0];
     expect(team?.parentIds).toEqual([firstBoot.scopes['org:acme']]);
   });
 
