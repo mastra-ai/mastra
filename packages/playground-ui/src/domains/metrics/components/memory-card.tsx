@@ -33,7 +33,8 @@ export function MemoryCard() {
 
   const rows: Record<View, MetricsShareListRow[]> = {
     threads: (threads.data ?? []).map(t => ({
-      key: t.threadId,
+      // A thread can come back once per resource, each with its own link.
+      key: `${t.threadId}:${t.resourceId ?? ''}`,
       label: t.threadId,
       share: t.runs,
       value: formatCount(t.runs),

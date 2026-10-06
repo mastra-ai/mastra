@@ -36,12 +36,13 @@ export function tokenSeriesFixture(value: number, estimatedCost: number): TimeSe
   return { series: [{ name: 'tokens', points: [{ timestamp: recent(), value, estimatedCost }] }] };
 }
 
-/** One bucket of agent runs: 8 completed, 2 failed. */
+/** One bucket of agent runs: 8 completed, 2 failed (one `error`, one `failed`). */
 export function agentRunSeriesFixture(): TimeSeriesResponse {
   return {
     series: [
       { name: 'ok', points: [{ timestamp: recent(), value: 8 }] },
-      { name: 'error', points: [{ timestamp: recent(), value: 2 }] },
+      { name: 'error', points: [{ timestamp: recent(), value: 1 }] },
+      { name: 'failed', points: [{ timestamp: recent(), value: 1 }] },
     ],
   };
 }

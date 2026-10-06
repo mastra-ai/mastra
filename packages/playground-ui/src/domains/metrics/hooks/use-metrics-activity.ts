@@ -82,7 +82,8 @@ export function useMetricsActivity() {
       for (const s of cacheRead.series) addTokens(s.points, 'cacheRead');
 
       for (const s of runs.series) {
-        const key = /error/i.test(s.name) ? 'failed' : 'completed';
+        // Failed runs report status `error` or `failed`.
+        const key = /error|fail/i.test(s.name) ? 'failed' : 'completed';
         for (const p of s.points) {
           const b = at(p);
           if (b) b[key] += p.value;

@@ -80,7 +80,7 @@ function useEmptyMetrics() {
 }
 
 function useFailingMetrics() {
-  const fail = () => HttpResponse.json(metricsErrorFixture, { status: metricsErrorFixture.status });
+  const fail = () => HttpResponse.json(metricsErrorFixture, { status: 500 });
   server.use(
     http.post(`${API}/aggregate`, fail),
     http.post(`${API}/breakdown`, fail),
