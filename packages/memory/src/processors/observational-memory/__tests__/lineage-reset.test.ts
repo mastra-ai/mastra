@@ -107,7 +107,9 @@ describe('a cycle that spans a clear', () => {
           const recreated = await om.getOrCreateRecord(threadId, resourceId);
 
           gate.resolve();
-          await running;
+          const result = await running;
+          // The caller must not drop the source messages from context or mark the cycle complete.
+          expect(result).toMatchObject(operation === 'buffer' ? { buffered: false } : { observed: false });
 
           const head = (await storage.getObservationalMemory(recreated.threadId, resourceId))!;
           expect(head.id).toBe(recreated.id);
