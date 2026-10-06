@@ -20,8 +20,9 @@
  *
  *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-completion-feedback.test.ts
  *
- * Only commit recordings from a run where every cell passed. Before committing, check them for
- * secrets and remove the `anthropic-organization-id` / `anthropic-workspace-id` response headers.
+ * Only commit recordings from a run where every cell passed. The recorder strips credentials and
+ * account metadata headers (`authorization`, `x-api-key`, `anthropic-organization-id`,
+ * `openai-organization`, …), so the diff should contain none of them.
  *
  * Replay uses exact request matching. If replay fails with "No exact match for hash", a request body
  * changed (for example the completion-feedback template); re-record.
