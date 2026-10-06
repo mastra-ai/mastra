@@ -140,6 +140,10 @@ describe('Overview', () => {
     expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Your pipeline starts here' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open board' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+    expect(screen.getByRole('link', { name: 'Link repository' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/repositories`,
+    );
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.queryByText('0 running · 0 in the pipeline')).not.toBeInTheDocument();
   });

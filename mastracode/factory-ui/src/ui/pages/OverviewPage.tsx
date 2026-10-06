@@ -123,7 +123,7 @@ export function OverviewContent({
       </section>
 
       <Block title="Latest commits" action={repository ? <ViewOnGithub slug={repository.slug} /> : undefined}>
-        <CommitRail projectRepositoryId={repository?.projectRepositoryId} />
+        <CommitRail projectRepositoryId={repository?.projectRepositoryId} factoryProjectId={factoryProjectId} />
       </Block>
 
       <Block title="Activity" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/activity`} />}>
