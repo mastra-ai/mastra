@@ -429,6 +429,8 @@ export interface TripwirePayload<TMetadata = unknown> {
   metadata?: TMetadata;
   /** The ID of the processor that triggered the tripwire */
   processorId?: string;
+  /** If true, the user message and finished steps are saved before the run stops */
+  persist?: boolean;
 }
 
 /**

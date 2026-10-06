@@ -461,6 +461,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   messageId,
   stepTools,
   _internal,
+  allowPersist = false,
 }: {
   error: TripWire;
   controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
@@ -470,6 +471,8 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   messageId: string;
   stepTools?: TOOLS;
   _internal: OuterLLMRun<TOOLS, OUTPUT>['_internal'];
+  /** Only set where the step's model output has not been produced, so `persist` cannot save blocked content. */
+  allowPersist?: boolean;
 }) {
   const tripwireChunk: ChunkType<OUTPUT> = {
     type: 'tripwire',
@@ -480,6 +483,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
       retry: error.options?.retry,
       metadata: error.options?.metadata,
       processorId: error.processorId,
+      ...(allowPersist && error.options?.persist && { persist: true }),
     },
   };
 
@@ -1802,6 +1806,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageId: currentStep.messageId,
                 stepTools: tools,
                 _internal: _internal,
+                allowPersist: true,
               });
             }
             logger?.error('Error in processInputStep processors:', error);
@@ -1921,6 +1926,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageId: currentStep.messageId,
                 stepTools: currentStep.tools,
                 _internal: _internal,
+                allowPersist: true,
               });
             }
             logger?.error('Error in processLLMRequest processors:', error);

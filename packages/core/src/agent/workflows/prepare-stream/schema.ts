@@ -93,6 +93,7 @@ export const prepareMemoryStepOutputSchema = z.object({
       retry: z.boolean().optional(),
       metadata: z.unknown().optional(),
       processorId: z.string().optional(),
+      persist: z.boolean().optional(),
     })
     .optional(),
 });

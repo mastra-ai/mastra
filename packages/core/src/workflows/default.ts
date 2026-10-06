@@ -511,6 +511,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                       retry: e.options?.retry,
                       metadata: e.options?.metadata,
                       processorId: e.processorId,
+                      ...(e.options?.persist && { persist: true }),
                     }
                   : undefined,
             },

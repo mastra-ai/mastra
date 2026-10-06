@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ObservabilityContext } from '../observability';
 import { resolveObservabilityContext } from '../observability';
+import type { OutputProcessorOrWorkflow } from '../processors';
 import { MastraModelOutput } from '../stream/base/output';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType } from '../stream/types';
@@ -22,6 +23,15 @@ export interface TripWireOptions<TMetadata = unknown> {
    * This allows processors to pass structured information about what triggered the tripwire.
    */
   metadata?: TMetadata;
+  /**
+   * If true, save the user message and any steps that already finished to memory before the run
+   * stops. By default a tripwire saves nothing from the turn.
+   *
+   * Only applies to aborts from `processInput`, `processInputStep`, and `processLLMRequest`, which
+   * run before the model produces the step's content. It is ignored for output-side aborts, so
+   * blocked content is never saved.
+   */
+  persist?: boolean;
 }
 
 /**
@@ -52,6 +62,8 @@ export interface TripwireData<TMetadata = unknown> {
   retry?: boolean;
   metadata?: TMetadata;
   processorId?: string;
+  /** See {@link TripWireOptions.persist}. */
+  persist?: boolean;
 }
 
 export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = unknown>({
@@ -60,6 +72,7 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
   options,
   model,
   messageList,
+  outputProcessors,
   ...rest
 }: {
   tripwire: TripwireData<TMetadata>;
@@ -67,6 +80,8 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
   options: InnerAgentExecutionOptions<OUTPUT>;
   model: MastraLanguageModel;
   messageList: MessageList;
+  /** Run on a `persist` tripwire so processors such as message history can save the turn. */
+  outputProcessors?: OutputProcessorOrWorkflow[];
 } & ObservabilityContext) => {
   const observabilityContext = resolveObservabilityContext(rest);
   const tripwireStream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -80,6 +95,7 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
           retry: tripwire.retry,
           metadata: tripwire.metadata,
           processorId: tripwire.processorId,
+          ...(tripwire.persist && { persist: true }),
         },
       });
       controller.close();
@@ -102,6 +118,7 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
       onStepFinish: options.onStepFinish as any,
       returnScorerData: options.returnScorerData,
       requestContext: options.requestContext,
+      outputProcessors,
     },
     messageId: globalThis.crypto.randomUUID(),
   });

@@ -1008,6 +1008,7 @@ For `agent.generate()`, the result exposes the same information as `result.tripw
 
 - `retry: true` asks the agent to retry instead of ending. Input and output processor retries require `maxProcessorRetries` to be set on the agent or call.
 - `metadata` attaches structured data to the `tripwire` chunk so downstream consumers can branch on categories like `pii`, `quality`, or `moderation`.
+- `persist: true` saves the user message and any finished steps to memory before the run stops. Use it when an input-side processor ends a run, but the conversation so far should stay in the thread. See [aborting and tripwire chunks](/reference/processors/processor-interface#aborting-and-tripwire-chunks).
 
 ## API error handling
 

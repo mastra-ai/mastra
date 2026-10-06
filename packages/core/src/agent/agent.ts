@@ -198,6 +198,7 @@ import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
+import type { TripwireData } from './trip-wire';
 import type {
   AgentClaimThreadPeerOptions,
   AgentAbortThreadOptions,
@@ -4665,14 +4666,9 @@ export class Agent<
     processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
-    tripwire?: {
-      reason: string;
-      retry?: boolean;
-      metadata?: unknown;
-      processorId?: string;
-    };
+    tripwire?: TripwireData;
   }> {
-    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
+    let tripwire: TripwireData | undefined;
 
     if (
       inputProcessorOverrides?.length ||
@@ -4698,6 +4694,7 @@ export class Agent<
             retry: error.options?.retry,
             metadata: error.options?.metadata,
             processorId: error.processorId,
+            ...(error.options?.persist && { persist: true }),
           };
           this.logger.warn('Input processor tripwire triggered', {
             agent: this.name,
