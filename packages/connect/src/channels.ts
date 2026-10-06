@@ -451,12 +451,12 @@ function normalizeChannelProviders(providers: ChannelsOptions['providers']): Nor
       overrides[canonical] = {};
     } else if (value === false) {
       overrides[canonical] = { disabled: true };
-    } else if (typeof value === 'object' && !Array.isArray(value)) {
+    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       overrides[canonical] = value;
     } else {
       throw new MastraConnectError(
         'invalid_options',
-        `Invalid providers entry for '${providerId}': expected true, false, or an options object, got ${Array.isArray(value) ? 'an array' : typeof value}.`,
+        `Invalid providers entry for '${providerId}': expected true, false, or an options object, got ${value === null ? 'null' : Array.isArray(value) ? 'an array' : typeof value}.`,
       );
     }
   }

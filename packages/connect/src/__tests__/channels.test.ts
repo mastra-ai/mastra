@@ -848,6 +848,17 @@ describe('channels()', () => {
     ).rejects.toThrow(/expected true, false, or an options object/);
   });
 
+  it('rejects a null providers record value with invalid_options', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(
+        options(platformFetch({ connections: [] }), {
+          providers: { telegram: null as unknown as { connectionId?: string } },
+        }),
+      ),
+    ).rejects.toThrow(/expected true, false, or an options object, got null/);
+  });
+
   it('honors a pinned connectionId when multiple are present', async () => {
     const fetchMock = platformFetch({
       connections: [
