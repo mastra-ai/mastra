@@ -31,7 +31,7 @@ export const agent = new Agent({
 
 Set `maxProcessorRetries` alongside a `maxRetries` above `3`, because the agent stops error-processor retries at `3` when it's unset. See [Retry limits](#retry-limits).
 
-To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`. Without an `errorProcessors` list, the agent then runs only the error processors its memory contributes, if any. When memory contributes one, the retry cap of `3` applies. See [Error processors are enabled by default](/docs/agents/processors#error-processors-are-enabled-by-default). An empty `errorProcessors` list still gets the defaults. Supplying your own processor for all three default ids replaces every default with your own implementation.
+To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`. Without an `errorProcessors` list, the agent then runs only the error processors its memory contributes, if any. When memory contributes one, the retry cap of `3` applies. See [Error processors are enabled by default](/docs/agents/processors#error-processors-are-enabled-by-default). An empty agent-level `errorProcessors` list still gets the defaults. A call-time `errorProcessors: []` replaces the resolved list instead, though the agent still runs the error processors its memory contributes. Supplying your own processor for all three default ids replaces every default with your own implementation.
 
 ## How it works
 
