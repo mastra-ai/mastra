@@ -9,7 +9,18 @@ import { MCPClient } from '@mastra/mcp';
 import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from '../client/types';
 import { countJsonValues, MAX_CATALOG_VALUES, MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
 
-class GenerationError extends Error {}
+/** Failure whose message is safe to print: it is built from supplied paths and server names only. */
+export class GenerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    // Checked by name rather than `instanceof` so the distinction survives bundling and separate
+    // module registries, exactly as the CommonJS/ESM client identity does.
+    this.name = 'GenerationError';
+  }
+}
+
+/** A catalogue can widen thousands of schemas; report enough to act on without flooding a terminal. */
+const MAX_REPORTED_WARNINGS = 25;
 
 let CommonJSClient: typeof MCPClient | undefined;
 function isClient(value: unknown): value is MCPClient {
@@ -31,10 +42,10 @@ function missing(error: unknown): boolean {
  */
 export function boundTransfer(catalog: SerializableMCPToolCatalog): {
   catalog: SerializableMCPToolCatalog;
-  widened: number;
+  warnings: string[];
 } {
   const bounded: SerializableMCPToolCatalog = {};
-  let widened = 0;
+  const warnings: string[] = [];
   let values = 0;
   for (const server of Object.keys(catalog)) {
     const tools: Record<string, SerializableMCPToolDefinition> = {};
@@ -48,13 +59,21 @@ export function boundTransfer(catalog: SerializableMCPToolCatalog): {
         values += counted;
         if (counted > MAX_SCHEMA_VALUES || values > MAX_CATALOG_VALUES) {
           definition[key] = true;
-          widened += 1;
+          const reason =
+            counted > MAX_SCHEMA_VALUES
+              ? `Schema exceeds the maximum value count of ${MAX_SCHEMA_VALUES}`
+              : `Catalogue exceeds the maximum value count of ${MAX_CATALOG_VALUES}`;
+          warnings.push(
+            `${reason} at server ${JSON.stringify(server)} tool ${JSON.stringify(tool)} ${
+              key === 'inputSchema' ? 'input' : 'output'
+            }; widened to unknown`,
+          );
         }
       }
       tools[tool] = definition;
     }
   }
-  return { catalog: bounded, widened };
+  return { catalog: bounded, warnings };
 }
 
 async function canonical(path: string): Promise<string> {
@@ -101,7 +120,9 @@ function convert(
     if (signal.aborted) abort();
     worker.once('message', result => {
       if (result.ok) accept(result.value);
-      else reject(new GenerationError('Schema conversion failed'));
+      // Only the generator's own `TypegenError` messages cross this boundary; converter failures
+      // stay generic so their text cannot carry schema values into a diagnostic.
+      else reject(new GenerationError(result.message ?? 'Schema conversion failed'));
     });
     worker.once('error', () => reject(new GenerationError('Schema conversion failed')));
     worker.once('exit', code => {
@@ -172,17 +193,20 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       outputs.set(output, client);
     }
     const prepared: { output: string; source: string }[] = [];
-    let warnings = 0;
+    const warnings: string[] = [];
     for (const [output, client] of outputs) {
       abort.signal.throwIfAborted();
       const result = await client.listToolDefinitionsWithErrors();
-      if (Object.keys(result.errors).length || Object.keys(result.errorDetails).length) {
-        throw new GenerationError('MCP discovery failed; no generated files were replaced');
+      const failed = [...new Set([...Object.keys(result.errors), ...Object.keys(result.errorDetails)])];
+      if (failed.length) {
+        throw new GenerationError(
+          `MCP discovery failed for ${failed.map(name => JSON.stringify(name)).join(', ')}; no generated files were replaced`,
+        );
       }
       const bounded = boundTransfer(result.definitions);
-      warnings += bounded.widened;
+      warnings.push(...bounded.warnings);
       const converted = await convert(bounded.catalog, abort.signal);
-      warnings += converted.warnings.length;
+      warnings.push(...converted.warnings);
       prepared.push({ output, source: converted.source });
     }
     // Disconnect before replacement so cleanup failures preserve previous output too.
@@ -200,7 +224,12 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       await rename(temporary, output);
     }
     console.log(`Generated ${prepared.length} MCP type file(s).`);
-    if (warnings) console.warn(`${warnings} schema portion(s) widened to unknown.`);
+    if (warnings.length) {
+      console.warn(`${warnings.length} schema portion(s) widened to unknown:`);
+      for (const warning of warnings.slice(0, MAX_REPORTED_WARNINGS)) console.warn(`  ${warning}`);
+      if (warnings.length > MAX_REPORTED_WARNINGS)
+        console.warn(`  ...and ${warnings.length - MAX_REPORTED_WARNINGS} more.`);
+    }
   } catch (error) {
     failure =
       error instanceof GenerationError

@@ -93,16 +93,28 @@ function count(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-function fail(position: string): never {
-  throw new Error(`Invalid or unsupported recursive schema at ${position}`);
+/**
+ * Generation failure whose message is safe to surface: it is built from server and tool names,
+ * keyword names, and positions, so it never carries schema values or transport details.
+ */
+export class TypegenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TypegenError';
+  }
+}
+
+function fail(reason: string, position: string): never {
+  throw new TypegenError(`${reason} at ${position}`);
 }
 
 // JSON roundtripping is not enough: schema object insertion order affects declaration order.
 function canonical(value: unknown, position: string, ancestors = new Set<object>(), depth = 0): unknown {
-  if (depth > MAX_JSON_SCHEMA_DEPTH) fail(position);
+  if (depth > MAX_JSON_SCHEMA_DEPTH) fail(`Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`, position);
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value !== 'object' || value === null || ancestors.has(value)) fail(position);
+  if (typeof value !== 'object') fail('Schema contains a value that is not JSON', position);
+  if (ancestors.has(value)) fail('Schema contains a circular reference', position);
   ancestors.add(value);
   const result = Array.isArray(value)
     ? value.map(item => canonical(item, position, ancestors, depth + 1))
@@ -126,67 +138,105 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
       locations.set(path, value);
       return value;
     }
-    if (!object(value)) fail(position);
-    locations.set(path, value);
+    const schema = object(value) ? value : undefined;
+    locations.set(path, schema ?? true);
     const nodePosition = `${position}/schema[${locations.size - 1}]`;
+    if (!schema) {
+      warnings.push(`Schema is not an object at ${nodePosition}; widened to unknown`);
+      return true;
+    }
     const output: Record<string, unknown> = Object.create(null);
-    let unsupported = false;
-    for (const [key, entry] of Object.entries(value)) {
+    const reasons: string[] = [];
+    const invalid = (key: string) => reasons.push(`invalid ${JSON.stringify(key)} value`);
+    for (const [key, entry] of Object.entries(schema)) {
       const here = `${path}/${pointer(key)}`;
-      if (strings.has(key) && typeof entry !== 'string') fail(nodePosition);
-      if (booleans.has(key) && typeof entry !== 'boolean') fail(nodePosition);
-      if (bounds.has(key) && (typeof entry !== 'number' || (key === 'multipleOf' && entry <= 0))) fail(nodePosition);
-      if (counts.has(key) && !count(entry)) fail(nodePosition);
-      if (key === 'examples' && !Array.isArray(entry)) fail(nodePosition);
+      // Annotations never reach the emitted type, so a malformed one cannot widen or fail it.
       if (annotations.has(key)) continue;
-      if (!supported.has(key)) unsupported = true;
+      if (!supported.has(key)) reasons.push(`unsupported keyword ${JSON.stringify(key)}`);
+      // A keyword with a value outside its allowed shape widens this schema rather than failing
+      // the run: one sloppy tool must not stop generation for every other server.
+      if (strings.has(key) && typeof entry !== 'string') {
+        invalid(key);
+        continue;
+      }
+      if (booleans.has(key) && typeof entry !== 'boolean') {
+        invalid(key);
+        continue;
+      }
+      if (bounds.has(key) && (typeof entry !== 'number' || (key === 'multipleOf' && entry <= 0))) {
+        invalid(key);
+        continue;
+      }
+      if (counts.has(key) && !count(entry)) {
+        invalid(key);
+        continue;
+      }
       if (maps.has(key)) {
-        if (!object(entry)) fail(nodePosition);
+        if (!object(entry)) {
+          invalid(key);
+          continue;
+        }
         output[key] = Object.fromEntries(
           Object.entries(entry).map(([name, child]) => [name, visit(child, `${here}/${pointer(name)}`)]),
         );
       } else if (singles.has(key)) {
         output[key] = visit(entry, here);
       } else if (lists.has(key) || (key === 'items' && Array.isArray(entry))) {
-        if (!Array.isArray(entry) || entry.length === 0) fail(nodePosition);
+        if (!Array.isArray(entry) || entry.length === 0) {
+          invalid(key);
+          continue;
+        }
         output[key] = entry.map((child, index) => visit(child, `${here}/${index}`));
       } else if (key === 'items') {
         output[key] = visit(entry, here);
       } else if (key === '$ref') {
-        if (typeof entry !== 'string') fail(nodePosition);
+        if (typeof entry !== 'string') {
+          invalid(key);
+          continue;
+        }
         if (entry === '#' || entry.startsWith('#/')) {
           references.push(entry);
           output[key] = entry;
         } else {
-          unsupported = true;
+          reasons.push('external reference');
         }
       } else if (key === 'type') {
         const entries = Array.isArray(entry) ? entry : [entry];
-        if (!entries.length || entries.some(type => typeof type !== 'string' || !types.has(type))) fail(nodePosition);
+        if (!entries.length || entries.some(type => typeof type !== 'string' || !types.has(type))) {
+          invalid(key);
+          continue;
+        }
         output[key] = entry;
       } else if (key === 'required') {
         if (
           !Array.isArray(entry) ||
           entry.some(name => typeof name !== 'string') ||
           new Set(entry).size !== entry.length
-        )
-          fail(nodePosition);
+        ) {
+          invalid(key);
+          continue;
+        }
         output[key] = entry;
       } else if (key === 'enum') {
-        if (!Array.isArray(entry) || entry.length === 0) fail(nodePosition);
+        if (!Array.isArray(entry) || entry.length === 0) {
+          invalid(key);
+          continue;
+        }
         output[key] = entry;
       } else if (key === 'minItems' || key === 'maxItems') {
-        if (!count(entry)) fail(nodePosition);
-        if (entry > 100) unsupported = true;
+        if (!count(entry)) {
+          invalid(key);
+          continue;
+        }
+        if (entry > 100) reasons.push(`${JSON.stringify(key)} bound above 100`);
         output[key] = entry;
       } else if (key === 'const') {
         output[key] = entry;
       }
     }
-    if (typeof value.minItems === 'number' && typeof value.maxItems === 'number' && value.minItems > value.maxItems)
-      fail(nodePosition);
-    if (unsupported) {
-      warnings.push(`Unsupported schema widened to unknown at ${nodePosition}`);
+    if (reasons.length) {
+      const reason = reasons.join('; ');
+      warnings.push(`${reason.charAt(0).toUpperCase()}${reason.slice(1)} at ${nodePosition}; widened to unknown`);
       // Keep reference targets even when their containing schema cannot be represented.
       return { ...output, tsType: 'unknown' };
     }
@@ -199,16 +249,18 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
     try {
       target = decodeURIComponent(ref.slice(1));
     } catch {
-      fail(position);
+      fail('Local reference is not a valid URI fragment', position);
     }
-    if (!locations.has(target) || /~(?![01])/u.test(target)) fail(position);
+    if (!locations.has(target) || /~(?![01])/u.test(target))
+      fail(`Unresolved local reference ${JSON.stringify(ref)}`, position);
   }
   // Reference/combinator-only cycles emit illegal aliases such as type X = X.
   // Properties and array items guard recursion and may refer back to their container.
   const active = new Set<string>();
   const complete = new Set<string>();
   function checkCycle(path: string, depth = 0): void {
-    if (active.has(path) || depth > MAX_JSON_SCHEMA_DEPTH) fail(position);
+    if (depth > MAX_JSON_SCHEMA_DEPTH) fail(`Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`, position);
+    if (active.has(path)) fail('Unresolvable recursive schema', position);
     if (complete.has(path)) return;
     active.add(path);
     const schema = locations.get(path);
@@ -245,7 +297,7 @@ export async function generateToolTypes(
   const declarations: string[] = [];
   const servers: string[] = [];
   const warnings: string[] = [];
-  const serverNames = new Set<string>();
+  const serverNames = new Map<string, string>();
   const flatNames = new Set<string>();
   let schemaIndex = 0;
   const budget = { values: 0 };
@@ -271,7 +323,7 @@ export async function generateToolTypes(
     }
     const { error, limit } = jsonSchemaComplexity(raw);
     // Depth is a structural violation, not merely an expensive schema: keep failing it.
-    if (limit === 'depth') fail(position);
+    if (limit === 'depth') fail(`Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`, position);
     if (error) return widen(name, position, error);
     const schema = prepare(raw, position, warnings);
     if (typeof schema === 'boolean') {
@@ -294,7 +346,9 @@ export async function generateToolTypes(
           }),
         );
       } catch {
-        throw new Error(`Schema conversion failed at ${position}`);
+        // The converter is a black box: anything it refuses is a portion we cannot represent, and
+        // one such tool must not stop generation for every other server.
+        return widen(name, position, 'Schema conversion failed');
       }
     }
     return name;
@@ -302,20 +356,24 @@ export async function generateToolTypes(
 
   for (const server of Object.keys(catalog).sort()) {
     const serverName = identifier(server);
-    if (serverNames.has(serverName)) throw new Error('Server interface name collision');
-    serverNames.add(serverName);
+    const collision = serverNames.get(serverName);
+    if (collision !== undefined)
+      throw new TypegenError(
+        `Server interface name collision between ${JSON.stringify(collision)} and ${JSON.stringify(server)}`,
+      );
+    serverNames.set(serverName, server);
     const tools: string[] = [];
     for (const tool of Object.keys(catalog[server]!).sort()) {
       const flat = `${server}_${tool}`;
-      if (flatNames.has(flat)) throw new Error('Flattened tool name collision');
+      if (flatNames.has(flat)) throw new TypegenError(`Flattened tool name collision for ${JSON.stringify(flat)}`);
       flatNames.add(flat);
       const definition = catalog[server]![tool]!;
-      const position = `server[${servers.length}]/tool[${tools.length}]`;
-      const input = await convert(definition.inputSchema, `${position}/input`);
+      const position = `server ${JSON.stringify(server)} tool ${JSON.stringify(tool)}`;
+      const input = await convert(definition.inputSchema, `${position} input`);
       const output =
         definition.outputSchema === undefined
           ? 'unknown'
-          : await convert(definition.outputSchema, `${position}/output`);
+          : await convert(definition.outputSchema, `${position} output`);
       tools.push(`    ${JSON.stringify(tool)}: { input: ${input}; output: ${output} };`);
     }
     declarations.push(`export interface ${serverName} {\n  tools: {\n${tools.join('\n')}\n  };\n}\n`);

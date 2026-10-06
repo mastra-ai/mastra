@@ -256,7 +256,7 @@ describe('client-file generation', () => {
     }
   });
 
-  it('deduplicates same-id cached aliases using the original metadata', async () => {
+  it('replaces a same-id cached instance when the requested typegen output differs', async () => {
     await client(
       'client.ts',
       'original.ts',
@@ -265,9 +265,35 @@ describe('client-file generation', () => {
     );
     const result = await launch(['generate', 'client.ts']).done;
     expect(result.code, result.output).toBe(0);
-    expect(result.output).toContain('Generated 1');
+    // The cached instance must not silently keep the first output file: both declared clients are
+    // exported with `typegen`, so both are generated.
+    expect(result.output).toContain('Generated 2');
     expect(await readdir(directory)).toContain('original.ts');
-    expect(await readdir(directory)).not.toContain('ignored.ts');
+    expect(await readdir(directory)).toContain('ignored.ts');
+  });
+
+  it('names the failing client file and the discovery servers instead of one generic message', async () => {
+    await writeFile(
+      join(directory, 'plain.ts'),
+      `import {MCPClient} from '@mastra/mcp';\nexport const plain = new MCPClient({id:'plain.ts',servers:{}});`,
+    );
+    const noClient = await launch(['generate', 'plain.ts']).done;
+    expect(noClient.code).not.toBe(0);
+    expect(noClient.output).toContain('has no exported typegen-enabled MCPClient');
+
+    await client('one.ts', 'shared.ts', stdio());
+    await client('two.ts', 'shared.ts', stdio());
+    const collision = await launch(['generate', 'one.ts', 'two.ts']).done;
+    expect(collision.code).not.toBe(0);
+    expect(collision.output).toContain('Multiple clients target the same output file');
+
+    await writeFile(join(directory, 'mode'), 'fail');
+    await client('one.ts', 'shared.ts', stdio());
+    const failed = await launch(['generate', 'one.ts']).done;
+    expect(failed.code).not.toBe(0);
+    expect(failed.output).toContain('MCP discovery failed for "weather"');
+    // Discovery details can carry credentials, so only the server name is printed.
+    expect(failed.output).not.toContain('SENTINEL_SERVER_SECRET');
   });
 
   it('handles SIGTERM during discovery without orphaning stdio children', async () => {
@@ -290,7 +316,8 @@ describe('transfer bounds', () => {
   it('widens an oversized schema before the definitions are transferred', () => {
     const wide = { type: 'object', examples: Array.from({ length: MAX_SCHEMA_VALUES }, () => true) };
     const result = boundTransfer(catalog(wide));
-    expect(result.widened).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('at server "weather" tool "measure" input');
     expect(result.catalog.weather!.measure!.inputSchema).toBe(true);
     expect(() => structuredClone(result.catalog)).not.toThrow();
   });
@@ -320,7 +347,7 @@ describe('transfer bounds', () => {
     });
     const result = boundTransfer(catalog({ type: 'object', examples: values }));
     expect(() => structuredClone(result.catalog)).not.toThrow();
-    expect(result.widened).toBe(1);
+    expect(result.warnings).toHaveLength(1);
     expect(result.catalog.weather!.measure!.inputSchema).toBe(true);
   });
 });

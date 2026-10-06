@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
 import { MAX_CATALOG_VALUES, MAX_JSON_SCHEMA_NODES, MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
-import { generateToolTypes } from './typegen';
+import { generateToolTypes, TypegenError } from './typegen';
 
 vi.mock('json-schema-to-typescript', async importOriginal => {
   const original = await importOriginal<typeof import('json-schema-to-typescript')>();
@@ -320,17 +320,42 @@ describe('concrete MCP schema generation', () => {
     null,
     [],
     { type: 'INVALID' },
+    { type: 'any' },
     { properties: [] },
     { required: [1] },
-    { items: 1 },
+    { required: ['a', 'a'] },
     { enum: [] },
     { minItems: -1 },
     { minItems: 2, maxItems: 1 },
-    { $ref: '#/missing' },
-    { $ref: '#' },
-    { definitions: { x: { $ref: '#/definitions/y' }, y: { $ref: '#/definitions/x' } }, $ref: '#/definitions/x' },
-  ])('rejects malformed or unresolved schema %#', async schema => {
-    await expect(generateToolTypes(catalog(schema))).rejects.toThrow(/schema/i);
+    { exclusiveMinimum: true },
+  ])('widens an unusable schema instead of failing the whole run %#', async schema => {
+    const result = await generateToolTypes(catalog(schema));
+    expect(result.warnings).toHaveLength(1);
+    // A widened schema has to name its tool, otherwise the user cannot act on the warning.
+    expect(result.warnings[0]).toContain('server "test" tool "tool" input');
+    check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
+  });
+
+  it.each([{ deprecated: 'yes' }, { description: 1 }, { examples: {} }])(
+    'ignores a malformed annotation without failing or widening %#',
+    async schema => {
+      // Annotations never reach the emitted type, so a malformed one costs the run nothing.
+      const result = await generateToolTypes(catalog(schema));
+      expect(result.warnings).toEqual([]);
+      check(result.source);
+    },
+  );
+
+  it.each([
+    [{ $ref: '#/missing' }, /^Unresolved local reference "#\/missing" at server "test" tool "tool" input$/],
+    [{ $ref: '#' }, /^Unresolvable recursive schema at server "test" tool "tool" input$/],
+    [
+      { definitions: { x: { $ref: '#/definitions/y' }, y: { $ref: '#/definitions/x' } }, $ref: '#/definitions/x' },
+      /^Unresolvable recursive schema at /,
+    ],
+  ])('fails only on a structural schema problem %#', async (schema, expected) => {
+    await expect(generateToolTypes(catalog(schema))).rejects.toThrow(TypegenError);
+    await expect(generateToolTypes(catalog(schema))).rejects.toThrow(expected);
   });
 
   it('never reads reachable external files or servers and explicitly disables resolvers', async () => {
@@ -367,25 +392,42 @@ describe('concrete MCP schema generation', () => {
     }
   });
 
-  it('propagates conversion failure with no source or secret-bearing diagnostics', async () => {
+  it('degrades a converter failure to unknown without leaking converter text', async () => {
     vi.mocked(compile).mockRejectedValueOnce(new Error('SECRET converter detail'));
-    await expect(generateToolTypes(catalog({ type: 'string' }))).rejects.toThrow(
-      'Schema conversion failed at server[0]/tool[0]/input',
-    );
-    const result = await generateToolTypes(
+    const result = await generateToolTypes(catalog({ type: 'string' }));
+    // The converter is a black box, so a tool it refuses degrades to `unknown` and is reported
+    // instead of failing generation for every other server.
+    expect(result.warnings).toEqual([
+      'Schema conversion failed at server "test" tool "tool" input; widened to unknown',
+    ]);
+    expect(JSON.stringify(result)).not.toContain('SECRET');
+    check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
+    const orphaned = await generateToolTypes(
       catalog({ type: 'object', properties: { SECRET: { unsupported: 'SECRET' } } }),
     );
-    expect(result.warnings.join()).not.toContain('SECRET');
-    check(result.source);
-    await expect(
-      generateToolTypes(catalog({ type: 'object', properties: { SECRET: { type: 'INVALID' } } })),
-    ).rejects.toThrow(/^Invalid or unsupported recursive schema at server\[0\]\/tool\[0\]\/input\/schema\[1\]$/);
+    expect(orphaned.warnings.join()).not.toContain('SECRET');
+    check(orphaned.source);
+    // An invalid keyword widens the tool rather than failing it, and still leaks no value.
+    const widened = await generateToolTypes(catalog({ type: 'object', properties: { SECRET: { type: 'INVALID' } } }));
+    expect(widened.warnings).toHaveLength(1);
+    expect(widened.warnings.join()).not.toContain('SECRET');
+    check(widened.source);
   });
 
-  it.each([{ minimum: 'bad' }, { minLength: -1 }, { deprecated: 'yes' }, { description: 1 }, { examples: {} }])(
-    'rejects malformed unsupported keywords %#',
+  it('widens a nested schema in place when a schema-valued keyword is not a schema', async () => {
+    const result = await generateToolTypes(catalog({ type: 'array', items: 1 }));
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('Schema is not an object at server "test" tool "tool" input');
+    check(result.source, assertions + 'type A = Assert<Equal<Input,unknown[]>>;');
+  });
+
+  it.each([{ minimum: 'bad' }, { minLength: -1 }])(
+    'widens a keyword whose value is outside its allowed shape %#',
     async schema => {
-      await expect(generateToolTypes(catalog(schema))).rejects.toThrow(/schema/i);
+      const result = await generateToolTypes(catalog(schema));
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toMatch(/^Invalid "[a-zA-Z]+" value at server "test" tool "tool" input/);
+      check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
     },
   );
 

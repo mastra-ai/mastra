@@ -121,7 +121,7 @@ Tools can be absent, and execution can return a protocol envelope, validation er
 
 Pass multiple explicit client files to generate several outputs. Export clients directly as named or default exports, use different output paths, and give independent clients distinct IDs when their server configurations match. Input and output paths resolve from the command's working directory. Repeated exports of the same client are processed once.
 
-Discovery or conversion failures leave existing files unchanged. File replacement is atomic per file, not across the whole set. Regenerate when server schemas change, using equivalent permissions. Before generation, provide credentials and load any environment files yourself. Importing a client executes its module and transitive imports, so choose files without application startup side effects. Interactive authentication isn't part of the command.
+Discovery failures leave existing files unchanged, as does a schema problem generation can't work around, such as a reference cycle, excessive depth, or an unresolved local reference. File replacement is atomic per file, not across the whole set. Regenerate when server schemas change, using equivalent permissions. Before generation, provide credentials and load any environment files yourself. Importing a client executes its module and transitive imports, so choose files without application startup side effects. Interactive authentication isn't part of the command.
 
 See [type generation reference](/reference/tools/mcp-client#generate-client-types) for export selection, instance caching, schema limitations, and failure handling.
 

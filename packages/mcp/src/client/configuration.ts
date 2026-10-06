@@ -170,7 +170,10 @@ export class MCPClient<
       this.id = args.id;
       const cached = cachedClient<TServers>(this.id);
 
-      if (cached && !equal(cached.serverConfigs, args.servers)) {
+      // `typegen` belongs to the cache identity: an instance must never silently drop or ignore
+      // the output file a caller asked for, so a mismatch replaces the instance the same way a
+      // server configuration change does.
+      if (cached && (!equal(cached.serverConfigs, args.servers) || cached.typegen?.outFile !== args.typegen?.outFile)) {
         void cached.disconnect();
         mcpClientInstances.delete(this.id);
       }
