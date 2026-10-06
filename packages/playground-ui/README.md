@@ -33,7 +33,9 @@ import { GrainFill } from '@mastra/playground-ui/components/GrainFill';
 </div>;
 ```
 
-The fill uses CSS gradients and a shared static noise tile, so it works during server rendering and without WebGL or a theme provider. Colors follow the document's `html.light` mode and local token overrides. Keep the decorative layer one pixel inside a raised surface to preserve its inset rim; `Notice` does this automatically.
+The fill uses CSS colors and shared static masks that capture the wave and fine grain together at 2× resolution, so it works during server rendering and without WebGL or a theme provider. Colors follow the document's `html.light` mode and local token overrides. Keep the decorative layer one pixel inside a raised surface to preserve its inset rim; `Notice` does this automatically.
+
+To regenerate the masks, run `node scripts/generate-grain-masks.mjs` from the repository root. This optional authoring tool requires the playground's Playwright, Chromium, and Python Pillow. It packs Paper Shaders 0.0.81 into a temporary directory to capture the reference grain, then encodes shared monochrome WebP masks. Paper is not an application dependency or a build requirement. Set `GRAIN_CHROMIUM_PATH` when using a system Chromium installation.
 
 ### Semantic color tokens
 

@@ -30,63 +30,42 @@
 }
 
 [data-grain-tone] {
-  --grain-1: color-mix(in oklab, var(--grain-ink) 8%, var(--grain-surface));
-  --grain-2: var(--grain-surface);
-  --grain-3: color-mix(in oklab, var(--grain-surface) 75%, var(--card));
-  --grain-4: color-mix(in oklab, var(--grain-surface) 50%, var(--card));
-  --grain-5: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
-
-  --grain-origin-y: 0%;
-  --grain-noise-opacity: 0.06;
+  --grain-back: color-mix(in oklab, var(--grain-ink) 16%, var(--grain-surface));
+  --grain-mask: url('./grain-mask-dark.webp');
 
   pointer-events: none;
-  background-image: radial-gradient(
-    ellipse 100% 150% at 0% var(--grain-origin-y),
-    var(--grain-1),
-    var(--grain-2) 25%,
-    var(--grain-3) 45%,
-    var(--grain-4) 65%,
-    var(--grain-5) 85%,
-    var(--card)
-  );
-  background-repeat: no-repeat;
-  background-size: var(--grain-width) max(var(--grain-height), 100%);
+  background-color: var(--card);
 }
 
-/* A shared 64px raster tile avoids live SVG filters, canvases and GPU contexts.
- * It contains deterministic white alpha noise (seed 2166); CSS supplies the ink.
- * The gradient fades the flecks with the glow, leaving the far edge neutral. */
+/* The mask carries the wave and its fine grain together, rather than tiling
+ * bright flecks over a gradient. It is baked at 2x; colors stay live CSS tokens.
+ * No drawing context, animation, image cache or SVG filter runs in the app. */
 [data-grain-tone]::after {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(to right, var(--grain-ink), transparent);
-  background-size: var(--grain-width) 100%;
-  background-repeat: no-repeat;
-  mask-image: url('./grain-noise.png');
-  mask-size: 64px 64px;
-  opacity: var(--grain-noise-opacity);
+  border-radius: inherit;
+  background-color: var(--grain-back);
+  mask-image: var(--grain-mask);
+  mask-mode: luminance;
+  mask-size: var(--grain-width) max(var(--grain-height), 100%);
+  mask-repeat: no-repeat;
 }
 
 [data-grain-tone='color'] {
-  --grain-origin-y: 24%;
+  --grain-mask: url('./grain-mask-dark-color.webp');
 }
 
 html.light [data-grain-tone] {
-  --grain-noise-opacity: 0.035;
-  --grain-1: color-mix(in oklab, var(--grain-surface) 55%, var(--card));
-  --grain-2: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
-  --grain-3: var(--card);
-  --grain-4: var(--card);
-  --grain-5: var(--card);
+  --grain-back: var(--grain-surface);
+  --grain-mask: url('./grain-mask-light.webp');
 }
 
 html.light [data-grain-tone='color'] {
   --grain-surface: color-mix(in oklab, var(--grain-ink) 18%, var(--card));
+  --grain-mask: url('./grain-mask-light-color.webp');
 }
 
 html.light [data-grain-tone='info'] {
-  --grain-1: color-mix(in oklab, var(--grain-surface) 75%, var(--card));
-  --grain-2: color-mix(in oklab, var(--grain-surface) 50%, var(--card));
-  --grain-3: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
+  --grain-mask: url('./grain-mask-light-info.webp');
 }
