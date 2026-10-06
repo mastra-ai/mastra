@@ -1,10 +1,12 @@
-import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
+import type { KnowledgeScope, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
+import { getGovernedKnowledge } from './knowledge-tools';
+import type { GovernedKnowledgeReader } from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
@@ -54,7 +56,7 @@ const REMINDER_QUERY_STOP_WORDS = new Set([
 ]);
 
 async function findReminderSources(
-  store: KnowledgeStorage,
+  store: GovernedKnowledgeReader,
   scope: KnowledgeScope,
   observations: string,
 ): Promise<SearchKnowledgeResult[]> {
@@ -76,7 +78,7 @@ async function findReminderSources(
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
 async function dropFreshOwnRecords(
-  store: KnowledgeStorage,
+  store: GovernedKnowledgeReader,
   sources: SearchKnowledgeResult[],
   threadId: string,
 ): Promise<SearchKnowledgeResult[]> {
@@ -106,13 +108,13 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) return;
 
         let scope: KnowledgeScope | undefined;
-        let store: KnowledgeStorage | undefined;
+        let store: GovernedKnowledgeReader | undefined;
         try {
           scope = resolveScope(context);
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
-          store = await context.memory.getKnowledgeStore();
+          store = getGovernedKnowledge(context.memory);
           const sources = await dropFreshOwnRecords(
             store,
             await findReminderSources(store, scope, context.rawObservations),
