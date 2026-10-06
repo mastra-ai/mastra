@@ -120,9 +120,8 @@ export function listIssueTypesTool(proxy: PlatformProxy) {
 
       const response = await platformProxy.get(config);
 
-      const issueTypes = input.projectId
-        ? z.object({ values: z.array(IssueTypeSchema) }).parse(response.data).values
-        : z.array(IssueTypeSchema).parse(response.data);
+      // Both endpoints return a plain array of issue types.
+      const issueTypes = z.array(IssueTypeSchema).parse(response.data);
 
       return {
         issueTypes: issueTypes.map(issueType => ({
