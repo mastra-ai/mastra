@@ -196,6 +196,9 @@ function assertImportRunTransition(
 }
 
 // Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+/** Cursor collection from v1 Knowledge; only an explicit reset removes it. */
+const RETIRED_KNOWLEDGE_CURSOR_COLLECTION = 'mastra_knowledge_cursors';
+
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
@@ -337,6 +340,17 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       ).findOne({ id: 'global' }, { ...sessionOptions(session) });
       return operation(session);
     });
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    for (const name of [RETIRED_KNOWLEDGE_CURSOR_COLLECTION, ...KnowledgeMongoDB.MANAGED_COLLECTIONS]) {
+      try {
+        await (await this.#collection(name)).drop();
+      } catch (error) {
+        if (!(error instanceof MongoServerError && error.codeName === 'NamespaceNotFound')) throw error;
+      }
+    }
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {
