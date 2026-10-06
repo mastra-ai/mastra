@@ -539,6 +539,36 @@ describe('goal step concurrent objective changes', () => {
     expect(stepResult.isContinued).toBe(false);
   });
 
+  it('does not overwrite a replacement that reuses the same id and objective', async () => {
+    const original = makeRecord({ id: 'g1', startedAt: 1 });
+    const replacement = { ...original, startedAt: 2 };
+    const { record } = await runGoalStep('done', original, {
+      mutateDuringJudge: states => states.set(key, replacement),
+    });
+
+    expect(record).toEqual(replacement);
+  });
+
+  it('continues when maxRuns is raised past the budget while the judge runs', async () => {
+    const { record, stepResult, chunk } = await runGoalStep('continue', makeRecord({ id: 'g1', runsUsed: 9 }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 20 }),
+    });
+
+    expect(record.status).toBe('active');
+    expect(record.runsUsed).toBe(10);
+    expect(stepResult.isContinued).toBe(true);
+    expect(chunk.payload.maxRuns).toBe(20);
+  });
+
+  it('pauses when maxRuns is lowered to the budget while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1', runsUsed: 2 }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 3 }),
+    });
+
+    expect(record.status).toBe('paused');
+    expect(stepResult.isContinued).toBe(false);
+  });
+
   it('keeps option changes made while the judge runs', async () => {
     const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
       mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 20 }),

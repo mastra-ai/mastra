@@ -199,12 +199,13 @@ export async function evaluateGoal(deps: {
     return { evaluated: false };
   }
 
-  const effective = resolveEffectiveGoalSettings(record, {
+  const agentGoalSettings = {
     judgeModelId: typeof goal.judge === 'string' ? goal.judge : undefined,
     maxRuns: goal.maxRuns,
     prompt: goal.prompt,
     maxSteps: goal.maxSteps,
-  });
+  };
+  const effective = resolveEffectiveGoalSettings(record, agentGoalSettings);
 
   // Budget guard. A `waiting` verdict deliberately keeps the record `active`
   // so the next user turn is still judged, which leaves an active objective
@@ -505,15 +506,33 @@ export async function evaluateGoal(deps: {
     !result.complete &&
     result.scorers.some(s => s.scorerId === GOAL_SCORER_ID && s.score === GOAL_SCORE_WAITING);
 
+  // The judge can take a while; the user may have paused, cleared, or replaced
+  // the objective meanwhile. Writing back the stale `record` would undo that,
+  // so discard the verdict unless the same objective is still active.
+  // `startedAt` is reset by every setObjective, so it also catches a
+  // replacement that reuses the same id and objective text.
+  const current = await readObjective(store, threadId);
+  if (
+    !current ||
+    current.status !== 'active' ||
+    current.id !== record.id ||
+    current.objective !== record.objective ||
+    current.startedAt !== record.startedAt
+  ) {
+    return { evaluated: true, kind: 'superseded', shouldContinue: false };
+  }
+  // Options (e.g. maxRuns) may have been updated during judging; honour them.
+  const { maxRuns } = resolveEffectiveGoalSettings(current, agentGoalSettings);
+
   // Increment runs and update status. Precedence: judge failure → paused;
   // complete → done; budget exhausted → paused. A "waiting" decision does
   // NOT change the persisted status — the record stays `active` so the next
   // agent turn is still judged; only `isContinued` is set to false (below)
   // to stop the auto-loop and give the user a chance to provide input.
   // A failed judge produced no verdict, so it does not consume the run budget.
-  const runsUsed = judgeFailed ? record.runsUsed : record.runsUsed + 1;
-  const maxRunsReached = runsUsed >= effective.maxRuns;
-  let status: GoalObjectiveRecord['status'] = record.status;
+  const runsUsed = judgeFailed ? current.runsUsed : current.runsUsed + 1;
+  const maxRunsReached = runsUsed >= maxRuns;
+  let status: GoalObjectiveRecord['status'] = current.status;
   let pausedReason: string | undefined;
   if (judgeFailed) {
     status = 'paused';
@@ -525,15 +544,7 @@ export async function evaluateGoal(deps: {
     // of leaving it `active` but stuck. Raising maxRuns + setting status
     // back to `active` (updateObjectiveOptions) resumes evaluation.
     status = 'paused';
-    pausedReason = formatGoalBudgetPausedReason(effective.maxRuns);
-  }
-
-  // The judge can take a while; the user may have paused, cleared, or replaced
-  // the objective meanwhile. Writing back the stale `record` would undo that,
-  // so discard the verdict unless the same objective is still active.
-  const current = await readObjective(store, threadId);
-  if (!current || current.status !== 'active' || current.id !== record.id || current.objective !== record.objective) {
-    return { evaluated: true, kind: 'superseded', shouldContinue: false };
+    pausedReason = formatGoalBudgetPausedReason(maxRuns);
   }
 
   const updated: GoalObjectiveRecord = {
@@ -556,7 +567,7 @@ export async function evaluateGoal(deps: {
   const goalEvaluationPayload = {
     objective: record.objective,
     iteration: runsUsed,
-    maxRuns: effective.maxRuns,
+    maxRuns: maxRuns,
     passed: result.complete,
     status,
     pausedReason,
@@ -591,8 +602,8 @@ export async function evaluateGoal(deps: {
   });
   const feedback = result.completionReason ?? 'The goal is not yet complete.';
   const continuation = shouldContinue
-    ? `[Goal attempt ${runsUsed}/${effective.maxRuns}] The goal is not yet complete. Judge feedback: ${feedback}\n\nContinue working toward the goal: ${record.objective}`
-    : `${status} (${runsUsed}/${effective.maxRuns})\n${goalEvaluationPayload.reason ?? ''}`;
+    ? `[Goal attempt ${runsUsed}/${maxRuns}] The goal is not yet complete. Judge feedback: ${feedback}\n\nContinue working toward the goal: ${record.objective}`
+    : `${status} (${runsUsed}/${maxRuns})\n${goalEvaluationPayload.reason ?? ''}`;
   try {
     await sendSignal({
       type: 'system-reminder',
