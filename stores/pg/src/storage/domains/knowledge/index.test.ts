@@ -140,6 +140,26 @@ describe('KnowledgePG schema completion marker', () => {
     expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
     await new KnowledgePG({ pool, schemaName }).init();
   });
+
+  it('refuses to reset when unrelated objects depend on Knowledge tables', async () => {
+    const schemaName = `knowledge_reset_dependent_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const store = new KnowledgePG({ pool, schemaName });
+    await store.init();
+    await pool.query(
+      `CREATE VIEW "${schemaName}".unrelated_report AS SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`,
+    );
+
+    await expect(store.dangerouslyReset()).rejects.toThrow();
+
+    const views = await pool.query(`SELECT table_name FROM information_schema.views WHERE table_schema = $1`, [
+      schemaName,
+    ]);
+    expect(views.rows.map(row => row.table_name)).toEqual(['unrelated_report']);
+    const marker = await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
+    expect(marker.rows.map(row => row.id)).toEqual(['canonical']);
+  });
 });
 
 describe('PostgreSQL knowledge SQL normalization', () => {
