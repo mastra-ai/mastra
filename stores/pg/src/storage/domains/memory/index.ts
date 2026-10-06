@@ -14,7 +14,6 @@ import {
   createStorageErrorId,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
-  getObservationalMemoryGeneration0Id,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
@@ -2512,8 +2511,9 @@ export class MemoryPG extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
-      // Deterministic generation-0 id: concurrent initializations of a key insert the same id.
-      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      // Never reused: a write addressed to a cleared record must not land on its successor.
+      // The lookup-key lock below keeps concurrent initializers to one record.
+      const id = crypto.randomUUID();
       const now = new Date();
 
       const record: ObservationalMemoryRecord = {

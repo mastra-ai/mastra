@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -13,7 +15,6 @@ import {
   normalizePerPage,
   validateStorageMetadataFilter,
   createStorageErrorId,
-  getObservationalMemoryGeneration0Id,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
@@ -63,6 +64,8 @@ const OM_HEAD_ORDER = `${quoteIdentifier('generationCount', 'column name')} DESC
 const OM_MAX_HEAD_HOPS = 3;
 /** Attempts for an OM transaction that hits a deadlock or lock-wait timeout. */
 const OM_MAX_TRANSACTION_ATTEMPTS = 3;
+/** How long initialization waits for the per-key `GET_LOCK` before failing. */
+const OM_INIT_LOCK_TIMEOUT_SECONDS = 30;
 
 /** ER_LOCK_DEADLOCK (1213) or ER_LOCK_WAIT_TIMEOUT (1205): the transaction was rolled back and can be retried. */
 function isRetryableLockError(error: unknown): boolean {
@@ -1963,9 +1966,8 @@ export class MemoryMySQL extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
-      // Deterministic generation-0 id: concurrent initializations of a key insert the same row,
-      // and the primary key turns every insert after the first into a no-op.
-      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      // Never reused: a write addressed to a cleared record must not land on its successor.
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
 
       const existing = await this.getObservationalMemory(input.threadId, input.resourceId);
@@ -2003,33 +2005,58 @@ export class MemoryMySQL extends MemoryStorage {
         .join(', ');
       const placeholders = Array.from({ length: 25 }, () => '?').join(', ');
 
-      await this.pool.execute(`INSERT IGNORE INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
-        id,
-        lookupKey,
-        input.scope,
-        input.resourceId,
-        input.threadId || null,
-        '',
-        null,
-        'initial',
-        JSON.stringify(input.config),
-        0,
-        null,
-        null,
-        0,
-        0,
-        0,
-        false,
-        false,
-        false,
-        false,
-        0,
-        null,
-        input.observedTimezone || null,
-        nowSql,
-        nowSql,
-        null,
-      ]);
+      // A named lock keeps concurrent initializers (any process) to one record: each re-checks
+      // for a live record while holding it, and the insert commits before it is released.
+      const lockName = `mastra_om_init:${createHash('sha256').update(lookupKey).digest('hex').slice(0, 40)}`;
+      const connection = await this.pool.getConnection();
+      try {
+        const [lockRows] = await connection.query<RowDataPacket[]>('SELECT GET_LOCK(?, ?) AS acquired', [
+          lockName,
+          OM_INIT_LOCK_TIMEOUT_SECONDS,
+        ]);
+        if (Number(lockRows[0]?.acquired) !== 1) {
+          throw new Error(`Timed out waiting for the observational memory initialization lock for ${lookupKey}`);
+        }
+        try {
+          const [liveRows] = await connection.query<RowDataPacket[]>(
+            `SELECT 1 FROM ${OM_TABLE_QUOTED} WHERE ${omCol('lookupKey')} = ? AND ${omCol('supersededBy')} IS NULL LIMIT 1`,
+            [lookupKey],
+          );
+          if (liveRows.length === 0) {
+            await connection.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
+              id,
+              lookupKey,
+              input.scope,
+              input.resourceId,
+              input.threadId || null,
+              '',
+              null,
+              'initial',
+              JSON.stringify(input.config),
+              0,
+              null,
+              null,
+              0,
+              0,
+              0,
+              false,
+              false,
+              false,
+              false,
+              0,
+              null,
+              input.observedTimezone || null,
+              nowSql,
+              nowSql,
+              null,
+            ]);
+          }
+        } finally {
+          await connection.query('SELECT RELEASE_LOCK(?)', [lockName]);
+        }
+      } finally {
+        connection.release();
+      }
 
       // Whoever inserted first (this call or a concurrent one), the head is now the answer.
       const head = await this.getObservationalMemory(input.threadId, input.resourceId);

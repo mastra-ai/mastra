@@ -10,7 +10,6 @@ import {
   TABLE_THREADS,
   calculatePagination,
   createStorageErrorId,
-  getObservationalMemoryGeneration0Id,
   normalizePerPage,
   safelyParseJSON,
   storageMessageMatchesMetadataFilter,
@@ -944,8 +943,9 @@ export class MemoryConvex extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     const now = new Date();
     const lookupKey = this.getOMKey(input.threadId, input.resourceId);
-    // Deterministic generation-0 id; the server inserts it only when the key has no record.
-    const id = getObservationalMemoryGeneration0Id(lookupKey);
+    // Never reused: a write addressed to a cleared record must not land on its successor. The
+    // server inserts the record only when the key has no live record, else returns that one.
+    const id = crypto.randomUUID();
 
     const record: ObservationalMemoryRecord = {
       id,

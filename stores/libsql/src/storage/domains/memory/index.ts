@@ -44,7 +44,6 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   validateStorageMetadataFilter,
-  getObservationalMemoryGeneration0Id,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
@@ -2000,8 +1999,8 @@ export class MemoryLibSQL extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
-      // Deterministic generation-0 id: concurrent initializations of a key insert the same id.
-      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      // Never reused: a write addressed to a cleared record must not land on its successor.
+      const id = crypto.randomUUID();
       const now = new Date();
 
       const record: ObservationalMemoryRecord = {
@@ -2032,7 +2031,8 @@ export class MemoryLibSQL extends MemoryStorage {
       return await withClientWriteLock(this.#client, async () => {
         const existing = (await this.#readOMHeadRow(lookupKey))?.record ?? null;
         if (existing) return existing;
-        // Insert-if-absent: a concurrent initializer (any process) inserts the same id.
+        // Insert only while the key has no live record. One statement, so SQLite's database write
+        // lock makes it atomic against initializers in other processes.
         const inserted = await this.#client.execute({
           sql: `INSERT INTO "${OM_TABLE}" (
             id, "lookupKey", scope, "resourceId", "threadId",
@@ -2041,8 +2041,8 @@ export class MemoryLibSQL extends MemoryStorage {
             "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
             "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
             "observedTimezone", "createdAt", "updatedAt"
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO NOTHING`,
+          ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM "${OM_TABLE}" WHERE "lookupKey" = ? AND "supersededBy" IS NULL)`,
           args: [
             id,
             lookupKey,
@@ -2068,6 +2068,7 @@ export class MemoryLibSQL extends MemoryStorage {
             input.observedTimezone || null,
             now.toISOString(),
             now.toISOString(),
+            lookupKey,
           ],
         });
         if (inserted.rowsAffected === 1) return record;
