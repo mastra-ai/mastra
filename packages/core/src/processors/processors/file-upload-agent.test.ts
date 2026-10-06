@@ -718,28 +718,70 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         expect.objectContaining({ details: { code: FILE_UPLOAD_ERROR_CODES.NO_SANDBOX } }),
       );
     });
+  });
 
-    it.each([
-      ['the agent has no memory', { withMemory: false }, { memory: MEMORY }],
-      ['the call has no thread', { withMemory: true }, {}],
-      ['memory is read-only', { withMemory: true }, { memory: { ...MEMORY, options: { readOnly: true } } }],
-    ])('aborts a text-only turn with MEMORY_REQUIRED when %s', async (_label, harnessOptions, callOptions) => {
+  const withoutWritableMemory = [
+    ['the agent has no memory', { withMemory: false }, { memory: MEMORY }],
+    ['the call has no thread', { withMemory: true }, {}],
+    ['memory is read-only', { withMemory: true }, { memory: { ...MEMORY, options: { readOnly: true } } }],
+  ] as const;
+  const withoutUsableSandbox = (): Array<[string, WorkspaceSandbox | WorkspaceSandboxResolver]> => [
+    ['the workspace resolves no sandbox', (() => undefined) as unknown as WorkspaceSandboxResolver],
+    [
+      'resolving the sandbox throws',
+      () => {
+        throw new Error('sandbox pool exhausted');
+      },
+    ],
+    ['the sandbox cannot write files', createFakeSandbox({ writeFiles: undefined, executeCommand: undefined }).sandbox],
+  ];
+
+  // Scorers, agent networks and calls without a thread run input processors too: without a file, the processor stays out of the way.
+  describe('turns without a file', () => {
+    it.each(withoutWritableMemory)('reach the model when %s', async (_label, harnessOptions, callOptions) => {
       const { sandbox } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, {}, harnessOptions);
 
       const result = await agent.generate('No file here', callOptions);
 
-      expect(result.tripwire?.metadata).toEqual({
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED,
-      });
-      expect(prompts).toEqual([]);
+      expect(result.tripwire).toBeUndefined();
+      expect(textsIn(prompts.at(-1))).toEqual(['No file here']);
     });
 
-    it('aborts a text-only turn with NO_SANDBOX when the workspace resolves no sandbox', async () => {
-      const { agent, prompts } = createHarness((() => undefined) as unknown as WorkspaceSandboxResolver);
+    it.each(withoutUsableSandbox())('reach the model when %s', async (_label, sandbox) => {
+      const { agent, prompts } = createHarness(sandbox);
 
       const result = await agent.generate('No file here', { memory: MEMORY });
+
+      expect(result.tripwire).toBeUndefined();
+      expect(textsIn(prompts.at(-1))).toEqual(['No file here']);
+    });
+  });
+
+  describe('turns with a file', () => {
+    const withFile = () => [userMessage(text('Read this'), file(Buffer.from('a,b'), 'data.csv', 'text/csv'))];
+
+    it.each(withoutWritableMemory)(
+      'abort with MEMORY_REQUIRED, before writing anything, when %s',
+      async (_label, harnessOptions, callOptions) => {
+        const { sandbox, writes, commands } = createFakeSandbox();
+        const { agent, prompts } = createHarness(sandbox, {}, harnessOptions);
+
+        const result = await agent.generate(withFile(), callOptions);
+
+        expect(result.tripwire?.metadata).toEqual({
+          processorId: 'file-upload',
+          code: FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED,
+        });
+        expect(prompts).toEqual([]);
+        expect([...writes, ...commands]).toEqual([]);
+      },
+    );
+
+    it('abort with NO_SANDBOX when the workspace resolves no sandbox', async () => {
+      const { agent, prompts } = createHarness((() => undefined) as unknown as WorkspaceSandboxResolver);
+
+      const result = await agent.generate(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -748,12 +790,12 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(prompts).toEqual([]);
     });
 
-    it('aborts with NO_SANDBOX, keeping the cause, when resolving the sandbox throws', async () => {
+    it('abort with NO_SANDBOX, keeping the cause, when resolving the sandbox throws', async () => {
       const { agent, prompts } = createHarness(() => {
         throw new Error('sandbox pool exhausted');
       });
 
-      const result = await agent.generate('No file here', { memory: MEMORY });
+      const result = await agent.generate(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -763,11 +805,11 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(prompts).toEqual([]);
     });
 
-    it('aborts a text-only turn with NO_WRITE_CAPABILITY when the sandbox cannot write files', async () => {
+    it('abort with NO_WRITE_CAPABILITY when the sandbox cannot write files', async () => {
       const { sandbox } = createFakeSandbox({ writeFiles: undefined, executeCommand: undefined });
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate('No file here', { memory: MEMORY });
+      const result = await agent.generate(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',

@@ -4,7 +4,13 @@ import { parseMemoryRequestContext } from '../../memory/types';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import type { AnyWorkspace } from '../../workspace/workspace';
-import type { ProcessInputArgs, ProcessInputStepArgs, ProcessLLMRequestArgs, Processor } from '../index';
+import type {
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  ProcessLLMRequestArgs,
+  Processor,
+  ProcessorMessageContext,
+} from '../index';
 import { describeError, describeFile, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
 import type { FileUploadFailure, FileUploadTripwireMetadata, Result } from './file-upload-errors';
 import { selectFiles } from './file-upload-filter';
@@ -77,29 +83,24 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     this.maxFileSize = options.maxFileSize ?? (() => DEFAULT_MAX_FILE_SIZE);
   }
 
-  async processInput({
-    messageList,
-    requestContext = new RequestContext(),
-    abort,
-    abortSignal,
-  }: ProcessInputArgs<FileUploadTripwireMetadata>): Promise<MessageList> {
-    const files = newFiles(messageList);
-    const accepted = await selectFiles(files, this.filter);
-    if (!accepted.ok) return this.fail(abort, files, accepted.failure);
-    const memory = checkMemory(requestContext);
-    if (!memory.ok) return this.fail(abort, accepted.value, memory.failure);
-    const uploaded = await this.upload(accepted.value, requestContext, abortSignal);
-    if (!uploaded.ok) return this.fail(abort, accepted.value, uploaded.failure);
-    return messageList;
+  async processInput(args: ProcessInputArgs<FileUploadTripwireMetadata>): Promise<MessageList> {
+    await this.uploadNewFiles(args);
+    return args.messageList;
   }
 
   // A signal delivered to a run that is already active only shows up here, never in `processInput`.
-  async processInputStep({
+  async processInputStep(args: ProcessInputStepArgs<FileUploadTripwireMetadata>): Promise<void> {
+    await this.uploadNewFiles(args);
+  }
+
+  // Scorers, agent networks and calls without a thread run input processors too,
+  // so a turn without a file to upload is left alone: nothing is checked.
+  private async uploadNewFiles({
     messageList,
     requestContext = new RequestContext(),
     abort,
     abortSignal,
-  }: ProcessInputStepArgs<FileUploadTripwireMetadata>): Promise<void> {
+  }: ProcessorMessageContext<FileUploadTripwireMetadata>): Promise<void> {
     const files = newFiles(messageList);
     const accepted = await selectFiles(files, this.filter);
     if (!accepted.ok) return this.fail(abort, files, accepted.failure);
@@ -128,7 +129,6 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     });
   }
 
-  // The sandbox is checked even when there is nothing to upload, so a broken setup shows on the first call.
   private async upload(
     candidates: InlineFileCandidate[],
     requestContext: RequestContext,
@@ -136,7 +136,6 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
   ): Promise<Result<void>> {
     const sandbox = await resolveSandbox(this.workspace, requestContext);
     if (!sandbox.ok) return sandbox;
-    if (candidates.length === 0) return ok(undefined);
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
     if (!threadId) return memoryRequired();
     const prepared = prepareFiles(candidates, this.maxFileSize, threadId);

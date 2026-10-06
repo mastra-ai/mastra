@@ -11,7 +11,7 @@ The `FileUploadProcessor` uploads files attached to user messages to a [workspac
 
 A file that the filter accepts never reaches the model. When the processor can't upload it, the processor stops the turn instead of letting the file through.
 
-The processor requires an agent with [memory](/docs/memory/overview) and a thread. The replaced message is what gets stored, which is why the same file isn't uploaded again on the next turn.
+To upload a file, the processor requires an agent with [memory](/docs/memory/overview) and a thread that isn't read-only. The replaced message is what gets stored, which is why the same file isn't uploaded again on the next turn. A turn without a file needs neither.
 
 ## Usage example
 
@@ -125,7 +125,7 @@ if (result.tripwire?.processorId === 'file-upload') {
     name: 'processInput',
     type: '(args: ProcessInputArgs) => Promise<MessageList>',
     description:
-      'Runs once per call. Checks memory and the sandbox, then uploads the files of the new messages. Handles `agent.generate()`, `agent.stream()`, and a signal that wakes an idle agent.',
+      'Runs once per call. Uploads the files of the new messages. Handles `agent.generate()`, `agent.stream()`, and a signal that wakes an idle agent.',
     isOptional: false,
   },
   {
@@ -303,7 +303,7 @@ The tripwire metadata has this shape:
 
 | Code | When it happens |
 | - | - |
-| `MEMORY_REQUIRED` | The agent has no memory, the call has no thread, or memory is read-only |
+| `MEMORY_REQUIRED` | A file is sent, and the agent has no memory, the call has no thread, or memory is read-only |
 | `NO_SANDBOX` | The workspace resolved no sandbox for the request, or resolving it failed |
 | `NO_WRITE_CAPABILITY` | The sandbox has neither `writeFiles` nor `executeCommand` |
 | `INVALID_MAX_FILE_SIZE` | `maxFileSize` threw, or returned something other than a non-negative number |
@@ -313,7 +313,7 @@ The tripwire metadata has this shape:
 | `UPLOAD_FAILED` | Writing to the sandbox failed |
 | `FILE_NOT_UPLOADED` | A file of a new message that the filter accepts is still there right before the model call |
 
-`MEMORY_REQUIRED`, `NO_SANDBOX`, and `NO_WRITE_CAPABILITY` are checked at the start of every call, including calls without a file. A setup problem shows on the first call instead of the first upload.
+The processor checks nothing on a turn without a file to upload, and the turn runs as if the processor weren't there. Scorers, agent networks, and calls without a thread run input processors too, and keep working. A workspace without any sandbox is still caught when the processor is created. A sandbox resolver that fails shows on the first upload.
 
 All the files of a turn are checked before the first write. One file that fails stops the whole turn, and nothing is uploaded.
 
