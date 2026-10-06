@@ -37,7 +37,9 @@ export function CompareExperimentsContent({
   if (error && is401UnauthorizedError(error)) {
     return (
       <>
-        <h1 className="sr-only">Compare</h1>
+        <Txt as="h1" variant="heading" className="sr-only">
+          Compare
+        </Txt>
         <SessionExpired variant="fill" />
       </>
     );
@@ -46,7 +48,9 @@ export function CompareExperimentsContent({
   if (error && is403ForbiddenError(error)) {
     return (
       <>
-        <h1 className="sr-only">Compare</h1>
+        <Txt as="h1" variant="heading" className="sr-only">
+          Compare
+        </Txt>
         <PermissionDenied variant="fill" resource="experiments" />
       </>
     );
@@ -55,7 +59,9 @@ export function CompareExperimentsContent({
   if (error && !is404NotFoundError(error)) {
     return (
       <>
-        <h1 className="sr-only">Compare</h1>
+        <Txt as="h1" variant="heading" className="sr-only">
+          Compare
+        </Txt>
         <EmptyState
           tone="error"
           variant="fill"
@@ -70,10 +76,12 @@ export function CompareExperimentsContent({
   if (!isLoading && (error || !experimentA.data || !experimentB.data)) {
     return (
       <>
-        <h1 className="sr-only">Compare</h1>
+        <Txt as="h1" variant="heading" className="sr-only">
+          Compare
+        </Txt>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
-            <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
+            <Txt as="p">Experiments must belong to the same dataset ({datasetId}) to be compared.</Txt>
             <Txt className="mt-2 flex items-center justify-center gap-2">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />

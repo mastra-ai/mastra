@@ -11,10 +11,12 @@ export function CompareExperimentsBody() {
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
       <>
-        <h1 className="sr-only">Compare</h1>
+        <Txt as="h1" variant="heading" className="sr-only">
+          Compare
+        </Txt>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
-            <p>Select two experiments to compare.</p>
+            <Txt as="p">Select two experiments to compare.</Txt>
             <Txt className="mt-2">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
