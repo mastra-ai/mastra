@@ -116,6 +116,7 @@ describe('direct observation curation', () => {
     });
 
     expect(result.observed).toBe(true);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled(), { timeout: 3000 });
     expect(sendMessage).toHaveBeenCalledWith(
       { contents: expect.stringContaining(observation) },
       expect.objectContaining({ threadId: 'subconscious:alpha:curate' }),
