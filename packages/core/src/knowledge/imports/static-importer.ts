@@ -250,7 +250,6 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     }
     const deleted = await storage.deleteRecordBySource({
       id,
-      version: record.version,
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,
@@ -262,7 +261,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   /** Owned records whose tracked version still matches, captured before a node update. */
   async snapshotTrackedRecords(): Promise<Array<{ id: string; version: number }>> {
-    const records = await this.listKnowledge();
+    const records = await this.listRecords();
     const tracked = await Promise.all(
       records.map(async record => {
         const entry = await this.#getTrackedRecord(record.id);
@@ -316,7 +315,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async #setTrackedRecord(record: KnowledgeRecord | undefined, id = record?.id): Promise<void> {
     if (!id) return;
-    await this.#knowledge.setImportState({
+    await this.#knowledge.setImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),
@@ -396,10 +395,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   /** Writes a fetched own-source entity through ordinary binding authority; replay never duplicates records. */
   async storeCitedEntity(address: string, entity: KnowledgeCitationEntity): Promise<string> {
     const node = await this.upsertNode(address, { name: entity.name, metadata: entity.metadata });
-    const existing = await node.listKnowledge();
+    const existing = await node.listRecords();
     for (const record of entity.records ?? []) {
       const present = existing.some(item => (record.id ? item.id === record.id : item.text === record.text));
-      if (!present) existing.push(await node.appendKnowledge(record));
+      if (!present) existing.push(await node.appendRecord(record));
     }
     return node.id;
   }
@@ -557,7 +556,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     address: string,
     pending: PendingRecordTrackingRefresh | undefined,
   ): Promise<void> {
-    await this.#knowledge.setImportState({
+    await this.#knowledge.setImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: pendingRecordTrackingRefreshKey(address),

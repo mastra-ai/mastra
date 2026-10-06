@@ -60,7 +60,7 @@ async function structuralFixture() {
   });
   const memory = new Memory({ storage, knowledge });
   const { scopes } = await knowledge.reconcile();
-  const store = await knowledge.getStorage();
+  const store = await knowledge.getStorageInternal();
   const tools = createKnowledgeWriteTools(memory, {
     scopeIds: heldAddresses.map(address => scopes[address]!),
     scopeAddresses: heldAddresses,

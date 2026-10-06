@@ -117,13 +117,15 @@ describe('static Knowledge importer operations', () => {
     expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
     expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
 
-    const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
-    const edited = await knowledge.setRecordScopes({
+    const externallyEdited = await node.appendRecord({ id: 'record-edited', text: 'Importer-owned before edit' });
+    const edited = await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({
       id: externallyEdited.id,
       version: externallyEdited.version,
       scopeIds: [projectScopeId],
     });
-    expect(await node.removeKnowledge(edited.id)).toBeNull();
+    expect(await node.removeRecord(edited.id)).toBeNull();
     expect(await knowledge.getRecordInternal({ id: edited.id })).toEqual(edited);
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id })).toContainEqual(
       expect.objectContaining({
@@ -138,9 +140,11 @@ describe('static Knowledge importer operations', () => {
   it('keeps record ownership across importer-owned node updates without claiming external edits', async () => {
     const { knowledge, operations, projectScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
-    const owned = await node.appendKnowledge({ id: 'record-owned', text: 'Revision one' });
-    const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
-    const edited = await knowledge.setRecordScopes({
+    const owned = await node.appendRecord({ id: 'record-owned', text: 'Revision one' });
+    const externallyEdited = await node.appendRecord({ id: 'record-edited', text: 'Importer-owned before edit' });
+    const edited = await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({
       id: externallyEdited.id,
       version: externallyEdited.version,
       scopeIds: [projectScopeId],
@@ -148,24 +152,24 @@ describe('static Knowledge importer operations', () => {
 
     const updated = await operations.upsertNode('event:42', { name: 'Planning updated' });
 
-    expect(await updated.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
+    expect(await updated.removeRecord(owned.id)).toMatchObject({ id: owned.id });
     expect(await knowledge.getRecordInternal({ id: owned.id, includeDeleted: true })).toBeNull();
-    expect(await updated.removeKnowledge(edited.id)).toBeNull();
+    expect(await updated.removeRecord(edited.id)).toBeNull();
     expect(await knowledge.getRecordInternal({ id: edited.id })).toMatchObject({ id: edited.id });
   });
 
   it('recovers record ownership when a run is interrupted after a committed node update', async () => {
     const { knowledge, operations, run, projectScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
-    const owned = await node.appendKnowledge({ id: 'record-owned', text: 'Revision one' });
+    const owned = await node.appendRecord({ id: 'record-owned', text: 'Revision one' });
     for (let index = 0; index < 101; index++) {
       await operations.upsertNode(`event:filler-${index}`, { name: `Filler ${index}` });
       await operations.upsertNode(`event:filler-${index}`, { name: `Filler ${index} updated` });
     }
 
-    const setImportState = knowledge.setImportState.bind(knowledge);
+    const setImportState = knowledge.setImportStateInternal.bind(knowledge);
     let interrupted = false;
-    knowledge.setImportState = async input => {
+    knowledge.setImportStateInternal = async input => {
       if (!interrupted && input.key.includes('/node-version/event:42')) {
         interrupted = true;
         throw new Error('simulated interruption after node commit');
@@ -175,7 +179,7 @@ describe('static Knowledge importer operations', () => {
     await expect(operations.upsertNode('event:42', { name: 'Planning updated' })).rejects.toThrow(
       'simulated interruption after node commit',
     );
-    knowledge.setImportState = setImportState;
+    knowledge.setImportStateInternal = setImportState;
     for (let index = 0; index < 101; index++) {
       await operations.upsertNode(`event:filler-${index}`, { name: `Filler ${index} revised` });
     }
@@ -187,7 +191,7 @@ describe('static Knowledge importer operations', () => {
 
     const replayed = await operations.upsertNode('event:42', { name: 'Planning updated' });
 
-    expect(await replayed.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
+    expect(await replayed.removeRecord(owned.id)).toMatchObject({ id: owned.id });
     expect(await knowledge.getRecordInternal({ id: owned.id, includeDeleted: true })).toBeNull();
   });
 
