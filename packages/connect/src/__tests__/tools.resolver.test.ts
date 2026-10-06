@@ -4,6 +4,7 @@ import { MastraConnectError } from '../errors.js';
 import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
 import { tools as connect } from '../tools.js';
 import type { ToolsOptions as ConnectOptions } from '../tools.js';
+import { applyToolFilter } from '../toolset.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.
@@ -560,6 +561,114 @@ describe('catalog availability', () => {
     });
 
     await expect(tools()).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
+describe('top-level filter and approval defaults', () => {
+  type ApprovalTool = { requireApproval?: boolean };
+
+  function installTwoProviders() {
+    const linear = installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    // Mirror real generated providers, which apply allowTools/disallowTools
+    // inside createTools.
+    linear.createToolsSpy.mockImplementation(
+      (opts?: { allowTools?: string[]; disallowTools?: string[] }) =>
+        applyToolFilter(
+          {
+            linear_get_issue: { id: 'linear_get_issue' },
+            linear_delete_issue: { id: 'linear_delete_issue' },
+          } as never,
+          { allowTools: opts?.allowTools, disallowTools: opts?.disallowTools },
+        ) as never,
+    );
+    const notion = installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    notion.createToolsSpy.mockReturnValue({
+      notion_get_page: { id: 'notion_get_page' },
+    } as never);
+    return resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_not1', integrationId: 'notion', accountLabel: 'Notion' }),
+    ]);
+  }
+
+  it('applies a top-level disallowTools default to every provider without its own filter', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, disallowTools: ['*_delete_*'] });
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_get_issue', 'notion_get_page']);
+  });
+
+  it('applies a top-level allowTools default leniently across providers', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, allowTools: ['linear_get_*'] });
+    // notion has no matching tools: the default applies leniently, so notion
+    // simply contributes nothing rather than failing the resolution.
+    expect(Object.keys(await tools())).toEqual(['linear_get_issue']);
+  });
+
+  it('lets a provider with its own filter opt out of the top-level default', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({
+      ...options,
+      disallowTools: ['*_delete_*'],
+      providers: { linear: { allowTools: ['linear_delete_issue'] } },
+    });
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_delete_issue', 'notion_get_page']);
+  });
+
+  it('warns about a top-level entry that matched nothing anywhere', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, disallowTools: ['*_delete_*', 'nope_*'] });
+    await tools();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Top-level entry 'nope_\*' matched no tools/));
+  });
+
+  it('applies a top-level requireApproval default with per-provider opt-out', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({
+      ...options,
+      requireApproval: true,
+      providers: { notion: { requireApproval: false } },
+    });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_get_issue']!.requireApproval).toBe(true);
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['notion_get_page']!.requireApproval).toBeFalsy();
+  });
+
+  it('applies a top-level requireApproval glob list across providers', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, requireApproval: ['*_delete_*'] });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['linear_get_issue']!.requireApproval).toBeFalsy();
+    expect(result['notion_get_page']!.requireApproval).toBeFalsy();
+  });
+
+  it('never gates list_connections through top-level defaults', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
+    ]);
+    const tools = connect({ ...options, requireApproval: true, allowTools: ['linear_fake_*'] });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(Object.keys(result).sort()).toEqual(['linear__list_connections', 'linear_fake_tool']);
+    expect(result['linear_fake_tool']!.requireApproval).toBe(true);
+    expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
+  });
+
+  it('rejects top-level allowTools and disallowTools together', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, allowTools: ['a'], disallowTools: ['b'] } as never)).toThrow(
+      /Top-level allowTools and disallowTools are mutually exclusive/,
+    );
+  });
+
+  it('rejects a malformed top-level requireApproval value', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, requireApproval: 'yes' } as never)).toThrow(
+      /Top-level requireApproval must be a boolean or an array of tool keys/,
+    );
   });
 });
 

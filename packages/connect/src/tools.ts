@@ -85,6 +85,29 @@ export interface ToolsOptions {
    * connection for.
    */
   providers?: string[] | Record<string, boolean | ToolsProviderOptions>;
+  /**
+   * Default tool filter applied to every provider that does not set its own
+   * `allowTools`/`disallowTools`. Entries containing `*` are globs. Unlike
+   * the per-provider filters, defaults apply leniently: an entry that
+   * matches nothing on a given provider simply does not apply there (the
+   * provider set is live, so a default like `['*_get_*']` must tolerate
+   * providers without matching tools). An entry that matches nothing across
+   * the whole resolution logs a warning. Mutually exclusive with
+   * `disallowTools`. A provider that sets either filter option opts out of
+   * both defaults.
+   */
+  allowTools?: string[];
+  /** Default disallow filter; see {@link ToolsOptions.allowTools} for semantics. */
+  disallowTools?: string[];
+  /**
+   * Default tool-approval policy applied to every provider that does not set
+   * its own `requireApproval`. `true` gates every tool (except the synthetic
+   * `<provider>__list_connections` wrappers); an array gates matching keys,
+   * with the same lenient glob semantics as the default filters. A provider
+   * can opt out of a global `requireApproval: true` with
+   * `requireApproval: false`.
+   */
+  requireApproval?: boolean | string[];
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -188,6 +211,22 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   validateProviderXor(providerOverrides);
   validateRequireApproval(providerOverrides);
   rejectRemovedAutoApproveTools(providerOverrides);
+  if (options.allowTools !== undefined && options.disallowTools !== undefined) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'Top-level allowTools and disallowTools are mutually exclusive; set at most one.',
+    );
+  }
+  if (
+    options.requireApproval !== undefined &&
+    typeof options.requireApproval !== 'boolean' &&
+    !(Array.isArray(options.requireApproval) && options.requireApproval.every(name => typeof name === 'string'))
+  ) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'Top-level requireApproval must be a boolean or an array of tool keys.',
+    );
+  }
 
   let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
@@ -503,6 +542,8 @@ async function mapTools(
   const activeMcpKeys = new Set<string>();
   const result: ResolvedToolsRecord = {};
   const toolOwners = new Map<string, string>();
+  // Top-level default entries that matched at least one tool somewhere.
+  const matchedDefaultEntries = new Set<string>();
   for (const request of requests) {
     const integrationId = request.registration.integrationId;
     let providerTools: ToolsInput | undefined;
@@ -580,6 +621,20 @@ async function mapTools(
       continue;
     }
 
+    // Top-level defaults apply after the provider's tools are built, so the
+    // strict per-provider paths above stay untouched and a provider that set
+    // its own filter/approval opted out entirely.
+    const hasOwnFilter = request.options.allowTools !== undefined || request.options.disallowTools !== undefined;
+    if (!hasOwnFilter && (options.allowTools !== undefined || options.disallowTools !== undefined)) {
+      providerTools = applyDefaultFilter(providerTools, options, integrationId, matchedDefaultEntries);
+    }
+    if (request.options.requireApproval === undefined && options.requireApproval !== undefined) {
+      const policy = options.requireApproval;
+      if (policy !== false) {
+        applyDefaultRequireApproval(providerTools, policy, integrationId, matchedDefaultEntries);
+      }
+    }
+
     for (const toolKey of Object.keys(providerTools)) {
       const existingOwner = toolOwners.get(toolKey);
       if (existingOwner) {
@@ -593,10 +648,95 @@ async function mapTools(
     Object.assign(result, providerTools);
   }
 
+  // Lenient defaults cannot fail per provider, so a typo'd entry only shows
+  // up here: warn when it matched nothing across the whole resolution. Skip
+  // the check when nothing resolved at all (no connections yet is normal).
+  if (Object.keys(result).length > 0) {
+    const defaultEntries = [
+      ...(options.allowTools ?? []),
+      ...(options.disallowTools ?? []),
+      ...(Array.isArray(options.requireApproval) ? options.requireApproval : []),
+    ];
+    for (const entry of defaultEntries) {
+      if (!matchedDefaultEntries.has(entry)) {
+        console.warn(`[@mastra/connect] Top-level entry '${entry}' matched no tools on any resolved provider.`);
+      }
+    }
+  }
+
   const staleClients = Array.from(mcpClients.entries()).filter(([key]) => !activeMcpKeys.has(key));
   for (const [key] of staleClients) mcpClients.delete(key);
   await Promise.allSettled(staleClients.map(([, entry]) => entry.client.disconnect()));
   return result;
+}
+
+/**
+ * Applies the top-level default filter to a provider that set no filter of
+ * its own. Lenient by design: the provider set is live, so a default entry
+ * that matches nothing on this provider simply does not apply here. Entries
+ * that match are recorded in `matchedEntries` so mapTools can warn about
+ * defaults that matched nothing anywhere. The synthetic
+ * `<provider>__list_connections` wrapper is never filtered by defaults,
+ * matching the per-provider multi-connection behavior.
+ */
+function applyDefaultFilter(
+  providerTools: ToolsInput,
+  defaults: { allowTools?: string[]; disallowTools?: string[] },
+  integrationId: string,
+  matchedEntries: Set<string>,
+): ToolsInput {
+  const listToolKey = listConnectionsToolKey(integrationId);
+  const entries = defaults.allowTools ?? defaults.disallowTools ?? [];
+  const matchers = entries.map(entry => ({ entry, matches: compileToolMatcher([entry]) }));
+  const filtered: ToolsInput = {};
+  for (const [key, tool] of Object.entries(providerTools)) {
+    if (key === listToolKey) {
+      filtered[key] = tool;
+      continue;
+    }
+    let matchedAny = false;
+    for (const { entry, matches } of matchers) {
+      if (matches(key)) {
+        matchedEntries.add(entry);
+        matchedAny = true;
+      }
+    }
+    const keep = defaults.allowTools !== undefined ? matchedAny : !matchedAny;
+    if (keep) filtered[key] = tool;
+  }
+  return filtered;
+}
+
+/**
+ * Applies the top-level default `requireApproval` policy to a provider that
+ * set no policy of its own. `true` gates every tool except the synthetic
+ * `<provider>__list_connections` wrapper; an array gates matching keys with
+ * the same lenient semantics as {@link applyDefaultFilter}.
+ */
+function applyDefaultRequireApproval(
+  providerTools: ToolsInput,
+  policy: true | string[],
+  integrationId: string,
+  matchedEntries: Set<string>,
+): void {
+  const listToolKey = listConnectionsToolKey(integrationId);
+  if (policy === true) {
+    for (const [key, tool] of Object.entries(providerTools)) {
+      if (key === listToolKey) continue;
+      (tool as { requireApproval?: boolean }).requireApproval = true;
+    }
+    return;
+  }
+  const matchers = policy.map(entry => ({ entry, matches: compileToolMatcher([entry]) }));
+  for (const [key, tool] of Object.entries(providerTools)) {
+    if (key === listToolKey) continue;
+    for (const { entry, matches } of matchers) {
+      if (matches(key)) {
+        matchedEntries.add(entry);
+        (tool as { requireApproval?: boolean }).requireApproval = true;
+      }
+    }
+  }
 }
 
 /**
