@@ -25,6 +25,7 @@ export function SidebarSectionsContent({
   const baseId = useId();
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const customizeReturnFocusRef = useRef<HTMLElement | null>(null);
+  const getCustomizeFallbackRef = useRef<() => HTMLElement | null>(() => null);
   const [placements, setPlacements] = useLocalStorageState({
     initialKey: visibilityStorageKey,
     defaultValue: {},
@@ -35,9 +36,17 @@ export function SidebarSectionsContent({
     return placements[getSidebarVisibilityKey(sectionKey, link)] ?? getDefaultPlacement(link, optionalLinkCount);
   }
 
-  function openCustomize(returnFocusTo: HTMLElement | null) {
+  function openCustomize(returnFocusTo: HTMLElement | null, getMoreTrigger: () => HTMLElement | null) {
     customizeReturnFocusRef.current = returnFocusTo;
+    getCustomizeFallbackRef.current = getMoreTrigger;
     setCustomizeOpen(true);
+  }
+
+  function changeCustomizeOpen(open: boolean) {
+    if (!open && !customizeReturnFocusRef.current?.isConnected) {
+      customizeReturnFocusRef.current = getCustomizeFallbackRef.current();
+    }
+    setCustomizeOpen(open);
   }
 
   function changePlacement(sectionKey: string, link: OptionalSidebarLink, placement: SidebarLinkPlacement) {
@@ -90,7 +99,7 @@ export function SidebarSectionsContent({
       })}
       <SidebarCustomizeDialog
         open={customizeOpen}
-        onOpenChange={setCustomizeOpen}
+        onOpenChange={changeCustomizeOpen}
         returnFocusRef={customizeReturnFocusRef}
         sections={sections}
         placementOf={placementOf}

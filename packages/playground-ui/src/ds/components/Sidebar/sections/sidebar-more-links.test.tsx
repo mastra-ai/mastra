@@ -137,6 +137,22 @@ describe('Sidebar.Sections', () => {
     await waitFor(() => expect(document.activeElement).toBe(tools));
   });
 
+  it('returns focus to More when the right-clicked link moved out of the sidebar', async () => {
+    localStorage.setItem(storageKey, JSON.stringify({ 'primitives:Tools': 'sidebar' }));
+    renderSections();
+    fireEvent.contextMenu(navigation().getByRole('link', { name: 'Tools' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Customize sidebar…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Customize sidebar' });
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Tools placement' }));
+    const option = await screen.findByRole('option', { name: 'Hide in More menu' });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option, { detail: 1 });
+    await waitFor(() => expect(document.querySelector('nav a[href="/tools"]')).toBeNull());
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More' })));
+  });
+
   it('saves each placement across remounts', async () => {
     const first = renderSections();
     await choosePlacement('Tools', 'Always show');

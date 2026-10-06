@@ -16,7 +16,7 @@ export type SidebarMoreLinksProps = {
   isActive?: (link: SidebarLink, activeCandidates: SidebarLink[]) => boolean;
   placementOf: (link: OptionalSidebarLink) => SidebarLinkPlacement;
   onPlacementChange: (link: OptionalSidebarLink, placement: SidebarLinkPlacement) => void;
-  onCustomize: (returnFocusTo: HTMLElement | null) => void;
+  onCustomize: (returnFocusTo: HTMLElement | null, getMoreTrigger: () => HTMLElement | null) => void;
 };
 
 export function SidebarMoreLinks({
@@ -68,7 +68,7 @@ export function SidebarMoreLinks({
           isActive={isActive}
           placement={placementOf(link)}
           onPlacementChange={placement => onPlacementChange(link, placement)}
-          onCustomize={onCustomize}
+          onCustomize={returnFocusTo => onCustomize(returnFocusTo, () => moreTriggerRef.current)}
         />
       ))}
       {hasMoreRow ? (
@@ -85,7 +85,7 @@ export function SidebarMoreLinks({
           <DropdownMenu.Content align="start" aria-label="More navigation" className="min-w-44">
             {moreMenuLinks.map(link => renderMenuLink(link))}
             {moreMenuLinks.length > 0 && <DropdownMenu.Separator />}
-            <DropdownMenu.Item onClick={() => onCustomize(moreTriggerRef.current)}>
+            <DropdownMenu.Item onClick={() => onCustomize(moreTriggerRef.current, () => moreTriggerRef.current)}>
               <Settings2Icon />
               Customize sidebar
             </DropdownMenu.Item>
