@@ -19,4 +19,4 @@ Store the sandbox environment on the Factory project and expose it through one r
 }
 ```
 
-Positions must be a permutation of 1..n over the listed repositories. The CLI route metadata includes the new route.
+A body that sets positions must list every repository of the project, with positions forming a permutation of 1..n. The CLI route metadata includes the new route.
