@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
@@ -428,6 +428,35 @@ describe('TraceDataPanelView — the body', () => {
     expect(screen.getAllByRole('status', { name: 'Loading spans' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No spans found for this trace.')).toBeNull();
     expect(screen.queryByText('No spans match your search.')).toBeNull();
+  });
+
+  it('keeps a single search field while loading, so the header does not jump when spans land', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+
+    expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
+    // The header owns the search; the tree placeholder starts straight at the legend, not with a second field.
+    const [placeholder] = screen.getAllByRole('status', { name: 'Loading spans' });
+    expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
+  });
+
+  it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
+    const { rerender } = render(
+      <TraceDataPanelView {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
+    );
+
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText('feedback body')).toBeNull();
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        feedbackTabSlot={() => <p>feedback body</p>}
+        messagesPanelSlot={<p>messages body</p>}
+      />,
+    );
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Messages', 'Feedback']);
+    expect(screen.getByText('messages body')).toBeTruthy();
   });
 
   it('says a settled trace has no spans', () => {

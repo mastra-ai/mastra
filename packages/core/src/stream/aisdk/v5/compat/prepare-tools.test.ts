@@ -620,6 +620,26 @@ describe('getToolDefinitionsForTracing', () => {
     expect(result).toEqual([{ type: 'provider-defined', name: 'search', id: 'openai.web_search' }]);
   });
 
+  it.each(['v3', 'v4'])('uses the provider tool type sent to %s models', specificationVersion => {
+    const tools = { search: { id: 'openai.web_search', type: 'provider-defined', args: {} } as any };
+
+    const result = getToolDefinitionsForTracing({
+      tools,
+      toolChoice: undefined,
+      activeTools: undefined,
+      specificationVersion,
+    });
+    const sent = prepareToolsAndToolChoice({
+      tools,
+      toolChoice: undefined,
+      activeTools: undefined,
+      targetVersion: specificationVersion as 'v3' | 'v4',
+    });
+
+    expect(result).toEqual([{ type: 'provider', name: 'search', id: 'openai.web_search' }]);
+    expect(result![0]!.type).toBe(sent.tools![0]!.type);
+  });
+
   it('applies activeTools filtering', () => {
     const makeTool = (id: string) =>
       createTool({

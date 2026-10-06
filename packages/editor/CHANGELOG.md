@@ -1,5 +1,107 @@
 # @mastra/editor
 
+## 0.16.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169), [`a879630`](https://github.com/mastra-ai/mastra/commit/a879630e3f8c696fdaa61e4103b8bb052b97730e)]:
+  - @mastra/core@1.75.0-alpha.6
+  - @mastra/memory@1.36.0-alpha.4
+
+## 0.16.0-alpha.4
+
+### Minor Changes
+
+- Added per-usage display conditions to prompt block references. A `prompt_block_ref` instruction can now carry its own `rules`, so an agent can include a shared stored block only in specific situations without adding rules to the shared block itself. If the stored block has rules too, both must pass. ([#25991](https://github.com/mastra-ai/mastra/pull/25991))
+
+  This makes it possible to insert a runtime value from request context and fall back to a shared default block when the value is missing (#17878):
+
+  ```ts
+  await mastra.getEditor()!.agent.update({
+    id: 'support-agent',
+    instructions: [
+      { type: 'text', content: 'Follow the platform safety policy.' },
+      {
+        type: 'prompt_block',
+        content: '{{userPrompt}}',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'exists' }] },
+      },
+      {
+        type: 'prompt_block_ref',
+        id: 'default-user-prompt',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+      },
+    ],
+  });
+  ```
+
+- Added support for Composio shared connected accounts in `ComposioToolProvider`. Fixes [#18959](https://github.com/mastra-ai/mastra/issues/18959). ([#26002](https://github.com/mastra-ai/mastra/pull/26002))
+
+  **Create shared accounts.** Set `sharedConnections` to create Composio SHARED accounts for connections authorized with `scope: 'shared'`. The optional ACL controls which Composio users can use the account. Without it, Composio's deny-by-default access applies.
+
+  ```ts
+  new ComposioToolProvider({
+    apiKey: process.env.COMPOSIO_API_KEY!,
+    sharedConnections: { acl: { allowAllUsers: true } },
+  });
+  ```
+
+  **Select shared accounts.** The connection picker now lists SHARED accounts, including accounts another user created in the Composio dashboard when their ACL grants access. Pinned SHARED accounts now report the correct connection status.
+
+  **Fixed:** Adding a second connection for the same toolkit failed with a multiple connected accounts error. You can connect multiple accounts per toolkit again.
+
+### Patch Changes
+
+- Updated dependencies [[`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/memory@1.36.0-alpha.3
+  - @mastra/core@1.75.0-alpha.5
+  - @mastra/mcp@2.2.0-alpha.1
+
+## 0.16.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`d2f2243`](https://github.com/mastra-ai/mastra/commit/d2f2243ed0d3190b685d0b1a9349ca00a95ce647), [`056427c`](https://github.com/mastra-ai/mastra/commit/056427cda3e9b7c064e55daaa688601807806840), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+  - @mastra/memory@1.36.0-alpha.2
+
+## 0.16.0-alpha.2
+
+### Minor Changes
+
+- Stored agents can now use a memory instance registered on your Mastra instance instead of copying its config. Set `memory` to `{ type: 'id', memoryId: '<registry key>' }` and the agent uses that exact instance, including its storage, processors, and working memory settings. Many stored agents can share one memory setup. ([#25850](https://github.com/mastra-ai/mastra/pull/25850))
+
+  ```ts
+  const mastra = new Mastra({
+    memory: { supportMemory },
+    editor: new MastraEditor(),
+  });
+
+  await mastra.getEditor()!.agent.create({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Help customers.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    memory: { type: 'id', memoryId: 'supportMemory' },
+  });
+  ```
+
+  If the key isn't registered, the agent loads without memory and a warning names the missing key. Existing inline memory configs keep working. Cloning an agent that uses registered memory now stores a reference instead of a copy. Fixes #21890.
+
+### Patch Changes
+
+- Updated dependencies [[`b0d2c38`](https://github.com/mastra-ai/mastra/commit/b0d2c387ec339229d878fdd9bbf6b6f87ec308b8), [`79b3c78`](https://github.com/mastra-ai/mastra/commit/79b3c7875c511a718526020e3442bca433787199), [`e5f53fe`](https://github.com/mastra-ai/mastra/commit/e5f53fe5965b22b274435bde05fd75f0b851e1e5), [`3b03b05`](https://github.com/mastra-ai/mastra/commit/3b03b054281496e07201284f686b20b4dc2c51b1), [`bcc2ceb`](https://github.com/mastra-ai/mastra/commit/bcc2ceb951d5259d09cde558dd6b86015b096d5c), [`832f57d`](https://github.com/mastra-ai/mastra/commit/832f57da36a03e5a90bf3ccc90e9df26ecf7d59d), [`edf1ce6`](https://github.com/mastra-ai/mastra/commit/edf1ce69cc703f917cd2ee06488293a1f1d45597), [`824eb7f`](https://github.com/mastra-ai/mastra/commit/824eb7fef2eb3a52a63c59c2b879c7211294e5ae), [`648a4f3`](https://github.com/mastra-ai/mastra/commit/648a4f3ec442416816173e5fd64b97efd930df8d), [`01ac36b`](https://github.com/mastra-ai/mastra/commit/01ac36bf59295cf16d7a86c04f5776a4f1c98132), [`4c1bc9d`](https://github.com/mastra-ai/mastra/commit/4c1bc9d87fb5545b190e7e691331576781bffecf), [`f6fb6bc`](https://github.com/mastra-ai/mastra/commit/f6fb6bc2b0efadd6b744b6f73f07aa9800e5fc07), [`b0d2b33`](https://github.com/mastra-ai/mastra/commit/b0d2b336efd2a023a9f29218b442b386e42248f9), [`196fd89`](https://github.com/mastra-ai/mastra/commit/196fd89df87b1675adcff0d4eeb1cd75965e40cb), [`3acf1e3`](https://github.com/mastra-ai/mastra/commit/3acf1e36e26835caac9c22764bc87ee536ef5a62), [`7a046c6`](https://github.com/mastra-ai/mastra/commit/7a046c6a75c27d9859d695a59f6b3e8a96f6bfc8), [`6efbfad`](https://github.com/mastra-ai/mastra/commit/6efbfad1d763f54a2b346579d43a67ad0d92ce42), [`1d94199`](https://github.com/mastra-ai/mastra/commit/1d94199fbb65d5acbcd0101bcbac96876e35cac4), [`3e7a81b`](https://github.com/mastra-ai/mastra/commit/3e7a81b4e9b2c9de440b85b315a8297418afbaca), [`a4b2030`](https://github.com/mastra-ai/mastra/commit/a4b2030f6a1cb7123530f99d06f2b9e461e63932), [`bb57489`](https://github.com/mastra-ai/mastra/commit/bb5748958b6d404619884f7e04a0d7619fdebae7), [`4ec3ccd`](https://github.com/mastra-ai/mastra/commit/4ec3ccde9924c27e7320f7bbe26c932731b7b4cd), [`b8be029`](https://github.com/mastra-ai/mastra/commit/b8be0295bf88782f95702e65349a714d03a787d1)]:
+  - @mastra/core@1.75.0-alpha.2
+  - @mastra/mcp@2.2.0-alpha.0
+
+## 0.15.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e)]:
+  - @mastra/core@1.75.0-alpha.1
+  - @mastra/memory@1.36.0-alpha.1
+
 ## 0.15.7-alpha.0
 
 ### Patch Changes

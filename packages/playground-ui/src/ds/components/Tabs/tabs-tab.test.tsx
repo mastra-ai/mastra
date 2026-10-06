@@ -29,6 +29,26 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
+  it('when a tab with a tooltip receives keyboard focus, then the tooltip shows and the tab stays selectable', async () => {
+    render(
+      <Tabs defaultTab="first">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second" tooltip="Second tab">
+            <span className="sr-only">Second</span>
+          </Tab>
+        </TabList>
+      </Tabs>,
+    );
+
+    const tab = screen.getByRole('tab', { name: 'Second' });
+    act(() => tab.focus());
+    expect(await screen.findByText('Second tab')).toBeTruthy();
+
+    fireEvent.click(tab);
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('measures contained tabs once without ResizeObserver', () => {
     Reflect.deleteProperty(globalThis, 'ResizeObserver');
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);

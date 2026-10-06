@@ -2,16 +2,15 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useInfiniteDatasets } from '@mastra/playground-ui/domains/datasets';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 
@@ -45,7 +44,7 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets({ targetType, targetId }, orderBy);
+  } = useInfiniteDatasets({ filter: { targetType, targetId }, orderBy: orderBy });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);

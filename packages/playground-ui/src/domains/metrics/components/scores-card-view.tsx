@@ -1,3 +1,4 @@
+import type { ScorerSummary, ScoresOverTimePoint } from '@mastra/react/hooks/metrics';
 import { useMemo } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
@@ -6,7 +7,6 @@ import { TabContent } from '../../../ds/components/Tabs/tabs-content';
 import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
-import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-metrics';
 import { CHART_COLORS, METRICS_DATA_LIST_PROPS } from './metrics-utils';
 
 const SERIES_COLORS = [

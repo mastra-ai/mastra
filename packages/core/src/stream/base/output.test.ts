@@ -385,6 +385,65 @@ describe('MastraModelOutput', () => {
       expect(result.spanId).toBe('mastra-agent-span-id');
     });
 
+    it('should include traceId on fullStream chunks when tracing context exists, except custom data chunks', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        { type: 'data-progress', data: { percent: 50 } } as unknown as ChunkType,
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          tracingContext: {
+            currentSpan: { id: 'mastra-agent-span-id', externalTraceId: 'mastra-trace-id', isValid: true },
+          } as any,
+        },
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const dataChunk = chunks.find(c => c.type === 'data-progress');
+      expect(dataChunk).toEqual({ type: 'data-progress', data: { percent: 50 } });
+
+      const mastraChunks = chunks.filter(c => c.type !== 'data-progress');
+      expect(mastraChunks.length).toBeGreaterThan(0);
+      for (const chunk of mastraChunks) {
+        expect(chunk.traceId).toBe('mastra-trace-id');
+      }
+    });
+
+    it('should not add traceId to fullStream chunks when tracing is disabled', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const chunk of chunks) {
+        expect(chunk).not.toHaveProperty('traceId');
+      }
+    });
+
     it('should resolve top-level finish providerMetadata on the final output', async () => {
       const runId = 'test-run';
       const providerMetadata = {
@@ -1553,6 +1612,53 @@ describe('MastraModelOutput', () => {
       await output.consumeStream({ onError });
 
       expect(onError).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('locked base stream (#25532)', () => {
+    const createOutput = (runId: string) =>
+      new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, 'hello'),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+    it('routes a locked-stream failure to onError instead of rejecting', async () => {
+      const output = createOutput('locked-run');
+      const reader = output._getBaseStream().getReader();
+
+      const onError = vi.fn();
+      await expect(output.consumeStream({ onError })).resolves.toBeUndefined();
+      expect(onError).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
+
+      reader.releaseLock();
+    });
+
+    it('does not take a second reader when getters are awaited after _getBaseStream()', async () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const output = createOutput('base-stream-run');
+        let textPromise: Promise<string> | undefined;
+        for await (const _chunk of output._getBaseStream()) {
+          // The agentic loop owns the base stream reader; getters awaited
+          // mid-iteration (e.g. `await self.request` on finish) must not
+          // try to drain it again.
+          textPromise ??= output.text;
+        }
+        await expect(textPromise).resolves.toBe('hello');
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
     });
   });
 

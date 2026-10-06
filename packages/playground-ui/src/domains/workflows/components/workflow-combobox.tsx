@@ -1,5 +1,5 @@
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useEffect } from 'react';
-import { useWorkflows } from '../hooks/use-workflows';
 import { Combobox } from '@/ds/components/Combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';

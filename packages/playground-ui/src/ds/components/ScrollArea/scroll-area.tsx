@@ -354,6 +354,7 @@ function ScrollBar({
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
         'flex touch-none transition-opacity duration-normal ease-out-custom select-none',

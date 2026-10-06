@@ -6,7 +6,7 @@ settings:
 
 overrides:
   postcss@<8.5.23: 8.5.23
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
+  nanoid@<5.1.16: 5.1.16
 
 importers:
 
@@ -403,9 +403,9 @@ packages:
     resolution: {integrity: sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==}
     engines: {node: '>= 0.6'}
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   obug@2.1.4:
@@ -872,7 +872,7 @@ snapshots:
     dependencies:
       mime-db: 1.52.0
 
-  nanoid@3.3.19: {}
+  nanoid@5.1.16: {}
 
   obug@2.1.4: {}
 
@@ -884,7 +884,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 5.1.16
       picocolors: 1.1.1
       source-map-js: 1.2.1
 

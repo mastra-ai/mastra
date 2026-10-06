@@ -551,7 +551,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         policy: { mode: 'default', hasFiniteMaxSteps: !!rt.maxSteps },
         pendingFeedbackStop: state.pendingFeedbackStop,
         llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
-        underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,
+        // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
+        // Retries stay bounded by maxProcessorRetries.
+        underMaxSteps:
+          !rt.maxSteps ||
+          state.accumulatedSteps.filter(s => (s.finishReason as string) !== 'retry').length < rt.maxSteps,
         steps: state.accumulatedSteps,
         stopWhen: rt.stopWhen,
         consumeDelegationBail: () => {

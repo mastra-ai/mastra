@@ -13,14 +13,13 @@ import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
@@ -44,7 +43,7 @@ function MobileNavbar() {
         <SidebarNew.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <Txt as="span" className="font-display whitespace-nowrap">
+          <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
             Mastra Studio
           </Txt>
         </span>
@@ -157,7 +156,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <div className="h-screen bg-sidebar font-body">
+    <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

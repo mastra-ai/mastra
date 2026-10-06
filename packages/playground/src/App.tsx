@@ -2,6 +2,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import { createFetchWithRefresh } from '@mastra/react/hooks/auth';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
@@ -95,7 +96,6 @@ import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';

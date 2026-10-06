@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -23,7 +24,7 @@ import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePul
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { itemAwaitsPerson } from '../../factory/boardCardStatus';
+import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
@@ -368,10 +369,12 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
+          className={cn('text-muted-foreground', 'hover:text-foreground pl-3 text-left')}
         >
-          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          <Txt as="span" variant="caption" className="block">
+            {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          </Txt>
         </button>
       )}
     </section>

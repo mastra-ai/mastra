@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -139,7 +139,12 @@ describe('TraceSpanPanel', () => {
       const onFullThreadOpenChange = vi.fn();
       const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const button = await screen.findByRole('button', { name: 'Open full thread' });
+      // The action sits in the side column's tab row, not inside the conversation.
+      expect(screen.getByTestId('messages-panel').contains(button)).toBe(false);
+      expect(button.closest('[data-trace-side-column]')).not.toBeNull();
+
+      fireEvent.click(button);
       expect(onFullThreadOpenChange).toHaveBeenCalledWith(true);
       expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -167,28 +172,63 @@ describe('TraceSpanPanel', () => {
       expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
     });
 
-    describe('when the full thread is open', () => {
-      it('replaces the trace timeline with the thread view and can go back or close', async () => {
-        installHandlers({ threadTraceCount: 2 });
-        const onFullThreadOpenChange = vi.fn();
-        const onClose = vi.fn();
-        const { queryClient } = renderPanel({
-          showPartialThread: true,
-          isFullThreadOpen: true,
-          onFullThreadOpenChange,
-          onClose,
-        });
+    describe('when the full thread is opened', () => {
+      // Mirrors the traces page: the thread drawer opens on top of an already-open trace drawer.
+      function FullThreadHarness({ onClose }: { onClose: () => void }) {
+        const [isFullThreadOpen, setIsFullThreadOpen] = useState(false);
+        return (
+          <Harness
+            showPartialThread
+            isFullThreadOpen={isFullThreadOpen}
+            onFullThreadOpenChange={setIsFullThreadOpen}
+            onClose={onClose}
+          />
+        );
+      }
 
-        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-        expect(screen.queryByText(`Trace ${TRACE_ID}`)).toBeNull();
-        expect(screen.queryByTestId('messages-panel')).toBeNull();
+      const openFullThread = async () => {
+        const onClose = vi.fn();
+        const utils = renderWithProviders(
+          <TestLinkProvider>
+            <FullThreadHarness onClose={onClose} />
+          </TestLinkProvider>,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+        const threadDialog = await screen.findByRole('dialog', { name: /^Thread / });
+        return { ...utils, onClose, threadDialog };
+      };
+
+      it('then the thread opens in its own drawer stacked above the trace drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, threadDialog } = await openFullThread();
+
+        expect(threadDialog.getAttribute('data-depth')).toBe('2');
+        expect(await within(threadDialog).findByTestId('thread-view-by-trace')).not.toBeNull();
+        // The trace drawer stays mounted beneath, made inert by the thread drawer.
+        expect(screen.getByRole('dialog', { name: `Trace ${TRACE_ID}`, hidden: true })).not.toBeNull();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
+
+      it('then "Back to trace" closes only the thread drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, onClose } = await openFullThread();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
-        expect(onFullThreadOpenChange).toHaveBeenCalledWith(false);
 
-        // The thread view has no dedicated close arrow (the leading arrow goes back to the trace); the drawer closes via Escape.
-        fireEvent.keyDown(screen.getByRole('dialog', { name: /^Thread / }), { key: 'Escape' });
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Thread / })).toBeNull());
+        expect(screen.getByRole('dialog', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
+
+      it('then Escape closes only the thread drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, onClose, threadDialog } = await openFullThread();
+
+        fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Thread / })).toBeNull());
+        expect(onClose).not.toHaveBeenCalled();
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       });
     });
