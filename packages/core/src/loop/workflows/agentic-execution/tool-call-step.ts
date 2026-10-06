@@ -44,6 +44,7 @@ import {
   TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
@@ -521,21 +522,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalGated =
           !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
 
-        // Schema for tool call approval - used for both streaming and metadata
-        const approvalSchema = toStandardSchema(
-          z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-            reason: z
-              .string()
-              .optional()
-              .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
-          }),
-        );
-
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
         // eager attempt that suspended at runtime. Defined here because it closes over
@@ -566,7 +552,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -701,7 +687,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -717,7 +703,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 

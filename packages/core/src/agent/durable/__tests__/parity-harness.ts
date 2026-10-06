@@ -138,8 +138,6 @@ export interface ParitySnapshot {
    * sides already compare, and COR-1398 is scoped to these turns.
    */
   resumed: boolean;
-  /** Whether an approval request is what suspended the turn, the case COR-1399 is scoped to. */
-  approvalSuspended: boolean;
 }
 
 /**
@@ -214,8 +212,6 @@ interface TurnChunks {
   finishPayload: any;
   /** See `ParitySnapshot.resumed`. */
   resumed: boolean;
-  /** See `ParitySnapshot.approvalSuspended`. */
-  approvalSuspended: boolean;
   /** The stream the turn's output fields are read from: the last one to run. */
   lastOutput: MastraModelOutput<any>;
 }
@@ -245,7 +241,6 @@ async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promi
     if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
     if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
     if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
-      if (chunk.type === 'tool-call-approval') acc.approvalSuspended = true;
       suspendedToolCallId = chunk.payload?.toolCallId;
       break;
     }
@@ -267,14 +262,13 @@ function emptyTurnChunks(output?: MastraModelOutput<any>): TurnChunks {
     streamedText: '',
     finishPayload: undefined,
     resumed: false,
-    approvalSuspended: false,
     lastOutput: output as MastraModelOutput<any>,
   };
 }
 
 /** Builds a turn's snapshot from the chunks its streams produced. */
 async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot> {
-  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed, approvalSuspended } = acc;
+  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed } = acc;
   const output = acc.lastOutput;
 
   const full = await output.getFullOutput();
@@ -332,7 +326,6 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
       keys: Object.keys(full).sort(),
     },
     resumed,
-    approvalSuspended,
   };
 }
 
@@ -730,12 +723,6 @@ interface KnownChunkDifference {
    * of the finish chunk's compared key list. Only the `finish` entry has them.
    */
   missingKeys?: readonly string[];
-  /**
-   * Restricts the declaration to the turns it was filed for; omitted means every
-   * turn the chunk type appears in. Turns that fail this keep their payload
-   * compared, so a scenario that never reaches the divergence still compares it.
-   */
-  scope?: (turn: ParitySnapshot) => boolean;
 }
 
 const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
@@ -776,23 +763,6 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
       'output.steps',
       'output.toolCalls',
     ],
-  },
-  {
-    ticket: 'COR-1399',
-    reason:
-      'Wrapped engines serialise the approval `resumeSchema` from a hand-written literal, without the `$schema` ' +
-      'and the field descriptions plain emits for the same schema. Scoped to the approval flow: a suspended ' +
-      '(non-approval) tool keeps its own schema on every engine.',
-    chunkType: 'tool-call-approval',
-    paths: ['resumeSchema'],
-    scope: turn => turn.approvalSuspended,
-  },
-  {
-    ticket: 'COR-1399',
-    reason: 'The resumed chunk of an approved tool call carries the same hand-written approval `resumeSchema`.',
-    chunkType: 'tool-call-resumed',
-    paths: ['resumeSchema'],
-    scope: turn => turn.approvalSuspended,
   },
 ];
 
@@ -866,8 +836,8 @@ function deleteAtPath(target: unknown, path: string): void {
 }
 
 /** A copy of a chunk payload with the declared differences removed. */
-function withoutDeclaredPayloadDifferences(chunkType: string, payload: unknown, turn: ParitySnapshot): unknown {
-  const declarations = KNOWN_CHUNK_DIFFERENCES.filter(d => d.chunkType === chunkType && (!d.scope || d.scope(turn)));
+function withoutDeclaredPayloadDifferences(chunkType: string, payload: unknown): unknown {
+  const declarations = KNOWN_CHUNK_DIFFERENCES.filter(d => d.chunkType === chunkType);
   if (declarations.length === 0) return payload;
   const copy = structuredClone(payload);
   for (const declared of declarations) {
@@ -908,13 +878,13 @@ function withoutKnownEngineDifferences(
       const stripped: ParitySnapshot = {
         ...turn,
         chunkPayloads: turn.chunkPayloads.map((payload, i) =>
-          withoutDeclaredPayloadDifferences(turn.chunkTypes[i] ?? '', payload, turn),
+          withoutDeclaredPayloadDifferences(turn.chunkTypes[i] ?? '', payload),
         ),
         // The finish chunk is compared twice: as `finishChunk` and in `chunkPayloads`.
         finishChunk: {
           ...turn.finishChunk,
           payloadKeys: turn.finishChunk.payloadKeys.filter(k => !declaredMissingKeysFor('finish').includes(k)),
-          payload: withoutDeclaredPayloadDifferences('finish', turn.finishChunk.payload, turn),
+          payload: withoutDeclaredPayloadDifferences('finish', turn.finishChunk.payload),
         },
       };
       return side === 'wrapped' ? withoutKnownTurnDifferences(reference.turns[index], stripped) : stripped;
@@ -930,17 +900,11 @@ function withoutKnownEngineDifferences(
 export function staleKnownDifferences(engine: string, plain: EngineObservation, actual: EngineObservation): string[] {
   const failures: string[] = [];
   for (const declared of KNOWN_CHUNK_DIFFERENCES) {
-    // A scenario that never reaches the declared turns says nothing about
-    // whether the difference is still there, so it need not reproduce.
-    const inScope = (turn: ParitySnapshot) => !declared.scope || declared.scope(turn);
-    const plainHasChunks = plain.turns.some(
-      turn => inScope(turn) && indexesOfType(turn, declared.chunkType).length > 0,
-    );
+    const plainHasChunks = plain.turns.some(turn => indexesOfType(turn, declared.chunkType).length > 0);
     let sawDifference = false;
     let plainEmitsMissingKey = false;
 
     plain.turns.forEach((turn, i) => {
-      if (!inScope(turn)) return;
       const wrapped = actual.turns[i];
       if (!wrapped) return;
       const wrappedIndexes = indexesOfType(wrapped, declared.chunkType);

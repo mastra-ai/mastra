@@ -52,6 +52,15 @@ function divergentScenario(overrides: Partial<EngineParityScenario> = {}): Engin
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 
 /**
+ * The approval `resumeSchema` every engine now publishes, captured verbatim from
+ * plain before the wrapped engines were switched to the shared schema. Pinning
+ * the byte-for-byte string is what proves the shared module changed nothing
+ * about what plain sends.
+ */
+const APPROVAL_RESUME_SCHEMA =
+  '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"approved":{"type":"boolean","description":"Controls if the tool call is approved or not, should be true when approved and false when declined"},"reason":{"description":"Optional explanation for the decision, surfaced to the model when the tool call is declined","type":"string"}},"required":["approved"],"additionalProperties":false}';
+
+/**
  * A tool that suspends until the caller resumes it, then answers with the
  * resume data. `question` is what the caller is asked, so a scenario can make
  * one engine suspend with a different payload.
@@ -483,7 +492,7 @@ describe('expectEngineParity', () => {
     ]);
   });
 
-  it('flags the approved-schema and resumed-tool-call differences once they stop reproducing', async () => {
+  it('flags the resumed-tool-call difference once it stops reproducing', async () => {
     const results = await expectEngineParity(
       approvalScenario({
         model: { tapes: [toolCallTape('gate', {}), textOnlyTape('Done.')] },
@@ -500,17 +509,12 @@ describe('expectEngineParity', () => {
     const approvalPayload = (r: EngineObservation) =>
       r.turns[0]!.chunkPayloads[r.turns[0]!.chunkTypes.indexOf('tool-call-approval')] as Record<string, unknown>;
 
+    // Every engine publishes the same approval schema, and the only difference
+    // left to declare in this scenario is the resumed output's missing tool call.
+    expect(approvalPayload(observe(results.durable!)).resumeSchema).toBe(
+      approvalPayload(observe(results.plain!)).resumeSchema,
+    );
     expect(staleKnownDifferences('durable', observe(results.plain!), observe(results.durable!))).toEqual([]);
-
-    // The wrapped engine serialises the approval schema the way plain does.
-    const schemaFixed = observe(results.durable!);
-    approvalPayload(schemaFixed).resumeSchema = approvalPayload(observe(results.plain!)).resumeSchema;
-    expect(staleKnownDifferences('durable', observe(results.plain!), schemaFixed)).toEqual([
-      "durable: turns[0] tool-call-approval payload 'resumeSchema' no longer differs from plain; " +
-        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1399)',
-      'durable: the declared tool-call-approval chunk difference no longer reproduces; ' +
-        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1399)',
-    ]);
 
     // The wrapped engine keeps the suspended tool call in its resumed output.
     const callsFixed = observe(results.durable!);
@@ -519,13 +523,6 @@ describe('expectEngineParity', () => {
       'durable: the declared toolCalls difference no longer reproduces; ' +
         'remove it from KNOWN_TURN_DIFFERENCES (COR-1398)',
     ]);
-
-    // Matching schemas are tolerated outside the approval flow because the
-    // declaration is scoped to it, not because the value is ignored everywhere.
-    const suspended = [observe(results.plain!), observe(results.durable!)];
-    for (const observation of suspended) observation.turns[0]!.approvalSuspended = false;
-    approvalPayload(suspended[1]!).resumeSchema = approvalPayload(suspended[0]!).resumeSchema;
-    expect(staleKnownDifferences('durable', suspended[0]!, suspended[1]!)).toEqual([]);
   });
 
   it('fails when part of a declared expectation no longer differs from plain', async () => {
@@ -649,6 +646,10 @@ describe('expectEngineParity', () => {
 
     for (const engine of ENGINES) {
       const turn = results[engine]!.turns[0]!;
+      for (const ct of ['tool-call-approval', 'tool-call-resumed']) {
+        const payload = turn.chunkPayloads[turn.chunkTypes.indexOf(ct)] as { resumeSchema: string };
+        expect(payload.resumeSchema).toBe(APPROVAL_RESUME_SCHEMA);
+      }
       expect(turn.chunks).toContain('AGENT:tool-call-approval:gate');
       expect(turn.chunks).toContain('AGENT:finish');
       expect(turn.chunks).not.toContain('AGENT:tool-call-suspended:gate');
