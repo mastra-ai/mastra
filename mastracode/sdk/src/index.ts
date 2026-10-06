@@ -1856,7 +1856,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
   // saved workflows against the right tool/agent registry.
   const mastra = controller.getMastra();
-  registerSelectedKnowledge(mastra, base.knowledgeKey, base.knowledge);
+  registerSelectedKnowledge(mastra, base.knowledge);
   if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
@@ -1899,8 +1899,9 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
  * controller's internal Mastra, or a caller-owned one) so keyed lookups resolve
  * it and an instance without its own storage inherits the Mastra's.
  */
-function registerSelectedKnowledge(mastra: Mastra | undefined, key: string, knowledge: Knowledge | undefined) {
+function registerSelectedKnowledge(mastra: Mastra | undefined, knowledge: Knowledge | undefined) {
   if (!mastra || !knowledge) return;
+  const key = knowledge.id;
   const existing = (mastra.listKnowledge() as Record<string, Knowledge | undefined>)[key];
   if (existing === knowledge) return;
   if (existing) {
@@ -1949,7 +1950,7 @@ export async function mountAgentControllerOnMastra(
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
     prepared.base.controller.__registerMastra(config.mastra);
-    registerSelectedKnowledge(config.mastra, prepared.base.knowledgeKey, prepared.base.knowledge);
+    registerSelectedKnowledge(config.mastra, prepared.base.knowledge);
     await prepared.finalize();
     return { ...prepared.base, mastra: config.mastra };
   }
