@@ -637,6 +637,7 @@ export function createKnowledgeStorageTests(
         source: 'github',
         scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
       });
+      const beforeDelete = await store.getNode(node.id);
 
       const result = await store.deleteNodeByAddress({
         source: 'github',
@@ -645,7 +646,7 @@ export function createKnowledgeStorageTests(
       });
 
       expect(result.deleted).toBe(false);
-      expect(await store.getNode(node.id)).toEqual(node);
+      expect(await store.getNode(node.id)).toEqual(beforeDelete);
       expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toBeNull();
       expect(await store.getRecord({ id: bindingLocal.id, includeDeleted: true })).toBeNull();
       expect(await store.getRecord({ id: broadened.id })).toEqual(broadened);
