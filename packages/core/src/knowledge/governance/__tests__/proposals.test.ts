@@ -10,10 +10,26 @@ async function createFixture() {
   const storage = await knowledge.getStorageInternal();
   const structure = await storage.reconcileStructure({
     scopes: [
-      { address: 'principal:suggest', name: 'Suggest principal' },
-      { address: 'principal:owner', name: 'Owner principal' },
-      { address: 'principal:edit', name: 'Edit principal' },
-      { address: 'principal:observer', name: 'Observer principal' },
+      {
+        address: 'principal:suggest',
+        name: 'Suggest principal',
+        grants: [{ scopeRefAddress: 'principal:suggest', role: 'owner' }],
+      },
+      {
+        address: 'principal:owner',
+        name: 'Owner principal',
+        grants: [{ scopeRefAddress: 'principal:owner', role: 'owner' }],
+      },
+      {
+        address: 'principal:edit',
+        name: 'Edit principal',
+        grants: [{ scopeRefAddress: 'principal:edit', role: 'owner' }],
+      },
+      {
+        address: 'principal:observer',
+        name: 'Observer principal',
+        grants: [{ scopeRefAddress: 'principal:observer', role: 'owner' }],
+      },
       {
         address: 'scope:source',
         name: 'Source scope',
