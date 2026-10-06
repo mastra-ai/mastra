@@ -1253,6 +1253,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       input.importRunId,
       input.details,
     );
+  }
+
   async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
     this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
     const [primaryTarget] = input.targets;
