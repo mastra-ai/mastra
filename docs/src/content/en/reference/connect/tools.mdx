@@ -172,9 +172,9 @@ import { tools } from '@mastra/connect'
 
 const connected = tools()
 
-const toolsets = await connected()
-
-const response = await agent.generate('Summarize my open issues.', { toolsets })
+const response = await agent.generate('Summarize my open issues.', {
+  toolsets: { connect: await connected() },
+})
 ```
 
 The resolver also exposes methods for manual control:
