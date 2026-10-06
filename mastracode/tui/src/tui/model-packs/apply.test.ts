@@ -174,6 +174,18 @@ describe('model pack application', () => {
     });
   });
 
+  it('preserves the restored model when no pack resolves during thread restore', async () => {
+    const { ctx, modelSwitch } = makeContext();
+
+    await expect(applyCurrentThreadPack(ctx, { packId: null, applyModeDefault: false })).resolves.toBeUndefined();
+
+    expect(modelSwitch).not.toHaveBeenCalled();
+    expect(ctx.state.session.state.set).toHaveBeenCalledWith({
+      modelRoute: undefined,
+      mastracodePendingModelFallback: null,
+    });
+  });
+
   it('re-applies the pack model after switching modes', async () => {
     const { ctx, modeSwitch, modelSwitch } = makeContext();
 

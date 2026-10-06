@@ -1178,7 +1178,7 @@ export class MastraTUI {
         : resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
     if (!ownsUpdate()) return;
-    await applyCurrentThreadPack({ state: this.state }, { packId: resolvedPackId });
+    await applyCurrentThreadPack({ state: this.state }, { packId: resolvedPackId, applyModeDefault: false });
     if (!ownsUpdate()) return;
     this.state.fallbackStatus = fallbackStatus;
     updateStatusLine(this.state);

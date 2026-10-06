@@ -218,7 +218,7 @@ async function resolveActivePackId(
 
 export async function applyCurrentThreadPack(
   ctx: ModelPackContext,
-  options: { modeId?: string; packId?: string | null } = {},
+  options: { modeId?: string; packId?: string | null; applyModeDefault?: boolean } = {},
 ): Promise<(PackSelection & { applied: boolean }) | undefined> {
   const settings = loadSettings();
   const modeId = options.modeId ?? ctx.state.session.mode.get();
@@ -238,11 +238,13 @@ export async function applyCurrentThreadPack(
   const application = beginPackApplication(ctx, modeId, resolution.threadId);
   return application.run(async () => {
     if (!application.isCurrent()) return undefined;
-    const mode = ctx.state.controller.listModes().find(item => item.id === modeId);
-    const modelId = settings.models.modeDefaults[modeId] ?? mode?.defaultModelId;
-    if (modelId && ctx.state.session.model.get() !== modelId) {
-      await ctx.state.session.model.switch({ modelId });
-      if (!application.isCurrent()) return undefined;
+    if (options.applyModeDefault !== false) {
+      const mode = ctx.state.controller.listModes().find(item => item.id === modeId);
+      const modelId = settings.models.modeDefaults[modeId] ?? mode?.defaultModelId;
+      if (modelId && ctx.state.session.model.get() !== modelId) {
+        await ctx.state.session.model.switch({ modelId });
+        if (!application.isCurrent()) return undefined;
+      }
     }
     if (resolution.threadId) {
       await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
