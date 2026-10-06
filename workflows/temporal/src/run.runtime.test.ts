@@ -84,4 +84,19 @@ describe('TemporalRun with the generated worker runtime', () => {
     expect(result.steps).toEqual(expected);
     expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ steps: expected }));
   });
+
+  it('wraps raw step outputs that only resemble step results', async () => {
+    const rawOutput = { status: 'pending', output: 42, startedAt: 1 };
+    const { run } = await createRun(async args => ({
+      status: 'success',
+      input: args.inputData,
+      result: { value: 2 },
+      state: undefined,
+      steps: { increment: rawOutput },
+    }));
+
+    const result = await run.start({ inputData: { value: 1 } });
+
+    expect(result.steps).toEqual({ increment: { status: 'success', output: rawOutput, startedAt: 0, endedAt: 0 } });
+  });
 });

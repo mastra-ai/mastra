@@ -222,13 +222,18 @@ export class TemporalRun<
   }
 }
 
+// The worker only records successful steps; a failed run rejects handle.result() instead.
 function isStepResult(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'status' in value &&
-    'output' in value &&
-    typeof (value as { startedAt?: unknown }).startedAt === 'number'
+    record.status === 'success' &&
+    'payload' in record &&
+    'output' in record &&
+    typeof record.startedAt === 'number' &&
+    typeof record.endedAt === 'number'
   );
 }
 
