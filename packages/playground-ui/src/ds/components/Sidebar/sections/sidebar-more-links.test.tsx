@@ -137,17 +137,17 @@ describe('Sidebar.Sections', () => {
     await waitFor(() => expect(document.activeElement).toBe(tools));
   });
 
-  it('returns focus to More when the right-clicked link moved out of the sidebar', async () => {
-    localStorage.setItem(storageKey, JSON.stringify({ 'primitives:Tools': 'sidebar' }));
-    renderSections();
-    fireEvent.contextMenu(navigation().getByRole('link', { name: 'Tools' }));
+  it('returns focus to the More row that appears when the only optional link is hidden', async () => {
+    renderSections([{ key: 'build', links: [], moreLinks: [{ name: 'Workspaces', url: '/workspaces' }] }]);
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+    fireEvent.contextMenu(navigation().getByRole('link', { name: 'Workspaces' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Customize sidebar…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Customize sidebar' });
-    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Tools placement' }));
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Workspaces placement' }));
     const option = await screen.findByRole('option', { name: 'Hide in More menu' });
     fireEvent.pointerDown(option, { pointerType: 'mouse' });
     fireEvent.click(option, { detail: 1 });
-    await waitFor(() => expect(document.querySelector('nav a[href="/tools"]')).toBeNull());
+    await waitFor(() => expect(document.querySelector('nav a[href="/workspaces"]')).toBeNull());
     fireEvent.keyDown(dialog, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More' })));
