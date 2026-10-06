@@ -24,7 +24,7 @@ export function CommitRailEmptyState({
         ))}
       </svg>
       <div className="flex min-w-0 flex-col items-start gap-3">
-        <Txt as="h3" variant="subheading">
+        <Txt as="h4" variant="subheading">
           {linked ? 'No commits yet' : 'No repository linked yet'}
         </Txt>
         {!linked && factoryProjectId ? (
