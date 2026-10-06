@@ -44,7 +44,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
   return (
     <div
       className={cn(
-        'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl bg-card p-3 shadow-raised',
+        'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl border border-surface-rim bg-card p-3 shadow-(--elevation-raised)',
         'animate-in duration-200 fade-in-0 slide-in-from-top-2',
         className,
       )}
@@ -54,7 +54,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
           tone={variant}
           width={464}
           height={200}
-          className="absolute inset-y-0 left-0 -z-10 w-116 mask-r-from-34%"
+          className="absolute inset-0 -z-10 max-w-116 mask-r-from-34%"
         />
       )}
       {title && (

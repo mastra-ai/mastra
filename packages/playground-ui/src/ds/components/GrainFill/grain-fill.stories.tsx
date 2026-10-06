@@ -16,7 +16,10 @@ export const Tones: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       {tones.map(tone => (
-        <div key={tone} className="relative isolate h-50 w-116 overflow-hidden rounded-2xl bg-card shadow-raised">
+        <div
+          key={tone}
+          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim bg-card shadow-(--elevation-raised)"
+        >
           <GrainFill tone={tone} width={464} height={200} className="absolute inset-0 -z-10" />
         </div>
       ))}
@@ -30,7 +33,10 @@ export const AnyColorToken: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       {colorTokens.map(tone => (
-        <div key={tone} className="relative isolate h-50 w-116 overflow-hidden rounded-2xl bg-card shadow-raised">
+        <div
+          key={tone}
+          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim bg-card shadow-(--elevation-raised)"
+        >
           <GrainFill tone={tone} width={464} height={200} className="absolute inset-0 -z-10" />
         </div>
       ))}
