@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 import { extractProblemDetail, MastraConnectError } from './errors.js';
+import {
+  describePlatformCall,
+  endPlatformCallSpan,
+  errorPlatformCallSpan,
+  startPlatformCallSpan,
+} from './instrumentation.js';
 
 /**
  * Configuration for talking to the Mastra platform integrations service.
@@ -87,17 +93,24 @@ function redact(message: string, accessToken: string): string {
 }
 
 async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+  // Single choke point for outbound connect HTTP (platform API + vendor
+  // proxy), so one span here covers every external call this package makes.
+  const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
   try {
-    return await client.fetch(`${client.baseUrl}${path}`, {
+    const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    endPlatformCallSpan(span, response.status);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
+      errorPlatformCallSpan(span, redacted);
       throw redacted;
     }
+    errorPlatformCallSpan(span, error);
     throw error;
   }
 }

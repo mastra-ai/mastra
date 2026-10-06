@@ -2,7 +2,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  approvePlanFile: vi.fn(async () => undefined),
+  switchModeWithPack: vi.fn(async () => undefined),
+}));
+vi.mock('@mastra/code-sdk/utils/plans', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/code-sdk/utils/plans')>()),
+  approvePlanFile: mocks.approvePlanFile,
+}));
+vi.mock('../../model-packs/apply.js', () => ({ switchModeWithPack: mocks.switchModeWithPack }));
+
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
@@ -21,6 +32,11 @@ function createTmpProjectWithPlan(title: string, plan: string, filename = getPla
   fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
   return projectPath;
 }
+
+beforeEach(() => {
+  mocks.approvePlanFile.mockClear();
+  mocks.switchModeWithPack.mockClear();
+});
 
 afterEach(() => {
   while (tmpProjects.length) {
@@ -217,6 +233,10 @@ describe('handlePlanApproval goal mode', () => {
 
     expect(ctx.setGoal).toHaveBeenCalledTimes(1);
     expect(ctx.setGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(mocks.switchModeWithPack).toHaveBeenCalledWith(ctx, 'build');
+    expect(mocks.switchModeWithPack.mock.invocationCallOrder[0]).toBeLessThan(
+      (state.session.respondToToolSuspension as any).mock.invocationCallOrder[0],
+    );
     // An already-active goal would otherwise judge the resumed run, which
     // carries on into implementing the plan.
     expect((ctx.setGoal as any).mock.invocationCallOrder[0]).toBeLessThan(
@@ -355,6 +375,40 @@ describe('handlePlanApproval goal mode', () => {
 });
 
 describe('handlePlanApproval regular approval', () => {
+  it.each([['onApprove'], ['onGoal']] as const)(
+    'restores the approval prompt when %s cannot switch to the build model',
+    async method => {
+      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+      const { state, ctx } = createPlanApprovalCtx(projectPath);
+      const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+      state.hookManager = { runPermissionResult };
+      mocks.switchModeWithPack.mockRejectedValueOnce(new Error('model persistence failed'));
+
+      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+      await (component as any)[method]();
+
+      expect(ctx.showError).toHaveBeenCalledWith('Failed to start plan: model persistence failed');
+      expect(state.activeInlinePlanApproval).toBe(component);
+      expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
+      expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+      expect(state.session.state.set).not.toHaveBeenCalled();
+      expect(state.previousPlanSnapshot).toBeDefined();
+      expect(mocks.approvePlanFile).not.toHaveBeenCalled();
+      expect(runPermissionResult).not.toHaveBeenCalled();
+
+      mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
+      await (component as any)[method]();
+      await promise;
+
+      expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+      expect(state.previousPlanSnapshot).toBeUndefined();
+      expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
+      expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
+        path: PLAN_PATH,
+      });
+    },
+  );
+
   it('activates an existing streamed submit_plan component in place', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);

@@ -953,7 +953,6 @@ export type ProviderModelsMap = {
     'sakana/fugu-max',
     'sakana/fugu-ultra',
     'sakana/fugu-ultra-v1.1',
-    'sakana/sakana-namazu',
     'sarvam-105b',
     'shisa-ai/shisa-v2-llama3.3-70b',
     'shisa-ai/shisa-v2.1-llama3.3-70b',
@@ -1198,25 +1197,16 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
   ];
   readonly wandb: readonly [
-    'JetBrains/Mellum2-12B-A2.5B-Instruct',
     'MiniMaxAI/MiniMax-M3',
-    'OpenPipe/Qwen3-14B-Instruct',
-    'Qwen/Qwen3-30B-A3B-Instruct-2507',
-    'Qwen/Qwen3.5-35B-A3B',
-    'Qwen/Qwen3.6-27B',
     'Qwen/Qwen3.6-35B-A3B',
     'Qwen/Qwen3.8-27B',
     'deepseek-ai/DeepSeek-V3.1',
-    'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Flash-0731',
-    'deepseek-ai/DeepSeek-V4-Pro',
     'deepseek-ai/DeepSeek-V4-Pro-0813',
     'deepseek-ai/DeepSeek-V4.1-Flash',
     'google/gemma-4-26B-A4B-it',
     'google/gemma-4-31B-it',
-    'ibm-granite/granite-4.1-8b',
     'ibm-granite/granite-4.2-8b',
-    'meta-llama/Llama-3.1-70B-Instruct',
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
     'moonshotai/Kimi-K2.6',
@@ -4400,6 +4390,7 @@ export type ProviderModelsMap = {
     'bfl/flux-2-klein-9b',
     'bfl/flux-2-max',
     'bfl/flux-2-pro',
+    'bfl/flux-3-image',
     'bfl/flux-3-video',
     'bfl/flux-kontext-max',
     'bfl/flux-kontext-pro',
@@ -4422,6 +4413,8 @@ export type ProviderModelsMap = {
     'bytedance/seedream-5.0-pro',
     'cohere/command-a',
     'cohere/embed-v4.0',
+    'cohere/embed-v5.0-fast',
+    'cohere/embed-v5.0-pro',
     'cohere/rerank-v3.5',
     'cohere/rerank-v4-fast',
     'cohere/rerank-v4-pro',
@@ -5851,6 +5844,7 @@ export type ProviderModelsMap = {
     'qwen3.7-plus',
     'qwen3.8-flash',
     'qwen3.8-max',
+    'space-bunny',
     'space-bunny-free',
   ];
   readonly openreason: readonly [
@@ -5860,7 +5854,7 @@ export type ProviderModelsMap = {
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly 'aki-io': readonly [
-    'deepseek-v4-flash-0731-284b',
+    'deepseek-v4.1-flash-552b',
     'gemma4-26b',
     'glm5.3-754b',
     'gpt-oss-120b',

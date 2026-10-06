@@ -1,4 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { INTAKE_SOURCES } from '../boardCandidates';
 import type { IntakeSource } from '../boardCandidates';
@@ -21,13 +22,15 @@ export function IntakeSourceSwitch({
           aria-pressed={active === source.id}
           onClick={() => onSelect(source.id)}
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-meta transition',
+            'rounded-full border px-2.5 py-0.5 transition',
             active === source.id
               ? 'border-badge-green-indicator bg-fill text-foreground'
               : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >
-          {source.label}
+          <Txt as="span" variant="meta" className="block">
+            {source.label}
+          </Txt>
         </button>
       ))}
     </div>

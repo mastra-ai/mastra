@@ -95,6 +95,16 @@ Line 3`;
       expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
     });
 
+    it('should report lineRange matching a case-preserving custom tokenizer', async () => {
+      const caseEngine = new SearchEngine({
+        bm25: { tokenize: { tokenizer: text => text.split(/\s+/).filter(Boolean) } },
+      });
+      await caseEngine.index({ id: 'doc1', content: 'Introduction\nPython examples\npython alternatives' });
+
+      const results = await caseEngine.search('Python');
+      expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
+    });
+
     it('should store and return metadata', async () => {
       await engine.index({
         id: 'doc1',

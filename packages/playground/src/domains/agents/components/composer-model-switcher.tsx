@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
@@ -126,12 +127,12 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
         <div
-          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground"
+          className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words">
+          <Txt as="span" variant="caption" className="min-w-0 break-words">
             {modelWarning || (
               <>
                 <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">
@@ -140,19 +141,19 @@ export const ComposerModelWarning = () => {
                 is no longer allowed by admin policy. Pick a different model.
               </>
             )}
-          </span>
+          </Txt>
         </div>
       )}
       {showProviderWarning && (
-        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground">
+        <div className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words">
+          <Txt as="span" variant="caption" className="min-w-0 break-words">
             Set{' '}
             <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">
               {envVar}
             </code>{' '}
             to use this provider
-          </span>
+          </Txt>
         </div>
       )}
     </div>
