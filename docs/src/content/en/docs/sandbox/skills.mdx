@@ -79,9 +79,32 @@ Mastra also gives the agent three tools:
 | - | - |
 | `skill` | Loads a skill's `SKILL.md` instructions and lists its reference, script, and asset files. |
 | `skill_read` | Reads all or part of any file under the selected skill directory. |
-| `skill_search` | Searches skill instructions and reference files. |
+| `skill_search` | Searches skill names, descriptions, instructions, and reference files. |
 
 Loading is stateless. The instructions remain in the conversation as a tool result, and the agent can call `skill` again if they leave the context after compaction.
+
+### Turn off the skills list
+
+With many skills, listing all of them in the system message costs tokens on every request. Add `SkillsProcessor` with `injectCatalog: false` to replace the list with a short instruction to find skills with `skill_search` and load them with `skill`:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { SkillsProcessor } from '@mastra/core/processors'
+import { workspace } from '../workspaces'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You help customers with support requests.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace,
+  inputProcessors: [new SkillsProcessor({ injectCatalog: false })],
+})
+```
+
+The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both filesystem-backed and [agent skills](/docs/skills). Because the agent now finds skills by searching, configure [BM25 or vector search](#search-skill-content) for larger collections.
+
+[`SkillSearchProcessor`](/reference/processors/skill-search-processor) also hides the list, but replaces the standard tools with its own `search_skills` and `load_skill` tools and only covers workspace skills.
 
 ## Configure skill paths
 
@@ -117,9 +140,13 @@ Direct [agent skills](/docs/skills) are resolved before filesystem-backed skills
 
 ## Search skill content
 
-When [BM25 or vector search](/docs/sandbox/search) is configured alongside skills, Mastra automatically indexes each skill's `SKILL.md` instructions and reference files. Scripts and assets aren't indexed.
+When [BM25 or vector search](/docs/sandbox/search) is configured alongside skills, Mastra automatically indexes each skill's name, description, `SKILL.md` instructions, and reference files. Scripts and assets aren't indexed.
 
-Without BM25 or vector search, `skill_search` falls back to case-insensitive text matching across the instructions and references. This keeps skill search available without a separate search configuration, while indexed search provides ranking and semantic retrieval for larger collections.
+Without BM25 or vector search, `skill_search` falls back to case-insensitive text matching across the name, description, instructions, and references. A result matches when every word in the query appears in it. This keeps skill search available without a separate search configuration, while indexed search provides ranking and semantic retrieval for larger collections.
+
+A result from a reference file includes the file path, such as `references/style-guide.md`, so the agent can pass it to `skill_read`.
+
+When the agent asks for a skill name that doesn't exist, `skill` and `skill_read` list every available skill if there are 20 or fewer. With more skills, they suggest up to five close matches and point the agent to `skill_search`, so a mistyped name doesn't add the whole skill list to the conversation.
 
 ## Dynamic skill paths
 

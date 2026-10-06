@@ -19,6 +19,13 @@
  *   workspace,
  *   inputProcessors: [new SkillsProcessor({ workspace })],
  * });
+ *
+ * // Or search-first, without the catalog. The skill, skill_search and
+ * // skill_read tools stay available:
+ * const agent = new Agent({
+ *   workspace,
+ *   inputProcessors: [new SkillsProcessor({ injectCatalog: false })],
+ * });
  * ```
  */
 import type { IMastraLogger } from '../../logger';
@@ -63,15 +70,39 @@ interface SkillsProcessorBaseOptions {
    * more than turn latency (e.g. local filesystems where the walk is cheap).
    */
   blockingRefresh?: boolean;
+  /**
+   * Inject the `<available_skills>` catalog into the system message.
+   *
+   * When false, the processor injects a short hint telling the model to find
+   * skills with the `skill_search` tool and load them with the `skill` tool
+   * instead of listing every skill. Use this when there are enough skills that
+   * the catalog costs too many tokens. The hint is injected whenever the
+   * `skill_search` tool is available, so it also covers skills configured on
+   * the agent; `skills` and `workspace` become optional.
+   *
+   * @default true
+   */
+  injectCatalog?: boolean;
 }
 
 /**
  * Configuration options for SkillsProcessor.
  * Provide either `skills` (WorkspaceSkills directly) or `workspace` (skills resolved via workspace.skills), not both.
+ * With `injectCatalog: false`, neither is required.
  */
 export type SkillsProcessorOptions =
   | ({ skills: WorkspaceSkills; workspace?: never } & SkillsProcessorBaseOptions)
-  | ({ workspace: Workspace; skills?: never } & SkillsProcessorBaseOptions);
+  | ({ workspace: Workspace; skills?: never } & SkillsProcessorBaseOptions)
+  | ({ injectCatalog: false; skills?: never; workspace?: never } & Omit<SkillsProcessorBaseOptions, 'injectCatalog'>);
+
+/**
+ * Injected instead of the catalog when `injectCatalog` is false.
+ */
+const SKILL_SEARCH_HINT =
+  'Skills are available but not listed. Skills are NOT tools: do not call skill names directly as tool names. ' +
+  'Use the `skill_search` tool to find a relevant skill, then call the `skill` tool with its name to load its instructions. ' +
+  'Read skill files with `skill_read` rather than with filesystem tools. ' +
+  'When a user asks about a topic a skill may cover, search for it immediately without asking for permission first.';
 
 // =============================================================================
 // Catalog formatting
@@ -194,6 +225,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /** When true, await the staleness check before step 0 (same-turn freshness) */
   private readonly _blockingRefresh: boolean;
 
+  /** When false, inject a skill_search hint instead of the skills catalog */
+  private readonly _injectCatalog: boolean;
+
   /** Mastra logger, attached via __registerMastra; console.warn fallback until then */
   private _logger?: IMastraLogger;
 
@@ -202,6 +236,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     this._format = opts.format ?? 'xml';
     this._formatLocation = opts.formatLocation;
     this._blockingRefresh = opts.blockingRefresh ?? false;
+    this._injectCatalog = opts.injectCatalog ?? true;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -294,7 +329,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Process input step - inject available skills metadata into the system
    * message.  Tools are provided by `Agent.listSkillTools()` instead.
    */
-  async processInputStep({ messageList, stepNumber, requestContext, tracingContext }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, stepNumber, requestContext, tracingContext, tools }: ProcessInputStepArgs) {
     const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
 
     // Revalidate skills on first step only (not every step in the agentic loop).
@@ -318,8 +353,23 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // is the signal that skills are configured but nothing was discovered
     // (e.g. a skills path that does not resolve on the workspace filesystem).
     tracingContext?.currentSpan?.update({
-      attributes: { skillCount: skillsList?.length ?? 0, skillFormat: this._format },
+      attributes: {
+        skillCount: skillsList?.length ?? 0,
+        skillFormat: this._format,
+        injectCatalog: this._injectCatalog,
+      },
     });
+
+    // Without a catalog, point the model at skill_search. Gate on the tool
+    // rather than this processor's own skills: the agent builds the skill tools
+    // from agent-level and workspace skills together, and drops them when an
+    // on-demand discovery processor takes over.
+    if (!this._injectCatalog) {
+      if (tools && 'skill_search' in tools) {
+        messageList.addSystem({ role: 'system', content: SKILL_SEARCH_HINT });
+      }
+      return;
+    }
 
     // Inject available skills metadata (if any skills discovered)
     if (hasSkills) {

@@ -15,6 +15,7 @@ import { ProcessorStepSchema } from '../../processors/index';
 import type { Processor, ProcessInputArgs } from '../../processors/index';
 import { SkillSearchProcessor } from '../../processors/processors/skill-search';
 import { SkillsProcessor } from '../../processors/processors/skills';
+import { createSkill, resolveAgentSkills } from '../../skills';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows/create';
 import { createStep } from '../../workflows/workflow';
@@ -590,6 +591,75 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       expect(prompt).toContain('To discover available skills, call search_skills');
       expect(prompt).not.toContain('<available_skills>');
       expect(prompt).not.toContain('Skills are NOT tools');
+    });
+  });
+
+  describe('SkillsProcessor with injectCatalog: false', () => {
+    const HINT = 'Skills are available but not listed';
+
+    it('replaces the catalog with the skill_search hint and keeps all skill tools', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        workspace: mockWorkspace,
+        inputProcessors: [new SkillsProcessor({ workspace: mockWorkspace, injectCatalog: false })],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toEqual(expect.arrayContaining(['skill', 'skill_search', 'skill_read']));
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt).not.toContain('IMPORTANT: Skills are NOT tools');
+      expect(prompt.split(HINT)).toHaveLength(2);
+    });
+
+    it('covers agent-level skills with a processor that has no skills source', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        skills: [
+          createSkill({
+            name: 'release-notes',
+            description: 'Write release notes from merged pull requests',
+            instructions: '# Release notes\n\nGroup changes by package.',
+          }),
+        ],
+        inputProcessors: [new SkillsProcessor({ injectCatalog: false })],
+      });
+
+      await agent.generate('Hello');
+
+      const toolNames = getToolNames(capturedTools);
+      expect(toolNames).toEqual(expect.arrayContaining(['skill', 'skill_search', 'skill_read']));
+
+      const prompt = JSON.stringify(capturedPrompt);
+      expect(prompt).not.toContain('<available_skills>');
+      expect(prompt.split(HINT)).toHaveLength(2);
+    });
+
+    it('lets skill_search find agent-level skills by description', async () => {
+      const skills = resolveAgentSkills([
+        createSkill({
+          name: 'release-notes',
+          description: 'Write release notes from merged pull requests',
+          instructions: '# Release notes\n\nGroup changes by package.',
+        }),
+        createSkill({
+          name: 'api-design',
+          description: 'Design REST endpoints',
+          instructions: '# API design\n\nUse nouns for resources.',
+        }),
+      ]);
+
+      const results = await skills.search('merged pull requests');
+      expect(results[0]?.skillName).toBe('release-notes');
     });
   });
 });

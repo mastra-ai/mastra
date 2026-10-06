@@ -716,8 +716,8 @@ user-invocable: false
       expect(indexedPaths).not.toContain('skills/skill-b');
       // New skill is indexed
       expect(indexedPaths).toContain('skills/skill-c');
-      // Unchanged skill is neither duplicated nor dropped
-      expect(indexedPaths.filter(p => p === 'skills/skill-a')).toHaveLength(1);
+      // Unchanged skill is neither duplicated nor dropped (body + name/description docs)
+      expect(indexedPaths.filter(p => p === 'skills/skill-a')).toHaveLength(2);
     });
   });
 
@@ -737,6 +737,80 @@ user-invocable: false
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
       expect(results[0]?.skillPath).toBe('skills/api-skill');
+    });
+
+    describe('name and description matching', () => {
+      const PR_REVIEW_SKILL_MD = `---
+name: pr-review
+description: Review pull requests for correctness and style
+---
+
+# Checklist
+
+Read the diff carefully.
+`;
+
+      function createSkills(searchEngine?: ReturnType<typeof createMockSearchEngine>) {
+        return new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+          }),
+          skills: ['skills'],
+          ...(searchEngine ? { searchEngine } : {}),
+        });
+      }
+
+      it('simple search matches a query found only in the skill name', async () => {
+        const results = await createSkills().search('pr-review');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('simple search matches a query found only in the description and previews the description', async () => {
+        const results = await createSkills().search('correctness');
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({
+          skillName: 'pr-review',
+          source: 'SKILL.md',
+          content: 'Review pull requests for correctness and style',
+        });
+      });
+
+      it('simple search matches multi-word queries whose words are split across name, description and body', async () => {
+        const results = await createSkills().search('Review DIFF pull');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('simple search returns nothing when any query word is missing', async () => {
+        expect(await createSkills().search('review kubernetes')).toEqual([]);
+      });
+
+      it('indexes name and description as a SKILL.md document', async () => {
+        const searchEngine = createMockSearchEngine();
+        const skills = createSkills(searchEngine);
+
+        const results = await skills.search('correctness');
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({ skillName: 'pr-review', source: 'SKILL.md' });
+        expect(results[0]?.content).toContain('Review pull requests for correctness');
+
+        const metadataDoc = searchEngine.indexedDocs.find(d => d.id === 'skill:skills/pr-review:SKILL.md#metadata');
+        expect(metadataDoc?.content).toBe('pr-review\nReview pull requests for correctness and style');
+        expect(metadataDoc?.metadata).toMatchObject({ skillPath: 'skills/pr-review', source: 'SKILL.md' });
+      });
+
+      it('returns one result per skill when both the body and metadata documents match', async () => {
+        const searchEngine = createMockSearchEngine();
+        const results = await createSkills(searchEngine).search('API');
+        expect(results.filter(r => r.skillName === 'api-skill')).toHaveLength(1);
+      });
+
+      it('keeps the metadata document when references are excluded', async () => {
+        const results = await createSkills(createMockSearchEngine()).search('correctness', {
+          includeReferences: false,
+        });
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
     });
 
     it('should use search engine when configured', async () => {
@@ -1223,7 +1297,8 @@ This skill helps with endpoint design and API patterns.`;
 
       expect((await scopedA.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['alpha']);
       expect((await scopedB.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['beta']);
-      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(2);
+      // One body + one name/description document per scoped skill
+      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(4);
     });
   });
 
@@ -2819,9 +2894,28 @@ These are the updated instructions.
 
       await skills.removeSkill('skills/test-skill');
 
-      // Should have removed SKILL.md and reference entries
+      // Should have removed SKILL.md, name/description metadata, and reference entries
       expect(removedIds).toContain('skill:skills/test-skill:SKILL.md');
+      expect(removedIds).toContain('skill:skills/test-skill:SKILL.md#metadata');
       expect(removedIds).toContain('skill:skills/test-skill:doc.md');
+    });
+
+    it('reindexes a skill whose description changed even when its instructions did not', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const searchEngine = { ...createMockSearchEngine(), remove: vi.fn(async () => {}) };
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: ['skills'], searchEngine });
+      await skills.list();
+
+      await filesystem.writeFile(
+        'skills/test-skill/SKILL.md',
+        VALID_SKILL_MD.replace('A test skill for unit testing', 'Generates release notes'),
+      );
+      await skills.refresh();
+
+      const metadataDocs = searchEngine.indexedDocs.filter(d => d.id === 'skill:skills/test-skill:SKILL.md#metadata');
+      expect(metadataDocs.at(-1)?.content).toBe('test-skill\nGenerates release notes');
     });
   });
 

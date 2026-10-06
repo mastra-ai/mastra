@@ -9,6 +9,8 @@ packages:
 
 The `SkillSearchProcessor` is an **input processor** that enables on-demand skill discovery and loading. Instead of injecting all skill metadata into the system prompt upfront (like `SkillsProcessor`), it gives the agent two meta-tools (`search_skills` and `load_skill`) that let it find and load skills on demand. This reduces context token usage when workspaces have many skills.
 
+To hide the skills list but keep the standard `skill`, `skill_read`, and `skill_search` tools, use `SkillsProcessor` with `injectCatalog: false` instead. See [Turn off the skills list](/docs/sandbox/skills#turn-off-the-skills-list).
+
 By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
 
 - The default eager `SkillsProcessor` isn't auto-added.

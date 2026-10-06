@@ -322,6 +322,77 @@ describe('skill tool', () => {
     expect(result).toContain('Skill "plan" not found.');
     expect(result).toContain('Available skills: plan (.mastra/skills/plan), plan (user-skills/plan)');
   });
+
+  describe('with more than 20 skills', () => {
+    const manySkills = Array.from({ length: 21 }, (_, i) =>
+      makeMetadata({ name: `skill-${i}`, path: `skills/skill-${i}` }),
+    );
+
+    it('suggests the closest matches instead of listing every skill', async () => {
+      const search = vi.fn(async () => [
+        { skillName: 'release-notes', skillPath: 'skills/release-notes', source: 'SKILL.md', content: '', score: 2 },
+        { skillName: 'changelog-lint', skillPath: 'skills/changelog-lint', source: 'SKILL.md', content: '', score: 1 },
+      ]);
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills), search });
+      const { skill: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { name: 'release-notes-writer' });
+
+      expect(search).toHaveBeenCalledWith('release notes writer', { topK: 5, includeReferences: false });
+      expect(result).toBe(
+        'Skill "release-notes-writer" not found. Closest matches: release-notes (skills/release-notes), ' +
+          'changelog-lint (skills/changelog-lint). Use the `skill_search` tool to find other skills.',
+      );
+      expect(result).not.toContain('skill-0');
+    });
+
+    it('points to skill_search when nothing matches', async () => {
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills) });
+      const { skill: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { name: 'nonexistent' });
+
+      expect(result).toBe('Skill "nonexistent" not found. Use the `skill_search` tool to find other skills.');
+    });
+
+    it('suggests a real skill matched by its description', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-suggest-'));
+      try {
+        const write = async (name: string, description: string) => {
+          const dir = path.join(tempDir, 'skills', name);
+          await fs.mkdir(dir, { recursive: true });
+          await fs.writeFile(
+            path.join(dir, 'SKILL.md'),
+            `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.`,
+          );
+        };
+        await write('release-notes', 'Drafts the changelog from merged pull requests');
+        for (let i = 0; i < 20; i++) await write(`filler-${i}`, 'Unrelated helper');
+
+        const skills = new WorkspaceSkillsImpl({
+          source: new LocalSkillSource({ basePath: tempDir }),
+          skills: ['skills'],
+        });
+        const { skill: tool } = createSkillTools(skills);
+
+        const result = await exec(tool, { name: 'changelog' });
+
+        expect(result).toContain('Closest matches: release-notes (');
+        expect(result).not.toContain('filler-');
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('applies to skill_read too', async () => {
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills) });
+      const { skill_read: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { skillName: 'nonexistent', path: 'references/a.md' });
+
+      expect(result).toBe('Skill "nonexistent" not found. Use the `skill_search` tool to find other skills.');
+    });
+  });
 });
 
 // =============================================================================
@@ -393,6 +464,27 @@ describe('skill_search tool', () => {
     const result = await exec(tool, { query: 'null checks' });
 
     expect(result).toContain('(lines 10-15)');
+  });
+
+  it('names the reference file for reference hits so it can be passed to skill_read', async () => {
+    const searchResults: SkillSearchResult[] = [
+      {
+        skillName: 'brand-guide',
+        skillPath: 'skills/brand-guide',
+        source: 'references/colors.md',
+        content: 'Primary blue is #0066CC.',
+        score: 0.6,
+        lineRange: { start: 3, end: 3 },
+      },
+      { skillName: 'brand-guide', skillPath: 'skills/brand-guide', source: 'SKILL.md', content: 'Body.', score: 0.4 },
+    ];
+    const skills = createMockWorkspaceSkills({ search: vi.fn(async () => searchResults) });
+    const { skill_search: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { query: 'blue' });
+
+    expect(result).toContain('[brand-guide] references/colors.md (lines 3-3) (score: 0.60)');
+    expect(result).toContain('[brand-guide] (score: 0.40)');
   });
 
   it('truncates preview at 200 characters with ellipsis', async () => {

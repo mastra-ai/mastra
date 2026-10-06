@@ -55,6 +55,9 @@ interface SharedSearchState {
 /** @internal Prefix of every search document ID owned by a request-scoped skills view. */
 export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
 
+/** Search document ID suffix for a skill's name + description document. */
+const SKILL_METADATA_SOURCE = 'SKILL.md#metadata';
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -579,6 +582,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const unchanged =
         oldSkill &&
         oldSkill.instructions === newSkill.instructions &&
+        oldSkill.name === newSkill.name &&
+        oldSkill.description === newSkill.description &&
         oldSkill.references.length === newSkill.references.length &&
         oldSkill.references.every((r, i) => r === newSkill.references[i]);
       if (unchanged) continue;
@@ -736,7 +741,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       ? this.#sharedSearchState.documentIds.size
       : [...this.#skills.values()].reduce(
           (count, candidates) =>
-            count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+            count + candidates.reduce((skillCount, skill) => skillCount + 2 + skill.references.length, 0),
           0,
         );
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
@@ -1452,6 +1457,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const ids = [
       this.#searchDocumentId(skill.path, 'SKILL.md'),
+      this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE),
       ...skill.references.map(r => this.#searchDocumentId(skill.path, r)),
     ];
     for (const id of ids) {
@@ -1497,6 +1503,21 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
     this.#sharedSearchState.documentIds.add(skillDocumentId);
 
+    // Index name + description as their own document so searches can find a
+    // skill by what it is for. Kept separate from the body so body line ranges
+    // stay accurate; shares source 'SKILL.md' so results de-dup per skill.
+    const metadataDocumentId = this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE);
+    await this.#searchEngine.index({
+      id: metadataDocumentId,
+      content: `${skill.name}\n${skill.description}`,
+      metadata: {
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        ...(this.#searchNamespace ? { skillScope: this.#searchNamespace } : {}),
+      },
+    });
+    this.#sharedSearchState.documentIds.add(metadataDocumentId);
+
     // Index each reference file in parallel (independent reads + index calls)
     await Promise.all(
       skill.references.map(async refPath => {
@@ -1533,7 +1554,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #simpleSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const { topK = 5, skillNames, includeReferences = true } = options;
-    const queryLower = query.toLowerCase();
+    // Match when every query word appears (case-insensitive), so multi-word
+    // queries don't need to appear verbatim.
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const matchesAll = (text: string) => {
+      const lower = text.toLowerCase();
+      return terms.every(term => lower.includes(term));
+    };
     const results: SkillSearchResult[] = [];
 
     for (const candidates of this.#skills.values()) {
@@ -1546,13 +1573,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         continue;
       }
 
-      // Search in instructions
-      if (skill.instructions.toLowerCase().includes(queryLower)) {
+      // Search in name, description, and instructions. When the instructions
+      // alone don't match, preview the description since that's what matched.
+      if (matchesAll(`${skill.name}\n${skill.description}\n${skill.instructions}`)) {
         results.push({
           skillName: skill.name,
           skillPath: skill.path,
           source: 'SKILL.md',
-          content: skill.instructions.substring(0, 200),
+          content: matchesAll(skill.instructions) ? skill.instructions.substring(0, 200) : skill.description,
           score: 1,
         });
       }
@@ -1562,7 +1590,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         for (const refPath of skill.references) {
           if (results.length >= topK) break;
           const content = await this.getReference(skill.name, `references/${refPath}`);
-          if (content && content.toLowerCase().includes(queryLower)) {
+          if (content && matchesAll(content)) {
             results.push({
               skillName: skill.name,
               skillPath: skill.path,

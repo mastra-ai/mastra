@@ -342,6 +342,73 @@ describe('SkillsProcessor', () => {
       expect(mockMessageList.addSystem).not.toHaveBeenCalled();
     });
 
+    describe('injectCatalog: false', () => {
+      const skillTools = { skill: {}, skill_search: {}, skill_read: {} };
+      const systemContents = () => mockMessageList.addSystem.mock.calls.map(c => c[0].content as string);
+
+      it('injects the skill_search hint instead of the catalog', async () => {
+        const searchFirst = new SkillsProcessor({ workspace: mockWorkspace, injectCatalog: false });
+
+        await searchFirst.processInputStep({ messageList: mockMessageList as any, tools: skillTools } as any);
+
+        const contents = systemContents();
+        expect(contents).toHaveLength(1);
+        expect(contents[0]).toContain('`skill_search` tool');
+        expect(contents[0]).toContain('`skill` tool');
+        expect(contents.join('\n')).not.toContain('<available_skills>');
+        expect(contents.join('\n')).not.toContain('code-review');
+      });
+
+      it('works without a skills source and still keeps skills fresh when one is given', async () => {
+        const sourceless = new SkillsProcessor({ injectCatalog: false });
+        await sourceless.processInputStep({
+          messageList: mockMessageList as any,
+          tools: skillTools,
+          stepNumber: 0,
+        } as any);
+        expect(systemContents()).toHaveLength(1);
+        expect(await sourceless.listSkills()).toEqual([]);
+
+        const withSource = new SkillsProcessor({ workspace: mockWorkspace, injectCatalog: false });
+        await withSource.processInputStep({
+          messageList: createMockMessageList() as any,
+          tools: skillTools,
+          stepNumber: 0,
+        } as any);
+        expect(mockSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      });
+
+      it('injects nothing when the skill_search tool is not available', async () => {
+        const searchFirst = new SkillsProcessor({ injectCatalog: false });
+
+        await searchFirst.processInputStep({ messageList: mockMessageList as any, tools: { skill_read: {} } } as any);
+        await searchFirst.processInputStep({ messageList: mockMessageList as any } as any);
+
+        expect(mockMessageList.addSystem).not.toHaveBeenCalled();
+      });
+
+      it('records injectCatalog on the span', async () => {
+        const update = vi.fn();
+        const searchFirst = new SkillsProcessor({ injectCatalog: false });
+
+        await searchFirst.processInputStep({
+          messageList: mockMessageList as any,
+          tools: skillTools,
+          tracingContext: { currentSpan: { update } },
+        } as any);
+
+        expect(update).toHaveBeenCalledWith({
+          attributes: expect.objectContaining({ injectCatalog: false, skillCount: 0 }),
+        });
+      });
+
+      it('injects the catalog by default', async () => {
+        await processor.processInputStep({ messageList: mockMessageList as any, tools: skillTools } as any);
+        expect(systemContents().join('\n')).toContain('<available_skills>');
+        expect(systemContents().join('\n')).not.toContain('Skills are available but not listed');
+      });
+    });
+
     it('should load skills based on request context', async () => {
       const requestContext = { userId: 'test-user', sessionId: '123' };
 
