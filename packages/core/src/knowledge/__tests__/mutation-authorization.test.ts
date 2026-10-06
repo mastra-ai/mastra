@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Knowledge } from '..';
 import { InMemoryStore } from '../../storage';
@@ -320,6 +320,87 @@ describe('Knowledge mutation authorization', () => {
     ).toMatchObject({
       records: [],
     });
+  });
+
+  it('replaceNodeRecords never retires a same-source record that appears after authorization', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const vouchedScopeIds = [ids['principal:owner']!, ids['principal:readonly']!];
+    const node = await storage.createNode({ name: 'Replaced', scopeIds: [ids['scope:owner']!] });
+    const authorized = await storage.createRecord({
+      node,
+      text: 'Authorized',
+      source: 'curator',
+      scopeIds: [ids['scope:owner']!],
+    });
+    const current = (await storage.getNode(node.id))!;
+    let concurrentId: string | undefined;
+    const replace = storage.replaceNodeRecords.bind(storage);
+    vi.spyOn(storage, 'replaceNodeRecords').mockImplementation(async input => {
+      // Readable to the caller but not manageable: the old storage path deleted every visible match.
+      concurrentId = (
+        await storage.createRecord({
+          node: current,
+          text: 'Concurrent readonly evidence',
+          source: 'curator',
+          scopeIds: [ids['scope:readonly']!],
+        })
+      ).id;
+      return replace({ ...input, node: { ...input.node, version: (await storage.getNode(node.id))!.version } });
+    });
+
+    const result = await knowledge.replaceNodeRecords({
+      node: { id: node.id, version: current.version },
+      record: { text: 'Replacement', source: 'curator', scopeIds: [ids['scope:owner']!] },
+      vouchedScopeIds,
+    });
+
+    expect(await storage.getRecord({ id: authorized.id })).toBeNull();
+    expect(await storage.getRecord({ id: concurrentId! })).toMatchObject({ text: 'Concurrent readonly evidence' });
+    expect(await storage.getRecord({ id: result.id })).toMatchObject({ text: 'Replacement' });
+  });
+
+  it('replaceNodeRecords fails without effects when access changes after authorization', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const node = await storage.createNode({ name: 'Revoked', scopeIds: [ids['scope:owner']!] });
+    const original = await storage.createRecord({
+      node,
+      text: 'Original',
+      source: 'curator',
+      scopeIds: [ids['scope:owner']!],
+    });
+    const current = (await storage.getNode(node.id))!;
+    const before = await storage.listRecordsBySource({
+      source: 'curator',
+      scopeIds: [ids['scope:owner']!],
+      includeDeleted: true,
+      limit: 100,
+    });
+    const replace = storage.replaceNodeRecords.bind(storage);
+    vi.spyOn(storage, 'replaceNodeRecords').mockImplementation(async input => {
+      await storage.upsertScopeGrant({
+        scopeNodeId: ids['scope:owner']!,
+        scopeRefId: ids['principal:owner']!,
+        role: 'readonly',
+      });
+      return replace(input);
+    });
+
+    await expect(
+      knowledge.replaceNodeRecords({
+        node: { id: node.id, version: current.version },
+        record: { text: 'Replacement', source: 'curator', scopeIds: [ids['scope:owner']!] },
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toThrow();
+    expect(await storage.getRecord({ id: original.id })).toMatchObject({ text: 'Original' });
+    expect(
+      await storage.listRecordsBySource({
+        source: 'curator',
+        scopeIds: [ids['scope:owner']!],
+        includeDeleted: true,
+        limit: 100,
+      }),
+    ).toEqual(before);
   });
 
   it('preserves numeric CAS after authorization succeeds', async () => {

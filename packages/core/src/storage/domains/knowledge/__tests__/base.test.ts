@@ -54,13 +54,17 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
       await expect(
         subject.replaceNodeRecords({
           node: { id: node.id, version: node.version },
+          replacedRecords: Array.from({ length: 105 }, (_, index) => ({
+            id: `prior-${String(index).padStart(3, '0')}`,
+            version: 1,
+          })),
+          deletedBy: 'curator',
           record: {
             id: 'replacement',
             text: 'Replacement [[New link]]',
             source: 'curator',
             scopeIds: [PROJECT_SCOPE_ID],
           },
-          visibilityScopeIds: [PROJECT_SCOPE_ID],
         }),
       ).rejects.toThrow(`injected ${stage} failure`);
     } finally {
