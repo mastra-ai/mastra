@@ -515,6 +515,8 @@ export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
   model: z.string().optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+  modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),

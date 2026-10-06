@@ -2460,6 +2460,21 @@ describe('Agent Routes Authorization', () => {
       expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
     });
 
+    it('should keep providerOptions and modelSettings when parsing approve/decline tool call bodies', () => {
+      const body = {
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+        providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } },
+        modelSettings: { temperature: 0.2 },
+      };
+
+      for (const schema of [approveToolCallBodySchema, declineToolCallBodySchema]) {
+        const parsed = schema.parse(body);
+        expect(parsed.providerOptions).toEqual(body.providerOptions);
+        expect(parsed.modelSettings).toEqual(body.modelSettings);
+      }
+    });
+
     it('should approve a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
