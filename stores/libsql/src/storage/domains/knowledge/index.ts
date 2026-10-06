@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import {
   createKnowledgeCoreLoader,
+  canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   isKnowledgeNodeVisible,
@@ -58,7 +59,6 @@ import {
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   TABLE_SCHEMAS,
-  canonicalizeKnowledgeImporterBindingKey,
 } from '@mastra/core/storage';
 import type {
   CreateKnowledgeRecordInput,
