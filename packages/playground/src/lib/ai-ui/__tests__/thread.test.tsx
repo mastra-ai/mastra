@@ -891,12 +891,11 @@ describe('Thread', () => {
         }),
       );
       const read = FileReader.prototype.readAsArrayBuffer;
-      const probe = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (
-        this: FileReader,
-        blob,
-      ) {
-        void pending.then(() => read.call(this, blob));
-      });
+      const probe = vi
+        .spyOn(FileReader.prototype, 'readAsArrayBuffer')
+        .mockImplementation(function (this: FileReader, blob) {
+          void pending.then(() => read.call(this, blob));
+        });
       try {
         await act(async () => {
           renderThread([]);
