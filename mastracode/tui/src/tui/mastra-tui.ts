@@ -6,8 +6,8 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
-import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -60,6 +60,7 @@ import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
+import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
 import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
@@ -147,22 +148,22 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThread = initThreads.find(t => t.id === initThreadId);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   const persistedFallbackStatus = fallbackStatusFromMetadata(metadata);
-  const pendingFallback = metadata?.[PACK_FALLBACK_STATE_KEY] as Partial<PendingPackFallback> | null | undefined;
+  const pendingFallback = metadata?.[MODEL_FALLBACK_STATE_KEY] as Partial<PendingModelFallback> | null | undefined;
   const validPendingFallback =
     pendingFallback &&
     typeof pendingFallback === 'object' &&
-    typeof pendingFallback.fromPackId === 'string' &&
-    typeof pendingFallback.toPackId === 'string' &&
+    typeof pendingFallback.fromEntryId === 'string' &&
+    typeof pendingFallback.toEntryId === 'string' &&
     typeof pendingFallback.toModelId === 'string' &&
     (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
     typeof pendingFallback.at === 'string'
-      ? (pendingFallback as PendingPackFallback)
+      ? (pendingFallback as PendingModelFallback)
       : null;
   const currentState = state.session.state?.get?.() as Record<string, unknown> | undefined;
-  const currentPending = currentState?.[PACK_FALLBACK_STATE_KEY];
+  const currentPending = currentState?.[MODEL_FALLBACK_STATE_KEY];
   if (validPendingFallback || currentPending) {
     const updates = {
-      [PACK_FALLBACK_STATE_KEY]: validPendingFallback,
+      [MODEL_FALLBACK_STATE_KEY]: validPendingFallback,
     };
     const applied = state.session.state.setIf
       ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
@@ -1027,8 +1028,7 @@ export class MastraTUI {
     if (event.type === 'model_changed') {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
-        scope: event.scope,
-        mode: event.modeId ?? this.state.session.mode.get(),
+        mode: this.state.session.mode.get(),
         threadId: this.state.session.thread.getId(),
         resourceId: this.state.session.identity.getResourceId(),
       });
@@ -1153,28 +1153,33 @@ export class MastraTUI {
   ): Promise<void> {
     const settings = loadSettings();
     const currentThreadId = this.state.session.thread.getId();
-    if (!currentThreadId || !isCurrent()) return;
+    if (!isCurrent()) return;
+    if (!currentThreadId) {
+      if (!this.state.options.initialModelOverride) {
+        await applyCurrentThreadPack({ state: this.state }, { packId: settings.models.activeModelPackId });
+        if (!isCurrent()) return;
+      }
+      updateStatusLine(this.state);
+      return;
+    }
     const ownsUpdate = () => isCurrent() && this.state.session.thread.getId() === currentThreadId;
 
     const resolvedThread =
       thread?.id === currentThreadId
         ? thread
         : (await this.state.session.thread.list()).find(t => t.id === currentThreadId);
-    const access = await this.buildProviderAccess();
-    const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
+    const packs = listResolvableModePacks(settings);
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
     if (!ownsUpdate()) return;
-    const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
+    const hasThreadPack = typeof metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] === 'string';
+    const resolvedPackId =
+      this.state.options.initialModelOverride && !hasThreadPack
+        ? null
+        : resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
-    const updates = {
-      activeModelPackId: resolvedPackId,
-    };
-    const applied = this.state.session.state.setIf
-      ? await this.state.session.state.setIf(updates, ownsUpdate)
-      : ownsUpdate()
-        ? (await this.state.session.state.set(updates), ownsUpdate())
-        : false;
-    if (!applied || !ownsUpdate()) return;
+    if (!ownsUpdate()) return;
+    await applyCurrentThreadPack({ state: this.state }, { packId: resolvedPackId, applyModeDefault: false });
+    if (!ownsUpdate()) return;
     this.state.fallbackStatus = fallbackStatus;
     updateStatusLine(this.state);
   }
@@ -1621,34 +1626,8 @@ export class MastraTUI {
   }
 
   private async applyOnboardingResult(result: OnboardingResult): Promise<void> {
-    const controller = this.state.controller;
     const modePack = result.modePack;
-    const modes = controller.listModes();
-
-    for (const mode of modes) {
-      const modelId = (modePack.models as Record<string, string>)[mode.id];
-      if (modelId) {
-        (mode as any).defaultModelId = modelId;
-        await this.state.session.thread.setSetting({
-          key: `modeModelId_${mode.id}`,
-          value: modelId,
-        });
-      }
-    }
-
-    const currentModeId = this.state.session.mode.get();
-    const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
-    if (currentModeModel) {
-      await this.state.session.model.switch({ modelId: currentModeModel });
-    }
-
-    const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-    for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-      const saModelId = (modePack.models as Record<string, string>)[modeId];
-      if (saModelId) {
-        await this.state.session.subagents.model.set({ modelId: saModelId, agentType });
-      }
-    }
+    const modes = this.state.controller.listModes();
 
     // With no reachable provider the OM step only offers an empty custom pack;
     // recording that non-choice would block every later provider-aware seed.
@@ -1668,37 +1647,31 @@ export class MastraTUI {
       if (modelId) modeDefaults[mode.id] = modelId;
     }
 
-    let activeModePackId = modePack.id;
-    if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
-      const customName =
-        modePack.id === 'custom' ? modePack.name?.trim() || 'Custom' : modePack.id.slice('custom:'.length) || 'Custom';
-      activeModePackId = `custom:${customName}`;
-      const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
-      const idx = settings.customModelPacks.findIndex(p => p.name === customName);
-      if (idx >= 0) {
-        settings.customModelPacks[idx] = entry;
+    let activeModePackId = settings.models.activeModelPackId;
+    const hasCompleteModePack = modes.every(mode => Boolean(modeDefaults[mode.id]));
+    if (hasCompleteModePack) {
+      activeModePackId = modePack.id;
+      if (modePack.id === 'custom' || modePack.id.startsWith('custom:')) {
+        const customName =
+          modePack.id === 'custom'
+            ? modePack.name?.trim() || 'Custom'
+            : modePack.id.slice('custom:'.length) || 'Custom';
+        activeModePackId = `custom:${customName}`;
+        const entry = { name: customName, models: modeDefaults, createdAt: new Date().toISOString() };
+        const idx = settings.customModelPacks.findIndex(p => p.name === customName);
+        if (idx >= 0) {
+          settings.customModelPacks[idx] = entry;
+        } else {
+          settings.customModelPacks.push(entry);
+        }
+        settings.models.modeDefaults = modeDefaults;
       } else {
-        settings.customModelPacks.push(entry);
+        settings.models.modeDefaults = {};
       }
-      settings.models.modeDefaults = modeDefaults;
-    } else {
-      settings.models.modeDefaults = {};
-    }
 
-    settings.onboarding.modePackId = activeModePackId;
-    settings.models.activeModelPackId = activeModePackId;
-    if (this.state.session.thread.getId()) {
-      await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
-      // Selecting a pack here is a deliberate choice, not a fallback landing:
-      // a status restored from a previous run on this thread would otherwise
-      // keep claiming the thread is on a fallback pack.
-      await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+      settings.onboarding.modePackId = activeModePackId;
+      settings.models.activeModelPackId = activeModePackId;
     }
-    await this.state.session.state.set({ activeModelPackId: activeModePackId, fallbackStatus: undefined });
-    // The status line reads the TUI's own field, not the controller session
-    // state — clearing only the latter would leave "Using fallback …" on screen
-    // until the next thread sync.
-    this.state.fallbackStatus = undefined;
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
@@ -1712,6 +1685,9 @@ export class MastraTUI {
     settings.models.subagentModels = {};
 
     saveSettings(settings);
+    await applyCurrentThreadPack({ state: this.state }, { packId: activeModePackId });
+    await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+    this.state.fallbackStatus = undefined;
 
     updateStatusLine(this.state);
     await this.refreshModelAuthStatus();

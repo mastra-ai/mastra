@@ -147,7 +147,6 @@ vi.mock('./onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -353,9 +352,9 @@ describe('scores storage domain', () => {
 });
 
 describe('Kimi startup access', () => {
-  it('rejects stored OAuth credentials without a valid device ID', async () => {
+  it('rejects stored OAuth credentials without a valid device ID for OM pack selection', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { getAvailableOmPacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
@@ -366,11 +365,11 @@ describe('Kimi startup access', () => {
         refresh: 'refresh-token',
         expires: Date.now() + 60_000,
       });
-      vi.mocked(getAvailableModePacks).mockClear();
+      vi.mocked(getAvailableOmPacks).mockClear();
 
       await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
 
-      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+      expect(getAvailableOmPacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
     } finally {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -475,6 +474,19 @@ describe('settings.json OM seeding', () => {
       vi.mocked(hasExplicitOMConfiguration).mockReturnValue(false);
       vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
     }
+  });
+
+  it('does not resolve model packs for startup mode defaults', async () => {
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { resolveModelDefaults } = await import('./onboarding/settings.js');
+    const { createMastraCode } = await import('./index.js');
+    vi.mocked(getAvailableModePacks).mockClear();
+    vi.mocked(resolveModelDefaults).mockClear();
+
+    await createMastraCode({ cwd: '/tmp/project-no-runtime-packs' });
+
+    expect(getAvailableModePacks).not.toHaveBeenCalled();
+    expect(resolveModelDefaults).not.toHaveBeenCalled();
   });
 
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {

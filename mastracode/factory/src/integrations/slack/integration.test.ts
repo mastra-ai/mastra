@@ -128,12 +128,12 @@ describe('SlackIntegration.channels', () => {
 
   // The storage handle is only useful if it survives the trip from the
   // integration context into the hook the channel machinery calls.
-  it("forwards the model-packs domain to the session-start hook, so a session starts on the sender's own model", async () => {
+  it("forwards the model-defaults domain to the session-start hook, so a session starts on the sender's own model", async () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
-    const modelPacks = { getActive: vi.fn(async () => ({ models: { build: 'openai/gpt-5.6', plan: '', fast: '' } })) };
+    const modelDefaults = { get: vi.fn(async () => ({ modelId: 'openai/gpt-5.6' })) };
     const config = integration.channels(
       ctxWith({
-        modelPacks,
+        modelDefaults,
         memorySettings: { get: vi.fn(async () => null) },
         projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-5' })) },
         sourceControlOwner: {
@@ -147,17 +147,23 @@ describe('SlackIntegration.channels', () => {
     );
     const session = {
       mode: { get: () => 'build' },
-      thread: { getSetting: vi.fn(async () => null) },
+      thread: {
+        getId: () => 'us-1',
+        getById: vi.fn(async () => ({ metadata: {} })),
+        getSetting: vi.fn(async () => null),
+        setSetting: vi.fn(async () => {}),
+        setSettingOn: vi.fn(async () => {}),
+      },
       model: {
         get: vi.fn(() => 'openai/gpt-5.5'),
         switch: vi.fn(async () => {}),
-        saveForMode: vi.fn(async () => {}),
       },
       om: {
         observer: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
         reflector: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
       },
       state: { get: () => ({}), set: vi.fn(async () => {}) },
+      subagents: { model: { set: vi.fn(async () => {}) } },
     };
 
     await config.onSessionStart!({
@@ -165,7 +171,7 @@ describe('SlackIntegration.channels', () => {
       thread: { id: 'us-1', resourceId: 'us-1' },
     } as any);
 
-    expect(modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
   });
 });

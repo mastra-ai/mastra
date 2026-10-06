@@ -56,7 +56,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'personal-models',
         label: SETTINGS_SECTION_LABELS['personal-models'],
         icon: Bot,
-        searchText: 'your personal models defaults model packs api keys providers credentials sign in oauth',
+        searchText: 'your personal models default model api keys providers credentials sign in oauth',
       },
       {
         id: 'memory',

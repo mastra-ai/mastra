@@ -54,7 +54,7 @@ interface AgentControllerModeBase {
 
   name?: string;
 
-  /** bootstrap model default when a session enters this mode. */
+  /** Seeds sessions that start in this mode and remains the subagent fallback. Mode switches do not apply it. */
   defaultModelId?: string;
 
   /** Surfaced in mode pickers / Studio UI. Free text. */
@@ -802,7 +802,7 @@ export function defaultOMProgressState(): OMProgressState {
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
+  | { type: 'model_changed'; modelId: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }

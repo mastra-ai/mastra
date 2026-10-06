@@ -1,3 +1,4 @@
+import { migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import type {
   ChannelHandler,
@@ -34,7 +35,7 @@ import type { FactoryActorExternalIdentity } from '../../storage/domains/comment
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
-import type { ActiveModelPackRecord, ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
+import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -111,13 +112,12 @@ interface SlackChannelDeps {
    */
   memorySettings?: MemorySettingsStorage;
   /**
-   * Model-packs domain. When provided, a new repo-backed session starts on the
-   * linked sender's active pack build model — the model that user picked for
-   * themselves — before the factory's shared default. Read once, when the
-   * thread's build model is first chosen; the choice is persisted on the thread
-   * and never re-resolved. Unset → the factory default, as before.
+   * Model-defaults domain. When provided, a new repo-backed session starts on
+   * the linked sender's default model before the factory's shared default. Read
+   * once, when the thread's build model is first chosen; the choice is persisted
+   * on the thread and never re-resolved. Unset → the factory default, as before.
    */
-  modelPacks?: ModelPacksStorage;
+  modelDefaults?: ModelDefaultsStorage;
   /**
    * Factory work-items domain. When provided, a dispatched new-session thread
    * (DM or mention) upserts a Work-board card in Building (`execute`) carrying
@@ -526,9 +526,9 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
  * The model this session starts on is picked here, once, in the order of who
- * chose it: the linked sender's active model pack, else the factory project's
- * default, else the SDK's built-in mode default. The choice is persisted on the
- * thread as `modeModelId_<mode>`, so it outlives the process that made it.
+ * chose it: the linked sender's default model, else the factory project's
+ * default, else the SDK's built-in model. The choice is persisted on the thread
+ * as `currentModelId`, so it outlives the process that made it.
  *
  * Observational memory is configured here too, in the same order of who chose
  * it: the project's shared settings first, then the linked sender's own row,
@@ -537,7 +537,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * made on this thread, and a restarted process re-resolves the project's row
  * before this hook runs.
  *
- * The model resolution is skipped on a session whose mode already has a model
+ * The model resolution is skipped on a session that already has a model
  * persisted on the thread. That is the durable record of a deliberate choice —
  * either an earlier start or a user's own switch — and re-applying a preference
  * over it would undo the user's selection every time the process restarts.
@@ -545,7 +545,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * every start.
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
-  const { projects, memorySettings, modelPacks } = deps;
+  const { projects, memorySettings, modelDefaults } = deps;
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ session, thread, requestContext }) => {
     // Seed the tenant org above every guard below. `gateDispatch` stamps it on
@@ -573,9 +573,21 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // recovery is the resolution that has to clear that marker with it.
     await seedSessionOrg(session, owner.orgId);
 
-    const modeModelKey = `modeModelId_${session.mode.get()}`;
-    const persistedModelId = await session.thread.getSetting({ key: modeModelKey });
-    if (typeof persistedModelId === 'string') {
+    const modeId = session.mode.get();
+    const activeThreadId = session.thread.getId();
+    const persistedModelId = await migratePersistedModelSelection({
+      getMetadata: async () =>
+        activeThreadId
+          ? (((await session.thread.getById({ threadId: activeThreadId }))?.metadata as
+              | Record<string, unknown>
+              | undefined) ?? {})
+          : {},
+      modeId,
+      set: (key: string, value: unknown) =>
+        activeThreadId ? session.thread.setSettingOn({ threadId: activeThreadId, key, value }) : Promise.resolve(),
+      threadId: activeThreadId ?? undefined,
+    });
+    if (persistedModelId) {
       // A restarted session restores its generation model from the thread, but
       // still needs the project memory row and a provider-compatible fallback.
       await hydrateFactorySession(session, {
@@ -592,8 +604,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       }
     } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-      const userPackModels = await resolveActivePackModels(modelPacks, owner);
-      const userModelId = userPackModels?.build || undefined;
+      const userModelId = await resolveUserDefaultModel(modelDefaults, owner);
       const selectedModelId = userModelId ?? factoryModelId;
 
       await hydrateFactorySession(session, {
@@ -609,12 +620,12 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 
       if (selectedModelId && selectedModelId !== factoryModelId) {
         // The sender's own choice beats the factory's. `switch` applies the model
-        // and persists it as this mode's model on the thread in one step — which
-        // is what makes the choice outlive this process.
+        // and persists it as the thread's current model in one step — which is
+        // what makes the choice outlive this process.
         try {
           await session.model.switch({ modelId: selectedModelId });
         } catch (error) {
-          console.warn("[slack] Failed to apply the sender's model pack model", {
+          console.warn("[slack] Failed to apply the sender's default model", {
             modelId: selectedModelId,
             error: error instanceof Error ? error.message : String(error),
           });
@@ -629,9 +640,9 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
           });
           if (currentModelId && !factoryModelId) {
             try {
-              await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+              await session.model.switch({ modelId: currentModelId });
             } catch (saveError) {
-              console.warn("[slack] Failed to persist the sender's model pack model", {
+              console.warn("[slack] Failed to persist the sender's default model", {
                 modelId: currentModelId,
                 error: saveError instanceof Error ? saveError.message : String(saveError),
               });
@@ -644,21 +655,15 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // that default must not silently retarget a thread that already started.
         const currentModelId = session.model.get();
         if (currentModelId) {
-          await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+          await session.model.switch({ modelId: currentModelId });
         }
       }
 
-      // Subagents follow the sender's pack like the TUI does (explore→fast,
-      // plan→plan, execute→build); roles the pack leaves empty use the factory
-      // default. Pinned on the thread like the main model, so a restart
-      // restores these rather than whatever pack or default exists by then.
-      const packSubagentModels = {
-        explore: userPackModels?.fast,
-        plan: userPackModels?.plan,
-        execute: userPackModels?.build,
-      };
+      // Subagents follow the sender's default model. When none is set, they use
+      // the factory default. Pin the choice on the thread like the main model so
+      // a restart restores it rather than whatever default exists by then.
       for (const agentType of SUBAGENT_TYPES) {
-        const modelId = packSubagentModels[agentType] || factoryModelId;
+        const modelId = userModelId ?? factoryModelId;
         if (!modelId) continue;
         if (await applySubagentModel(session, agentType, modelId)) {
           await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: modelId });
@@ -703,23 +708,22 @@ async function applySubagentModel(
 }
 
 /**
- * The models of the sender's active model pack — the models that user chose
- * for themselves — or `undefined` when they have no pack.
+ * The sender's personal default model, or `undefined` when they have none.
  *
- * Best-effort by design: an uninitialized model-packs domain, a read failure, or
- * a pack saved without a build model all mean "no personal preference", which
- * falls through to the factory default rather than failing the dispatch.
+ * Best-effort by design: an uninitialized model-defaults domain or a read
+ * failure means "no personal preference", which falls through to the factory
+ * default rather than failing the dispatch.
  */
-async function resolveActivePackModels(
-  modelPacks: ModelPacksStorage | undefined,
+async function resolveUserDefaultModel(
+  modelDefaults: ModelDefaultsStorage | undefined,
   owner: { orgId: string; userId: string },
-): Promise<ActiveModelPackRecord['models'] | undefined> {
-  if (!modelPacks) return undefined;
+): Promise<string | undefined> {
+  if (!modelDefaults) return undefined;
   try {
-    const active = await modelPacks.getActive({ orgId: owner.orgId, userId: owner.userId });
-    return active?.models;
+    const record = await modelDefaults.get({ orgId: owner.orgId, userId: owner.userId });
+    return record?.modelId;
   } catch (error) {
-    console.warn('[slack] model pack lookup failed for a new session', {
+    console.warn('[slack] default model lookup failed for a new session', {
       orgId: owner.orgId,
       userId: owner.userId,
       error: error instanceof Error ? error.message : String(error),
