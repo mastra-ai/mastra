@@ -1,0 +1,239 @@
+import { UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, expect, it } from 'vitest';
+
+import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
+
+const MEMORY = { thread: 'unsupported-file-thread', resource: 'unsupported-file-resource' };
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+type Rejection = (prompt: LanguageModelV2Prompt) => Error | undefined;
+
+const userFileParts = (prompt: LanguageModelV2Prompt) =>
+  prompt.flatMap(message => (message.role === 'user' ? message.content : [])).filter(part => part.type === 'file');
+const userTexts = (prompt: LanguageModelV2Prompt) =>
+  prompt
+    .flatMap(message => (message.role === 'user' ? message.content : []))
+    .flatMap(part => (part.type === 'text' ? [part.text] : []));
+
+/** Rejects, like the OpenAI and Anthropic SDKs do before sending, any prompt holding a file of these types. */
+const rejectsTypes =
+  (...mediaTypes: string[]): Rejection =>
+  prompt => {
+    const rejected = userFileParts(prompt).find(part => mediaTypes.includes(part.mediaType));
+    return rejected
+      ? new UnsupportedFunctionalityError({ functionality: `file part media type ${rejected.mediaType}` })
+      : undefined;
+  };
+
+function createModel(reject: Rejection) {
+  const prompts: LanguageModelV2Prompt[] = [];
+  const check = (prompt: LanguageModelV2Prompt) => {
+    prompts.push(prompt);
+    const error = reject(prompt);
+    if (error) throw error;
+  };
+  const model = new MockLanguageModelV2({
+    doGenerate: async ({ prompt }) => {
+      check(prompt);
+      return { content: [{ type: 'text', text: 'ok' }], finishReason: 'stop', usage, warnings: [] };
+    },
+    doStream: async ({ prompt }) => {
+      check(prompt);
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'ok' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({ type: 'finish', finishReason: 'stop', usage });
+            controller.close();
+          },
+        }),
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+function createAgent(reject: Rejection, options: { errorProcessorDefaults?: false } = {}) {
+  const { model, prompts } = createModel(reject);
+  const memory = new MockMemory();
+  const agent = new Agent({
+    id: 'unsupported-file-agent',
+    name: 'unsupported-file-agent',
+    instructions: 'Answer briefly.',
+    model,
+    memory,
+    ...options,
+  });
+  const recall = async () => (await memory.recall({ threadId: MEMORY.thread, resourceId: MEMORY.resource })).messages;
+  return { agent, prompts, memory, recall };
+}
+
+const file = (bytes: string, filename: string | undefined, mediaType: string) => ({
+  type: 'file' as const,
+  data: Buffer.from(bytes),
+  mediaType,
+  ...(filename ? { filename } : {}),
+});
+const turnWith = (...files: Array<ReturnType<typeof file>>) => [
+  { role: 'user' as const, content: [{ type: 'text' as const, text: 'Read these' }, ...files] },
+];
+
+const unsentNote = (name: string, mediaType: string) =>
+  [
+    '[File not sent]',
+    `name: ${name}`,
+    `type: ${mediaType}`,
+    'reason: The model does not support this type of file, so the file was not sent to it.',
+  ].join('\n');
+
+const run = async (agent: Agent, mode: 'generate' | 'stream', input: Parameters<Agent['generate']>[0]) => {
+  if (mode === 'generate') return (await agent.generate(input, { memory: MEMORY })).text;
+  const output = await agent.stream(input, { memory: MEMORY });
+  return (await output.getFullOutput()).text;
+};
+
+describe('UnsupportedFileHandler, a default error processor of every agent', () => {
+  describe.each(['generate', 'stream'] as const)('with %s()', mode => {
+    it('replaces a file the model rejects with a note, and calls the model again', async () => {
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX));
+
+      const text = await run(agent, mode, turnWith(file('PK workbook', 'leads.xlsx', XLSX)));
+
+      expect(text).toBe('ok');
+      expect(prompts).toHaveLength(2);
+      expect(userFileParts(prompts[0]!)).toMatchObject([{ mediaType: XLSX, filename: 'leads.xlsx' }]);
+      expect(userFileParts(prompts[1]!)).toEqual([]);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+    });
+
+    it('sends a file the model accepts unchanged, in a single call', async () => {
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX));
+
+      const text = await run(agent, mode, turnWith(file('%PDF report', 'report.pdf', 'application/pdf')));
+
+      expect(text).toBe('ok');
+      expect(prompts).toHaveLength(1);
+      expect(userFileParts(prompts[0]!)).toMatchObject([{ mediaType: 'application/pdf', filename: 'report.pdf' }]);
+    });
+  });
+
+  it('keeps the images, PDFs, and text files of the request when it replaces the rejected one', async () => {
+    const { agent, prompts } = createAgent(rejectsTypes(XLSX));
+
+    await agent.generate(
+      turnWith(
+        file('PK workbook', 'leads.xlsx', XLSX),
+        file('%PDF report', 'report.pdf', 'application/pdf'),
+        file('png bytes', 'chart.png', 'image/png'),
+        file('a,b', 'data.csv', 'text/csv'),
+      ),
+      { memory: MEMORY },
+    );
+
+    expect(userFileParts(prompts.at(-1)!).map(part => part.mediaType)).toEqual([
+      'application/pdf',
+      'image/png',
+      'text/csv',
+    ]);
+  });
+
+  it('replaces every other file type the model may not read too, since it only tries again once', async () => {
+    const { agent, prompts } = createAgent(rejectsTypes(XLSX, 'application/zip'));
+
+    const result = await agent.generate(
+      turnWith(file('PK workbook', 'leads.xlsx', XLSX), file('PK archive', undefined, 'application/zip')),
+      { memory: MEMORY },
+    );
+
+    expect(result.text).toBe('ok');
+    expect(prompts).toHaveLength(2);
+    expect(userTexts(prompts[1]!)).toEqual([
+      'Read these',
+      unsentNote('leads.xlsx', XLSX),
+      unsentNote('unnamed file', 'application/zip'),
+    ]);
+  });
+
+  it('keeps the rejected file in the stored message', async () => {
+    const { agent, recall } = createAgent(rejectsTypes(XLSX));
+
+    await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+    const stored = (await recall()).find(message => message.role === 'user');
+    expect(stored?.content.parts.map(part => part.type)).toEqual(['text', 'file']);
+  });
+
+  it('recovers a thread that already stores a file the model rejects, on every turn', async () => {
+    const { agent, prompts, memory } = createAgent(rejectsTypes(XLSX));
+    await memory.createThread({ threadId: MEMORY.thread, resourceId: MEMORY.resource });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'stored-xlsx',
+          role: 'user',
+          type: 'text',
+          threadId: MEMORY.thread,
+          resourceId: MEMORY.resource,
+          createdAt: new Date(Date.now() - 10_000),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'file',
+                data: `data:${XLSX};base64,${Buffer.from('PK stored').toString('base64')}`,
+                mimeType: XLSX,
+                filename: 'old.xlsx',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const first = await agent.generate('Hello', { memory: MEMORY });
+    const second = await agent.generate('Hello again', { memory: MEMORY });
+
+    expect([first.text, second.text]).toEqual(['ok', 'ok']);
+    expect(prompts).toHaveLength(4);
+    expect(userTexts(prompts[1]!)).toContain(unsentNote('old.xlsx', XLSX));
+    expect(userTexts(prompts[3]!)).toContain(unsentNote('old.xlsx', XLSX));
+  });
+
+  it('leaves a rejection that is not about a file alone', async () => {
+    const { agent, prompts } = createAgent(
+      () => new UnsupportedFunctionalityError({ functionality: 'tool choice type: required' }),
+    );
+
+    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+      'tool choice type: required',
+    );
+    expect(prompts).toHaveLength(1);
+  });
+
+  it('tries again only once, so a rejection the note does not fix still fails', async () => {
+    const { agent, prompts } = createAgent(
+      () => new UnsupportedFunctionalityError({ functionality: `file part media type ${XLSX}` }),
+    );
+
+    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+      `file part media type ${XLSX}`,
+    );
+    expect(prompts).toHaveLength(2);
+  });
+
+  it('does nothing for an agent that turns the default error processors off', async () => {
+    const { agent, prompts } = createAgent(rejectsTypes(XLSX), { errorProcessorDefaults: false });
+
+    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+      `file part media type ${XLSX}`,
+    );
+    expect(prompts).toHaveLength(1);
+  });
+});

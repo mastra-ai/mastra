@@ -625,6 +625,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
+        { type: 'doc', id: 'processors/unsupported-file-handler', label: 'UnsupportedFileHandler' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
       ],
     },

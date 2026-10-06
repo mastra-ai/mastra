@@ -1,0 +1,80 @@
+---
+title: "Reference: UnsupportedFileHandler | Processors"
+description: "The UnsupportedFileHandler is an error processor that replaces the files a model rejects with a note and calls the model again."
+packages:
+  - "@mastra/core"
+---
+
+# UnsupportedFileHandler
+
+The `UnsupportedFileHandler` is an **error processor** that keeps an agent working when the model rejects a file the user sent. It replaces the file with a note in the prompt and calls the model again.
+
+Mastra adds this processor to every agent's `errorProcessors` by default, after `PrefillErrorHandler` and before `StreamErrorRetryProcessor`. It needs no configuration. Setting `errorProcessorDefaults: false` turns it off along with the other defaults.
+
+## How it works
+
+1. Every file goes to the model unchanged. Which file types a model reads varies by provider and changes over time, so the processor doesn't guess up front.
+1. The provider SDK refuses the file type before the request goes out, with an `UnsupportedFunctionalityError` that names the media type. The OpenAI and Anthropic SDKs do, for example.
+1. On the first refusal of the call, the processor replaces the rejected file with a note in the prompt, along with every other file that isn't an image, a PDF, or text. The call is tried again only once, and this covers every file the model may not read in that one attempt.
+1. It returns `{ retry: true }`, and the model is called again with the notes. If the call fails again, the error surfaces.
+
+The note tells the model which file it didn't receive:
+
+```text
+[File not sent]
+name: leads.xlsx
+type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+reason: The model does not support this type of file, so the file was not sent to it.
+```
+
+Only the prompt sent to the model changes. The stored message keeps the file, so the thread, clients such as Studio, and a model that reads that type still have it. A thread that already stores a rejected file works again on its next turn, because the file is replaced the same way on every turn.
+
+For the agent to work on such files instead, add a [`FileUploadProcessor`](/reference/processors/file-upload-processor). It uploads the files to the agent's sandbox and gives the model their path.
+
+## Constructor parameters
+
+The `UnsupportedFileHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'unsupported-file-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Unsupported File Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description:
+      'Signals a retry when the provider SDK refused a file type and the request holds a file. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+  {
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
+    description:
+      'Once a call of the request was refused for a file, replaces the files the model may not read with a note in the prompt of every following call.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Limitations
+
+- **Refusals from the provider API.** Only refusals raised by the provider SDK before the request goes out are handled. A provider that accepts the request and rejects the file in its HTTP response returns an error that surfaces unchanged.
+- **One more attempt.** If the call still fails once the files are replaced, the error surfaces. A refusal unrelated to a file is left alone.
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [FileUploadProcessor](/reference/processors/file-upload-processor)
+- [PrefillErrorHandler](/reference/processors/prefill-error-handler)

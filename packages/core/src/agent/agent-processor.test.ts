@@ -11,6 +11,7 @@ import { PrefillErrorHandler } from '../processors/prefill-error-handler';
 import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { StreamErrorRetryProcessor } from '../processors/stream-error-retry-processor';
+import { UnsupportedFileHandler } from '../processors/unsupported-file-handler';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools/tool';
@@ -3949,6 +3950,7 @@ describe('error processors — shared stability defaults', () => {
   const DEFAULT_ERROR_PROCESSOR_IDS = [
     'provider-history-compat',
     'prefill-error-handler',
+    'unsupported-file-handler',
     'stream-error-retry-processor',
   ] as const;
 
@@ -3995,6 +3997,7 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
     // The caller's instance is the one that runs, and it stays in the caller's position.
@@ -4004,12 +4007,17 @@ describe('error processors — shared stability defaults', () => {
   it('leaves a caller list that already names every default untouched', async () => {
     const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
     const agent = bareAgent({
-      errorProcessors: [new ProviderHistoryCompat(), customRetry, new PrefillErrorHandler()],
+      errorProcessors: [
+        new ProviderHistoryCompat(),
+        customRetry,
+        new PrefillErrorHandler(),
+        new UnsupportedFileHandler(),
+      ],
     });
 
     const resolved = await agent.listErrorProcessors();
 
-    expect(resolved).toHaveLength(3);
+    expect(resolved).toHaveLength(4);
     expect(resolved[1]).toBe(customRetry);
   });
 
@@ -4036,6 +4044,7 @@ describe('error processors — shared stability defaults', () => {
       'provider-history-compat',
       'custom-error-processor',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
     expect(resolved[0]).toBe(customCompat);
@@ -4062,9 +4071,9 @@ describe('error processors — shared stability defaults', () => {
 
     // Naming only the retry processor must not put it ahead of the repairs: error processors
     // short-circuit on the first `{ retry: true }`, and a retry processor configured with broad
-    // matchers would claim errors the repairs could fix, so both repairs have to stay ahead of it.
+    // matchers would claim errors the repairs could fix, so every repair has to stay ahead of it.
     expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
-    expect(resolved[2]).toBe(customRetry);
+    expect(resolved[3]).toBe(customRetry);
   });
 
   it('inserts added defaults in canonical order around a caller processor naming the last one', async () => {
@@ -4092,12 +4101,14 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
       'custom-error-processor',
     ]);
     expect(resolved[1]).toBeInstanceOf(PrefillErrorHandler);
-    expect(resolved[2]).toBe(customRetry);
-    expect(resolved[3]).toBe(customProcessor);
+    expect(resolved[2]).toBeInstanceOf(UnsupportedFileHandler);
+    expect(resolved[3]).toBe(customRetry);
+    expect(resolved[4]).toBe(customProcessor);
   });
 
   it('leaves getConfiguredProcessorIds reporting only what the caller configured', async () => {

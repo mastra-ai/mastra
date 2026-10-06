@@ -1013,6 +1013,7 @@ export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { UnsupportedFileHandler } from './unsupported-file-handler';
 export {
   ProviderHistoryCompat,
   anthropicToolIdFormat,

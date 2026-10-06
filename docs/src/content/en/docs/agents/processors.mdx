@@ -119,13 +119,14 @@ const agent = new Agent({
 
 ### Error processors are enabled by default
 
-Every agent adds whichever of these three your `errorProcessors` list doesn't already contain:
+Every agent adds whichever of these four your `errorProcessors` list doesn't already contain:
 
 1. `ProviderHistoryCompat`: repairs provider-specific history incompatibilities in the outbound prompt
 1. `PrefillErrorHandler`: recovers from assistant-response prefill rejections
+1. [`UnsupportedFileHandler`](/reference/processors/unsupported-file-handler): replaces a file the model rejects with a note and calls the model again
 1. `StreamErrorRetryProcessor`: retries transient API and stream failures
 
-A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one doesn't invert the pair. Supplying only your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat` and `PrefillErrorHandler` ahead of it.
+A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one doesn't invert the pair. Supplying only your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` ahead of it.
 
 Error processors stop at the first one that returns `{ retry: true }`, so that relative order decides which repair runs. The default order puts the repairs ahead of the retrying processor. Placed earlier, an instance with broad matchers (the bad-request matcher matches any `400`, for example) would claim a request the repairs could have fixed and resend it unchanged. The default instance retries only transient failures: connection resets, retryable OpenAI stream errors, and errors the provider marks as retryable. Your own instance can be configured with broader matchers. The order keeps repairs ahead of it too.
 
@@ -147,11 +148,11 @@ const agent = new Agent({
 })
 ```
 
-The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults your list never names. Pass all three ids to run a completely custom set.
+The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` defaults your list never names. Pass all four ids to run a completely custom set.
 
 A processor's `maxRetries` can't raise the agent's limit. Without `maxProcessorRetries`, error-processor retries stop after `3` (see [Error processor retry limits](#error-processor-retry-limits)), so set it when a processor needs more.
 
-An empty `errorProcessors` list merges like any other, so it still gets the three defaults. To turn the defaults off, set `errorProcessorDefaults: false`. The agent then runs only the processors you configure, or none when you configure none:
+An empty `errorProcessors` list merges like any other, so it still gets the four defaults. To turn the defaults off, set `errorProcessorDefaults: false`. The agent then runs only the processors you configure, or none when you configure none:
 
 ```typescript
 new Agent({
