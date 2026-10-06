@@ -1172,7 +1172,8 @@ export class MemoryLibSQL extends MemoryStorage {
             args: [threadId],
           });
           const row = result.rows?.[0] as
-            (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | undefined;
+            | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+            | undefined;
 
           if (!row) {
             throw new Error(`Thread "${threadId}" not found`);
