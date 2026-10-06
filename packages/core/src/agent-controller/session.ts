@@ -4234,6 +4234,7 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
     const agent = this.machinery.getAgent();
@@ -4351,6 +4352,7 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,

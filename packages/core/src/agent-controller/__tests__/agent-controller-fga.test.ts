@@ -100,6 +100,45 @@ describe('AgentController FGA', () => {
     );
   });
 
+  it('denies queued messages before invoking the agent', async () => {
+    const controller = createController();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    const provider = createProvider(false);
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+
+    await expect(
+      session.queueMessage({ content: 'hello', requestContext: createRequestContext() }),
+    ).rejects.toBeInstanceOf(FGADeniedError);
+
+    expect(queueMessage).not.toHaveBeenCalled();
+    expect(provider.require).toHaveBeenCalledWith(
+      { id: 'user-1', organizationMembershipId: 'om-1' },
+      expect.objectContaining({ permission: 'agent-controller:execute' }),
+    );
+  });
+
+  it('denies notification signals before invoking the agent', async () => {
+    const controller = createController();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const sendNotificationSignal = vi.spyOn(session.machinery.getAgent(), 'sendNotificationSignal');
+    const provider = createProvider(false);
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+
+    await expect(
+      session.sendNotificationSignal(
+        { source: 'test', kind: 'manual', summary: 'test notification', payload: {} },
+        { requestContext: createRequestContext() },
+      ),
+    ).rejects.toBeInstanceOf(FGADeniedError);
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(provider.require).toHaveBeenCalledWith(
+      { id: 'user-1', organizationMembershipId: 'om-1' },
+      expect.objectContaining({ permission: 'agent-controller:execute' }),
+    );
+  });
+
   it('authorizes actor-aware session reads before returning protected data', async () => {
     const controller = createController();
     const session = await controller.createSession({ resourceId: 'resource-1' });

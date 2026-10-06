@@ -1435,7 +1435,7 @@ export class AgentController<TState = {}> {
       throw new Error('This conversation has no message to name it from yet.');
     }
 
-    const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
+    const session = resourceId ? await this.getSessionByResource(resourceId, scope, callerContext) : undefined;
     const agent = session
       ? this.getCurrentAgent(session)
       : this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));
