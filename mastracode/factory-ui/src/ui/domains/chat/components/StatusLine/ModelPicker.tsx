@@ -154,7 +154,7 @@ export function ModelPicker() {
               <CommandGroup
                 key={provider}
                 heading={provider}
-                className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
+                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
               >
                 {models.map(model => (
                   <CommandItem

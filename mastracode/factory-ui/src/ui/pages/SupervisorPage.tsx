@@ -147,16 +147,10 @@ function SupervisorEmptyState() {
       aria-labelledby="supervisor-empty-title"
     >
       <Logo size="md" aria-label="Mastra Code" />
-      <Txt
-        as="h1"
-        variant="display"
-        tone="ink"
-        id="supervisor-empty-title"
-        className="mt-7 tracking-tight text-balance"
-      >
+      <Txt as="h1" variant="display" tone="ink" id="supervisor-empty-title" className="mt-7 text-balance">
         What needs your attention?
       </Txt>
-      <Txt tone="muted" className="mt-2 max-w-lg leading-relaxed text-pretty">
+      <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
         Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
       </Txt>
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">

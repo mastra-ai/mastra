@@ -29,8 +29,6 @@ const RANGE_PRESETS = [
 
 const DEFAULT_RANGE_DAYS = 30;
 
-const BLOCK_TITLE = 'text-column text-muted-foreground m-0 font-semibold';
-
 export function OverviewPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
@@ -122,11 +120,13 @@ export function OverviewContent({
           <div className="flex items-center gap-3">
             {supervisorHealth.data?.findings.length ? (
               <Link
-                className="text-meta text-badge-green-indicator hover:text-badge-red-indicator"
                 to={`/factories/${factoryProjectId ?? ''}/supervisor`}
+                className="text-badge-green-indicator hover:text-badge-red-indicator"
               >
-                {supervisorHealth.data.findings.length} supervisor{' '}
-                {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+                <Txt as="span" variant="meta" className="block">
+                  {supervisorHealth.data.findings.length} supervisor{' '}
+                  {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+                </Txt>
               </Link>
             ) : null}
             <ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />
@@ -141,8 +141,10 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="text-muted-foreground hover:text-foreground text-meta">
-      View all
+    <Link to={to} className="text-muted-foreground hover:text-foreground">
+      <Txt as="span" variant="meta" className="block">
+        View all
+      </Txt>
     </Link>
   );
 }
@@ -153,16 +155,18 @@ function ViewOnGithub({ slug }: { slug: string }) {
       href={`https://github.com/${slug}/commits`}
       target="_blank"
       rel="noreferrer"
-      className="text-muted-foreground hover:text-foreground text-meta"
+      className="text-muted-foreground hover:text-foreground"
     >
-      {slug}
+      <Txt as="span" variant="meta">
+        {slug}
+      </Txt>
     </a>
   );
 }
 
 function Count({ value }: { value: string }) {
   return (
-    <Txt as="span" variant="meta" className="text-muted-foreground">
+    <Txt tone="muted" as="span" variant="meta">
       {value}
     </Txt>
   );
@@ -172,7 +176,9 @@ function Block({ title, action, children }: { title: string; action?: ReactNode;
   return (
     <section className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-        <h3 className={BLOCK_TITLE}>{title}</h3>
+        <Txt as="h3" variant="column" tone="muted" className="m-0">
+          {title}
+        </Txt>
         {action}
       </div>
       {children}
