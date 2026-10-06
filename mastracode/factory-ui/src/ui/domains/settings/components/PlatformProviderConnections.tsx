@@ -87,6 +87,8 @@ export interface ProviderConnectControlProps {
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
+  /** Layout classes forwarded to the connect button. */
+  className?: string;
   /** Called after the provider confirmed the authorization. */
   onCompleted?: () => void;
 }
@@ -102,6 +104,7 @@ export function ProviderConnectControl({
   size = 'sm',
   variant = 'default',
   icon,
+  className,
   onCompleted,
 }: ProviderConnectControlProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -136,6 +139,7 @@ export function ProviderConnectControl({
         size={size}
         variant={variant}
         icon={icon}
+        className={className}
         disabled={pending}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
