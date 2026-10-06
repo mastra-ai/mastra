@@ -7,14 +7,18 @@
  * runs on the plain, durable and evented engines. Anthropic is the discriminator; OpenAI is the
  * control that must keep working.
  *
- * Replay is the default: provider traffic is served from
- * `packages/core/__recordings__/core-src-agent-durable-__tests__-durable-agent-completion-feedback.e2e/`,
- * so PR CI runs this without API keys. Recordings include the rejected 400 and the repaired retry.
+ * This copy lives here (rather than in `packages/core`) because harness parity needs the real
+ * `@mastra/memory` `Memory` plus `@mastra/libsql` storage, the way the harness sets it up. Core does
+ * not depend on `@mastra/memory`.
  *
- * To re-record (needs both OPENAI_API_KEY and ANTHROPIC_API_KEY), from `packages/core`:
+ * Replay is the default: provider traffic is served from `packages/memory/__recordings__/`, so the
+ * memory CI job runs this without API keys. Recordings include the rejected 400 and the repaired
+ * retry.
  *
- *   LLM_TEST_MODE=record pnpm vitest run --project 'e2e:packages/core' \
- *     src/agent/durable/__tests__/durable-agent-completion-feedback.e2e.test.ts
+ * To re-record (needs both OPENAI_API_KEY and ANTHROPIC_API_KEY), from
+ * `packages/memory/integration-tests`:
+ *
+ *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-completion-feedback.test.ts
  *
  * Only commit recordings from a run where every cell passed. Before committing, check them for
  * secrets and remove the `anthropic-organization-id` / `anthropic-workspace-id` response headers.
@@ -22,20 +26,25 @@
  * Replay uses exact request matching. If replay fails with "No exact match for hash", a request body
  * changed (for example the completion-feedback template); re-record.
  */
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
+import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { createScorer } from '@mastra/core/evals';
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createScorer } from '../../../evals';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage/mock';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
+import { transformRequest } from './transform-request';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai', 'anthropic']);
+
+const RECORDING_NAME = 'memory-integration-tests-src-durable-agent-completion-feedback';
 
 const PROVIDERS = {
   anthropic: 'anthropic/claude-sonnet-4-6',
@@ -45,13 +54,6 @@ const ENGINES = ['plain', 'durable', 'evented'] as const;
 
 const OMEGA_FEEDBACK = 'The reply is missing the required word OMEGA.';
 const PREFILL_REPAIR_MARKER = 'anthropic-prefill-processor-retry';
-
-// The completion feedback embeds the check's wall-clock duration ("Duration: 1ms"), which would
-// otherwise change the request hash between runs.
-const normalizeCompletionDuration = ({ url, body }: { url: string; body: unknown }) => ({
-  url,
-  body: JSON.parse(JSON.stringify(body).replace(/Duration: \d+ms/g, 'Duration: 0ms')),
-});
 
 type ModelRequest = { endpoint: string; body: any; status: number; responseText?: string };
 
@@ -123,12 +125,14 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
     let originalFetch: typeof fetch;
     let requests: ModelRequest[];
 
-    beforeEach(c => {
+    beforeEach(() => {
       mock = createGatewayMock({
-        name: `${provider}-${engine}`,
+        name: `${RECORDING_NAME}-${provider}-${engine}`,
         exactMatch: true,
-        transformRequest: normalizeCompletionDuration,
-        recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+        // The shared normalizer redacts `\d+ms`, which covers the completion feedback's
+        // "Duration: 1ms" — otherwise the check's wall-clock duration would change the request hash
+        // between runs. It also redacts ids, timestamps and tool-call ids.
+        transformRequest,
       });
       mock.start();
 
@@ -162,10 +166,14 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
     it('repairs the prefill rejection and completes after one failed completion check', async () => {
       const scores: number[] = [];
       const onComplete: boolean[] = [];
-      const storage = new InMemoryStore();
-      const memory = new MockMemory({
+      const dbPath = await mkdtemp(join(tmpdir(), `t78-${provider}-${engine}-`));
+      const storage = new LibSQLStore({
+        id: randomUUID(),
+        url: `file:${join(dbPath, 'memory.db')}`,
+      });
+      const memory = new Memory({
         storage,
-        options: { lastMessages: 40, semanticRecall: false, generateTitle: false },
+        options: { lastMessages: 40, semanticRecall: false, generateTitle: false, workingMemory: { enabled: false } },
       });
       const agent = new Agent({
         id: `t78-${provider}-${engine}`,
@@ -221,6 +229,7 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       const repairs = prefillRepairs(requests);
       // Read everything stored, including signals that recall() hides by default.
       const recalled = await memory.recall({ threadId: thread, resourceId: resource, perPage: 50, hideSignals: false });
+      await rm(dbPath, { recursive: true, force: true });
 
       // 1. Every Anthropic request ending on an assistant turn was repaired (F5, COR-1312).
       expect(repairs.unrepaired).toEqual([]);
