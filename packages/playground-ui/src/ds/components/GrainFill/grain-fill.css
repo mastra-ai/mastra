@@ -44,7 +44,6 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: inherit;
   background-color: var(--grain-back);
   mask-image: var(--grain-mask);
   mask-mode: luminance;

@@ -1,5 +1,6 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
 import { Children, type ReactNode } from 'react';
+import './notice.css';
 import { GrainFill } from '@/ds/components/GrainFill/grain-fill';
 import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
@@ -50,8 +51,9 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
 
   return (
     <div
+      data-slot="notice"
       className={cn(
-        'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl bg-card p-3 shadow-raised',
+        'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl border border-surface-rim bg-card p-3',
         'motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0 motion-safe:slide-in-from-top-2',
         className,
       )}
@@ -61,7 +63,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
           tone={variant}
           width={464}
           height={200}
-          className="absolute inset-px -z-10 max-w-116 rounded-[inherit] mask-r-from-34%"
+          className="absolute inset-0 -z-10 max-w-116 mask-r-from-34%"
         />
       )}
       {hasTitle && (
