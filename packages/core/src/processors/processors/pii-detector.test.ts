@@ -1809,7 +1809,7 @@ describe('PIIDetector', () => {
       await detector.processOutputStream({
         part: {
           type: 'text-delta',
-          payload: { id: 'text-0', text: 'a'.repeat(190) },
+          payload: { id: 'text-0', text: 'a '.repeat(95) },
           runId: 'test-run-id',
           from: ChunkFrom.AGENT,
         },
@@ -2332,6 +2332,43 @@ describe('PIIDetector', () => {
       else await run();
       expect(output).toBe(expected);
     });
+
+    it.each(['block', 'filter', 'redact'] as const)(
+      '%s holds an email address longer than the carryover until it is complete',
+      async strategy => {
+        const address = `${'a'.repeat(64)}@${'1'.repeat(63)}.${'2'.repeat(63)}.com`;
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy,
+          redactionMethod: 'placeholder',
+          detectionTypes: ['email'],
+        });
+        const state: Record<string, any> = {};
+        const abort = vi.fn((reason?: string) => {
+          throw new TripWire(reason ?? 'blocked');
+        }) as any;
+        let output = '';
+        const run = async () => {
+          for (const part of [
+            { type: 'text-delta', payload: { id: 'text-0', text: `Mail ${address.slice(0, -4)}` } },
+            { type: 'text-delta', payload: { id: 'text-1', text: `${address.slice(-4)} now` } },
+            { type: 'step-finish', payload: {} },
+          ]) {
+            const result = await detector.processOutputStream({
+              part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+              streamParts: [],
+              state,
+              abort,
+            });
+            if (result?.type === 'text-delta') output += result.payload.text;
+          }
+        };
+
+        if (strategy === 'block') await expect(run()).rejects.toThrow(TripWire);
+        else await run();
+        expect(output).toBe({ block: 'Mail ', filter: 'Mail  now', redact: 'Mail [EMAIL] now' }[strategy]);
+      },
+    );
 
     it('keeps mixed-mode sentence fragments in regex carryover', async () => {
       const model = new MockLanguageModelV1({

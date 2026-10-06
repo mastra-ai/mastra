@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed streamed `PIIDetector` `block` and `filter` strategies so they no longer send the start of an SSN, email or other regex-detected value before the rest of it arrives in a later chunk. `block` now stops the stream before any part of the value is sent. `filter` drops the held text up to the end of the value and keeps the text after it. Like `redact`, these strategies may briefly delay trailing text until a later text or non-text chunk.
+Fixed streamed `PIIDetector` output with the `block` and `filter` strategies. When a Social Security number, email address or similar value arrived split across several stream chunks, the first part of it reached the user before the rest was recognized. Now `block` stops the response before any part of the value is shown, and `filter` removes the text up to and including the value while keeping the text after it. Very long email addresses are now also held until they are complete, including with `redact`. As with `redact`, the end of a response may arrive slightly later.

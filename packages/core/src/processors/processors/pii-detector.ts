@@ -263,6 +263,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
    */
   private static readonly REGEX_CARRYOVER_SIZE = 128;
 
+  /**
+   * Longest unfinished word kept held past the carryover, so a long email address (up to 254
+   * characters) or URL is not released before the rest of it arrives.
+   */
+  private static readonly MAX_WORD_HOLD = 256;
+
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -1014,7 +1020,10 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
-    let emitEnd = combined.length - PIIDetector.REGEX_CARRYOVER_SIZE;
+    let emitEnd = Math.min(
+      combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
+      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
+    );
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
