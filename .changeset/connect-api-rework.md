@@ -16,16 +16,18 @@ const connectTools = tools({ integrations: { linear: { allowTools: ['linear_get_
 const connectTools = tools({ providers: { linear: { allowTools: ['linear_get_issue'] } } });
 ```
 
-**Merge your own tools with `.with()`**
+**Merge your own tools in a dynamic `tools` callback**
 
-The resolver can now combine connect tools with an agent's local tools in one expression. It accepts a static tool record or a function (sync or async, optionally reading the request context); your tools win on key collision, and calls chain.
+Spread the resolver's result alongside local tools; your tools win on key collision.
 
 ```ts
 const agent = new Agent({
   // ...
-  tools: connectTools.with({ weatherTool }),
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
 });
 ```
+
+A `.with()` convenience method also exists for the same merge (`tools: connectTools.with({ weatherTool })`); it accepts a static record or a (sync/async, optionally context-reading) function, and calls chain.
 
 **Simpler provider selection**
 

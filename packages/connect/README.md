@@ -30,12 +30,12 @@ The resolver is live: Mastra calls it per generate/stream, so providers connecte
 
 ### Combining with your own tools
 
-Use `.with()` to merge local tools into every resolution. It accepts a static record or a (sync or async, optionally context-reading) function; your tools win on key collision, and calls chain:
+Spread the resolver's result alongside your own tools in a dynamic `tools` callback; your tools win on key collision:
 
 ```ts
 const agent = new Agent({
   // ...
-  tools: connectTools.with({ weatherTool }),
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool, searchTool }),
 });
 ```
 
