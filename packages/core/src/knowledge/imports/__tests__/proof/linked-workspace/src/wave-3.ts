@@ -111,11 +111,31 @@ const knowledge = new Knowledge({ id: 'wave-3-proof-main', storage });
 const store = await knowledge.getStorageInternal();
 
 const initialScopes = [
-  { address: 'principal:reader', name: 'Reader' },
-  { address: 'principal:suggester', name: 'Suggester' },
-  { address: 'principal:owner', name: 'Owner' },
-  { address: 'principal:admin', name: 'Admin' },
-  { address: 'principal:other', name: 'Other' },
+  {
+    address: 'principal:reader',
+    name: 'Reader',
+    grants: [{ scopeRefAddress: 'principal:reader', role: 'owner' as const }],
+  },
+  {
+    address: 'principal:suggester',
+    name: 'Suggester',
+    grants: [{ scopeRefAddress: 'principal:suggester', role: 'owner' as const }],
+  },
+  {
+    address: 'principal:owner',
+    name: 'Owner',
+    grants: [{ scopeRefAddress: 'principal:owner', role: 'owner' as const }],
+  },
+  {
+    address: 'principal:admin',
+    name: 'Admin',
+    grants: [{ scopeRefAddress: 'principal:admin', role: 'owner' as const }],
+  },
+  {
+    address: 'principal:other',
+    name: 'Other',
+    grants: [{ scopeRefAddress: 'principal:other', role: 'owner' as const }],
+  },
   {
     address: 'scope:project',
     name: 'Project',
@@ -348,6 +368,12 @@ invariant(movedReplacementApproval.status === 'approved', 'Current-scope admin c
 // Sealed proposer context: readable only when vouched directly, never through
 // the project or private scopes.
 const sealedContext = await store.createNode({ name: 'Sealed proposer context', isScope: true, scopeIds: [] });
+await store.upsertScopeGrant({
+  scopeNodeId: sealedContext.id,
+  scopeRefId: sealedContext.id,
+  role: 'owner',
+  canSuggest: true,
+});
 const sealedTarget = await knowledge.getNode({ id: visibleNode.id, scopeIds: [owner] });
 invariant(sealedTarget, 'Owner lost the visible node');
 const sealedProposal = await knowledge.proposeNodeUpdate({
