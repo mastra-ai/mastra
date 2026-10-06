@@ -48,6 +48,7 @@ import type {
   AgentControllerOMConfig,
   AgentControllerRequestState,
   AgentControllerRequestStateUpdater,
+  AgentControllerThinkingLevel,
   AgentControllerThread,
   ModelUseCountTracker,
   PermissionPolicy,
@@ -91,6 +92,8 @@ export interface ThreadSettingsStore {
   set(key: string, value: unknown): Promise<void>;
   /** Persist a setting to a specific thread. */
   setOn(threadId: string, key: string, value: unknown): Promise<void>;
+  /** Persist a model selection and its preferences in one metadata write. */
+  setModelOn(threadId: string, settings: Record<string, unknown>): Promise<void>;
 }
 
 /** Process-local listener awaited before a terminal agent event is emitted. */
@@ -183,7 +186,7 @@ export async function migratePersistedModelSelection({
   metadata?: Record<string, unknown>;
   getMetadata?: () => Promise<Record<string, unknown>>;
   modeId: string;
-  onResolved?: (modelId: string) => void | Promise<void>;
+  onResolved?: (modelId: string, metadata: Record<string, unknown>) => void | Promise<void>;
   set: (key: string, value: unknown) => Promise<void>;
   threadId?: string;
   validModeIds?: readonly string[];
@@ -208,7 +211,7 @@ export async function migratePersistedModelSelection({
     const modelId = isSingleModelFormat ? currentModelId : (legacyModelId ?? currentModelId);
 
     if (isNewerFormat || (isSingleModelFormat && legacyKeys.length === 0)) {
-      if (modelId) await onResolved?.(modelId);
+      if (modelId) await onResolved?.(modelId, persistedMetadata);
       return modelId;
     }
     if (!modelId && legacyKeys.length === 0) return undefined;
@@ -216,7 +219,7 @@ export async function migratePersistedModelSelection({
     if (modelId) await set('currentModelId', modelId);
     for (const key of legacyKeys) await set(key, undefined);
     await set(MODEL_PERSISTENCE_VERSION_KEY, MODEL_PERSISTENCE_VERSION);
-    if (modelId) await onResolved?.(modelId);
+    if (modelId) await onResolved?.(modelId, persistedMetadata);
 
     return modelId;
   });
@@ -1077,6 +1080,31 @@ export class SessionThread {
         }
       }
 
+      // Restore schema prerequisites before validating persisted preferences.
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
+      }
+      const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
+      const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
+
+      if (hasObservationThreshold) {
+        updates.observationThreshold = meta.observationThreshold;
+      }
+      if (hasReflectionThreshold) {
+        updates.reflectionThreshold = meta.reflectionThreshold;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        try {
+          await session.state.set(updates as Record<string, unknown>);
+        } catch {
+          // Old OM overrides must not prevent restoring the model selection.
+        }
+      }
+
       // Migrate legacy per-mode selections before restoring the session model.
       // Legacy threads also contain a create-time currentModelId, so the active
       // mode's legacy value wins until the single-model version marker exists.
@@ -1085,8 +1113,17 @@ export class SessionThread {
         getMetadata: async () =>
           ((await store.getById({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
         modeId: currentModeId,
-        onResolved: modelId => {
-          if (this.#threadId === threadId) session.model.set({ modelId });
+        onResolved: async (modelId, metadata) => {
+          if (this.#threadId !== threadId) return;
+          session.model.set({ modelId });
+          const thinkingLevel = metadata.thinkingLevel;
+          if (thinkingLevel !== undefined) {
+            try {
+              await session.state.setIf({ thinkingLevel }, () => this.#threadId === threadId);
+            } catch {
+              // Ignore preferences no longer accepted by the state schema.
+            }
+          }
         },
         set: (key, value) => this.setSettingOn({ threadId, key, value }),
         threadId,
@@ -1107,32 +1144,12 @@ export class SessionThread {
         });
       }
 
-      // Restore observer/reflector model IDs
-      if (meta?.observerModelId) {
-        updates.observerModelId = meta.observerModelId;
-      }
-      if (meta?.reflectorModelId) {
-        updates.reflectorModelId = meta.reflectorModelId;
-      }
-      const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
-      const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
-
-      if (hasObservationThreshold) {
-        updates.observationThreshold = meta.observationThreshold;
-      }
-      if (hasReflectionThreshold) {
-        updates.reflectionThreshold = meta.reflectionThreshold;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await session.state.set(updates as Record<string, unknown>);
-      }
-
       // Restore restart-surviving preferences (thinking level, notifications).
       // Applied one key at a time so an invalid persisted value fails schema
       // validation without discarding the mode/model/OM restoration above or
       // the other, still-valid preference.
       for (const key of PERSISTED_STATE_KEYS) {
+        if (key === 'thinkingLevel' && persistedModelId) continue;
         const value = meta?.[key];
         if (value === undefined) continue;
         try {
@@ -1913,6 +1930,13 @@ export class SessionRun {
  * Owns the session's currently-selected model. Source of truth for which model
  * is active and responsible for persisting that one selection per thread.
  */
+type ThinkingLevelSwitch = (
+  level: AgentControllerThinkingLevel,
+  commit: () => Promise<void>,
+  isActive: () => boolean,
+  applyModel: () => void,
+) => Promise<boolean>;
+
 export class SessionModel {
   #id = '';
   readonly #store: () => ThreadSettingsStore | undefined;
@@ -1924,10 +1948,13 @@ export class SessionModel {
   #getModeIds: (() => string[]) | undefined;
   /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
   #trackModelUse: ModelUseCountTracker | undefined;
+  readonly #setThinkingLevel: ThinkingLevelSwitch;
+  #switchQueue: Promise<void> = Promise.resolve();
 
-  constructor(store: () => ThreadSettingsStore | undefined, bus: SessionBus) {
+  constructor(store: () => ThreadSettingsStore | undefined, bus: SessionBus, setThinkingLevel: ThinkingLevelSwitch) {
     this.#store = store;
     this.#bus = bus;
+    this.#setThinkingLevel = setThinkingLevel;
   }
 
   /** Attach mode accessors and the optional model-use tracker. */
@@ -1998,29 +2025,55 @@ export class SessionModel {
    * Switch to a different model at runtime.
    *
    * Persists the selection for the thread, reports it to the model-use tracker,
-   * and emits `model_changed`.
+   * and emits `model_changed`. When `thinkingLevel` is provided it is applied
+   * and persisted with the model (through the session-state preference, which
+   * also survives restarts) and reported on the same event, so model and
+   * reasoning effort move together.
    */
-  async switch({ modelId }: { modelId: string }): Promise<void> {
+  async switch({
+    modelId,
+    thinkingLevel,
+  }: {
+    modelId: string;
+    thinkingLevel?: AgentControllerThinkingLevel;
+  }): Promise<void> {
     const store = this.#store();
     const threadId = store?.getThreadId();
-    let appliedToActiveThread = !threadId;
-    await runModelPersistenceOperation(threadId, async () => {
-      appliedToActiveThread = !threadId || store?.getThreadId() === threadId;
-      if (appliedToActiveThread) this.set({ modelId });
-      if (threadId) {
-        await store?.setOn(threadId, 'currentModelId', modelId);
-        await store?.setOn(threadId, MODEL_PERSISTENCE_VERSION_KEY, MODEL_PERSISTENCE_VERSION);
-      }
-    });
+    const isActive = () => store?.getThreadId() === threadId;
+    const run = this.#switchQueue.then(() =>
+      runModelPersistenceOperation(threadId, async () => {
+        const commit = async () => {
+          if (threadId) {
+            await store?.setModelOn(threadId, {
+              currentModelId: modelId,
+              [MODEL_PERSISTENCE_VERSION_KEY]: MODEL_PERSISTENCE_VERSION,
+              ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+            });
+          }
+        };
+        if (thinkingLevel !== undefined) {
+          if (!isActive()) return;
+          if (!(await this.#setThinkingLevel(thinkingLevel, commit, isActive, () => this.set({ modelId })))) return;
+        } else {
+          await commit();
+          if (isActive()) this.set({ modelId });
+        }
+        if (isActive()) {
+          this.#bus.emit({
+            type: 'model_changed',
+            modelId,
+            ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+          });
+        }
+      }),
+    );
+    this.#switchQueue = run.catch(() => undefined);
+    await run;
 
     try {
       await Promise.resolve(this.#trackModelUse?.(modelId));
     } catch (error) {
       console.error('Failed to track model usage count', error);
-    }
-
-    if (appliedToActiveThread && (!threadId || store?.getThreadId() === threadId)) {
-      this.#bus.emit({ type: 'model_changed', modelId });
     }
   }
 }
@@ -2433,6 +2486,8 @@ class SessionState<TState = unknown> {
     updates: Partial<TState>,
     persistSetting?: PersistSettingFn,
     shouldApply?: () => boolean,
+    commit?: () => Promise<void>,
+    onApply?: () => void,
   ): Promise<boolean> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
@@ -2453,6 +2508,16 @@ class SessionState<TState = unknown> {
     // live session. Callers use this to prevent a queued update from crossing
     // a session/thread ownership boundary while validation was in flight.
     if (shouldApply && !shouldApply()) return false;
+    if (commit) {
+      if (
+        (validatedState as Record<string, unknown>).thinkingLevel !== (updates as Record<string, unknown>).thinkingLevel
+      ) {
+        throw new Error('State schema must preserve the selected thinkingLevel');
+      }
+      await commit();
+    }
+    if (shouldApply && !shouldApply()) return false;
+    onApply?.();
     this.#state = validatedState;
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
@@ -2482,6 +2547,22 @@ class SessionState<TState = unknown> {
     const run = this.#updateQueue.then(async () => {
       await this.apply(updateSnapshot, persistSetting);
     });
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Validate a model preference before committing its model and metadata. */
+  setWithCommit(
+    updates: Partial<TState>,
+    commit: () => Promise<void>,
+    shouldApply: () => boolean,
+    onApply: () => void,
+  ): Promise<boolean> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, undefined, shouldApply, commit, onApply));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -3273,7 +3354,7 @@ export class Session<TState = unknown> {
   /** The per-session agent run engine, constructed once machinery is wired via {@link setMachinery}. */
   #engine: SessionRunEngine | undefined;
   /** The session's currently-selected model (source of truth). */
-  readonly model = new SessionModel(() => this.#store, this.#bus);
+  readonly model: SessionModel;
   /** The session's currently-selected mode. */
   readonly mode = new SessionMode(() => this.#store, this.#bus);
   /** The session's observational-memory model selection (observer/reflector). */
@@ -3303,7 +3384,7 @@ export class Session<TState = unknown> {
   /** The canonical display state a UI renders, plus the reducer that maintains it. */
   readonly displayState: SessionDisplayState;
   /** The session-owned AgentController state domain. */
-  readonly state: AgentControllerRequestState<TState>;
+  readonly state: AgentControllerRequestState<TState> & Pick<SessionState<TState>, 'setIf'>;
   /**
    * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
    * and stamped onto every thread this session creates so thread listings can be
@@ -3340,7 +3421,7 @@ export class Session<TState = unknown> {
       clearFollowUps: () => this.cleanupFollowUpBinding(),
     });
     this.#bus.setDisplayState(this.displayState);
-    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
+    const sessionState = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
       // Pin persistence to the thread active when the state update was
       // requested — a queued preference update must not land in the metadata
       // of a thread the session switched to in the meantime.
@@ -3348,6 +3429,18 @@ export class Session<TState = unknown> {
       if (threadId === null) return undefined;
       return args => this.thread.setSettingOn({ threadId, ...args });
     });
+    this.state = sessionState;
+    this.model = new SessionModel(
+      () => this.#store,
+      this.#bus,
+      (level, commit, isActive, applyModel) =>
+        sessionState.setWithCommit(
+          { thinkingLevel: level } as unknown as Partial<TState>,
+          commit,
+          isActive,
+          applyModel,
+        ),
+    );
 
     if (workspace !== undefined && !(workspace instanceof Workspace)) {
       throw new Error(`A session workspace must be a valid Workspace instance.`);

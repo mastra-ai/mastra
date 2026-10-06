@@ -7,6 +7,7 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   type GlobalSettings,
 } from '@mastra/code-sdk/onboarding/settings';
+import type { AgentControllerThinkingLevel } from '@mastra/core/agent-controller';
 import type { TUIState } from '../state.js';
 
 interface ModelPackContext {
@@ -147,6 +148,7 @@ export async function applyPackToSession(
   packId: string,
   options: {
     modeId?: string;
+    thinkingLevel?: AgentControllerThinkingLevel;
     settings?: GlobalSettings;
     clearPendingFallback?: boolean;
     expectedThreadId?: string | null;
@@ -174,7 +176,10 @@ export async function applyPackToSession(
           if (!application.isCurrent()) return cancelled();
         }
       }
-      await ctx.state.session.model.switch({ modelId: selection.modelId });
+      await ctx.state.session.model.switch({
+        modelId: selection.modelId,
+        ...(options.thinkingLevel !== undefined ? { thinkingLevel: options.thinkingLevel } : {}),
+      });
       if (!application.isCurrent()) return cancelled();
       for (const [agentType, modelId] of Object.entries(selection.subagentModels)) {
         await ctx.state.session.subagents.model.set({ modelId, agentType });

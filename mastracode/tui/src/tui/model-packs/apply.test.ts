@@ -145,6 +145,18 @@ describe('model pack application', () => {
     });
   });
 
+  it('passes a thinking override with the model in one switch', async () => {
+    const { ctx, modelSwitch } = makeContext();
+
+    await applyPackToSession(ctx, 'custom:Primary', { modeId: 'build', thinkingLevel: 'xhigh' });
+
+    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({
+      modelId: 'provider/build-primary',
+      thinkingLevel: 'xhigh',
+    });
+    expect(ctx.state.session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ thinkingLevel: 'xhigh' }));
+  });
+
   it('applies the global pack before a new thread is bound', async () => {
     const { ctx, modelSwitch } = makeContext();
     ctx.state.session.thread.getId.mockReturnValue(undefined);

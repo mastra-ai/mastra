@@ -1,4 +1,5 @@
 import type {
+  AgentControllerThinkingLevel,
   AgentControllerThread,
   AgentControllerWireEvent,
   MastraDBMessage,
@@ -687,11 +688,14 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
   }
 
-  /** Switch the session model and persist it to the active thread. */
-  async switchModel(modelId: string): Promise<void> {
+  /**
+   * Switch the session model and persist it to the active thread. When
+   * `thinkingLevel` is provided it is applied and persisted with the model.
+   */
+  async switchModel(modelId: string, thinkingLevel?: AgentControllerThinkingLevel): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
-      body: { modelId },
+      body: thinkingLevel !== undefined ? { modelId, thinkingLevel } : { modelId },
     });
   }
 

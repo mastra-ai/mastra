@@ -13,6 +13,12 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
   const setState = vi.fn(async updates => {
     Object.assign(state, updates);
   });
+  const switchModel = vi.fn(
+    async ({ modelId: id, thinkingLevel }: { modelId: string; thinkingLevel?: ThinkingLevelSetting }) => {
+      modelId = id;
+      if (thinkingLevel !== undefined) state.thinkingLevel = thinkingLevel;
+    },
+  );
   const session = {
     subscribe: (listener: typeof emit) => {
       emit = listener;
@@ -27,9 +33,7 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
     },
     model: {
       get: () => modelId,
-      switch: async ({ modelId: id }: { modelId: string }) => {
-        modelId = id;
-      },
+      switch: switchModel,
     },
     state: { get: () => state, set: setState },
   } as unknown as Session;
@@ -43,7 +47,15 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
     getThinkingLevel: () => state.thinkingLevel ?? 'medium',
   }));
   const initial = await agent.newSession({ cwd: '/project', mcpServers: [] });
-  return { agent, initial, setState, sessionUpdate, session, emit: (event: AgentControllerEvent) => emit(event) };
+  return {
+    agent,
+    initial,
+    setState,
+    switchModel,
+    sessionUpdate,
+    session,
+    emit: (event: AgentControllerEvent) => emit(event),
+  };
 }
 
 describe('ACP session configuration', () => {
@@ -89,7 +101,7 @@ describe('ACP session configuration', () => {
   });
 
   it('normalizes max when switching to a model whose reasoning scale ends at xhigh', async () => {
-    const { agent, initial, setState } = await setup();
+    const { agent, initial, setState, switchModel } = await setup();
     await agent.setSessionConfigOption({
       sessionId: initial.sessionId,
       configId: 'model',
@@ -101,7 +113,8 @@ describe('ACP session configuration', () => {
       configId: 'model',
       value: 'openai/gpt-5.5',
     });
-    expect(setState).toHaveBeenLastCalledWith({ thinkingLevel: 'xhigh' });
+    expect(switchModel).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.5', thinkingLevel: 'xhigh' });
+    expect(setState).toHaveBeenCalledExactlyOnceWith({ thinkingLevel: 'max' });
     expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });
 

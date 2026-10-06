@@ -183,6 +183,7 @@ export class AgentController<TState = {}> {
 
   private config: AgentControllerConfig<TState>;
   private initPromise: Promise<void> | undefined = undefined;
+  readonly #metadataWriteQueues = new Map<string, Promise<void>>();
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -382,6 +383,7 @@ export class AgentController<TState = {}> {
       getThreadId: () => session.thread.getId() ?? undefined,
       set: (key, value) => session.thread.setSetting({ key, value }),
       setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
+      setModelOn: (threadId, settings) => this.writeThreadMetadataValues(threadId, settings),
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
@@ -1157,6 +1159,31 @@ export class AgentController<TState = {}> {
     }
   }
 
+  private async writeThreadMetadataValues(threadId: string, settings: Record<string, unknown>): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const previous = this.#metadataWriteQueues.get(threadId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const memoryStorage = await this.getMemoryStorage();
+        const thread = await memoryStorage.getThreadById({ threadId });
+        if (!thread) throw new Error(`Thread ${threadId} not found`);
+        const metadata = { ...thread.metadata, ...settings };
+        for (const key of Object.keys(settings)) {
+          if (settings[key] === undefined) delete metadata[key];
+        }
+        await memoryStorage.saveThread({
+          thread: { ...thread, metadata: Object.keys(metadata).length ? metadata : undefined, updatedAt: new Date() },
+        });
+      });
+    this.#metadataWriteQueues.set(threadId, run);
+    try {
+      await run;
+    } finally {
+      if (this.#metadataWriteQueues.get(threadId) === run) this.#metadataWriteQueues.delete(threadId);
+    }
+  }
+
   private async writeThreadMetadataValue({
     threadId,
     key,
@@ -1166,36 +1193,16 @@ export class AgentController<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: { ...thread, metadata: { ...thread.metadata, [key]: value }, updatedAt: new Date() },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: value });
     } catch {
       // Settings persistence is not critical
     }
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread && thread.metadata) {
-        const metadata = { ...thread.metadata };
-        delete metadata[key];
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: undefined });
     } catch {
       // Settings removal is not critical
     }
@@ -2437,17 +2444,7 @@ export class AgentController<TState = {}> {
     if (!threadId || !this.#resolveStorage()) return;
 
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { tokenUsage: session.getTokenUsage() });
     } catch {
       // Token persistence is not critical
     }

@@ -371,6 +371,7 @@ export async function dispatchEvent(
       break;
 
     case 'model_changed':
+      ectx.updateStatusLine();
       await ectx.refreshModelAuthStatus();
       break;
 
