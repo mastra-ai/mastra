@@ -382,6 +382,34 @@ describe('DatadogBridge', () => {
       await bridge.shutdown();
     });
 
+    it('runs code inside an excluded span in the nearest exported dd span', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'exclude-tool',
+        name: 'exclude-tool-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+        excludeSpanTypes: [SpanType.TOOL_CALL],
+      });
+
+      const agentRun = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' })!;
+      const tool = agentRun.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
+      const agentRunApmSpan = capturedApmSpans[0];
+
+      await tool.executeInContext(async () => {});
+      tool.executeInContextSync(() => {});
+
+      expect(capturedApmSpans).toHaveLength(1);
+      expect(mockScopeActivate).toHaveBeenCalledTimes(2);
+      expect(mockScopeActivate).toHaveBeenNthCalledWith(1, agentRunApmSpan, expect.any(Function));
+      expect(mockScopeActivate).toHaveBeenNthCalledWith(2, agentRunApmSpan, expect.any(Function));
+
+      tool.end();
+      agentRun.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
     it('registers the eager span with the LLMObs tagger', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
