@@ -6,6 +6,7 @@ import {
   KnowledgeConflictError,
   KnowledgeSchemaError,
   TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
@@ -84,6 +85,48 @@ describe('MySQL canonical Knowledge support', () => {
       for (const result of results) {
         if (result.status === 'rejected') expect(result.reason).toBeInstanceOf(KnowledgeConflictError);
       }
+    }
+  });
+
+  it('lets a fenced scope delete finish ahead of a grant change queued behind it, without a lock-upgrade deadlock', async () => {
+    const store = createStore();
+    await store.init();
+    const [deleted, grantTarget, grantRef] = await Promise.all(
+      [0, 1, 2].map(() => store.createNode({ name: `Scope ${randomUUID()}`, isScope: true, scopeIds: [] })),
+    );
+    const epoch = await store.getAccessEpoch();
+    const blocker = await pool.getConnection();
+    const settle = (promise: Promise<unknown>) =>
+      promise.then(
+        () => ({ status: 'fulfilled' as const }),
+        (reason: unknown) => ({ status: 'rejected' as const, reason }),
+      );
+    try {
+      // Pin the delete after its epoch fence and before its epoch bump by holding the scope's node row.
+      await blocker.beginTransaction();
+      await blocker.query(`SELECT id FROM \`${TABLE_KNOWLEDGE_NODES}\` WHERE id=? FOR UPDATE`, [deleted!.id]);
+      const scopeDelete = settle(
+        store.deleteNode({ id: deleted!.id, version: deleted!.version, deletedBy: 'test', expectedAccessEpoch: epoch }),
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      // The grant change now queues for the exclusive access-state lock behind the delete.
+      const grantChange = settle(
+        store.upsertScopeGrant(
+          { scopeNodeId: grantTarget!.id, scopeRefId: grantRef!.id, role: 'readonly' },
+          { expectedAccessEpoch: epoch },
+        ),
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await blocker.commit();
+
+      expect(await scopeDelete).toEqual({ status: 'fulfilled' });
+      const grant = await grantChange;
+      expect(grant.status).toBe('rejected');
+      expect(grant.status === 'rejected' && grant.reason).toBeInstanceOf(KnowledgeConflictError);
+      expect(await store.getAccessEpoch()).toBe(epoch + 1);
+      expect(await store.getNode(deleted!.id)).toBeNull();
+    } finally {
+      blocker.release();
     }
   });
 
