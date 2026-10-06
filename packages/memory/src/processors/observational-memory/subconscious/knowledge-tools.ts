@@ -34,10 +34,6 @@ type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
-export function withCaptureCompanions(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
-  return scopeIds;
-}
-
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
   if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
   const store = await memory.storage?.getStore('knowledge');
@@ -80,19 +76,7 @@ export async function resolveKnowledgeScopeIds(
       contextualScopeAddress: resourceAddress,
       parameters: { orgId: organizationId, resourceId, threadId },
     });
-    const scopeIds = [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-    for (const parentAddress of [resourceAddress, threadAddress]) {
-      const address = `${parentAddress}:uncurated`;
-      const companion = await knowledge.materializeScope({
-        address,
-        name: 'uncurated',
-        parentAddresses: [parentAddress],
-        contextualScopeAddress: parentAddress,
-        parameters: { orgId: organizationId, resourceId, threadId },
-      });
-      scopeIds.push(companion.scopes[address]!);
-    }
-    return scopeIds;
+    return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
   }
 
   // Bare-storage Memory: materialize through the storage domain directly, using
