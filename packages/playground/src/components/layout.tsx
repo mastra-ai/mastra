@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
@@ -8,7 +9,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
-import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
@@ -29,7 +29,7 @@ import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
-  const { setOpenMobile } = useSidebarNew();
+  const { setOpenMobile } = useSidebar();
   const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
 
   const openNavigationCommand = () => {
@@ -40,7 +40,7 @@ function MobileNavbar() {
   return (
     <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
-        <SidebarNew.MobileTrigger />
+        <Sidebar.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
           <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
@@ -161,12 +161,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <SidebarNew.Provider LinkComponent={Link}>
+            <Sidebar.Provider LinkComponent={Link}>
               <SidebarShortcuts />
               <RouteSidePanelProvider>
                 <LayoutContent>{children}</LayoutContent>
               </RouteSidePanelProvider>
-            </SidebarNew.Provider>
+            </Sidebar.Provider>
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>
