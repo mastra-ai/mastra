@@ -474,6 +474,11 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
 
     const stranded = warn.mock.calls.filter(([msg]) => String(msg).includes('no running workflow workers'));
     expect(stranded).toHaveLength(1);
+
+    // stopWorkers() resets the warn-once state, so a later stranding warns again.
+    await mastra.stopWorkers();
+    await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
+    expect(warn.mock.calls.filter(([msg]) => String(msg).includes('no running workflow workers'))).toHaveLength(2);
     await mastra.shutdown();
   });
 

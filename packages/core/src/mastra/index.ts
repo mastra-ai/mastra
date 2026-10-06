@@ -7104,6 +7104,8 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#executionWorkersStarted = false;
+    // Workers are gone again, so a stranded workflow event should warn again.
+    this.#warnedStrandedLocalWorkflowIds.clear();
   }
 
   /**
