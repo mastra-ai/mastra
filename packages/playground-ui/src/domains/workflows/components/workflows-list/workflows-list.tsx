@@ -314,10 +314,10 @@ export function WorkflowsList({
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<span />}
+                        render={<Txt as="span" variant="body-sm" tone="muted" />}
                         role="note"
                         tabIndex={0}
-                        className={cn('shrink-0 rounded-sm text-body-sm text-muted-foreground', focusRing)}
+                        className={cn('shrink-0 rounded-sm', focusRing)}
                       >
                         not registered
                       </TooltipTrigger>

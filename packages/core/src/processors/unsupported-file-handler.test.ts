@@ -106,9 +106,12 @@ function createAgent(
   return { agent, prompts, memory, recall };
 }
 
-const file = (bytes: string, filename: string | undefined, mediaType: string) => ({
+/** The 8-byte signature of a PNG file, so the image passes Mastra's check of image content. */
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const file = (bytes: string | Buffer, filename: string | undefined, mediaType: string) => ({
   type: 'file' as const,
-  data: Buffer.from(bytes),
+  data: Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes),
   mediaType,
   ...(filename ? { filename } : {}),
 });
@@ -162,7 +165,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       turnWith(
         file('PK workbook', 'leads.xlsx', XLSX),
         file('%PDF report', 'report.pdf', 'application/pdf'),
-        file('png bytes', 'chart.png', 'image/png'),
+        file(PNG, 'chart.png', 'image/png'),
         file('a,b', 'data.csv', 'text/csv'),
       ),
       { memory: MEMORY },

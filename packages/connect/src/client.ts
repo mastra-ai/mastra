@@ -207,13 +207,34 @@ const integrationCatalogResponseSchema = z.object({
   integrations: z.array(integrationCatalogEntrySchema),
 });
 
+/**
+ * Secondary access token minted by the vendor alongside the primary oauth2
+ * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
+ * Keyed by the vendor's connection-config field name. Treat this like any
+ * other bearer credential — it authenticates second-audience API calls
+ * (Teams Dev Portal, etc.) and must not be logged or forwarded to code that
+ * shouldn't hold connection secrets.
+ */
+export const secondaryAccessTokenSchema = z.object({
+  accessToken: z.string(),
+  expiresAt: z.string().nullable(),
+});
+
+export type SecondaryAccessToken = z.infer<typeof secondaryAccessTokenSchema>;
+
 export const credentialSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('oauth2'),
     accessToken: z.string(),
     expiresAt: z.string().nullable(),
+    secondaryAccessTokens: z.record(z.string(), secondaryAccessTokenSchema).optional(),
   }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
+  z.object({
+    type: z.literal('two_step'),
+    token: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
 ]);
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
@@ -406,7 +427,17 @@ export async function proxyRequestWithResponse(
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
-  const headers: Record<string, string> = { ...options.headers };
+  // The platform authenticates proxy requests with the project token and
+  // injects the provider credential upstream (same invariant as the MCP
+  // transport). A caller-supplied authorization header would merge with the
+  // platform bearer under a different casing and corrupt platform auth, so it
+  // is dropped here rather than forwarded.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+    headers[name] = value;
+  }
   if (options.baseUrlOverride !== undefined) {
     assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;

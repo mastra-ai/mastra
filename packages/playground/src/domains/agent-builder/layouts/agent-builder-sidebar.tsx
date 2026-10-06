@@ -104,7 +104,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                   className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <Txt as="span" className="truncate font-display whitespace-nowrap">
+                  <Txt variant="body-sm" font="display" as="span" className="truncate whitespace-nowrap">
                     Mastra Studio
                   </Txt>
                 </Link>
@@ -120,7 +120,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                 className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <Txt as="span" className="truncate font-display whitespace-nowrap">
+                <Txt variant="body-sm" font="display" as="span" className="truncate whitespace-nowrap">
                   Mastra Studio
                 </Txt>
               </Link>

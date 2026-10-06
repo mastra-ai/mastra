@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Star } from 'lucide-react';
@@ -72,7 +73,7 @@ export const SkillFavoriteButton = ({
     >
       <Star size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && (
-        <span className="leading-none whitespace-nowrap">
+        <Txt as="span" variant="label" className="whitespace-nowrap">
           {hasCount ? (
             <>
               <span className="tabular-nums">{favoriteCount}</span> {countLabel}
@@ -80,7 +81,7 @@ export const SkillFavoriteButton = ({
           ) : (
             'Star'
           )}
-        </span>
+        </Txt>
       )}
     </Button>
   );

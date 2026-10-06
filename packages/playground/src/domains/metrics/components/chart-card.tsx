@@ -62,7 +62,9 @@ export function CustomTooltip({
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <p className="mb-1 font-medium text-foreground">{label}</p>
+      <Txt as="p" variant="label" tone="ink" className="mb-1">
+        {label}
+      </Txt>
       {payload.map(entry => (
         <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />

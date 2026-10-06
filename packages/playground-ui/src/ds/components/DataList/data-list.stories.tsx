@@ -373,6 +373,29 @@ export const WithSubheaders: Story = {
   ),
 };
 
+export const WithGroups: Story = {
+  render: () => (
+    <DataList columns={COLUMNS}>
+      <RunsHeader />
+      <DataList.Group aria-label="Running" className="pb-4">
+        <DataList.Subheader>Running</DataList.Subheader>
+        {SAMPLE_RUNS.slice(0, 2).map(run => (
+          <DataList.RowButton key={run.id} onClick={() => {}}>
+            <RunCells run={run} />
+          </DataList.RowButton>
+        ))}
+        <Button variant="ghost" size="sm" className="justify-self-center">
+          Load more runs
+        </Button>
+      </DataList.Group>
+      <DataList.Group aria-label="Finished" className="pb-4">
+        <DataList.Subheader>Finished</DataList.Subheader>
+        <DataList.NoMatch message="Nothing finished yet" />
+      </DataList.Group>
+    </DataList>
+  ),
+};
+
 /** Roving focus with ArrowUp, ArrowDown, Home, End, PageUp and PageDown. */
 export const KeyboardNavigation: Story = {
   render: function KeyboardNavigationStory() {

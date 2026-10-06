@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 397 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 395 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -114,8 +114,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 0.1901,
-    "outputCost": 4.2
+    "inputCost": 0.2987,
+    "outputCost": 6
   },
   {
     "model": "kilo/~deepseek/deepseek-v4-flash-latest",
@@ -126,7 +126,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.0152,
+    "inputCost": 0.0134,
     "outputCost": 1.28
   },
   {
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.3,
-    "outputCost": 20
+    "inputCost": 0.365,
+    "outputCost": 13
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -246,7 +246,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.0352,
+    "inputCost": 0.0317,
     "outputCost": 0.5
   },
   {
@@ -941,7 +941,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "maxOutput": 393216,
     "inputCost": 1.32,
     "outputCost": 3.96
   },
@@ -2117,7 +2117,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 235929,
+    "maxOutput": 98304,
     "inputCost": 0.6,
     "outputCost": 2.5
   },
@@ -3449,7 +3449,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 235929,
+    "maxOutput": 16384,
     "inputCost": 0.1495,
     "outputCost": 0.598
   },
@@ -3484,8 +3484,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
     "inputCost": 0.13,
     "outputCost": 0.52
   },
@@ -3761,7 +3761,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 235929,
+    "maxOutput": 81920,
     "inputCost": 0.39,
     "outputCost": 2.34
   },
@@ -3932,18 +3932,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.425,
     "outputCost": 2.55
-  },
-  {
-    "model": "kilo/qwen/qwen3.8-27b:free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 235929,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "kilo/qwen/qwen3.8-flash",
@@ -4184,18 +4172,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.25,
     "outputCost": 1.5
-  },
-  {
-    "model": "kilo/stealth/space-bunny-alpha",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 524288,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "kilo/stepfun/step-3.5-flash",
