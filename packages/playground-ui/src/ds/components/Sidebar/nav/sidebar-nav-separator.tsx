@@ -1,0 +1,19 @@
+import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '@/lib/utils';
+
+export type SidebarNavSeparatorProps = ComponentPropsWithoutRef<'div'>;
+
+export function SidebarNavSeparator({ className, ...props }: SidebarNavSeparatorProps) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      className={cn(
+        'relative min-h-5',
+        '[&:after]:absolute [&:after]:inset-x-3 [&:after]:top-1/2 [&:after]:block [&:after]:h-0 [&:after]:border-t [&:after]:border-border [&:after]:content-[""]',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
