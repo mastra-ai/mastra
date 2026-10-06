@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -44,7 +45,8 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('direct Subconscious replay', () => {
   it('directly curates recorded observations and persists reminder-retrievable knowledge', async () => {
-    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'mastra', storage }), ...semanticInfrastructure });
     const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
     const store = (await memory.storage.getStore('knowledge'))!;
     const generatedPrompts: string[] = [];

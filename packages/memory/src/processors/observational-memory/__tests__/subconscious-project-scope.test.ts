@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -108,7 +109,8 @@ describe('Subconscious project scope override', () => {
   });
 
   it('curate and remind resolve search scope from the override', async () => {
-    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'mastra', storage }), ...semanticInfrastructure });
     const store = (await memory.storage.getStore('knowledge'))!;
     const search = vi.spyOn(store, 'search');
     const subconscious = new Subconscious({

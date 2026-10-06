@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -5,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
+import { getGovernedKnowledge } from '../subconscious/knowledge-tools';
 
 function createSemanticDependencies(ignoreFilters = false) {
   const indexes = new Set<string>();
@@ -45,8 +47,10 @@ function toolContext(threadId = 'alpha') {
 
 async function createMemory(tools = true, ignoreFilters = false) {
   const { vector, embedder } = createSemanticDependencies(ignoreFilters);
+  const storage = new InMemoryStore();
   const memory = new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'mastra', storage }),
     vector,
     embedder,
     options: {
@@ -177,5 +181,13 @@ describe('Subconscious knowledge read tools', () => {
     await expect(
       tools.knowledge_browse!.execute?.({}, { agent: { threadId: 'alpha', resourceId: 'user-42' } } as any),
     ).rejects.toThrow(/organizationId/);
+  });
+
+  it('fails closed without a configured Knowledge instance even when raw knowledge storage exists', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    expect(await memory.storage.getStore('knowledge')).toBeDefined();
+    expect(() => getGovernedKnowledge(memory)).toThrow(
+      'Subconscious Knowledge reads require a configured Knowledge instance.',
+    );
   });
 });

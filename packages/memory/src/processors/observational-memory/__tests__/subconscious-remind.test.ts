@@ -1,4 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -70,7 +71,7 @@ function createModel(response: string, prompts?: string[], repeatToolCall = fals
 function createContext(response: string, storage = new InMemoryStore()) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
-  const memory = new Memory({ storage });
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'mastra', storage }) });
   const sendSignal = vi.fn(async () => undefined) as any;
   return {
     threadId: 'alpha',
