@@ -100,7 +100,6 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(db.knowledgeNodeKeys.size).toBe(0);
     expect(db.knowledgeRecords.size).toBe(0);
     expect(db.knowledgeMentions.size).toBe(0);
-    expect(db.knowledgeCursors.size).toBe(0);
     expect(db.knowledgeActivity).toHaveLength(0);
     expect(db.knowledgeSemanticOutbox.size).toBe(0);
     expect(db.knowledgeSemanticIdempotency.size).toBe(0);
@@ -381,7 +380,21 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toHaveLength(1);
   });
 
-  it('enforces ceilings and monotonic curation cursors', async () => {
+  it('rejects the deprecated curation cursor methods', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    await expect(store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).rejects.toThrow(
+      'Knowledge curation cursors were removed',
+    );
+    await expect(
+      store.advanceCurationCursor({
+        sourceThreadId: 't1',
+        agent: 'curate',
+        lastKnowledgeId: '01J00000000000000000000000',
+      }),
+    ).rejects.toThrow('Knowledge curation cursors were removed');
+  });
+
+  it('enforces Knowledge ceilings', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Secret', kind: 'task', scope: resource });
     const record = await store.appendKnowledge({
@@ -400,15 +413,6 @@ describe('InMemoryKnowledgeStorage', () => {
     await expect(store.rescopeKnowledge({ id: record.id, scope: org })).resolves.toEqual(
       expect.objectContaining({ scope: org }),
     );
-
-    await store.advanceCurationCursor({ sourceThreadId: 't1', agent: 'curate', lastKnowledgeId: record.id });
-    await expect(
-      store.advanceCurationCursor({
-        sourceThreadId: 't1',
-        agent: 'curate',
-        lastKnowledgeId: '00000000000000000000000000',
-      }),
-    ).rejects.toThrow('cannot move backwards');
   });
 
   it('paginates knowledge newest-first and supports semantic outbox recovery', async () => {

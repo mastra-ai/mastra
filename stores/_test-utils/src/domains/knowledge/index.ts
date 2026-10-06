@@ -539,18 +539,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      await store.advanceCurationCursor({
-        sourceThreadId: 't1',
-        agent: 'curate',
-        lastKnowledgeId: '01J00000000000000000000000',
-      });
 
       await store.dangerouslyClearAll();
 
       expect(await store.getNode(node.id)).toBeNull();
       expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toBeNull();
       expect(await store.listActivity({ scope: thread })).toEqual([]);
-      expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
     });
 
@@ -567,16 +561,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(second.map(event => event.id)).toEqual(all.slice(2).map(event => event.id));
     });
 
-    it('persists activity, cursors, and recoverable semantic work', async () => {
-      const node = await store.createNode({ name: 'Release', kind: 'task', scope: resource });
-      await store.advanceCurationCursor({
-        sourceThreadId: 't1',
-        agent: 'curate',
-        lastKnowledgeId: '01J00000000000000000000000',
-      });
-      expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toEqual(
-        expect.objectContaining({ lastKnowledgeId: '01J00000000000000000000000' }),
+    it('rejects the deprecated curation cursor methods', async () => {
+      await expect(store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).rejects.toThrow(
+        'Knowledge curation cursors were removed',
       );
+      await expect(
+        store.advanceCurationCursor({
+          sourceThreadId: 't1',
+          agent: 'curate',
+          lastKnowledgeId: '01J00000000000000000000000',
+        }),
+      ).rejects.toThrow('Knowledge curation cursors were removed');
+    });
+
+    it('persists activity and recoverable semantic work', async () => {
+      const node = await store.createNode({ name: 'Release', kind: 'task', scope: resource });
       expect((await store.listActivity({ scope: thread }))[0]).toEqual(expect.objectContaining({ recordId: node.id }));
       const pending = await store.listSemanticOutbox({ status: 'pending' });
       expect(pending).toHaveLength(1);
