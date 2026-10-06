@@ -238,7 +238,7 @@ export interface KnowledgeScopeNodeSummary {
   name: string;
   kind?: string;
   description?: string;
-  /** UUIDs of the scope nodes that contain this scope (membership edges). */
+  /** UUIDs of the scope nodes that contain this scope (membership edges), sorted ascending. */
   parentIds: string[];
 }
 
