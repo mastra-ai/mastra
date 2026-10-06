@@ -2,12 +2,14 @@ const { execFileSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
-const SCANNED_ROOTS_DECLARATION = /^export const scannedRoots\s*=\s*\[([\s\S]*?)\]/m;
+const SCANNED_ROOTS_DECLARATION = /^export const scannedRoots(?:\s*:[^=]+)?\s*=\s*\[([\s\S]*?)\]/m;
 const STRING_LITERAL = /'([^']*)'|"([^"]*)"/g;
 
 function parseScannedRoots(test, source) {
   const declaration = source.match(SCANNED_ROOTS_DECLARATION);
-  if (!declaration) return [];
+  if (!declaration) {
+    throw new Error(`${test} mentions scannedRoots but its declaration is not a literal array`);
+  }
   const roots = [...declaration[1].matchAll(STRING_LITERAL)].map(([, single, double]) => single ?? double);
   if (roots.length === 0) {
     throw new Error(`${test} declares scannedRoots without any string literal paths`);

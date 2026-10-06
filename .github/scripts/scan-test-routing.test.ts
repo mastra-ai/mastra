@@ -31,6 +31,16 @@ describe('scan test routing', () => {
     expect(parseScannedRoots('x.test.ts', source)).toEqual(['packages/a/src', 'packages/b/src']);
   });
 
+  test('reads roots from a type-annotated declaration', () => {
+    const source = `export const scannedRoots: readonly string[] = ['packages/a/src'];`;
+    expect(parseScannedRoots('x.test.ts', source)).toEqual(['packages/a/src']);
+  });
+
+  test('rejects a declaration it cannot read instead of selecting nothing', () => {
+    const source = `export const scannedRoots = buildRoots();`;
+    expect(() => parseScannedRoots('x.test.ts', source)).toThrow(/x\.test\.ts/);
+  });
+
   test('rejects a declaration with no literal paths', () => {
     expect(() => parseScannedRoots('x.test.ts', 'export const scannedRoots = [root];')).toThrow(/x\.test\.ts/);
   });
