@@ -29,20 +29,32 @@ function TestLink({ onClick, ...props }: LinkComponentProps) {
   );
 }
 
-function renderSections(items = sections, activeUrl = '/agents') {
-  return render(
+function SectionsFixture({
+  items = sections,
+  activeUrl = '/agents',
+  visibilityStorageKey = storageKey,
+}: {
+  items?: SidebarNewSection[];
+  activeUrl?: string;
+  visibilityStorageKey?: string;
+}) {
+  return (
     <SidebarNew.Provider LinkComponent={TestLink}>
       <SidebarNew>
         <SidebarNew.Nav aria-label="Main">
           <SidebarNew.Sections
             sections={items}
-            visibilityStorageKey={storageKey}
+            visibilityStorageKey={visibilityStorageKey}
             isActive={link => link.url === activeUrl}
           />
         </SidebarNew.Nav>
       </SidebarNew>
-    </SidebarNew.Provider>,
+    </SidebarNew.Provider>
   );
+}
+
+function renderSections(items = sections, activeUrl = '/agents') {
+  return render(<SectionsFixture items={items} activeUrl={activeUrl} />);
 }
 
 async function customizeSidebar(name = 'Tools') {
@@ -58,6 +70,33 @@ afterEach(() => {
 });
 
 describe('SidebarNew.Sections', () => {
+  describe('when the visibility storage key changes', () => {
+    it('loads the new scope and saves choices without changing the previous scope', async () => {
+      const otherStorageKey = 'other-sidebar-visibility-test';
+      localStorage.setItem(otherStorageKey, JSON.stringify({ 'primitives:Workspaces': true }));
+      const view = renderSections();
+      fireEvent.click(await customizeSidebar());
+      await screen.findByRole('link', { name: 'Tools' });
+      const firstScope = localStorage.getItem(storageKey);
+
+      view.rerender(<SectionsFixture visibilityStorageKey={otherStorageKey} />);
+
+      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
+      expect(screen.getByRole('link', { name: 'Workspaces' })).toBeTruthy();
+      fireEvent.click(await customizeSidebar('Workspaces'));
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+      await waitFor(() =>
+        expect(localStorage.getItem(otherStorageKey)).toBe(JSON.stringify({ 'primitives:Workspaces': false })),
+      );
+      expect(localStorage.getItem(storageKey)).toBe(firstScope);
+
+      view.rerender(<SectionsFixture />);
+
+      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+    });
+  });
+
   it('opens hidden links in a floating menu and returns focus on Escape', async () => {
     renderSections();
     const navigation = screen.getByRole('navigation', { name: 'Main' });

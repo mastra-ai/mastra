@@ -68,6 +68,7 @@ export function SidebarNewNavHeader({
             <header {...props}>{children}</header>
           </VisuallyHidden>
           <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border" />
+          {action ? <VisuallyHidden>{action}</VisuallyHidden> : null}
         </>
       )}
     </div>

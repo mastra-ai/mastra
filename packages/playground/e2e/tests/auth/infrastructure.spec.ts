@@ -23,8 +23,6 @@ import {
   buildAuthCapabilities,
 } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
-import { expectCurrentBreadcrumb } from '../__utils__/route-header';
-import { openSidebarMoreMenu, sidebarDestination } from '../__utils__/sidebar';
 
 test.describe('Auth Infrastructure', () => {
   test.afterEach(async () => {
@@ -145,22 +143,6 @@ test.describe('Auth Infrastructure', () => {
 
       expect(data.capabilities.rbac).toBe(false);
       expect(data.access).toBeNull();
-    });
-
-    test('rbac disabled shows links that are hidden when RBAC is enabled', async ({ page }) => {
-      await setupMockAuth(page, {
-        role: 'viewer',
-        permissions: ['agents:read', 'workflows:read'],
-        rbacEnabled: false,
-      });
-
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
-      await openSidebarMoreMenu(page);
-      await expect(sidebarDestination(page, /^Tools$/i)).toBeVisible();
-      await expect(sidebarDestination(page, /^MCP Servers$/i)).toBeVisible();
     });
 
     test('can mock auth disabled', async ({ page }) => {

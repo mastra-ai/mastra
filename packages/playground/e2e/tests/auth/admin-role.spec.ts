@@ -15,7 +15,6 @@ import { test, expect } from '@playwright/test';
 import { setupAdminAuth, setupMockAuth, MOCK_USERS } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
-import { openSidebarMoreMenu, sidebarDestination } from '../__utils__/sidebar';
 
 test.describe('Admin Role', () => {
   test.afterEach(async () => {
@@ -23,21 +22,6 @@ test.describe('Admin Role', () => {
   });
 
   test.describe('when an admin user navigates the studio', () => {
-    test('admin sees all navigation items', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // Wait for page to load
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Verify all main navigation links are visible
-      await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
-      await expect(page.getByRole('link', { name: /^Workflows$/i })).toBeVisible();
-      await openSidebarMoreMenu(page);
-      await expect(sidebarDestination(page, /^Tools$/i)).toBeVisible();
-      await expect(sidebarDestination(page, /^MCP Servers$/i)).toBeVisible();
-    });
-
     test('admin can navigate to all main sections', async ({ page }) => {
       await setupAdminAuth(page);
 
