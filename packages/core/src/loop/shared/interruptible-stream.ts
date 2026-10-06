@@ -1,3 +1,5 @@
+import { TransformStream } from 'node:stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import type { ChunkType } from '../../stream/types';
 import { STEP_CONTENT_CHUNK_TYPES } from './step-content-chunk-types';
 
@@ -40,5 +42,5 @@ export function watchInterruptibleStream<OUTPUT>(
         controller.enqueue(chunk);
       },
     }),
-  ) as ReadableStream<ChunkType<OUTPUT>>;
+  );
 }

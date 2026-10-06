@@ -7,6 +7,7 @@ import { loop } from '../../loop/loop';
 import { createMessageListWithUserMessage, defaultSettings } from '../../loop/test-utils/utils';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
+import { BatchPartsProcessor } from '../../processors/processors/batch-parts';
 import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -779,5 +780,62 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(partsAtStepFinish).toHaveLength(1);
     expect(partsAtStepFinish[0]?.join()).not.toContain('STALE_REASONING_FINGERPRINT');
     expect(partsAtStepFinish[0]?.filter(part => part.includes('"step-start"'))).toHaveLength(1);
+  });
+  it('drops discarded reasoning held by a built-in batch buffer', async () => {
+    const batch = new BatchPartsProcessor({ batchSize: 1_000, emitOnNonText: false, maxWaitTime: 60_000 });
+    const processing = vi.spyOn(batch, 'processOutputStream');
+    const memory = new MockMemory();
+    const prompts: unknown[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt, abortSignal }) => {
+        prompts.push(prompt);
+        if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
+        return {
+          warnings: [],
+          stream: new ReadableStream<LanguageModelV2StreamPart>({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'reasoning-start', id: 'batched' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'batched', delta: 'BATCH_DISCARDED' });
+              abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+            },
+          }),
+        };
+      },
+    });
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const agent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Batch preemption test',
+      instructions: 'Test',
+      model,
+      memory,
+      outputProcessors: [batch],
+    });
+    const stream = await agent.stream('initial question', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+    });
+    const chunks: unknown[] = [];
+    const consumption = (async () => {
+      for await (const chunk of stream.fullStream) chunks.push(chunk);
+    })();
+    await vi.waitFor(() =>
+      expect(JSON.stringify(processing.mock.calls.at(-1)?.[0].state.batch)).toContain('BATCH_DISCARDED'),
+    );
+    const state = processing.mock.calls.at(-1)![0].state;
+    state.retained = 'ACCEPTED_PROCESSOR_STATE';
+    const signal = await agent.sendSignal({ type: 'user-message', contents: 'SYNTHETIC_SIGNAL_MARKER' }, scope);
+    await expect(signal.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+    await consumption;
+    await stream._waitUntilFinished();
+    clearTimeout(state.timeoutId);
+    expect(prompts).toHaveLength(2);
+    expect(state.retained).toBe('ACCEPTED_PROCESSOR_STATE');
+    // emitOnNonText:false keeps buffering the accepted replacement; only the discarded parts leave.
+    expect(JSON.stringify(state.batch)).not.toContain('BATCH_DISCARDED');
+    expect(JSON.stringify(state.batch)).toContain('replacement answer');
+    expect(JSON.stringify(chunks)).not.toContain('BATCH_DISCARDED');
+    expect(JSON.stringify(prompts[1])).not.toContain('BATCH_DISCARDED');
+    expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain('BATCH_DISCARDED');
   });
 });
