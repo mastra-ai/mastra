@@ -171,27 +171,6 @@ export interface KnowledgeNode {
   updatedAt: Date;
 }
 
-/**
- * The normalized v2 node shape. `KnowledgeNode` remains the shipped v1 compatibility shape until
- * every adapter is v2-capable.
- *
- * @experimental Knowledge APIs are experimental and may change without notice.
- */
-export interface KnowledgeV2Node {
-  id: string;
-  type: 'node';
-  name: string;
-  kind?: string;
-  isScope: boolean;
-  metadata?: Record<string, unknown>;
-  scopes: string[];
-  version: number;
-  createdAt: Date;
-  updatedAt: Date;
-  deletedAt?: Date;
-  deletedBy?: string;
-}
-
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeNodeReference = KnowledgeNode | string;
 
@@ -207,26 +186,6 @@ export interface KnowledgeRecord {
   maxScope?: KnowledgeScopeLevel;
   /** Free-form provenance, e.g. the capture agent's reasoning for keeping or pinning the item. */
   metadata?: Record<string, unknown>;
-  deletedAt?: Date;
-  deletedBy?: string;
-}
-
-/**
- * The normalized v2 record shape. Scope declarations are part of the record API and are backed by
- * `mastra_knowledge_record_scopes` in relational adapters.
- *
- * @experimental Knowledge APIs are experimental and may change without notice.
- */
-export interface KnowledgeV2Record {
-  id: string;
-  node: string;
-  text: string;
-  metadata?: Record<string, unknown>;
-  source?: string;
-  scopes: string[];
-  version: number;
-  createdAt: Date;
-  updatedAt: Date;
   deletedAt?: Date;
   deletedBy?: string;
 }
@@ -630,10 +589,10 @@ export function knowledgeSemanticIdempotencyKey(
   return `${documentId}:${operation}:${version}`;
 }
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export abstract class KnowledgeStorage extends StorageDomain {
   constructor() {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
