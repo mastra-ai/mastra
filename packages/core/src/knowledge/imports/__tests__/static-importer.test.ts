@@ -236,15 +236,15 @@ describe('static Knowledge importer operations', () => {
       name: 'Planning',
       metadata: { agenda: 'Imported' },
     });
-    const movedScopeId = '10000000-0000-4000-8000-000000000004';
-    await (
-      await knowledge.getStorageInternal()
-    ).createNode({
-      id: movedScopeId,
-      name: 'Curated thread',
-      isScope: true,
-      scopeIds: [projectScopeId],
-    });
+    const movedScopeAddress = `${scopeAddress}:curated`;
+    const movedScopeId = (
+      await knowledge.materializeScope({
+        address: movedScopeAddress,
+        name: 'Curated thread',
+        parentAddresses: [scopeAddress],
+        contextualScopeAddress: movedScopeAddress,
+      })
+    ).scopes[movedScopeAddress]!;
     const moved = await knowledge.updateNode({
       id: handle.id,
       version: handle.node.version,
