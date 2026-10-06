@@ -30,7 +30,7 @@ await knowledge.materializeScope({
 
 Both calls are idempotent. Parent scopes and access grants you add to `structure` later are applied on the next `reconcile()`. A scope created by `materializeScope()` keeps the access it was created with, even if you later change its scope type.
 
-Read the reconciled scopes back with the Knowledge store's `listScopeNodes()`. Pass `withinAddress` to read one scope and everything beneath it, or `addresses` for exact scopes, and follow `nextCursor` for more pages, so one tenant's read never depends on how many scopes other tenants have.
+Read the reconciled scopes back with the Knowledge store's `listScopeNodes()`. Pass `withinAddress` to read one scope and everything beneath it, `addresses` for exact scopes, or `ids` for exact scope nodes. Filters combine, so `{ withinAddress: 'org:acme', ids: [scopeId], limit: 1 }` checks whether one scope belongs to an org. Follow `nextCursor` for more pages, so one tenant's read never depends on how many scopes other tenants have.
 
 ```ts
 const store = await storage.getStore('knowledge');
