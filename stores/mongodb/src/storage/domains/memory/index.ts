@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -13,7 +15,6 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-  getObservationalMemoryGeneration0Id,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
@@ -70,6 +71,11 @@ const OM_HEAD_SORT = { generationCount: -1, createdAt: 1, id: 1 } as const;
 const OM_MAX_HEAD_HOPS = 3;
 /** Max read-decide-conditional-update rounds before giving up on a contended record. */
 const OM_MAX_CONDITIONAL_ATTEMPTS = 3;
+
+/** Document `_id` of a key's generation-0 record; see `initializeObservationalMemory`. */
+function getGeneration0DocumentId(lookupKey: string): string {
+  return `om0_${createHash('sha256').update(lookupKey).digest('hex').slice(0, 32)}`;
+}
 
 /**
  * Inputs for a rollover's successor, stored on the fenced (retired) document so that any
@@ -1745,12 +1751,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existing = await this.#getHeadDoc(collection, lookupKey);
       if (existing) return this.parseOMDocument(existing);
 
-      // Deterministic generation-0 id: concurrent initializations insert the same id, and the
-      // unique `id` index rejects every insert after the first.
-      const id = getObservationalMemoryGeneration0Id(lookupKey);
+      // The record id is never reused: a write addressed to a cleared record must not land on its
+      // successor. Concurrent initializations instead converge on the document `_id`, which is
+      // derived from the key and freed when the key is cleared: the `_id` index rejects every
+      // insert after the first.
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       try {
         await collection.insertOne({
+          _id: getGeneration0DocumentId(lookupKey) as any,
           id,
           lookupKey,
           scope: input.scope,

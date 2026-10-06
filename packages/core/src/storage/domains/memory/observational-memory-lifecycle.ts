@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { ObservationalMemoryRecord } from '../../types';
 
 /**
@@ -6,15 +5,6 @@ import type { ObservationalMemoryRecord } from '../../types';
  * these inside its own atomic section (lock, transaction, or conditional update), so the
  * decisions are identical across adapters.
  */
-
-/**
- * Deterministic id for the generation-0 record of a lookup key. Concurrent initializations
- * of the same thread/resource insert the same id, so the storage primary key (or unique
- * `id` index) lets exactly one of them create the record.
- */
-export function getObservationalMemoryGeneration0Id(lookupKey: string): string {
-  return `om0_${createHash('sha256').update(lookupKey).digest('hex').slice(0, 32)}`;
-}
 
 /**
  * Canonical head order: `generationCount DESC, createdAt ASC, id ASC`.

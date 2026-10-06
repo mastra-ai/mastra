@@ -2429,7 +2429,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect((await head(tie)).id).toBe(`a-${suffix}`);
       });
 
-      it('C15: after the key is deleted, writes create nothing and initialization is deterministic', async () => {
+      it('C15: after the key is deleted, writes create nothing and land nowhere, even once it is reinitialized', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
         expect((await memoryStorage.initializeObservationalMemory(input)).id).toBe(record.id);
@@ -2444,34 +2444,51 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
             return undefined;
           }
         };
-        const append = await settle(() =>
-          memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('gone', 100) }),
-        );
-        if (append) expect(append).toMatchObject({ persisted: false });
-        const swap = (await settle(() => activateAll(record.id, 500))) as { chunksActivated: number } | undefined;
-        if (swap) expect(swap.chunksActivated).toBe(0);
-        await expect(
-          memoryStorage.updateActiveObservations({
-            id: record.id,
-            observations: '- gone',
-            tokenCount: 1,
-            lastObservedAt: at(0),
-          }),
-        ).rejects.toThrow(/not found/);
-        await expect(memoryStorage.setPendingMessageTokens(record.id, 1)).rejects.toThrow(/not found/);
-        await expect(memoryStorage.setBufferingObservationFlag(record.id, true)).rejects.toThrow(/not found/);
-        expect(
-          (await memoryStorage.createReflectionGeneration({ currentRecord: stale, reflection: '- x', tokenCount: 1 }))
-            .id,
-        ).toBe(record.id);
-        expect((await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 1 })).id).toBe(
-          record.id,
-        );
+        // Writes still addressed to the deleted record, e.g. from a cycle that started before
+        // the delete.
+        const staleWrites = async () => {
+          const append = await settle(() =>
+            memoryStorage.updateBufferedObservations({ id: record.id, chunk: chunkAt('gone', 100) }),
+          );
+          if (append) expect(append).toMatchObject({ persisted: false });
+          const swap = (await settle(() => activateAll(record.id, 500))) as { chunksActivated: number } | undefined;
+          if (swap) expect(swap.chunksActivated).toBe(0);
+          await expect(
+            memoryStorage.updateActiveObservations({
+              id: record.id,
+              observations: '- gone',
+              tokenCount: 1,
+              lastObservedAt: at(0),
+              expectedActiveObservations: stale.activeObservations,
+            }),
+          ).rejects.toThrow(/not found/);
+          await expect(memoryStorage.setPendingMessageTokens(record.id, 1)).rejects.toThrow(/not found/);
+          await expect(memoryStorage.setBufferingObservationFlag(record.id, true)).rejects.toThrow(/not found/);
+          expect(
+            (await memoryStorage.createReflectionGeneration({ currentRecord: stale, reflection: '- x', tokenCount: 1 }))
+              .id,
+          ).toBe(record.id);
+          expect((await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 1 })).id).toBe(
+            record.id,
+          );
+        };
+        await staleWrites();
         expect(await rows(input)).toEqual([]);
 
+        // The key's next record gets a new id, so the same stale writes still land nowhere.
         const reinitialized = await memoryStorage.initializeObservationalMemory(input);
-        expect(reinitialized.id).toBe(record.id);
-        expect(await rows(input)).toHaveLength(1);
+        expect(reinitialized.id).not.toBe(record.id);
+        await staleWrites();
+        const after = await rows(input);
+        expect(after.map(r => r.id)).toEqual([reinitialized.id]);
+        expect(after[0]).toMatchObject({
+          activeObservations: '',
+          observationTokenCount: 0,
+          pendingMessageTokens: 0,
+          isBufferingObservation: false,
+        });
+        expect(after[0]!.bufferedObservationChunks ?? []).toEqual([]);
+        expect(after[0]!.lastObservedAt ?? null).toBeNull();
       });
     });
   });

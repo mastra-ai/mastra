@@ -1,10 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/memory';
-import {
-  TABLE_MESSAGES,
-  TABLE_RESOURCES,
-  TABLE_THREADS,
-  getObservationalMemoryGeneration0Id,
-} from '@mastra/core/storage';
+import { TABLE_MESSAGES, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ConvexAdminClient } from '../../client';
@@ -475,7 +470,7 @@ describe('MemoryConvex observational memory', () => {
     expect(records[0]?.createdAt).toBeInstanceOf(Date);
   });
 
-  it('initializeObservationalMemory sends a deterministic generation-0 record to omInitialize', async () => {
+  it('initializeObservationalMemory sends a fresh generation-0 record to omInitialize', async () => {
     const { calls, memory } = createMemoryDomain(request => (request as { record: unknown }).record);
 
     const record = await memory.initializeObservationalMemory({
@@ -487,7 +482,7 @@ describe('MemoryConvex observational memory', () => {
     });
 
     expect(calls).toHaveLength(1);
-    expect(record.id).toBe(getObservationalMemoryGeneration0Id('resource:resource-1'));
+    expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(calls[0]).toMatchObject({
       op: 'omInitialize',
       tableName: OM_TABLE,
