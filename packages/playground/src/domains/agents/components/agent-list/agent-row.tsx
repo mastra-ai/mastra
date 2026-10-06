@@ -41,15 +41,11 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <DataList.Cell className="min-w-0 overflow-visible text-left text-muted-foreground">
-          <span title={agent.name} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
-            {agent.name}
-          </span>
+        <DataList.Cell title={agent.name} className="block self-center truncate text-left">
+          {agent.name}
         </DataList.Cell>
-        <DataList.Cell className="min-w-0 overflow-visible">
-          <span title={purpose} className="block max-w-[70ch] min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
-            {purpose}
-          </span>
+        <DataList.Cell title={purpose} className="block max-w-[70ch] self-center truncate">
+          {purpose}
         </DataList.Cell>
       </DataList.RowLink>
       <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
