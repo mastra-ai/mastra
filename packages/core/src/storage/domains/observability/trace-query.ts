@@ -1633,7 +1633,8 @@ export function normalizeTraceQueryPath(path: string): string {
  * marks, and digits, joined by single spaces. Text is composed to NFC first, so an accent
  * stored as a separate mark equals its precomposed form, and marks stay inside their word,
  * so `नमस्ते` is one word. After that, `İ` folds to plain `i`: it is the only letter whose lowercase form
- * is two code points, and the stores' `lower()` returns one. `matches` succeeds when the
+ * is two code points, and the stores' `lower()` returns one. A Greek final `ς` becomes `σ`, since
+ * `toLowerCase()` picks the final form by position and the stores' `lower()` does not. `matches` succeeds when the
  * normalized literal appears as a contiguous word sequence inside the normalized field
  * value. Stores apply the same normalization in SQL, so `incorrect` matches
  * `This answer is incorrect.` but not `This was incorrectly formatted.`
@@ -1643,6 +1644,7 @@ export function normalizeTraceQueryText(text: string): string {
     .normalize('NFC')
     .replace(/\u0130/g, 'i')
     .toLowerCase()
+    .replace(/\u03c2/g, '\u03c3')
     .split(/[^\p{L}\p{M}\p{N}]+/u)
     .filter(word => word.length > 0)
     .join(' ');

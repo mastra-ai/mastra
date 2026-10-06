@@ -159,7 +159,8 @@ function placeholders(values: readonly unknown[], offset: number): string {
  * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{M}`, and glibc files
  * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
  * Unicode tables. A run may also absorb neighbouring letters, digits, and unassigned code
- * points, which are word characters already or never stored.
+ * points, which are word characters already or never stored. Private-use code points are not
+ * absorbed: the other stores treat them as separators.
  */
 let pgCombiningMarkRanges: string | undefined;
 function getPgCombiningMarkRanges(): string {
@@ -177,7 +178,7 @@ function getPgCombiningMarkRanges(): string {
   }
   const text = chunks.join('');
   const ranges: string[] = [];
-  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}\p{Co}]+/gu)) {
+  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}]+/gu)) {
     if (!/\p{M}/u.test(match[0])) continue;
     const first = match[0].codePointAt(0)!;
     const lastUnit = match.index + match[0].length - 1;
@@ -247,7 +248,7 @@ function compileScalarPredicate<TField extends string>(
     // database locale (a C-locale database treats non-ASCII letters as separators) and glibc files
     // some marks such as the Devanagari virama under punct, so the mark ranges are listed explicitly.
     // `lower()` already folds `İ` to `i`.
-    const words = `' ' || lower(regexp_replace(normalize(${field}), '[^[:alnum:]${getPgCombiningMarkRanges()}]+', ' ', 'g')) || ' '`;
+    const words = `' ' || replace(lower(regexp_replace(normalize(${field}), '[^[:alnum:]${getPgCombiningMarkRanges()}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
     const found = `strpos(${words}, $${parameterOffset}) > 0`;
     return {
       sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,

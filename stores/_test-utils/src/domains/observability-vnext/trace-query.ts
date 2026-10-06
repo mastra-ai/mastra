@@ -957,7 +957,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
-      comment: 'Reviewed: incorrect dosage, 20 mg was correct. I\u0307stanbul clinic, greeted with नमस्ते.',
+      comment: 'Reviewed: incorrect dosage, 20 mg was correct. I\u0307stanbul clinic, greeted with नमस्ते. ΟΔΟΣ 5.',
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -2582,6 +2582,11 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
   {
     name: 'matches composes a decomposed dotted capital I before folding it',
     request: { timeRange: fullRange, where: { feedback: { some: commentMatches('I\u0307STANBUL clinic') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches folds a Greek final sigma the same way in every store',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('οδος 5') } } },
     expected: [{ traceId: 'trace-c' }],
   },
   {
