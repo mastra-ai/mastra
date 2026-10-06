@@ -50,8 +50,10 @@
  * fails the test instead of passing silently.
  *
  * Redelivering the step.run of a step that already *completed* re-executes it
- * today (F4). That is owned by COR-1307 and is red until that fix lands, so
- * only use the driver for completed-step outcome assertions alongside it.
+ * (F4). The only thing dropping a duplicate today is the id-keyed step lease
+ * (`STEP_FENCE_TTL_MS`), which covers an immediate redelivery but not a late
+ * one. That is owned by COR-1307 and is red until the fix lands, so only use
+ * the driver for completed-step outcome assertions alongside it.
  */
 import EventEmitter from 'node:events';
 import { vi } from 'vitest';
@@ -70,7 +72,11 @@ const WORKFLOWS_TOPIC = 'workflows';
  */
 export const TOOL_STEP_PATH: readonly number[] = [3, 0];
 
-/** `'tool-step'`, `'<path>'` (e.g. `'1'`, `'3,0'`) or `'<workflowId>@<path>'`. */
+/**
+ * `'tool-step'`, `'<path>'` (e.g. `'1'`, `'3,0'`) or `'<workflowId>@<path>'`.
+ * A bare `'<path>'` matches that path in *any* workflow, so pair it with a
+ * `runId` unless the path is unique in the test.
+ */
 export type RedeliverySpec = string;
 
 export interface RedeliveryMatch {
@@ -96,16 +102,27 @@ export interface RedeliveryOutcome {
 /**
  * Deep-copies the data parts of an event (arrays, plain objects, dates).
  * Anything else — functions and class instances, which some agent events
- * carry and `structuredClone` rejects — is kept by reference.
+ * carry and `structuredClone` rejects — is kept by reference. Cycles are
+ * preserved rather than followed.
  */
-export function snapshotClone<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(item => snapshotClone(item)) as T;
+export function snapshotClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (Array.isArray(value)) {
+    const existing = seen.get(value);
+    if (existing) return existing as T;
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(snapshotClone(item, seen));
+    return copy as T;
+  }
   if (value instanceof Date) return new Date(value.getTime()) as T;
   if (value && typeof value === 'object') {
     const proto = Object.getPrototypeOf(value);
     if (proto === Object.prototype || proto === null) {
+      const existing = seen.get(value);
+      if (existing) return existing as T;
       const copy: Record<string, unknown> = proto === null ? Object.create(null) : {};
-      for (const [key, item] of Object.entries(value)) copy[key] = snapshotClone(item);
+      seen.set(value, copy);
+      for (const [key, item] of Object.entries(value)) copy[key] = snapshotClone(item, seen);
       return copy as T;
     }
   }

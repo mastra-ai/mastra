@@ -29,6 +29,11 @@ function singleStepWorkflow(id: string, execute: (args: any) => Promise<any>) {
     .commit();
 }
 
+/** `workflow.step.end` events the driver has seen, so tests can prove a dropped duplicate emitted none. */
+function stepEndCount(driver: RedeliveryDriver) {
+  return driver.events.filter(e => e.type === 'workflow.step.end').length;
+}
+
 async function withMastra<T>(
   driver: RedeliveryDriver,
   config: { workflows?: Record<string, any>; agents?: Record<string, any>; storage?: any; startWorkers?: boolean },
@@ -78,6 +83,14 @@ describe('RedeliveryDriver', () => {
       expect(captured!.data.at.getTime()).toBe(1000);
       expect(captured!.id).toEqual(expect.any(String));
       expect(captured!.deliveryAttempt).toBe(1);
+
+      // A self-referencing payload clones with the cycle intact instead of
+      // recursing forever.
+      const cyclic: any = { workflowId: 'wf', runId: 'cyclic-run', executionPath: [0] };
+      cyclic.self = cyclic;
+      await driver.pubsub.publish('workflows', { type: 'workflow.step.run', runId: 'cyclic-run', data: cyclic });
+      const [capturedCyclic] = driver.stepRuns({ spec: 'wf@0', runId: 'cyclic-run' });
+      expect(capturedCyclic!.data.self).toBe(capturedCyclic!.data);
     } finally {
       driver.dispose();
     }
@@ -151,6 +164,35 @@ describe('RedeliveryDriver', () => {
     }
   });
 
+  it('rejects misuse and settles a step-end wait that is queued before the event', async () => {
+    const execute = vi.fn(async () => ({ done: true }));
+    const workflow = singleStepWorkflow('late-end-wf', execute);
+    const driver = new RedeliveryDriver();
+
+    expect(() => driver.assertEvented(undefined as any)).toThrow(/only supported on the evented engine/);
+    for (const spec of ['late-end-wf@', '@', 'late-end-wf@x', 'late-end-wf@0,']) {
+      expect(() => driver.stepRuns({ spec })).toThrow(/Invalid redelivery spec/);
+      expect(() => driver.deliveryCount({ spec })).toThrow(/Invalid redelivery spec/);
+    }
+
+    const match = { spec: 'late-end-wf@0', runId: 'late-end-run' };
+    // Queued before the event exists, then settled by the real step.end.
+    const ended = driver.waitForStepEnd(match);
+
+    await withMastra(driver, { workflows: { [workflow.id]: workflow } }, async () => {
+      const run = await workflow.createRun({ runId: 'late-end-run' });
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+      await expect(ended).resolves.toMatchObject({ type: 'workflow.step.end' });
+      expect(driver.deliveryCount(match)).toBe(1);
+    });
+
+    // withMastra disposes the driver: redelivery is now a hard error and the
+    // single-live-driver slot is free again for the next test.
+    await expect(driver.redeliver(match)).rejects.toThrow(/disposed/);
+    const next = new RedeliveryDriver();
+    next.dispose();
+  });
+
   it('drops a redelivered step.run for a suspended step and the run still resumes', async () => {
     const suspendPayload = { reason: 'needs-approval' };
     const execute = vi.fn(async ({ suspend, resumeData }: any) => {
@@ -172,14 +214,17 @@ describe('RedeliveryDriver', () => {
       expect((await run.start({ inputData: {} })).status).toBe('suspended');
       await expect(driver.waitForStepEnd(match)).resolves.toMatchObject({ type: 'workflow.step.end' });
 
+      const endedBefore = stepEndCount(driver);
       const { event, handled } = await driver.redeliver(match);
       expect(event.deliveryAttempt).toBe(2);
       expect(event.id).toBe(driver.stepRuns(match)[0]!.id);
-      expect(handled.length).toBeGreaterThan(0);
-      expect(handled.map(h => h.event.deliveryAttempt)).toEqual(handled.map(() => 2));
+      expect(handled).toHaveLength(1);
+      expect(handled.map(h => h.event.deliveryAttempt)).toEqual([2]);
       expect(handled.every(h => h.event.id === event.id && h.result.ok)).toBe(true);
       expect(driver.deliveryCount(match)).toBe(2);
       expect(execute).toHaveBeenCalledTimes(1);
+      // The duplicate was dropped silently, so it published no step.end.
+      expect(stepEndCount(driver)).toBe(endedBefore);
 
       const workflowsStore = (await storage.getStore('workflows'))!;
       const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
@@ -210,21 +255,25 @@ describe('RedeliveryDriver', () => {
       const result = run.start({ inputData: {} });
       try {
         await started.promise;
+        expect(stepEndCount(driver)).toBe(0);
 
         // The fence keys on the original event id. A non-default attempt proves
         // the injected deliveryAttempt survives group delivery's own counter.
         const { handled } = await driver.redeliver(match, { deliveryAttempt: 3 });
-        expect(handled.length).toBeGreaterThan(0);
-        expect(handled.map(h => h.event.deliveryAttempt)).toEqual(handled.map(() => 3));
+        expect(handled).toHaveLength(1);
+        expect(handled.map(h => h.event.deliveryAttempt)).toEqual([3]);
         expect(handled.every(h => h.result.ok)).toBe(true);
         expect(driver.deliveryCount(match)).toBe(2);
         expect(execute).toHaveBeenCalledTimes(1);
+        // Fenced while running: the duplicate produced no step.end.
+        expect(stepEndCount(driver)).toBe(0);
       } finally {
         gate.resolve();
       }
       expect((await result).status).toBe('success');
       await driver.waitForStepEnd(match);
       expect(execute).toHaveBeenCalledTimes(1);
+      expect(stepEndCount(driver)).toBe(1);
     });
   });
 
@@ -263,11 +312,13 @@ describe('RedeliveryDriver', () => {
     // what a duplicate of a *completed* tool step does is F4 (COR-1307).
     const started = deferred();
     const gate = deferred();
+    let toolExecutions = 0;
     const echo = createTool({
       id: 'echo',
       description: 'echo',
       inputSchema: z.object({ q: z.string() }),
       execute: async () => {
+        toolExecutions++;
         started.resolve();
         await gate.promise;
         return { ok: true };
@@ -292,15 +343,21 @@ describe('RedeliveryDriver', () => {
           executionPath: [...TOOL_STEP_PATH],
         });
 
+        const endedBefore = stepEndCount(driver);
         const { event, handled } = await driver.redeliver(toolStep);
-        expect(handled.length).toBeGreaterThan(0);
+        expect(handled).toHaveLength(1);
         expect(event.data).toMatchObject({ workflowId: 'durable-agentic-execution', executionPath: [3, 0] });
         expect(driver.deliveryCount(toolStep)).toBe(2);
         expect(driver.deliveryCount({ spec: 'durable-agentic-execution@3,0' })).toBe(2);
+        // Fenced while the tool step was running, so no extra step.end.
+        expect(stepEndCount(driver)).toBe(endedBefore);
 
         gate.resolve();
         await consumed;
         await driver.waitForStepEnd(toolStep);
+        // The duplicate did not reach the tool, and did not cost a model call.
+        expect(toolExecutions).toBe(1);
+        expect(calls).toBe(2);
       } finally {
         gate.resolve();
         cleanup();
