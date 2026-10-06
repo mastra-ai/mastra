@@ -284,6 +284,8 @@ session.subscribe(event => {
 
 For `submit_plan`, resume with `{ action: 'approved' }` or `{ action: 'rejected', feedback }`. An approved plan can switch to the mode configured by `transitionsTo` before the run continues.
 
+The built-in `submit_plan` tool takes a plan file path, not the plan text. The agent writes the plan to a file and submits its path. It needs a filesystem it can write to, such as a workspace filesystem. To show the plan for approval, your app reads the file at the submitted `path`.
+
 ## Delegate to subagents
 
 Configure available subagent types on the controller. The built-in `subagent` tool can then delegate focused tasks using those definitions:
