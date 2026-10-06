@@ -35,7 +35,7 @@ describe('parallel tool calls landing at once', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
-        <TranscriptEntries entries={[burst]} onApprove={() => {}} onRespond={() => {}} />
+        <TranscriptEntries entries={[burst]} onApprove={() => {}} onRespond={() => {}} running />
       </MemoryRouter>,
     );
 

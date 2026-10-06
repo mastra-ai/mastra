@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { ChunkType } from '@mastra/core/stream';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
@@ -20,6 +21,7 @@ import {
   emptyApprovalHistory,
   generatedApprovalResponse,
 } from './fixtures/nested-approval';
+import { abortedThread, reasoningRunChunks, reasoningRunFailure } from './fixtures/reasoning-run';
 import {
   acceptedToolRun,
   emptyMcpServers,
@@ -457,6 +459,119 @@ describe('ChatProvider', () => {
         await act(() => streams[currentStream].close());
       },
     );
+  });
+
+  describe('when a run stops while its model is still reasoning', () => {
+    const ReasoningTranscript = () => {
+      const messages = useChatMessages();
+      const send = useChatSend();
+      const { isRunning, cancelRun } = useChatRunning();
+      return (
+        <>
+          <button onClick={() => send({ message: 'Plan the rollout' })}>Ask</button>
+          <button onClick={() => send({ message: 'Also cover the rollback' })}>Follow up</button>
+          <button onClick={() => void cancelRun()}>Stop</button>
+          <output>{isRunning ? 'Running' : 'Stopped'}</output>
+          {messages.map(message => (
+            <MessageRow key={message.id} message={message} />
+          ))}
+        </>
+      );
+    };
+
+    const startReasoningRun = async (transport: 'legacy' | 'signals') => {
+      Object.assign(window, { MASTRA_AGENT_SIGNALS: transport === 'signals' ? 'true' : 'false' });
+      const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+      let sends = 0;
+      const streamResponse = () =>
+        new HttpResponse(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.push(controller);
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      server.use(
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          sends++;
+          return streamResponse();
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, streamResponse),
+        http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+          sends++;
+          return HttpResponse.json(acceptedToolRun('reasoning-run'));
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/threads/abort`, () => HttpResponse.json(abortedThread)),
+        ...baseHandlers([]),
+      );
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <ReasoningTranscript />
+          </ChatProvider>
+        </Wrapper>,
+      );
+      const emit = (chunks: ChunkType[]) =>
+        act(() => {
+          for (const chunk of chunks) streams[0].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+      await waitFor(() => expect(sends).toBe(1));
+      await emit(reasoningRunChunks('reasoning-run', 'reasoning-response'));
+      const reasoning = await screen.findByRole('group', { name: 'Reasoning' });
+      expect(reasoning.getAttribute('aria-busy')).toBe('true');
+
+      return {
+        emit,
+        close: () => act(() => streams[0].close()),
+        sendFollowUp: async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+          await waitFor(() => expect(sends).toBe(2));
+        },
+      };
+    };
+
+    const expectSettledReasoning = async () => {
+      await screen.findByText('Stopped');
+      expect(
+        screen.getAllByRole('group', { name: 'Reasoning' }).map(group => group.getAttribute('aria-busy')),
+      ).toEqual(['false']);
+    };
+
+    it.each(['legacy', 'signals'] as const)('stops shimmering once Stop is pressed on the %s transport', async transport => {
+      await startReasoningRun(transport);
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      await expectSettledReasoning();
+    });
+
+    it('stops shimmering once Stop is pressed after a follow-up was sent mid-reasoning', async () => {
+      const run = await startReasoningRun('signals');
+      await run.sendFollowUp();
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      await expectSettledReasoning();
+    });
+
+    it('stops shimmering once the run is aborted after a follow-up was sent mid-reasoning', async () => {
+      const run = await startReasoningRun('signals');
+      await run.sendFollowUp();
+      await run.emit([toolRunFinish('reasoning-run')]);
+      await expectSettledReasoning();
+    });
+
+    it.each(['legacy', 'signals'] as const)('stops shimmering once the %s run fails mid-reasoning', async transport => {
+      const run = await startReasoningRun(transport);
+      await run.emit([reasoningRunFailure('reasoning-run')]);
+      await expectSettledReasoning();
+    });
+
+    it('stops shimmering once the legacy stream closes mid-reasoning without a terminal chunk', async () => {
+      const run = await startReasoningRun('legacy');
+      await run.close();
+      await expectSettledReasoning();
+    });
   });
 
   describe('when Studio selects a request-scoped model', () => {

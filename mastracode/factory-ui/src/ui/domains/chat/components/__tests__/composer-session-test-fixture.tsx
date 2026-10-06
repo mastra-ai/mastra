@@ -31,6 +31,8 @@ interface PreparingSession {
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
+  /** Close the open session stream, as a network drop would; the next stream request reopens it. */
+  dropStream: () => Promise<void>;
   posted: string[];
   postedFiles: unknown[];
   delivered: string[];
@@ -74,9 +76,11 @@ export function stubPreparingSession({
     releaseWorkspace = resolve;
   });
   let attachSse = (_controller: ReadableStreamDefaultController<Uint8Array>) => {};
-  const sseOpen = new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
-    attachSse = resolve;
-  });
+  const openSse = () =>
+    new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
+      attachSse = resolve;
+    });
+  let sseOpen = openSse();
   const encoder = new TextEncoder();
   let sessionPackId: string | null = null;
   const result: PreparingSession = {
@@ -84,6 +88,11 @@ export function stubPreparingSession({
     emit: async event => {
       const controller = await sseOpen;
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
+    dropStream: async () => {
+      const controller = await sseOpen;
+      sseOpen = openSse();
+      controller.close();
     },
     posted: [],
     postedFiles: [],

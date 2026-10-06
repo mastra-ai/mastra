@@ -20,8 +20,10 @@ function assistant(parts: MastraDBMessage['content']['parts'], streaming?: boole
   };
 }
 
-function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+function renderEntries(entries: TimelineEntry[], { running = false } = {}) {
+  return renderWithProviders(
+    <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} running={running} />,
+  );
 }
 
 function openReasoning() {
@@ -89,7 +91,7 @@ describe('assistant prose', () => {
 
   it('shows waiting reasoning and removes it if the stream finishes without text', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], state: 'streaming' as const };
-    const { rerender } = renderEntries([assistant([part], true)]);
+    const { rerender } = renderEntries([assistant([part], true)], { running: true });
     expect(screen.getByRole('group', { name: 'Reasoning' }).getAttribute('aria-busy')).toBe('true');
 
     const finished = { ...part, state: 'done' as const };
@@ -113,7 +115,9 @@ describe('assistant prose', () => {
   it('paces a thinking passage word by word instead of landing it whole', () => {
     vi.useFakeTimers();
     const thought = Array.from({ length: 30 }, (_, index) => `thought${index + 1}`).join(' ');
-    const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)]);
+    const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)], {
+      running: true,
+    });
     openStreamingReasoning();
 
     expect(container.textContent).not.toContain('thought5');
@@ -134,7 +138,7 @@ describe('assistant prose', () => {
       { type: 'reasoning', reasoning: 'Need the core first.', details: [] },
       { type: 'text', text },
     ];
-    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)]);
+    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)], { running: true });
 
     act(() => void vi.advanceTimersByTime(4000));
     openReasoning();
@@ -148,6 +152,7 @@ describe('assistant prose', () => {
         entries={[assistant(parts('Let me look at the core package now.'), true)]}
         onApprove={() => {}}
         onRespond={() => {}}
+        running
       />,
     );
     act(() => void vi.advanceTimersByTime(4000));
@@ -158,15 +163,18 @@ describe('assistant prose', () => {
 
   it('paces a streaming reply from one place, not one per part', () => {
     vi.useFakeTimers();
-    const { container } = renderEntries([
-      assistant(
-        [
-          { type: 'text', text: 'first half ' },
-          { type: 'text', text: 'second half' },
-        ],
-        true,
-      ),
-    ]);
+    const { container } = renderEntries(
+      [
+        assistant(
+          [
+            { type: 'text', text: 'first half ' },
+            { type: 'text', text: 'second half' },
+          ],
+          true,
+        ),
+      ],
+      { running: true },
+    );
 
     act(() => void vi.advanceTimersByTime(500));
 
