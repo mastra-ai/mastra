@@ -7,13 +7,14 @@ import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __clearSessionSandboxesForTests,
+  createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
   resolveSessionWorkdir,
 } from './session-sandbox.js';
-import type { SessionSetupGate } from './session-sandbox.js';
+import type { SessionEnvironmentGate, SessionSetupGate } from './session-sandbox.js';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
@@ -278,5 +279,127 @@ describe('session setup hook', () => {
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
     await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
+  });
+});
+
+describe('environment setup hook', () => {
+  let dir: string;
+  const API = 'pnpm install';
+  const DOCS = 'npm ci';
+  const WORKSPACE = 'touch .workspace-ready';
+  const repos = [
+    { slug: 'acme/api', setupCommand: API },
+    { slug: 'acme/docs', setupCommand: DOCS },
+  ];
+
+  /** A run that records, per repository, whether setup ran, and runs setup inside that repo's dir. */
+  const runWith = (log: string[]) => async (sb: WorkspaceSandbox, env: SessionEnvironmentGate) => {
+    for (const repo of env.repos) {
+      await sb.executeCommand!(`mkdir -p "${repo.dir}/.git"`);
+      if (repo.gate.setupDone) continue;
+      log.push(repo.slug);
+      await sb.executeCommand!(`cd "${repo.dir}" && touch setup-ran.txt`);
+      await repo.gate.markSetupDone();
+    }
+    if (!env.workspace.setupDone) {
+      log.push('workspace');
+      await sb.executeCommand!(`cd "${env.root}" && touch workspace-ran.txt`);
+      await env.workspace.markSetupDone();
+    }
+  };
+
+  const hook = (log: string[], workspaceSetupCommand: string | undefined = WORKSPACE) =>
+    createEnvironmentSetupHook(runWith(log), 'sess-env', 'acme/api', { repos, workspaceSetupCommand });
+
+  /** What a multi-repo template leaves behind for one repository. */
+  const plantRepo = async (root: string, repoDir: string, command: string) => {
+    await fs.mkdir(path.join(root, repoDir, '.git'), { recursive: true });
+    await fs.mkdir(path.join(root, '.mastra-sandbox/repos'), { recursive: true });
+    await fs.writeFile(path.join(root, '.mastra-sandbox/repos', repoDir), setupMarkerContent(command));
+  };
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-environment-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('runs every setup on a fresh sandbox, inside each repo dir, and writes the per-repo and workspace markers', async () => {
+    const boot = path.join(dir, 'fresh');
+    const log: string[] = [];
+    const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook(log) });
+    await sandbox._start();
+    expect(log).toEqual(['acme/api', 'acme/docs', 'workspace']);
+    await expect(fs.stat(path.join(boot, 'api/setup-ran.txt'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, 'docs/setup-ran.txt'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, 'workspace-ran.txt'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/repos/api'), 'utf8')).resolves.toBe(
+      setupMarkerContent(API),
+    );
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/repos/docs'), 'utf8')).resolves.toBe(
+      setupMarkerContent(DOCS),
+    );
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/workspace-setup'), 'utf8')).resolves.toBe(
+      setupMarkerContent(WORKSPACE),
+    );
+    // The primary repo dir is what resolveSessionWorkdir answers, and the
+    // root the hook derived is its parent: the same directory the markers sit in.
+    await expect(resolveSessionWorkdir('sess-env', sandbox, 'acme/api')).resolves.toBe(path.join(boot, 'api'));
+  });
+
+  it('skips a repo whose template marker matches and runs the one whose marker mismatches', async () => {
+    const boot = path.join(dir, 'warm');
+    await plantRepo(boot, 'api', API);
+    await plantRepo(boot, 'docs', 'an older docs command');
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
+    const log: string[] = [];
+    await new LocalSandbox({ workingDirectory: boot, onStart: hook(log) })._start();
+    expect(log).toEqual(['acme/docs']);
+    await expect(fs.stat(path.join(boot, 'api/setup-ran.txt'))).rejects.toThrow();
+    await expect(fs.stat(path.join(boot, 'docs/setup-ran.txt'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/repos/docs'), 'utf8')).resolves.toBe(
+      setupMarkerContent(DOCS),
+    );
+  });
+
+  it('runs a repo listed in setup-failed even when its marker matches, and clears it on success', async () => {
+    const boot = path.join(dir, 'failed');
+    await plantRepo(boot, 'api', API);
+    await plantRepo(boot, 'docs', DOCS);
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'docs\n');
+    const log: string[] = [];
+    await new LocalSandbox({ workingDirectory: boot, onStart: hook(log) })._start();
+    expect(log).toEqual(['acme/docs']);
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'utf8')).resolves.toBe('');
+
+    const again: string[] = [];
+    await new LocalSandbox({ workingDirectory: boot, onStart: hook(again) })._start();
+    expect(again).toEqual([]);
+  });
+
+  it('a missing checkout reads as not done even when the marker matches', async () => {
+    const boot = path.join(dir, 'wiped');
+    await plantRepo(boot, 'api', API);
+    await plantRepo(boot, 'docs', DOCS);
+    await fs.rm(path.join(boot, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
+    const log: string[] = [];
+    await new LocalSandbox({ workingDirectory: boot, onStart: hook(log) })._start();
+    expect(log).toEqual(['acme/docs']);
+  });
+
+  it('a repo without a setup command and an absent workspace command have nothing to gate', async () => {
+    const boot = path.join(dir, 'bare');
+    const log: string[] = [];
+    const onStart = createEnvironmentSetupHook(runWith(log), 'sess-env', 'acme/api', {
+      repos: [{ slug: 'acme/api' }, { slug: 'acme/docs', setupCommand: DOCS }],
+    });
+    await new LocalSandbox({ workingDirectory: boot, onStart })._start();
+    expect(log).toEqual(['acme/docs']);
+    await expect(fs.stat(path.join(boot, '.mastra-sandbox/repos/api'))).rejects.toThrow();
+    await expect(fs.stat(path.join(boot, '.mastra-sandbox/workspace-setup'))).rejects.toThrow();
   });
 });
