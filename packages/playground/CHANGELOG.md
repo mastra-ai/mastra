@@ -1,5 +1,35 @@
 # @internal/playground
 
+## 1.33.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+  - @mastra/client-js@1.52.0-alpha.6
+  - @mastra/react@1.8.0-alpha.6
+  - @mastra/playground-ui@61.0.0-alpha.6
+
+## 1.33.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`1f14ea8`](https://github.com/mastra-ai/mastra/commit/1f14ea825559bc70f663b8449cdbf4e070507dc9), [`2cedfc9`](https://github.com/mastra-ai/mastra/commit/2cedfc98e227693875f1cbd2b2a057f56d564df6), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+  - @mastra/client-js@1.52.0-alpha.5
+  - @mastra/playground-ui@61.0.0-alpha.5
+  - @mastra/react@1.8.0-alpha.5
+
+## 1.32.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b2e9cd4`](https://github.com/mastra-ai/mastra/commit/b2e9cd46698da961ebd343ac3744ca3b013b06ed), [`c038880`](https://github.com/mastra-ai/mastra/commit/c03888081edd9b5ccc77f1236b5d5549377ea611), [`c038880`](https://github.com/mastra-ai/mastra/commit/c03888081edd9b5ccc77f1236b5d5549377ea611), [`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`526bbbe`](https://github.com/mastra-ai/mastra/commit/526bbbe4df5b0f0b43a1ff2e653f1e68f4555be5), [`c038880`](https://github.com/mastra-ai/mastra/commit/c03888081edd9b5ccc77f1236b5d5549377ea611), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`e7f6aeb`](https://github.com/mastra-ai/mastra/commit/e7f6aebe358d333553b6638b119e2403abb06214), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`ca54402`](https://github.com/mastra-ai/mastra/commit/ca544027382316c41da7a3ba707c913262650064), [`736d12a`](https://github.com/mastra-ai/mastra/commit/736d12a1f2a17adc191e42a3bc6c5422d9a65f4e), [`90625ea`](https://github.com/mastra-ai/mastra/commit/90625ea56bf8e045a21e460558a8f2b6dd1e8c76), [`e7f6aeb`](https://github.com/mastra-ai/mastra/commit/e7f6aebe358d333553b6638b119e2403abb06214), [`8dc9d8c`](https://github.com/mastra-ai/mastra/commit/8dc9d8c5e5c2efd3771669069a13b2d05f638287), [`c038880`](https://github.com/mastra-ai/mastra/commit/c03888081edd9b5ccc77f1236b5d5549377ea611), [`35eeb5e`](https://github.com/mastra-ai/mastra/commit/35eeb5ecd1a80653c9e1aade3eccfca38d8072ef), [`329ff3f`](https://github.com/mastra-ai/mastra/commit/329ff3fa736ebf00e506691a41c8f55d336ff28a), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751), [`55d98b0`](https://github.com/mastra-ai/mastra/commit/55d98b069f3bd82b86a1246b94b4df3cb3640172), [`73aaaca`](https://github.com/mastra-ai/mastra/commit/73aaaca04e0777f175f7274f5f98bc729cbc173a), [`aec3c85`](https://github.com/mastra-ai/mastra/commit/aec3c852791148c12fc5dc2af3eb1e29a1e1f8ad), [`f6ebfa0`](https://github.com/mastra-ai/mastra/commit/f6ebfa0f0bd90578d8a8a82714037a7956f9550b), [`329ff3f`](https://github.com/mastra-ai/mastra/commit/329ff3fa736ebf00e506691a41c8f55d336ff28a)]:
+  - @mastra/playground-ui@61.0.0-alpha.4
+  - @mastra/core@1.75.0-alpha.4
+  - @mastra/react@1.8.0-alpha.4
+  - @mastra/client-js@1.52.0-alpha.4
+
 ## 1.32.2-alpha.3
 
 ### Patch Changes

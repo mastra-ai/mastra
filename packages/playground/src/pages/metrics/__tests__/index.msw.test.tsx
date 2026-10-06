@@ -81,7 +81,7 @@ describe('Metrics storage support', () => {
   ] as const)('when the capability lookup returns HTTP %i', (status, title) => {
     it('shows the error without declaring the storage unsupported', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Capability lookup failed' }, { status }),
         ),
       );
@@ -99,7 +99,9 @@ describe('Metrics storage support', () => {
 
   describe('when storage does not support metrics', () => {
     it('shows the unavailable state without requesting metrics or filter discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
@@ -112,7 +114,9 @@ describe('Metrics storage support', () => {
     });
 
     it('preserves the active URL filter without requesting discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage('/metrics?filterEnvironment=production');
@@ -126,7 +130,9 @@ describe('Metrics storage support', () => {
     });
 
     it('updates the date preset in the URL without requesting metrics', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
@@ -146,16 +152,18 @@ describe('Metrics storage support', () => {
   describe('when a failed capability lookup recovers', () => {
     it('loads the supported dashboard after the next capability fetch', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Temporarily unavailable' }, { status: 500 }),
         ),
       );
       const { onMetrics } = observeRequests();
       const { queryClient } = renderPage();
       expect(await screen.findByText('Failed to load storage capabilities')).toBeTruthy();
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(supportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
 
-      await act(() => queryClient.invalidateQueries({ queryKey: ['mastra-packages'] }));
+      await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.getByText('Agent runs')).toBeTruthy();
@@ -169,10 +177,10 @@ describe('Metrics storage support', () => {
       const pending = new Promise<void>(resolve => {
         release = resolve;
       });
-      const onPackages = vi.fn();
+      const onCapabilities = vi.fn();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, async () => {
-          onPackages();
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
+          onCapabilities();
           await pending;
           return HttpResponse.json(supportedStorage);
         }),
@@ -181,7 +189,7 @@ describe('Metrics storage support', () => {
 
       const { queryClient } = renderPage();
 
-      await waitFor(() => expect(onPackages).toHaveBeenCalled());
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
       try {
         expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
@@ -208,7 +216,7 @@ describe('Metrics storage support', () => {
     ])('names the previous window on %s', async (path, comparison) => {
       observeRequests();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(supportedStorage)),
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
         http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () =>
           HttpResponse.json({ value: 120, previousValue: 100, changePercent: 20 }),
         ),

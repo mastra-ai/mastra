@@ -31,7 +31,7 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
-  shell-quote@<1.10.0: 1.10.0
+  shell-quote@<1.11.0: 1.11.0
   yargs@<18.1.0: 18.2.0
 
 packageExtensionsChecksum: sha256-f5jg5nu7am32CqBa5xPNVuMAgFK3JRl486ohOOhw0Vc=
@@ -303,8 +303,8 @@ packages:
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
-  shell-quote@1.10.0:
-    resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
+  shell-quote@1.11.0:
+    resolution: {integrity: sha512-JdxDPD0DBTyu08pq0kPC0xSNet/qsU07qT6IsX1AS8oO2ICNRY4ldNa8OAI6PuwAH8tG3lxEhbqmyp4Dw4036g==}
     engines: {node: '>= 0.4'}
 
   string-width@7.2.0:
@@ -472,7 +472,7 @@ snapshots:
     dependencies:
       chalk: 4.1.2
       rxjs: 7.8.2
-      shell-quote: 1.10.0
+      shell-quote: 1.11.0
       supports-color: 8.1.1
       tree-kill: 1.2.2
       yargs: 18.2.0
@@ -523,7 +523,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  shell-quote@1.10.0: {}
+  shell-quote@1.11.0: {}
 
   string-width@7.2.0:
     dependencies:

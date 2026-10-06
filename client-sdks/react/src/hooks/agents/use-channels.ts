@@ -43,6 +43,32 @@ export const useChannelInstallations = <TData = ChannelInstallationInfo[]>({
   });
 };
 
+/**
+ * Reconcile an agent's installation with platform state — activates a pending
+ * installation whose connect flow completed out-of-band (e.g. a Discord bot
+ * invite finished in another tab). Resolves null on platforms without
+ * reconciliation. Call it deliberately (e.g. on window focus while a connect
+ * is in flight) — it is a write, not a read.
+ */
+export const useReconcileChannelInstallation = ({
+  platform,
+  queryOptions,
+}: {
+  platform: string;
+  queryOptions?: MastraMutationOptions<ChannelInstallationInfo | null, string>;
+}): UseMutationResult<ChannelInstallationInfo | null, Error, string> => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return useMutation<ChannelInstallationInfo | null, Error, string>({
+    mutationFn: agentId => client.channels.reconcileInstallation(platform, agentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['channels', 'installations', platform] });
+    },
+    ...queryOptions,
+  });
+};
+
 export const useConnectChannel = ({
   platform,
   queryOptions,

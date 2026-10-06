@@ -311,7 +311,7 @@ describe('FactoryStartCoordinator', () => {
 
     await coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' }));
 
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-fable-5');
   });
 
   it('hydrates board runs with built-in memory defaults, never per-user settings', async () => {

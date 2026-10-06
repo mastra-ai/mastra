@@ -290,6 +290,12 @@ export interface AuthorizeOpts {
    * OAuth flow starts (e.g. Confluence `{ subdomain: 'mycorp' }`).
    */
   config?: Record<string, unknown>;
+  /**
+   * Identity bucketing the new connection is created for. Providers with a
+   * native shared-account model may use `'shared'` to create one.
+   * Absent = treat as `'per-author'`.
+   */
+  scope?: ToolProviderConnectionScope;
 }
 
 /**
