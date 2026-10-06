@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Improved composer attachments with a consistent compact card style across file types and filenames beside previews or file icons. The attachment row uses tighter horizontal and top spacing, and image previews use a smaller inset with concentric corners. Integrated corner remove controls appear on hover or keyboard focus and stay visible on touch devices. Cards share the same height, surface, and corners, with widths that fit their content.
+Composer attachments now show filenames in consistently sized, compact cards. Remove controls appear on hover or keyboard focus and stay visible on touch devices. Studio shows attachments inside the composer with the same spacing as Factory.
