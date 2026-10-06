@@ -5,7 +5,6 @@ import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-ob
 import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import { PlayIcon } from 'lucide-react';
 import type { ZodType } from 'zod';
-import { submitOnEnter } from '../utils/submit-on-enter';
 import { RequestContextPopover } from '@/domains/run-options/components/request-context-popover';
 
 export interface ToolRequestProps {
@@ -32,7 +31,7 @@ export function ToolRequest({
       >
         <SettingsTitle>Request</SettingsTitle>
       </SettingsHeader>
-      <SettingsContainer onKeyDown={submitOnEnter}>
+      <SettingsContainer>
         <div className="p-4">
           <DynamicForm
             isSubmitLoading={isRunning}
