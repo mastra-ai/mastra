@@ -9,6 +9,7 @@ import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
+  MCPServerIcon,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
   PackageInfo,
@@ -42,6 +43,12 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   private _id: TId;
   /** A description of what the MCP server does. */
   public readonly description?: string;
+  /** A human-readable display title for the MCP server. */
+  public readonly title?: string;
+  /** The URL of the server's website. */
+  public readonly websiteUrl?: string;
+  /** Icons clients can display for the server. */
+  public readonly icons?: MCPServerIcon[];
   /** Optional instructions describing how to use the server and its features. */
   public readonly instructions?: string;
   /** Repository information for the server's source code. */
@@ -189,6 +196,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     }
 
     this.description = config.description;
+    this.title = config.title;
+    this.websiteUrl = config.websiteUrl;
+    this.icons = config.icons;
     this.instructions = config.instructions;
     this.repository = config.repository;
     this.releaseDate = config.releaseDate || new Date().toISOString();

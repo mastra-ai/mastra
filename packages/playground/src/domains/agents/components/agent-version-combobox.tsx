@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '@mastra/react/hooks';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 
 export interface AgentVersionComboboxProps {
   agentId: string;
@@ -26,6 +26,7 @@ export function AgentVersionCombobox({
   const { data, isLoading } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = data?.versions ?? [];

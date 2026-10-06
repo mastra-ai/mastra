@@ -1,7 +1,7 @@
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useDatasetVersions } from '@mastra/react/hooks';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
 
 export interface DatasetCompareVersionToolbarProps {
   datasetId: string;
@@ -24,7 +24,10 @@ export function DatasetCompareVersionToolbar({
   versionB,
   onVersionChange,
 }: DatasetCompareVersionToolbarProps) {
-  const { data: versions } = useDatasetVersions(datasetId);
+  const { data: versions } = useDatasetVersions({
+    datasetId: datasetId,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
   const options = (versions ?? []).map(v => ({
     value: String(v.version),

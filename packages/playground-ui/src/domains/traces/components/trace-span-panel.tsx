@@ -1,4 +1,4 @@
-import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks';
+import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
@@ -130,7 +130,11 @@ export function TraceSpanPanel({
   spanFeedbackTabBadge,
   spanFeedbackTabSlot,
 }: TraceSpanPanelProps) {
-  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
+  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
+    traceId: traceId,
+    spanId: selectedSpanId ?? '',
+    queryOptions: { enabled: !!traceId && !!selectedSpanId },
+  });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
   const { Link, paths } = useLinkComponent();
 
@@ -142,7 +146,10 @@ export function TraceSpanPanel({
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
   const hasMessagesPanel = !!(traceId && showPartialThread && threadId);
   // A single-trace thread would show exactly what the Messages column already shows.
-  const hasOtherTraces = useThreadHasOtherTraces(hasMessagesPanel ? threadId : undefined);
+  const hasOtherTraces = useThreadHasOtherTraces({
+    threadId: hasMessagesPanel ? threadId : undefined,
+    queryOptions: { enabled: !!(hasMessagesPanel ? threadId : undefined) },
+  });
   const showFullThreadAction = hasMessagesPanel && hasOtherTraces && !!onFullThreadOpenChange;
 
   return (

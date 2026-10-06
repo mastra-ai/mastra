@@ -258,6 +258,24 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["childSpanTool"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "childSpanTool",
+                          "description": "A tool that creates child spans",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "input": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
@@ -564,6 +582,24 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["childSpanTool"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "childSpanTool",
+                          "description": "A tool that creates child spans",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "input": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,

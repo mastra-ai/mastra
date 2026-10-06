@@ -76,11 +76,11 @@ describe('Trace span refresh', () => {
     describe('when called', () => {
       it('refreshes immediately on reopening', async () => {
         const api = serveTrace(initial);
-        const first = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        const first = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
         await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
         first.unmount();
         api.resume();
-        const reopened = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        const reopened = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
         await waitFor(() => expect(reopened.result.current.data?.spans).toHaveLength(2));
         expect(api.requested).toHaveBeenCalledTimes(2);
       });
@@ -89,7 +89,7 @@ describe('Trace span refresh', () => {
     describe('when called', () => {
       it('refreshes immediately on focus', async () => {
         const api = serveTrace(initial);
-        const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        const { result } = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
         await waitFor(() => expect(result.current.data?.spans).toHaveLength(initial.spans.length));
         api.resume();
         await refocus();
@@ -101,7 +101,7 @@ describe('Trace span refresh', () => {
   describe('when a trace resumes after all known spans have ended', () => {
     it('updates the open trace when Studio regains focus', async () => {
       const api = serveTrace();
-      const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.data?.spans).toHaveLength(1));
       api.resume();
       await expireCache();
@@ -111,12 +111,12 @@ describe('Trace span refresh', () => {
 
     it('refreshes an expired snapshot when a trace is reopened', async () => {
       const api = serveTrace();
-      const first = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const first = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(first.result.current.data?.spans).toHaveLength(1));
       first.unmount();
       api.resume();
       await expireCache();
-      const second = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const second = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(second.result.current.data?.spans).toHaveLength(2));
     });
   });
@@ -124,7 +124,7 @@ describe('Trace span refresh', () => {
   describe('when a trace initially has no exported spans', () => {
     it('discovers spans arriving later', async () => {
       const api = serveTrace(emptyTrace);
-      const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.data?.spans).toHaveLength(0));
       api.resume();
       await expireCache();
@@ -138,18 +138,18 @@ describe('Trace span refresh', () => {
       const api = serveTrace();
       const rail = renderHook(
         () =>
-          useTraceSpansQueries(
-            [traceId],
-            (_, data) => data.spans.length,
-            () => 0,
-          ),
+          useTraceSpansQueries({
+            traceIds: [traceId],
+            select: (_, data) => data.spans.length,
+            fallback: () => 0,
+          }),
         {
           wrapper: Wrapper,
         },
       );
       await waitFor(() => expect(rail.result.current).toEqual([1]));
       api.resume();
-      const panel = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const panel = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       expect(panel.result.current.data?.spans).toHaveLength(1);
       await waitFor(() => expect(panel.result.current.data?.spans).toHaveLength(2));
       await waitFor(() => expect(rail.result.current).toEqual([2]));
@@ -160,11 +160,11 @@ describe('Trace span refresh', () => {
       const api = serveTrace();
       const rail = renderHook(
         () =>
-          useTraceSpansQueries(
-            [traceId],
-            (_, data) => data.spans.length,
-            () => 0,
-          ),
+          useTraceSpansQueries({
+            traceIds: [traceId],
+            select: (_, data) => data.spans.length,
+            fallback: () => 0,
+          }),
         {
           wrapper: Wrapper,
         },
@@ -188,7 +188,7 @@ describe('Trace span refresh', () => {
 
     it('refreshes immediately when connectivity returns', async () => {
       const api = serveTrace();
-      const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.data?.spans).toHaveLength(1));
       api.resume();
       await reconnect();
@@ -211,13 +211,13 @@ describe('Trace span refresh', () => {
   describe('when a history row reads a trace', () => {
     it('does not refetch on focus, remount, or a timer', async () => {
       const api = serveTrace();
-      const first = renderHook(() => useTraceSpans(traceId, { passive: true }), { wrapper: Wrapper });
+      const first = renderHook(() => useTraceSpans({ traceId: traceId, passive: true }), { wrapper: Wrapper });
       await waitFor(() => expect(first.result.current.data?.spans).toHaveLength(1));
       await expireCache();
       await refocus();
       await reconnect();
       first.unmount();
-      const second = renderHook(() => useTraceSpans(traceId, { passive: true }), { wrapper: Wrapper });
+      const second = renderHook(() => useTraceSpans({ traceId: traceId, passive: true }), { wrapper: Wrapper });
       await expireCache();
       expect(second.result.current.data?.spans).toHaveLength(1);
       expect(api.requested).toHaveBeenCalledTimes(1);
@@ -225,9 +225,9 @@ describe('Trace span refresh', () => {
 
     it('receives updates from the active detail without scheduling its own requests', async () => {
       const api = serveTrace();
-      const history = renderHook(() => useTraceSpans(traceId, { passive: true }), { wrapper: Wrapper });
+      const history = renderHook(() => useTraceSpans({ traceId: traceId, passive: true }), { wrapper: Wrapper });
       await waitFor(() => expect(history.result.current.data?.spans).toHaveLength(1));
-      const detail = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const detail = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(api.requested).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(detail.result.current.isFetching).toBe(false));
       api.resume();
@@ -243,7 +243,7 @@ describe('Trace span refresh', () => {
   describe('when cached trace data is invalidated', () => {
     it('refreshes the shared trace query', async () => {
       const api = serveTrace();
-      const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: traceId }), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.data?.spans).toHaveLength(1));
       api.resume();
       await act(() => queryClient.invalidateQueries({ queryKey: ['trace-spans', traceId] }));
@@ -263,11 +263,11 @@ describe('Trace span refresh', () => {
       );
       const rail = renderHook(
         () =>
-          useTraceSpansQueries(
-            ids,
-            (_, data) => data.spans.length,
-            () => 0,
-          ),
+          useTraceSpansQueries({
+            traceIds: ids,
+            select: (_, data) => data.spans.length,
+            fallback: () => 0,
+          }),
         { wrapper: Wrapper },
       );
       await waitFor(() => expect(rail.result.current.every(count => count === 1)).toBe(true));
@@ -278,11 +278,11 @@ describe('Trace span refresh', () => {
       rail.unmount();
       renderHook(
         () =>
-          useTraceSpansQueries(
-            ids,
-            (_, data) => data.spans.length,
-            () => 0,
-          ),
+          useTraceSpansQueries({
+            traceIds: ids,
+            select: (_, data) => data.spans.length,
+            fallback: () => 0,
+          }),
         { wrapper: Wrapper },
       );
       await expireCache();
@@ -296,11 +296,11 @@ describe('Trace span refresh', () => {
       server.use(http.get(`${BASE_URL}/api/observability/traces/other`, () => HttpResponse.json(otherTrace)));
       const { result } = renderHook(
         () =>
-          useTraceSpansQueries(
-            ['other', traceId],
-            (id, data) => `${id}:${data.spans.length}`,
-            id => `loading:${id}`,
-          ),
+          useTraceSpansQueries({
+            traceIds: ['other', traceId],
+            select: (id, data) => `${id}:${data.spans.length}`,
+            fallback: id => `loading:${id}`,
+          }),
         { wrapper: Wrapper },
       );
       expect(result.current).toEqual(['loading:other', `loading:${traceId}`]);
@@ -372,7 +372,10 @@ describe('Trace span refresh', () => {
   ])('when branch identifiers are incomplete ($traceId, $spanId)', args => {
     describe('when called', () => {
       it('does not start a request on mount or focus', async () => {
-        const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
+        const { result } = renderHook(
+          () => useBranch({ ...args, queryOptions: { enabled: !!args.traceId && !!args.spanId } }),
+          { wrapper: Wrapper },
+        );
         await refocus();
         expect(result.current.fetchStatus).toBe('idle');
         expect(result.current.isError).toBe(false);
@@ -382,7 +385,10 @@ describe('Trace span refresh', () => {
 
     describe('when called', () => {
       it('reports the missing identifiers on explicit refetch', async () => {
-        const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
+        const { result } = renderHook(
+          () => useBranch({ ...args, queryOptions: { enabled: !!args.traceId && !!args.spanId } }),
+          { wrapper: Wrapper },
+        );
         await act(async () => {
           const refreshed = await result.current.refetch();
           expect(refreshed.error?.message).toBe('traceId and spanId are required');
@@ -434,7 +440,7 @@ describe('Trace span refresh', () => {
 
   describe('when a disabled trace is manually refetched', () => {
     it('reports the missing trace ID', async () => {
-      const { result } = renderHook(() => useTraceSpans(undefined), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: undefined }), { wrapper: Wrapper });
       await act(async () => {
         const refreshed = await result.current.refetch();
         expect(refreshed.error?.message).toBe('Trace ID is required');
@@ -445,7 +451,7 @@ describe('Trace span refresh', () => {
   describe('when no trace is selected', () => {
     it('does not fetch or poll', async () => {
       const api = serveTrace();
-      const { result } = renderHook(() => useTraceSpans(undefined), { wrapper: Wrapper });
+      const { result } = renderHook(() => useTraceSpans({ traceId: undefined }), { wrapper: Wrapper });
       await expireCache();
       expect(result.current.fetchStatus).toBe('idle');
       expect(api.requested).not.toHaveBeenCalled();

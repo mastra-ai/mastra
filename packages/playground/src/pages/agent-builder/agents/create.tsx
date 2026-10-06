@@ -1,5 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useWorkflows, useTools, useAgents, useStoredSkills } from '@mastra/react/hooks';
+import { useAgents, useStoredSkills } from '@mastra/react/hooks/agents';
+import { useTools } from '@mastra/react/hooks/tools';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -16,10 +18,10 @@ export default function AgentBuilderCreate() {
   // edit page can dispatch the initial message with a tools- and skills-aware schema on
   // its very first render instead of waiting for the queries to resolve.
   const features = useBuilderAgentFeatures();
-  useTools({ enabled: canWrite && features.tools });
-  useAgents({ enabled: canWrite && features.agents });
-  useWorkflows({ enabled: canWrite && features.workflows });
-  useStoredSkills({ enabled: canWrite && features.skills });
+  useTools({ queryOptions: { enabled: canWrite && features.tools } });
+  useAgents({ queryOptions: { enabled: canWrite && features.agents } });
+  useWorkflows({ queryOptions: { enabled: canWrite && features.workflows } });
+  useStoredSkills({ queryOptions: { enabled: canWrite && features.skills } });
   // Prefetch and seed the ['builder-available-models'] cache (return value
   // ignored) so the starter/model picker render instantly instead of waiting on
   // the cold gateway-backed request when this page or the edit page mounts.

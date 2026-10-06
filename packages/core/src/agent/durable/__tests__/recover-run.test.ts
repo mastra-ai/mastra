@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
+import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
@@ -29,6 +30,7 @@ import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 import type { SerializableModelListEntry } from '../types';
 import { serializeModelList } from '../utils/serialize-state';
+import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 
 const RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST = 10_000;
 
@@ -1147,5 +1149,112 @@ describe('DurableAgent.recover(runId)', () => {
 
     await entry?.workflowExecution;
     recovered.cleanup();
+  });
+});
+
+describe('DurableAgent.recover(runId) tracing', () => {
+  const runId = 'run-traced';
+
+  async function recoverTraced(contextExtras: Record<string, unknown> = {}) {
+    const endedSpans: Array<{ id: string; output: unknown }> = [];
+    const recordedSpan = (id: string): any => ({
+      id,
+      exportSpan: () => ({ id }),
+      createChildSpan: () => recordedSpan(`${id}-model`),
+      end: (opts?: { output?: unknown }) => endedSpans.push({ id, output: opts?.output }),
+    });
+    const instance = {
+      getConfig: vi.fn().mockReturnValue({ serviceName: 'test' }),
+      getExporters: vi.fn().mockReturnValue([]),
+      getSpanOutputProcessors: vi.fn().mockReturnValue([]),
+      getLogger: vi.fn().mockReturnValue(undefined),
+      getBridge: vi.fn().mockReturnValue(undefined),
+      startSpan: vi.fn(() => recordedSpan('span-rec')),
+      rebuildSpan: vi.fn((data: { id: string }) => recordedSpan(data.id)),
+      flush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      __setLogger: vi.fn(),
+      __setMastraEnvironment: vi.fn(),
+    } as unknown as ObservabilityInstance;
+    const observability: ObservabilityEntrypoint = {
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      setMastraContext: vi.fn(),
+      setLogger: vi.fn(),
+      getSelectedInstance: vi.fn(() => instance),
+      registerInstance: vi.fn(),
+      getInstance: vi.fn(() => instance),
+      getDefaultInstance: vi.fn(() => instance),
+      listInstances: vi.fn(() => new Map([['default', instance]])),
+      unregisterInstance: vi.fn().mockReturnValue(false),
+      hasInstance: vi.fn().mockReturnValue(true),
+      setConfigSelector: vi.fn(),
+      clear: vi.fn(),
+    };
+    const store = new InMemoryStore();
+    const agent = createDurableAgent({
+      agent: new Agent({ id: 'agent-traced', name: 'agent-traced', instructions: 'x', model: makeMockModel() }),
+    });
+    void new Mastra({ agents: { 'agent-traced': agent as any }, storage: store, observability, logger: false });
+
+    const workflows = (await store.getStore('workflows'))!;
+    for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+      const snapshot = makeSnapshot(runId, 'running', 'agent-traced');
+      Object.assign(snapshot.context.input as any, {
+        agentSpanData: { traceId: 'trace-orig', id: 'span-orig' },
+        modelSpanData: { traceId: 'trace-orig', id: 'model-orig' },
+      });
+      Object.assign(snapshot.context, contextExtras);
+      await workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId: 'r', snapshot });
+    }
+    const { restart } = stubWorkflow(agent, 'success');
+    restart.mockResolvedValue({ status: 'success', result: { output: { text: 'done' }, stepResult: {} } } as any);
+
+    const { cleanup } = await agent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    cleanup();
+    return { instance, endedSpans };
+  }
+
+  it('nests the recovered AGENT_RUN span under the original span instead of opening a second root (#25718)', async () => {
+    const { instance } = await recoverTraced();
+
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    expect(recoveredCall).toBeDefined();
+    expect(recoveredCall.parentSpanId).toBe('span-orig');
+    expect(recoveredCall.traceId).toBe('trace-orig');
+    expect(recoveredCall.metadata?.recoveredFromSpanId).toBe('span-orig');
+  });
+
+  // Stores persist only span-end events, so the crashed process's spans must be
+  // ended here or the recovered span's parent never lands.
+  it('ends the original spans the crashed process left open as interrupted', async () => {
+    const { endedSpans } = await recoverTraced();
+
+    expect(endedSpans).toEqual([
+      { id: 'model-orig', output: expect.objectContaining({ status: 'interrupted' }) },
+      { id: 'span-orig', output: expect.objectContaining({ status: 'interrupted' }) },
+    ]);
+  });
+
+  it('leaves the original spans alone when a suspension already ended them', async () => {
+    const { endedSpans } = await recoverTraced({
+      [DurableStepIds.AGENTIC_EXECUTION]: { status: 'success', resumedAt: Date.now() },
+    });
+
+    expect(endedSpans).toEqual([]);
+  });
+
+  it('leaves the original spans alone when map-final-output already ended them', async () => {
+    const { endedSpans } = await recoverTraced({ [MAP_FINAL_OUTPUT_STEP_ID]: { status: 'success' } });
+
+    // map-final-output won't re-run on the default engine, so recovery ends the
+    // recovered spans itself.
+    expect(endedSpans).toEqual([
+      { id: 'span-rec-model', output: undefined },
+      { id: 'span-rec', output: { text: 'done' } },
+    ]);
   });
 });

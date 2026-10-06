@@ -5,7 +5,7 @@ import {
   useExistingConnections,
   useToolProviders,
   useToolkits,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/tool-providers';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
@@ -27,8 +27,8 @@ export default function IntegrationsPage() {
   const [label, setLabel] = useState<string>('');
 
   const providersQuery = useToolProviders();
-  const toolkitsQuery = useToolkits(providerId || null);
-  const connectionsQuery = useExistingConnections(providerId || null, toolkit || null);
+  const toolkitsQuery = useToolkits({ providerId: providerId || null, queryOptions: { enabled: !!providerId } });
+  const connectionsQuery = useExistingConnections({ providerId: providerId || null, toolkit: toolkit || null });
   const authorize = useAuthorize();
   const disconnect = useDisconnectConnection();
   const isAdmin = useIsToolProviderAdmin();

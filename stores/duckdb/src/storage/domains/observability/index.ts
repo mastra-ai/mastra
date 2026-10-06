@@ -103,7 +103,12 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
-import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
+import {
+  checkSignalTablesMigrationStatus,
+  dropLegacyCursorIdDefaults,
+  hasPrimaryKey,
+  migrateSignalTables,
+} from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as spanQueryOps from './span-query';
@@ -159,6 +164,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     feedback: { table: 'feedback_events', column: 'timestamp', indexed: false },
   };
 
+  /** Set by `init()`; until then aggregate queries dedupe metric rows on `metricId`. */
+  private metricIdsUnique = false;
+
   private db: DuckDBConnection;
 
   constructor(config: ObservabilityDuckDBConfig) {
@@ -192,6 +200,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
     await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
     await dropLegacyCursorIdDefaults(this.db);
+    this.metricIdsUnique = await hasPrimaryKey(this.db, 'metric_events');
   }
 
   /**
@@ -325,7 +334,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return traceQueryOps.queryTraces(this.db, plan);
   }
   override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
-    return traceAggregateOps.aggregateTraces(this.db, plan);
+    return traceAggregateOps.aggregateTraces(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
   }
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,

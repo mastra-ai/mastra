@@ -8,20 +8,50 @@ import type {
   UpdateExperimentResultParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
+  MastraClient,
 } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 type DatasetItemMutationVariables = {
   datasetId: string;
   itemId: string;
 };
 
+type ClientResult<K extends keyof MastraClient> = MastraClient[K] extends (...args: any[]) => Promise<infer R>
+  ? R
+  : never;
+
+export interface DatasetMutationsQueryOptions {
+  createDataset?: MastraMutationOptions<ClientResult<'createDataset'>, CreateDatasetParams>;
+  updateDataset?: MastraMutationOptions<ClientResult<'updateDataset'>, UpdateDatasetParams>;
+  deleteDataset?: MastraMutationOptions<ClientResult<'deleteDataset'>, string>;
+  addItem?: MastraMutationOptions<ClientResult<'addDatasetItem'>, AddDatasetItemParams>;
+  updateItem?: MastraMutationOptions<ClientResult<'updateDatasetItem'>, UpdateDatasetItemParams>;
+  deleteItem?: MastraMutationOptions<ClientResult<'deleteDatasetItem'>, DatasetItemMutationVariables>;
+  purgeItem?: MastraMutationOptions<ClientResult<'purgeDatasetItem'>, DatasetItemMutationVariables>;
+  deleteItems?: MastraMutationOptions<
+    ClientResult<'batchDeleteDatasetItems'>,
+    { datasetId: string; itemIds: string[] }
+  >;
+  batchInsertItems?: MastraMutationOptions<ClientResult<'batchInsertDatasetItems'>, BatchInsertDatasetItemsParams>;
+  batchDeleteItems?: MastraMutationOptions<ClientResult<'batchDeleteDatasetItems'>, BatchDeleteDatasetItemsParams>;
+  triggerExperiment?: MastraMutationOptions<ClientResult<'triggerDatasetExperiment'>, TriggerDatasetExperimentParams>;
+  deleteExperiment?: MastraMutationOptions<ClientResult<'deleteExperiment'>, string>;
+  updateExperiment?: MastraMutationOptions<ClientResult<'updateDatasetExperiment'>, UpdateDatasetExperimentParams>;
+  updateExperimentResult?: MastraMutationOptions<
+    ClientResult<'updateDatasetExperimentResult'>,
+    UpdateExperimentResultParams
+  >;
+}
+
 /**
  * Hook providing mutation functions for datasets, items, and runs
- * All mutations invalidate relevant query caches on success
+ * All mutations invalidate relevant query caches on success.
+ * `queryOptions` is keyed by returned mutation name and spread last; a user `onSuccess` replaces the internal invalidation.
  */
-export const useDatasetMutations = () => {
+export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMutationsQueryOptions } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -30,6 +60,7 @@ export const useDatasetMutations = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['datasets'] });
     },
+    ...queryOptions?.createDataset,
   });
 
   const updateDataset = useMutation({
@@ -38,6 +69,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['datasets'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
     },
+    ...queryOptions?.updateDataset,
   });
 
   const deleteDataset = useMutation({
@@ -45,6 +77,7 @@ export const useDatasetMutations = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['datasets'] });
     },
+    ...queryOptions?.deleteDataset,
   });
 
   const addItem = useMutation({
@@ -54,6 +87,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.addItem,
   });
 
   const updateItem = useMutation({
@@ -66,6 +100,7 @@ export const useDatasetMutations = () => {
       });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.updateItem,
   });
 
   const deleteItem = useMutation({
@@ -75,6 +110,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.deleteItem,
   });
 
   const purgeItem = useMutation({
@@ -92,6 +128,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-completed-items'] });
       void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
     },
+    ...queryOptions?.purgeItem,
   });
 
   // Batch insert items using the batch endpoint
@@ -102,6 +139,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.batchInsertItems,
   });
 
   // Batch delete items using the batch endpoint
@@ -112,6 +150,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.batchDeleteItems,
   });
 
   // @deprecated - use batchDeleteItems mutation instead
@@ -124,6 +163,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
+    ...queryOptions?.deleteItems,
   });
 
   const triggerExperiment = useMutation({
@@ -131,6 +171,7 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
     },
+    ...queryOptions?.triggerExperiment,
   });
 
   const deleteExperiment = useMutation({
@@ -144,6 +185,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['completed-items'] });
       void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
     },
+    ...queryOptions?.deleteExperiment,
   });
 
   const updateExperiment = useMutation({
@@ -155,6 +197,7 @@ export const useDatasetMutations = () => {
         queryKey: ['dataset-experiment', variables.datasetId, variables.experimentId],
       });
     },
+    ...queryOptions?.updateExperiment,
   });
 
   const updateExperimentResult = useMutation({
@@ -167,6 +210,7 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-completed-items'] });
       void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
     },
+    ...queryOptions?.updateExperimentResult,
   });
 
   return {

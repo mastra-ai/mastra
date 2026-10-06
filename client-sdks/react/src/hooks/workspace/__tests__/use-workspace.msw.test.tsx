@@ -50,7 +50,9 @@ describe('useWorkspaceDirectory', () => {
         }),
       );
 
-      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '.'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceDirectory({ workspaceId: WORKSPACE_ID, path: '.' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.data).toEqual(rootListing.entries));
       expect(new Set(recursiveParams)).toEqual(new Set(['false']));
@@ -59,9 +61,12 @@ describe('useWorkspaceDirectory', () => {
 
   describe('when disabled', () => {
     it('does not request the directory', () => {
-      const { result } = renderHook(() => useWorkspaceDirectory(WORKSPACE_ID, '.', { enabled: false }), {
-        wrapper: makeWrapper(),
-      });
+      const { result } = renderHook(
+        () => useWorkspaceDirectory({ workspaceId: WORKSPACE_ID, path: '.', queryOptions: { enabled: false } }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       expect(result.current.fetchStatus).toBe('idle');
     });
@@ -73,9 +78,12 @@ describe('useWorkspaceFileContent', () => {
     it('returns the file content', async () => {
       server.use(readHandler());
 
-      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, 'src/index.ts'), {
-        wrapper: makeWrapper(),
-      });
+      const { result } = renderHook(
+        () => useWorkspaceFileContent({ workspaceId: WORKSPACE_ID, path: 'src/index.ts' }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       await waitFor(() => expect(result.current.data?.content).toBe('const answer = 42;'));
     });
@@ -91,7 +99,7 @@ describe('useWorkspaceFileContent', () => {
         }),
       );
 
-      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, 'logo.png'), {
+      const { result } = renderHook(() => useWorkspaceFileContent({ workspaceId: WORKSPACE_ID, path: 'logo.png' }), {
         wrapper: makeWrapper(),
       });
 
@@ -102,7 +110,12 @@ describe('useWorkspaceFileContent', () => {
 
   describe('when no path is given', () => {
     it('stays idle', () => {
-      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, undefined), { wrapper: makeWrapper() });
+      const { result } = renderHook(
+        () => useWorkspaceFileContent({ workspaceId: WORKSPACE_ID, path: undefined, queryOptions: { enabled: false } }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       expect(result.current.fetchStatus).toBe('idle');
     });
@@ -114,9 +127,12 @@ describe('useWorkspaceSearch', () => {
     it('only queries skills', async () => {
       server.use(http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json(skillSearchResponse)));
 
-      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, 'hello', { files: false }), {
-        wrapper: makeWrapper(),
-      });
+      const { result } = renderHook(
+        () => useWorkspaceSearch({ workspaceId: WORKSPACE_ID, query: 'hello', files: false }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       await waitFor(() => expect(result.current.data?.map(hit => hit.kind)).toEqual(['skill']));
     });
@@ -129,7 +145,9 @@ describe('useWorkspaceSearch', () => {
         http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json(skillSearchResponse)),
       );
 
-      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, 'hello'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceSearch({ workspaceId: WORKSPACE_ID, query: 'hello' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() =>
         expect(result.current.data).toEqual([
@@ -152,7 +170,9 @@ describe('useWorkspaceSearch', () => {
         http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json(skillSearchResponse)),
       );
 
-      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, 'hello'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceSearch({ workspaceId: WORKSPACE_ID, query: 'hello' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.data?.map(r => r.kind)).toEqual(['skill']));
     });
@@ -165,7 +185,9 @@ describe('useWorkspaceSearch', () => {
         http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
       );
 
-      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, 'hello'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceSearch({ workspaceId: WORKSPACE_ID, query: 'hello' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
     });
@@ -173,7 +195,12 @@ describe('useWorkspaceSearch', () => {
 
   describe('when the query is blank', () => {
     it('stays idle', () => {
-      const { result } = renderHook(() => useWorkspaceSearch(WORKSPACE_ID, '   '), { wrapper: makeWrapper() });
+      const { result } = renderHook(
+        () => useWorkspaceSearch({ workspaceId: WORKSPACE_ID, query: '   ', queryOptions: { enabled: false } }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       expect(result.current.fetchStatus).toBe('idle');
     });

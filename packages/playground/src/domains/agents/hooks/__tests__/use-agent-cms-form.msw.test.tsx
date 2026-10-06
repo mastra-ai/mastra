@@ -1,6 +1,6 @@
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
-import { useAgentVersions } from '@mastra/react/hooks';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -548,7 +548,11 @@ describe('useAgentCmsForm', () => {
             hasStoredOverride: false,
             onSuccess: () => {},
           }),
-          versions: useAgentVersions({ agentId: AGENT_ID, params: { orderBy: { direction: 'DESC' } } }),
+          versions: useAgentVersions({
+            agentId: AGENT_ID,
+            params: { orderBy: { direction: 'DESC' } },
+            queryOptions: { enabled: Boolean(AGENT_ID) },
+          }),
         }),
         { wrapper: makeWrapper() },
       );

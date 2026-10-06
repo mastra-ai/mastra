@@ -1,16 +1,25 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 const IMMUTABLE_CACHE_TIME = 1000 * 60 * 60 * 24 * 30; // 30 days, massive cache, span data is immutable
 
 type SpanDetailResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 
-export function useSpanDetail(
-  traceId: string | null | undefined,
-  spanId: string | null | undefined,
-): UseQueryResult<SpanDetailResponse | null> {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export function useSpanDetail<TData = SpanDetailResponse>({
+  traceId,
+  spanId,
+  queryOptions,
+}: {
+  traceId: string | null | undefined;
+  spanId: string | null | undefined;
+  queryOptions?: MastraQueryOptions<SpanDetailResponse, TData>;
+}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -21,7 +30,6 @@ export function useSpanDetail(
       }
       return client.getSpan(traceId, spanId);
     },
-    enabled: !!traceId && !!spanId,
     staleTime: query => {
       const data = query.state.data;
 
@@ -31,5 +39,6 @@ export function useSpanDetail(
 
       return 0;
     },
+    ...queryOptions,
   });
 }

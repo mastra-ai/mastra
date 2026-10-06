@@ -494,7 +494,14 @@ export class MCPServer extends MCPServerBase {
 
   private createServerInstance(): Server {
     const server = new Server(
-      { name: this.name, version: this.version },
+      {
+        name: this.name,
+        version: this.version,
+        title: this.title,
+        description: this.description,
+        websiteUrl: this.websiteUrl,
+        icons: this.icons,
+      },
       {
         capabilities: this.capabilities(),
         instructions: this.instructions,

@@ -1,4 +1,4 @@
-import type { ModelUsageRow } from '@mastra/react/hooks';
+import type { ModelUsageRow } from '@mastra/react/hooks/metrics';
 import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';

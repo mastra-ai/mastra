@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 import { makeSSOLoginRequest } from './sso-login';
 import type { LogoutResponse } from './types';
@@ -12,7 +13,7 @@ import type { LogoutResponse } from './types';
  *
  * @example
  * ```tsx
- * import { useSSOLogin } from '@mastra/react/hooks';
+ * import { useSSOLogin } from '@mastra/react/hooks/auth';
  *
  * function SSOLoginButton() {
  *   const { mutate: login, isPending } = useSSOLogin();
@@ -33,11 +34,16 @@ import type { LogoutResponse } from './types';
  * }
  * ```
  */
-export function useSSOLogin() {
+type SSOLoginResponse = Awaited<ReturnType<typeof makeSSOLoginRequest>>;
+
+export function useSSOLogin({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<SSOLoginResponse, { redirectUri?: string }> } = {}) {
   const client = useMastraClient();
 
   return useMutation({
     mutationFn: ({ redirectUri }: { redirectUri?: string }) => makeSSOLoginRequest(client, { redirectUri }),
+    ...queryOptions,
   });
 }
 
@@ -49,7 +55,7 @@ export function useSSOLogin() {
  *
  * @example
  * ```tsx
- * import { useLogout } from '@mastra/react/hooks';
+ * import { useLogout } from '@mastra/react/hooks/auth';
  *
  * function LogoutButton({ userId }: { userId: string }) {
  *   const { mutate: logout, isPending } = useLogout();
@@ -109,9 +115,10 @@ export interface UseLogoutOptions {
    * Failures are ignored so cleanup never turns a completed sign-out into an error.
    */
   onLoggedOut?: (variables: { userId: string }) => Promise<void>;
+  queryOptions?: MastraMutationOptions<LogoutResponse, { userId: string }>;
 }
 
-export function useLogout({ onLoggedOut }: UseLogoutOptions = {}) {
+export function useLogout({ onLoggedOut, queryOptions }: UseLogoutOptions = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -125,5 +132,6 @@ export function useLogout({ onLoggedOut }: UseLogoutOptions = {}) {
       // Invalidate all auth-related queries
       void queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
+    ...queryOptions,
   });
 }

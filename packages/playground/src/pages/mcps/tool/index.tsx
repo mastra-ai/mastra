@@ -1,5 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useMCPServerTool } from '@mastra/react/hooks';
+import { useMCPServerTool } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';
@@ -14,7 +14,11 @@ const MCPServerToolExecutor = () => {
     { id: 'mcp-server-tool', Component: McpServerToolCrumb },
   ];
 
-  const { data: mcpTool, isLoading } = useMCPServerTool(serverId!, toolId!);
+  const { data: mcpTool, isLoading } = useMCPServerTool({
+    serverId: serverId!,
+    toolId: toolId!,
+    queryOptions: { enabled: !!serverId && !!toolId },
+  });
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>

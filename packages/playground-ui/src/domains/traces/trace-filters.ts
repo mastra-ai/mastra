@@ -1,7 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
-import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks';
-import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks';
+import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
+import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
 import {
   ActivityIcon,
   BoxIcon,

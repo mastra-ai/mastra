@@ -1,5 +1,5 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
-import { useWorkspaceDirectory } from '@mastra/react/hooks';
+import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -28,7 +28,7 @@ type RequestDelete = (entry: WorkspaceEntryRef) => void;
 
 export function WorkspaceTree() {
   const { workspaceId, activeFilePath, setActiveFilePath } = useWorkspaceContext();
-  const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
+  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: ROOT_PATH });
   const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
 
   if (isLoading) return <TreeSkeleton />;
@@ -106,7 +106,11 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
   const { workspaceId, onDelete, onCreateDirectory, isReadOnly, openFolders, setFolderOpen } = useWorkspaceContext();
   const open = openFolders.has(path);
   // Shares the query with FolderChildren; only used to flag the first load next to the name.
-  const { isLoading } = useWorkspaceDirectory(workspaceId, path, { enabled: open });
+  const { isLoading } = useWorkspaceDirectory({
+    workspaceId: workspaceId,
+    path: path,
+    queryOptions: { enabled: open },
+  });
   const [creating, setCreating] = useState(false);
   const canDelete = onDelete && !isReadOnly(path);
   const canCreate = onCreateDirectory && !isReadOnly(path);
@@ -161,7 +165,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             title={mount.error}
             className="flex shrink-0"
           >
-            <CircleAlertIcon className="text-destructive size-3" />
+            <CircleAlertIcon className="size-3 text-destructive-foreground" />
           </span>
         ) : null}
         {mount && isReadOnly(path) ? (
@@ -203,7 +207,7 @@ function FolderChildren({
 }) {
   const { workspaceId, onCreateDirectory } = useWorkspaceContext();
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, path);
+  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: path });
 
   const create = async (name: string) => {
     try {

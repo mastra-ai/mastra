@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
 import { AgentConfigToggle } from './agent-config-toggle';
@@ -15,7 +15,11 @@ export interface AgentDetailHeaderActionsProps {
 
 /** Edit / Share / Config actions shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
-  const { data: agent } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
 

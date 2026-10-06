@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { parseJson } from './helpers';
+import { parseJson, payloadColumnSql } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 
 type ParameterType = 'scalar' | 'timestamp';
@@ -118,7 +118,7 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
-  r.input AS input,
+  ${payloadColumnSql('r.input')} AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,

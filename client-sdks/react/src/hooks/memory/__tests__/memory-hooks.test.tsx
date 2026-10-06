@@ -76,7 +76,9 @@ describe('useMemoryStatus', () => {
         }),
       );
 
-      const { result } = renderHook(() => useMemoryStatus('agent-1', 'thread-1'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useMemoryStatus({ agentId: 'agent-1', threadId: 'thread-1' }), {
+        wrapper: makeWrapper(),
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(memoryStatusResponse);
@@ -95,7 +97,9 @@ describe('useMemoryStatus', () => {
         }),
       );
 
-      const { result } = renderHook(() => useMemoryStatus(undefined, 'thread-1'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useMemoryStatus({ agentId: undefined, threadId: 'thread-1' }), {
+        wrapper: makeWrapper(),
+      });
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(result.current.fetchStatus).toBe('idle');
@@ -116,7 +120,7 @@ describe('useMemoryThreadMessages', () => {
         }),
       );
 
-      const { result } = renderHook(() => useMemoryThreadMessages('thread-1', { page: 2, perPage: 25 }), {
+      const { result } = renderHook(() => useMemoryThreadMessages({ threadId: 'thread-1', page: 2, perPage: 25 }), {
         wrapper: makeWrapper(),
       });
 
@@ -139,7 +143,7 @@ describe('useMemoryThreadMessages', () => {
         }),
       );
 
-      const { result } = renderHook(() => useMemoryThreadMessages(undefined), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useMemoryThreadMessages({ threadId: undefined }), { wrapper: makeWrapper() });
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(result.current.fetchStatus).toBe('idle');
@@ -160,9 +164,12 @@ describe('useObservationalMemory', () => {
         }),
       );
 
-      const { result } = renderHook(() => useObservationalMemory('agent-1', 'thread-1', 'resource-1'), {
-        wrapper: makeWrapper(),
-      });
+      const { result } = renderHook(
+        () => useObservationalMemory({ agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' }),
+        {
+          wrapper: makeWrapper(),
+        },
+      );
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(observationalMemoryResponse);
@@ -182,7 +189,9 @@ describe('useObservationalMemory', () => {
         }),
       );
 
-      const { result } = renderHook(() => useObservationalMemory(undefined, 'thread-1'), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useObservationalMemory({ agentId: undefined, threadId: 'thread-1' }), {
+        wrapper: makeWrapper(),
+      });
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(result.current.fetchStatus).toBe('idle');

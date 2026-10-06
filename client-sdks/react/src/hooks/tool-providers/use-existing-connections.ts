@@ -1,6 +1,9 @@
+import type { MastraClient } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import { isUnauthenticatedError, useCurrentUser } from '../auth';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface UseExistingConnectionsOptions {
   /**
@@ -15,6 +18,8 @@ export interface UseExistingConnectionsOptions {
   scopeToSelf?: boolean;
 }
 
+type ConnectionsResponse = Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['listConnections']>>;
+
 /**
  * Lists existing provider connections for the caller, scoped to a tool
  * service. Powers the "use existing connection" path in the picker so
@@ -25,13 +30,17 @@ export interface UseExistingConnectionsOptions {
  * `scopeToSelf: true` to narrow the response to the caller's own bucket
  * (used by the Builder edit view).
  */
-export const useExistingConnections = (
-  providerId: string | null | undefined,
-  toolkit: string | null | undefined,
-  options?: UseExistingConnectionsOptions,
-) => {
+export const useExistingConnections = <TData = ConnectionsResponse>({
+  providerId,
+  toolkit,
+  scopeToSelf = false,
+  queryOptions,
+}: UseExistingConnectionsOptions & {
+  providerId: string | null | undefined;
+  toolkit: string | null | undefined;
+  queryOptions?: MastraQueryOptions<ConnectionsResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  const scopeToSelf = options?.scopeToSelf ?? false;
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
 
@@ -49,5 +58,6 @@ export const useExistingConnections = (
         ...(scopeToSelf && callerAuthorId ? { authorId: callerAuthorId } : {}),
       }),
     enabled,
+    ...queryOptions,
   });
 };

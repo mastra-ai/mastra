@@ -1,19 +1,18 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface BrowserSessionProbe {
   hasSession: boolean;
   screencastAvailable: boolean;
 }
 
-interface UseBrowserSessionProbeOptions {
+interface UseBrowserSessionProbeOptions<TData> {
   agentId?: string;
   threadId?: string;
-  /**
-   * Whether to actually issue the probe. Pass `false` for agents that aren't
-   * configured with browser tools to avoid an unnecessary request.
-   */
-  enabled?: boolean;
+  /** TanStack overrides spread last, e.g. `{ enabled: false }` for agents without browser tools. */
+  queryOptions?: MastraQueryOptions<BrowserSessionProbe, TData>;
 }
 
 export const browserSessionProbeQueryKey = (agentId?: string, threadId?: string) =>
@@ -43,11 +42,17 @@ const isNotFoundError = (error: unknown): boolean => {
  * When the endpoint itself returns 404 (older server that predates this probe),
  * the hook assumes screencast is available and a session is active so behavior
  * matches the legacy unconditional connect.
+ *
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export function useBrowserSessionProbe({ agentId, threadId, enabled = true }: UseBrowserSessionProbeOptions) {
+export function useBrowserSessionProbe<TData = BrowserSessionProbe>({
+  agentId,
+  threadId,
+  queryOptions,
+}: UseBrowserSessionProbeOptions<TData>): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
-  return useQuery<BrowserSessionProbe>({
+  return useQuery<BrowserSessionProbe, Error, TData>({
     queryKey: browserSessionProbeQueryKey(agentId, threadId),
     queryFn: async () => {
       if (!agentId) {
@@ -64,7 +69,6 @@ export function useBrowserSessionProbe({ agentId, threadId, enabled = true }: Us
         throw error;
       }
     },
-    enabled: enabled && Boolean(agentId),
     // No polling: the probe fires once on mount, on window focus, and is
     // updated via `setQueriesData` from `tool-fallback.tsx` when a browser
     // tool call transitions. This avoids idle 5s polls and lets the probe
@@ -72,5 +76,6 @@ export function useBrowserSessionProbe({ agentId, threadId, enabled = true }: Us
     refetchOnWindowFocus: true,
     staleTime: 0,
     retry: 1,
+    ...queryOptions,
   });
 }

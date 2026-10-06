@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { ChevronRight, Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
@@ -122,7 +122,7 @@ function WorkflowInformationTopSection({
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
-            className="min-h-0 flex-1 border-t border-border/50"
+            className="min-h-0 flex-1 border-t border-border"
             mask={{ top: false, bottom: false }}
           >
             <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
@@ -167,7 +167,15 @@ export function WorkflowInformation({
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   const {
     createWorkflowRun,

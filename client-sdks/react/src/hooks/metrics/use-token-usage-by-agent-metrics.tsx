@@ -1,6 +1,8 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import { getOrCreate } from '../shared/map';
+import type { MastraQueryOptions } from '../shared/query-options';
 import type { MetricsQueryFilters } from './metrics-query-filters';
 
 export interface TokenUsageByAgentRow {
@@ -12,9 +14,11 @@ export interface TokenUsageByAgentRow {
   costUnit: string | null;
 }
 
-export function useTokenUsageByAgentMetrics(params: MetricsQueryFilters) {
+export function useTokenUsageByAgentMetrics<TData = TokenUsageByAgentRow[]>(
+  params: MetricsQueryFilters & { queryOptions?: MastraQueryOptions<TokenUsageByAgentRow[], TData> },
+): UseQueryResult<TData, Error> {
   const client = useMastraClient();
-  const { filters, filterKey } = params;
+  const { filters, filterKey, queryOptions } = params;
 
   return useQuery({
     queryKey: ['metrics', 'token-usage-by-agent', filterKey],
@@ -69,5 +73,6 @@ export function useTokenUsageByAgentMetrics(params: MetricsQueryFilters) {
         }))
         .sort((a, b) => b.total - a.total);
     },
+    ...queryOptions,
   });
 }

@@ -1,10 +1,14 @@
 import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
-import { useStoredPromptBlock } from '@mastra/react/hooks';
+import { useStoredPromptBlock } from '@mastra/react/hooks/prompt-blocks';
 import { useParams } from 'react-router';
 
 export function PromptBlockCrumb() {
   const { promptBlockId } = useParams<{ promptBlockId: string }>();
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(promptBlockId, { status: 'draft' });
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: promptBlockId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(promptBlockId) },
+  });
 
   if (!promptBlockId) return null;
   if (isLoading) return <CrumbSkeleton />;
