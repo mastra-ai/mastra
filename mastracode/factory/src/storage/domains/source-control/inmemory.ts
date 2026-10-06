@@ -431,7 +431,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.sessionsRows.find(
         row =>
           ('factoryProjectId' in args
-            ? row.factoryProjectId === args.factoryProjectId
+            ? row.factoryProjectId === args.factoryProjectId &&
+              // Mirrors base.ts: only sessions on this integration's links resolve.
+              this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId)
             : row.projectRepositoryId === args.projectRepositoryId) &&
           row.userId === args.userId &&
           row.branch === args.branch,

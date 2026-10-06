@@ -1,4 +1,5 @@
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -157,6 +158,46 @@ describe('ensureFactorySourceSession', () => {
         visibility: 'org',
       }),
     );
+  });
+
+  it('rejects the same branch for the same user on a second link of the factory', async () => {
+    const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '457',
+        slug: 'mastra-ai/mastra-website',
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra-website',
+    });
+    const first = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      repositorySlug: repository.slug,
+      branch: 'factory/issue-7',
+    });
+    expect(first.projectRepositoryId).toBe(projectRepository.id);
+
+    // Branches are unique per (factory, user, branch) now; the second link does not get its own session.
+    await expect(
+      ensureFactorySourceSession({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        repositorySlug: other.slug,
+        branch: 'factory/issue-7',
+      }),
+    ).rejects.toBeInstanceOf(UniqueViolationError);
   });
 
   it('requires the repository target when creating a source-control session', async () => {
