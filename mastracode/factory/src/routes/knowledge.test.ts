@@ -868,7 +868,7 @@ describe('KnowledgeRoutes', () => {
 
   it('marks pinned relationships split across node pages as terminally bounded', async () => {
     const h = await createHarness({ limits: { maxNodes: 1 } });
-    const firstTarget = await node(h.knowledge, 'A pinned target', h.projectScope);
+    await node(h.knowledge, 'A pinned target', h.projectScope);
     await node(h.knowledge, 'Z pinned target', h.projectScope);
     const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
     await record(h.knowledge, pinned, 'Connect [[A pinned target]] and [[Z pinned target]].', h.projectScope);
@@ -876,7 +876,8 @@ describe('KnowledgeRoutes', () => {
     const first = await rawGraph(h);
     expect(first.body.page.nextCursor).toBeDefined();
     expect(first.body.page.terminalBounds).toContain('edge-window');
-    expect(first.body.nodes.find(entry => entry.name === firstTarget.name)?.pinned).toBe(false);
+    expect(first.body.nodes).toHaveLength(1);
+    expect(first.body.nodes[0]?.pinned).toBe(false);
     expect(first.body.edges).toEqual([]);
 
     const second = await rawGraph(h, `?cursor=${encodeURIComponent(first.body.page.nextCursor!)}`);
