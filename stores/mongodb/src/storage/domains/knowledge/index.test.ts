@@ -3,11 +3,14 @@ import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KnowledgeSchemaError,
+  TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
+import { MongoClient } from 'mongodb';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { resolveMongoDBConfig } from '../../db';
@@ -183,6 +186,35 @@ describe('MongoDB canonical Knowledge support', () => {
     const outbox = await connector.getCollection('mastra_knowledge_semantic_outbox');
     expect(Object.keys(await nodes.indexInformation())).toContain('activeNameScopeKey_1');
     expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
+  });
+
+  it('explicitly resets retired Knowledge collections and leaves other storage untouched', async () => {
+    const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+    const dbName = `knowledge-reset-${randomUUID()}`;
+    const isolated = resolveMongoDBConfig({ uri, dbName });
+    const client = new MongoClient(uri);
+    try {
+      await (await isolated.getCollection('mastra_knowledge_cursors')).insertOne({ id: 'retired' });
+      await (await isolated.getCollection(TABLE_KNOWLEDGE_NODES)).insertOne({ id: 'v1-node' });
+      await (await isolated.getCollection('mastra_threads')).insertOne({ id: 'kept' });
+      const store = new KnowledgeMongoDB({ connector: isolated });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      await store.dangerouslyReset();
+
+      const db = client.db(dbName);
+      const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map(collection => collection.name);
+      expect(names).not.toContain('mastra_knowledge_cursors');
+      expect(await (await isolated.getCollection(TABLE_KNOWLEDGE_NODES)).countDocuments()).toBe(0);
+      expect(await (await isolated.getCollection(TABLE_KNOWLEDGE_SCHEMA)).findOne({ id: 'canonical' })).toMatchObject({
+        version: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      });
+      expect(await (await isolated.getCollection('mastra_threads')).countDocuments({ id: 'kept' })).toBe(1);
+    } finally {
+      await client.db(dbName).dropDatabase();
+      await client.close();
+      await isolated.close();
+    }
   });
 });
 

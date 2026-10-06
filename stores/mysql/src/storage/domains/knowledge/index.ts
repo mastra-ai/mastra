@@ -311,6 +311,9 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 }
 
 // Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+/** Cursor table from v1 Knowledge; only an explicit reset removes it. */
+const RETIRED_KNOWLEDGE_CURSOR_TABLE = 'mastra_knowledge_cursors';
+
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
@@ -458,6 +461,12 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id, version) VALUES ('canonical', ?) ON DUPLICATE KEY UPDATE id=id`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    const tables = [RETIRED_KNOWLEDGE_CURSOR_TABLE, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
+    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables.map(table => `"${table}"`).join(', ')}`);
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {
