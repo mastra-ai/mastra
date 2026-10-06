@@ -356,6 +356,53 @@ describe('DurableAgent FGA checks', () => {
     await expectDurableDenial('generate');
   });
 
+  it('denies before durable memory reads when memory:read is denied', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+      if (input.permission === 'memory:read') {
+        throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+      }
+    });
+    const memory = new MockMemory();
+    const getThreadById = vi.spyOn(memory, 'getThreadById');
+    const pubsub = new EventEmitterPubSub();
+    const base = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test',
+      model: createMockModel(),
+      memory,
+    });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const mastra = new Mastra({ agents: {}, logger: false, pubsub, server: { fga: fgaProvider } });
+    (durableAgent as any).__registerMastra(mastra);
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('organizationId', 'org-1');
+
+    try {
+      await expect(
+        durableAgent.generate('test', {
+          memory: { thread: 'thread-1', resource: 'resource-1' },
+          requestContext,
+        }),
+      ).rejects.toThrow('FGA authorization denied: user user-1 cannot memory:read on thread:thread-1');
+      expect(getThreadById).not.toHaveBeenCalled();
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-1' }),
+        expect.objectContaining({
+          permission: 'memory:read',
+          resource: { type: 'thread', id: 'thread-1' },
+          context: expect.objectContaining({ metadata: expect.objectContaining({ agentId: 'test-agent' }) }),
+        }),
+      );
+    } finally {
+      await mastra.stopWorkers?.();
+      await pubsub.close();
+    }
+  });
+
   it('stream() denies before durable execution when agents:execute is denied', async () => {
     await expectDurableDenial('stream');
   });

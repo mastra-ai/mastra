@@ -106,9 +106,9 @@ describe('AgentController FGA', () => {
     const provider = createProvider(true);
     controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
 
-    await expect(
-      controller.getSessionByResource('resource-1', undefined, createRequestContext()),
-    ).resolves.toBe(session);
+    await expect(controller.getSessionByResource('resource-1', undefined, createRequestContext())).resolves.toBe(
+      session,
+    );
     expect(provider.require).toHaveBeenCalledWith(
       { id: 'user-1', organizationMembershipId: 'om-1' },
       expect.objectContaining({

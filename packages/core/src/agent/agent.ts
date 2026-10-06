@@ -56,6 +56,7 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
+import { checkThreadFGA } from '../memory/thread-fga';
 import { getMemoryRunState } from '../memory/run-state';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
@@ -5626,6 +5627,16 @@ export class Agent<
                 // Save rejection messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: subAgentThreadId,
+                    resourceId: subAgentResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
                     // Create user message with the original prompt
                     const userMessage: MastraDBMessage = {
@@ -5898,6 +5909,16 @@ export class Agent<
                 // Save response messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: effectiveGenerateThreadId,
+                    resourceId: effectiveGenerateResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
                     await memory.createThread({
                       resourceId: effectiveGenerateResourceId,
@@ -6043,6 +6064,16 @@ export class Agent<
                 // Save response messages to sub-agent's memory so the UI can display them
                 const streamMemory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (streamMemory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: effectiveStreamThreadId,
+                    resourceId: effectiveStreamResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
                     await streamMemory.createThread({
                       resourceId: effectiveStreamResourceId,
@@ -6179,7 +6210,17 @@ export class Agent<
                       resourceId,
                     };
                     const supervisorMemory = await this.getMemory({ requestContext });
-                    if (supervisorMemory) {
+                    if (supervisorMemory && threadId && resourceId) {
+                      await checkThreadFGA({
+                        mastra: this.#mastra,
+                        user: requestContext.get('user'),
+                        threadId,
+                        resourceId,
+                        agentId: this.id,
+                        requestContext,
+                        permission: MastraFGAPermissions.MEMORY_WRITE,
+                        actor: invocationActor,
+                      });
                       try {
                         await supervisorMemory.saveMessages({
                           messages: [feedbackMessage],
@@ -6274,7 +6315,17 @@ export class Agent<
                       resourceId,
                     };
                     const supervisorMemory = await this.getMemory({ requestContext });
-                    if (supervisorMemory) {
+                    if (supervisorMemory && threadId && resourceId) {
+                      await checkThreadFGA({
+                        mastra: this.#mastra,
+                        user: requestContext.get('user'),
+                        threadId,
+                        resourceId,
+                        agentId: this.id,
+                        requestContext,
+                        permission: MastraFGAPermissions.MEMORY_WRITE,
+                        actor: invocationActor,
+                      });
                       try {
                         await supervisorMemory.saveMessages({
                           messages: [feedbackMessage],

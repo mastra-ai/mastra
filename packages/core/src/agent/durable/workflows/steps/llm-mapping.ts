@@ -12,7 +12,9 @@ import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payl
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import { DurableStepIds } from '../../constants';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -464,6 +466,21 @@ export function createDurableLLMMappingStep() {
         state.threadId &&
         state.resourceId
       ) {
+        const authorizationEntry = globalRunRegistry.get(_runId);
+        const authorizationRequestContext = authorizationEntry?.requestContext ?? requestContext;
+        const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(authorizationEntry), {
+            mastra: mastra as Mastra | undefined,
+            user: authorizationRequestContext?.get('user'),
+            threadId: state.threadId!,
+            resourceId: state.resourceId!,
+            agentId: _agentId,
+            requestContext: authorizationRequestContext,
+            permission,
+            actor: authorizationRequestContext?.get('actor'),
+          });
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+        if (!state.threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         try {
           // Re-read the entry: tool-call may have rebuilt the save queue into it. A connect()
           // worker in another process has none until something rebuilds it.
