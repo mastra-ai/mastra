@@ -608,7 +608,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
     // Domains initialize in parallel, so the project columns may not exist yet.
     await this.ensureCollections([FACTORY_PROJECTS_SCHEMA]);
     let missingRepositories = 0;
-    let failedProjects = 0;
+    const failedProjects: string[] = [];
     try {
       const projects = await this.ops.findMany<EnvironmentProjectRow>(FACTORY_PROJECTS, { sandbox_cpu_count: null });
       if (projects.length === 0) return;
@@ -672,16 +672,16 @@ export class SourceControlStorage extends FactoryStorageDomain {
             },
           );
         } catch {
-          failedProjects += 1;
+          failedProjects.push(project.id);
         }
       }
     } catch (error) {
       console.warn(`[factory] environment backfill did not run: ${error instanceof Error ? error.message : error}`);
       return;
     }
-    if (missingRepositories > 0 || failedProjects > 0) {
+    if (missingRepositories > 0 || failedProjects.length > 0) {
       console.warn(
-        `[factory] environment backfill: ${missingRepositories} links point at a missing repository row, ${failedProjects} projects could not be updated`,
+        `[factory] environment backfill: ${missingRepositories} links point at a missing repository row, ${failedProjects.length} projects could not be updated${failedProjects.length > 0 ? ` (${failedProjects.join(', ')})` : ''}`,
       );
     }
   }

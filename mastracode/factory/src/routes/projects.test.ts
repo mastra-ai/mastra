@@ -740,7 +740,7 @@ describe('ProjectRoutes', () => {
       });
 
     it('reads defaults and the ordered repositories, and writes settings, order and membership', async () => {
-      const { project, links, app, github } = await seedEnvironment();
+      const { seed, project, links, app, github } = await seedEnvironment();
 
       const read = await app.request(`/web/factory/projects/${project.id}/environment`);
       expect(read.status).toBe(200);
@@ -754,6 +754,11 @@ describe('ProjectRoutes', () => {
         workspaceSetupCommand: null,
         activeTemplateId: null,
         activeTemplateHeads: null,
+      });
+      // Defaults are applied on read, never written.
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
       });
       expect(
         (initial.environment.repositories as Array<Record<string, unknown>>).map(r => [
@@ -811,6 +816,17 @@ describe('ProjectRoutes', () => {
       // Re-reading returns the same shape the PATCH returned.
       const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
       expect(reread).toEqual(after);
+
+      // Build-status fields in the body are ignored, not written.
+      const mixed = await patch(app, project.id, {
+        sandboxCpuCount: 2,
+        repositories: [{ projectRepositoryId: links[1]!.id, inEnvironment: false, lastBuildStatus: 'failed' }],
+      });
+      expect(mixed.status).toBe(200);
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[1]!.id })).toMatchObject({
+        inEnvironment: false,
+        lastBuildStatus: 'unbuilt',
+      });
     });
 
     it('rejects invalid payloads without writing anything', async () => {
@@ -826,6 +842,13 @@ describe('ProjectRoutes', () => {
         { sandboxIdleTimeoutMinutes: 0 },
         { sandboxWorkdir: 'relative/path' },
         { repositories: [{ projectRepositoryId: links[0]!.id, position: 2 }] },
+        // A reorder that lists only some of the project's links.
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[1]!.id, position: 2 },
+          ],
+        },
         {
           repositories: [
             { projectRepositoryId: links[0]!.id, position: 1 },
