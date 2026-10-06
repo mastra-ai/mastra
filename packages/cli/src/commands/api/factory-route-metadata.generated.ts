@@ -1041,10 +1041,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "type": "string"
                   },
                   "slug": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "defaultBranch": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "position": {
                     "type": "integer",
@@ -1623,10 +1629,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "type": "string"
                   },
                   "slug": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "defaultBranch": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "position": {
                     "type": "integer",

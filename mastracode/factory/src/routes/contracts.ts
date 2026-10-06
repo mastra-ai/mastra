@@ -65,8 +65,9 @@ const environmentRepositorySchema = z.object({
   projectRepositoryId: z.string(),
   connectionId: z.string(),
   repositoryId: z.string(),
-  slug: z.string(),
-  defaultBranch: z.string(),
+  // Null when the repository row behind the link is missing.
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
   position: z.number().int(),
   inEnvironment: z.boolean(),
   setupCommand: z.string().nullable(),
