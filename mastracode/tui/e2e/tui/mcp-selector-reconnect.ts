@@ -90,7 +90,7 @@ export const mcpSelectorReconnectScenario = {
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_READY=1/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /● \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_READY=1/i,
+      /• \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_READY=1/i,
       terminal,
       10_000,
     );
@@ -113,7 +113,7 @@ export const mcpSelectorReconnectScenario = {
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_RELOAD_CONFIG=2/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /● \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_RELOAD_CONFIG=2/i,
+      /• \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b[\s\S]*MCP_SELECTOR_RELOAD_CONFIG=2/i,
       terminal,
       10_000,
     );

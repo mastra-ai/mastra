@@ -17,7 +17,7 @@ export const shellPassthroughDuringRunScenario: McE2eScenario = {
 
     terminal.submit(`!printf '%s\\n' SHELL_DURING_RUN_OK`);
     await runtime.waitForScreenText(/SHELL_DURING_RUN_OK/i, terminal, 10_000);
-    await runtime.waitForScreenText(/● \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/i, terminal, 10_000);
+    await runtime.waitForScreenText(/• \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/i, terminal, 10_000);
     runtime.printScreen('after shell passthrough', terminal);
 
     await runtime.waitForScreenText(/Slow run finished/i, terminal, 30_000);

@@ -48,7 +48,8 @@ export const autocompleteWrappingNavigationScenario = {
     await runtime.waitForScreenText(/→ \/wrap-bravo/i, terminal, 30_000);
     terminal.write(ENTER);
 
-    await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 15_000);
+    // The command block stays collapsed to its header; verifyAimockRequests checks the Bravo template was sent.
+    await runtime.waitForScreenText(/• command \/wrap-bravo/i, terminal, 15_000);
     await runtime.waitForScreenText(/Bravo wrapped autocomplete response\./i, terminal, 12_000);
     runtime.printScreen('after selecting wrapped autocomplete second item', terminal);
 

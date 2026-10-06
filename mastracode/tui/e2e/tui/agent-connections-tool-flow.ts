@@ -103,8 +103,8 @@ export const agentConnectionsToolFlowScenario = {
     // as a safety net for re-advertisement.
     await advertisePeer?.();
     terminal.submit('Connect to the peer reviewer agent.');
-    await runtime.waitForScreenText(/● agent_connections_list\b/i, terminal, 20_000);
-    await runtime.waitForScreenText(/● agent_connect\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connections_list\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connect\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Initial agent connection completed/i, terminal, 20_000);
 
     advertisingEnabled = false;
@@ -114,7 +114,7 @@ export const agentConnectionsToolFlowScenario = {
     await runtime.waitForScreenText(/Confirmed the absent peer is saved/i, terminal, 20_000);
 
     terminal.submit('Disconnect the absent saved peer.');
-    await runtime.waitForScreenText(/● agent_disconnect\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_disconnect\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Absent saved peer disconnected/i, terminal, 20_000);
 
     terminal.submit('List peers after disconnecting the absent peer.');
@@ -126,7 +126,7 @@ export const agentConnectionsToolFlowScenario = {
     await runtime.waitForScreenText(/Peer reviewer reconnected/i, terminal, 20_000);
 
     terminal.submit('Send a high-priority confirmation signal to the reconnected peer.');
-    await runtime.waitForScreenText(/● agent_signal_send\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_signal_send\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Reconnected peer confirmation\./i, terminal, 20_000);
     await runtime.waitForScreenText(/Agent connection tool flow completed after disconnect/i, terminal, 20_000);
     await expect(

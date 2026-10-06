@@ -115,7 +115,7 @@ values
     await runtime.waitForScreenText(/HISTORY_TOOL_RELOAD\s+=\s+true/i, terminal, 8_000);
     await runtime.waitForScreenText(/Loaded History Web Result/i, terminal, 8_000);
     await runtime.waitForScreenText(/https:\/\/example\.test\/loaded-history-web/i, terminal, 8_000);
-    await runtime.waitForScreenText(/● web_search\s+"Loaded history web search"/i, terminal, 8_000);
+    await runtime.waitForScreenText(/• web_search\s+"Loaded history web search"/i, terminal, 8_000);
     await runtime.waitForScreenText(/Tasks\s+\[2\/2 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Loaded history task one/i, terminal, 8_000);
     await runtime.waitForScreenText(/Loaded history task two/i, terminal, 8_000);

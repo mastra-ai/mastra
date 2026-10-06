@@ -131,12 +131,12 @@ export const agentConnectionsCrossProjectScenario = {
     await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
 
     terminal.submit('Find the peer reviewer in the other project and connect to it.');
-    await runtime.waitForScreenText(/● agent_connections_list\b/i, terminal, 20_000);
-    await runtime.waitForScreenText(/● agent_connect\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connections_list\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connect\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Cross-project peer connected/i, terminal, 20_000);
 
     terminal.submit('Send the cross-project peer a hello.');
-    await runtime.waitForScreenText(/● agent_signal_send\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_signal_send\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Cross-project hello sent/i, terminal, 20_000);
     if (!peerWoken) throw new Error('Expected the peer process to be running');
     // The peer's own model call proves the signal crossed resources and woke its thread.

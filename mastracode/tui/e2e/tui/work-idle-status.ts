@@ -158,7 +158,7 @@ export const workIdleStatusScenario: McE2eScenario = {
     // Checked on the row itself: the run is already over, so other updates can clear it before a frame lands.
     state.agentRunStartedAt = Date.now();
     updateStatusLine(state);
-    const workingRow = stripAnsi(state.activityLine.render(120).join('\n'));
+    const workingRow = stripAnsi(state.idleCounter.render(120).join('\n'));
     state.agentRunStartedAt = undefined;
     updateStatusLine(state);
     if (!/\b65 tok\/s\b/.test(workingRow)) {

@@ -8,10 +8,14 @@ const ARROW_DOWN = '\x1b[B';
 const CURSOR_LINE = /\s{2,}→\s+\S/;
 
 function highlightedRow(terminal: McE2eTerminal): string | undefined {
-  return terminal
-    .serialize()
-    .view.split('\n')
-    .find(line => CURSOR_LINE.test(line));
+  return (
+    terminal
+      .serialize()
+      .view.split('\n')
+      .find(line => CURSOR_LINE.test(line))
+      // An overlay row drawn over a shaded panel's edge keeps the edge glyphs on either side of it.
+      ?.replace(/^[▄▀]+|[▄▀]+\s*$/g, '')
+  );
 }
 
 async function waitForHighlightChange(

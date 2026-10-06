@@ -46,7 +46,7 @@ export const webSearchRenderingScenario = {
 
     await runtime.waitForScreenText(/Mastra E2E Web Search Result/i, terminal, 10_000);
     await runtime.waitForScreenText(/https:\/\/example\.test\/mastra-web-search/i, terminal, 10_000);
-    await runtime.waitForScreenText(/● web_search\s+"Mastra e2e web search"/i, terminal, 10_000);
+    await runtime.waitForScreenText(/• web_search\s+"Mastra e2e web search"/i, terminal, 10_000);
     await runtime.waitForScreenText(/Web search rendering e2e complete\./i, terminal, 10_000);
 
     const screen = terminal.serialize().view;

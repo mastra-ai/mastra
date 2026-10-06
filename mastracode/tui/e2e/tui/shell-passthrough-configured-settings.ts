@@ -42,7 +42,7 @@ export const shellPassthroughConfiguredSettingsScenario: McE2eScenario = {
     terminal.submit("!printf 'MC_CONFIGURED_SETTINGS_COMMAND=ok\\n'");
     await runtime.waitForScreenText(/MC_CONFIGURED_SETTINGS_SHELL arg0=-c command=printf/i, terminal, 8_000);
     await runtime.waitForScreenText(/MC_CONFIGURED_SETTINGS_COMMAND=ok/i, terminal, 8_000);
-    await runtime.waitForScreenText(/● \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/, terminal, 8_000);
+    await runtime.waitForScreenText(/• \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/, terminal, 8_000);
     expect(terminal.serialize().view).not.toMatch(/MC_ENV_OVERRIDE_SHELL/i);
     runtime.printScreen('after configured settings shell passthrough', terminal);
 

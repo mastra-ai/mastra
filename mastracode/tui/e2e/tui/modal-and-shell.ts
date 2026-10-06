@@ -26,7 +26,7 @@ export const modalAndShellScenario: McE2eScenario = {
 
     terminal.write('\r');
     await runtime.waitForScreenText(/^\s+mc shell e2e stdout/im, terminal);
-    await runtime.waitForScreenText(/● \$ printf 'mc shell e2e stdout\\n'/i, terminal);
+    await runtime.waitForScreenText(/• \$ printf 'mc shell e2e stdout\\n'/i, terminal);
     runtime.printScreen('after shell passthrough', terminal);
 
     terminal.keyCtrlC();

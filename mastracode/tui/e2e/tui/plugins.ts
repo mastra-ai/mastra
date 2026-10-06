@@ -1087,7 +1087,8 @@ export const pluginsAssetsLoadingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/E2E plugin bundled command autocomplete description/i, terminal, 20_000);
     runtime.printScreen('plugin command autocomplete', terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/E2E plugin bundled command executed\./i, terminal, 15_000);
+    // The command block stays collapsed to its header; verifyAimockRequests checks the template was sent.
+    await runtime.waitForScreenText(/• command \/\S*e2e-plugin-a/i, terminal, 15_000);
     await runtime.waitForScreenText(/MC plugin bundled command response/i, terminal, 15_000);
 
     await runtime.waitForScreenText(/→/, terminal, 10_000);

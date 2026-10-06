@@ -36,20 +36,20 @@ export const githubSignalsToolMultiSubscribeScenario = {
     await runtime.waitForScreenText(/Ready for new conversation/i, terminal);
 
     terminal.submit('Subscribe to both GitHub PRs with the tool.');
-    await runtime.waitForScreenText(/● github_subscribe_pr\b/i, terminal, 30_000);
+    await runtime.waitForScreenText(/• github_subscribe_pr\b/i, terminal, 30_000);
     await runtime.waitForOutputText(stepComplete(1), terminal, 30_000);
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/2 subscriptions/i, terminal);
 
     terminal.submit('Unsubscribe one GitHub PR with the tool.');
-    await runtime.waitForScreenText(/● github_unsubscribe_pr\b/i, terminal, 30_000);
+    await runtime.waitForScreenText(/• github_unsubscribe_pr\b/i, terminal, 30_000);
     await runtime.waitForOutputText(stepComplete(2), terminal, 30_000);
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/1 subscription/i, terminal);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17638/i, terminal);
 
     terminal.submit('Unsubscribe all GitHub PRs with the tool.');
-    await runtime.waitForScreenText(/● github_unsubscribe_pr all=true/i, terminal, 30_000);
+    await runtime.waitForScreenText(/• github_unsubscribe_pr all=true/i, terminal, 30_000);
     await runtime.waitForOutputText(stepComplete(3), terminal, 30_000);
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/no subscribed PRs/i, terminal);

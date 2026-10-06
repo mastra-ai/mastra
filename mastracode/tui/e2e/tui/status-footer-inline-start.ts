@@ -41,7 +41,8 @@ export const statusFooterInlineStartScenario: McE2eScenario = {
     expectSingleStatusFooterBelowEditor(terminal, 'after startup');
 
     terminal.submit('Animate the status footer.');
-    await runtime.waitForScreenText(/→ Animate the status footer\./, terminal);
+    // The sent message has no arrow, which tells it apart from the editor row ("→ …") the text was typed into.
+    await runtime.waitForScreenText(/^\s*Animate the status footer\.\s*$/m, terminal);
     // The response fixture holds time-to-first-token so the footer animation runs on its own.
     await runtime.sleep(1_000);
     runtime.printScreen('while the footer animates', terminal);
