@@ -1181,6 +1181,7 @@ describe('planTraceQuery', () => {
     expect(normalizeTraceQueryText('see cafe\u0301 notes')).toBe('see café notes');
     expect(normalizeTraceQueryText('नमस्ते, दुनिया!')).toBe('नमस्ते दुनिया');
     expect(normalizeTraceQueryText('İstanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('I\u0307stanbul')).toBe('istanbul');
     expect(normalizeTraceQueryText('!!! ---')).toBe('');
   });
 

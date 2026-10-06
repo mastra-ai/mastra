@@ -218,8 +218,8 @@ function compileScalarPredicate<TField extends string>(
 
   if (predicate.type === 'text') {
     // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
-    // letters, marks, and digits. `lowerUTF8('İ')` is `i` plus a combining dot, so fold `İ` first.
-    const words = `concat(' ', lowerUTF8(replaceRegexpAll(normalizeUTF8NFC(replaceAll(${field.sql}, 'İ', 'i')), '[^\\\\p{L}\\\\p{M}\\\\p{N}]+', ' ')), ' ')`;
+    // letters, marks, and digits. `lowerUTF8('İ')` is `i` plus a combining dot, so fold `İ` after NFC composes it.
+    const words = `concat(' ', lowerUTF8(replaceRegexpAll(replaceAll(normalizeUTF8NFC(${field.sql}), 'İ', 'i'), '[^\\\\p{L}\\\\p{M}\\\\p{N}]+', ' ')), ' ')`;
     const found = `position(${words}, ${parameters.add(` ${predicate.value} `, 'String')}) > 0`;
     return `ifNull(${predicate.operator === 'matches' ? found : `NOT (${found})`}, 0)`;
   }
