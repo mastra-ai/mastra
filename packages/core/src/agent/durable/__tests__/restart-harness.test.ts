@@ -236,6 +236,61 @@ describe('restart harness', () => {
     }
   }, 60_000);
 
+  it('workflow: cuts graph 1 inside a write, parked before the next step starts', async () => {
+    const runId = 'restart-workflow-hold';
+    const executed: { generation: number; step: string }[] = [];
+    const scenario = createRestartScenario({
+      kind: 'workflow',
+      runId,
+      // The cut point: `a` was committed, `b` has not started. No gate is used —
+      // the write that saved `a` does not return until the hold is released, so
+      // the engine cannot advance past it.
+      hold: { when: snapshot => snapshot.context?.a?.status === 'success' && snapshot.context?.b === undefined },
+      build: ({ core, generation }) => {
+        const step = (id: string) =>
+          core.createStep({
+            id,
+            inputSchema: z.object({ trail: z.array(z.string()) }),
+            outputSchema: z.object({ trail: z.array(z.string()) }),
+            execute: async ({ inputData }: any) => {
+              executed.push({ generation, step: id });
+              return { trail: [...inputData.trail, id] };
+            },
+          });
+        return core
+          .createWorkflow({
+            id: 'restart-wf-hold',
+            inputSchema: z.object({ trail: z.array(z.string()) }),
+            outputSchema: z.object({ trail: z.array(z.string()) }),
+          })
+          .then(step('a'))
+          .then(step('b'))
+          .then(step('c'))
+          .commit();
+      },
+    });
+    scenarios.push(scenario);
+    const original = await scenario.start(async ({ workflow }) => {
+      const run = await workflow.createRun({ runId });
+      return run.start({ inputData: { trail: [] } });
+    });
+    await original.held;
+
+    // Parked: `a` is persisted and `b` never started, so the cut is deterministic
+    // without polling or timers.
+    expect(executed.filter(e => e.generation === 1).map(e => e.step)).toEqual(['a']);
+    const checkpoint = await original.checkpoint();
+    expect(findRow(checkpoint, 'restart-wf-hold', runId)?.snapshot.context?.a?.status).toBe('success');
+    expect(findRow(checkpoint, 'restart-wf-hold', runId)?.snapshot.context?.b).toBeUndefined();
+
+    const recovered = await scenario.restart(checkpoint);
+    expect(recovered.result.status).toBe('success');
+    expect(recovered.result.result).toEqual({ trail: ['a', 'b', 'c'] });
+    // Graph 2 re-ran only what had not been committed; graph 1 never got past `a`.
+    expect(executed.filter(e => e.generation === 2).map(e => e.step)).toEqual(['b', 'c']);
+    expect(executed.filter(e => e.generation === 1).map(e => e.step)).toEqual(['a']);
+  }, 30_000);
+
   it('loads a fresh module graph each time', async () => {
     const first = await loadGraph();
     first.globalRunRegistry.set('graph-1-run', {} as any);

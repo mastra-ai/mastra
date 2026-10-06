@@ -8,6 +8,9 @@
  * 2. A checkpoint copies graph 1's workflow rows, either
  *    - at a gate: the test blocks a tool or step on a promise it controls and
  *      calls `original.checkpoint()` once the gate is reached, or
+ *    - at a held write: `hold.when(snapshot)` picks the write to park inside, so
+ *      the cut lands between two persisted states (after a step's success is
+ *      saved but before the next one starts), or
  *    - after every write: `original.checkpoints` holds one copy per snapshot
  *      write, so a test can restart from each of them.
  * 3. `restart(checkpoint)` builds graph 2 the same way, seeds a new store with
@@ -33,6 +36,20 @@
  * const original = await scenario.start(drive);
  * await original.settled;
  * for (const checkpoint of original.checkpoints.filter(hasRunningRow)) await scenario.restart(checkpoint);
+ * ```
+ *
+ * @example Held-write checkpoint
+ * ```ts
+ * const scenario = createRestartScenario({
+ *   kind: 'workflow',
+ *   runId: 'wf-1',
+ *   build: ({ core }) => stepsAThenB(core),
+ *   // The cut point: the write that saved `a`, before `b` starts.
+ *   hold: { when: snapshot => snapshot.context?.a?.status === 'success' && !snapshot.context?.b },
+ * });
+ * const original = await scenario.start(drive);
+ * await original.held; // the engine is parked inside that write
+ * const recovered = await scenario.restart(await original.checkpoint());
  * ```
  *
  * What this simulates: a new process that shares no *module* state with the
@@ -157,12 +174,31 @@ type BuildContext = { core: CoreGraph; generation: number };
 type AgentBuild = (ctx: BuildContext) => Agent<any, any, any>;
 type WorkflowBuild = (ctx: BuildContext) => any;
 
+/**
+ * A cut point between two persisted states: the first write to the workflow's
+ * row that leaves a snapshot matching `when` is parked inside — it has landed,
+ * but the engine does not get past the call. The cut is therefore deterministic
+ * (no polling, no timers) and graph 1 cannot advance while `original.held` is
+ * pending.
+ */
+export type HoldWrite = {
+  /**
+   * Only writes to this workflow's rows are inspected. Defaults to the
+   * scenario's root workflow: the agent's agentic loop, or the workflow itself.
+   * A nested workflow's writes need its own id.
+   */
+  workflowName?: string;
+  when: (snapshot: WorkflowRunState) => boolean;
+};
+
 export type ScenarioOptions<K extends RestartKind> = {
   kind: K;
   /** Pass explicit ids: core's Vitest setup stubs `crypto.randomUUID()`. */
   runId: string;
   /** Builds the agent (a plain `Agent`, wrapped per `kind`) or the committed workflow. Called once per graph. */
   build: K extends 'workflow' ? WorkflowBuild : AgentBuild;
+  /** Park graph 1 inside the write that leaves the snapshot this picks out. */
+  hold?: HoldWrite;
   timeoutMs?: number;
 };
 
@@ -281,6 +317,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
 export function createRestartScenario<K extends RestartKind>(options: ScenarioOptions<K>) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const graphs: Graph[] = [];
+  const holds: Gate[] = [];
   let generation = 0;
 
   return {
@@ -292,12 +329,29 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       // A monotonic counter, not `checkpoints.length`: concurrent writes interleave
       // at the await, and duplicate `write` indexes would make them indistinguishable.
       let writes = 0;
+      // `hold` parks one write; the gate is what `original.held` waits on.
+      const holdGate = options.hold ? createGate() : undefined;
+      if (holdGate) holds.push(holdGate);
+      const target = options.hold ? (options.hold.workflowName ?? rootWorkflowName(options.kind, graph)) : undefined;
+      let held = false;
       for (const method of WRITE_METHODS) {
         const original = graph.workflows[method].bind(graph.workflows);
         graph.workflows[method] = async (...args: unknown[]) => {
           const result = await original(...args);
           checkpoints.push({ rows: await copyRows(graph.workflows), write: ++writes });
-          return result;
+          if (held || !options.hold || !holdGate) return result;
+          const { workflowName, runId } = (args[0] ?? {}) as { workflowName?: string; runId?: string };
+          // Match on the workflow name only: a hold aimed at a nested workflow (its own id and
+          // own run id) must be able to park too, so the run id is not filtered here.
+          if (workflowName !== target || !runId) return result;
+          const row = await graph.workflows.getWorkflowRunById({ workflowName: target, runId });
+          const snapshot: WorkflowRunState | undefined =
+            typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
+          if (!snapshot || !options.hold.when(snapshot)) return result;
+          held = true;
+          // The write has landed; the engine does not get past the call until the
+          // test releases the hold, so nothing else can be persisted meanwhile.
+          return holdGate.wait();
         };
       }
       const value = drive({ ...graph, runId: options.runId });
@@ -313,7 +367,12 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
         settled,
         /** Every-write copies, in write order. */
         checkpoints,
-        /** A copy of graph 1's workflow rows right now (gate checkpoint). */
+        /** Resolves once graph 1 is parked in the write `hold.when` picked. Never resolves without a `hold`. */
+        releaseHold: () => holdGate?.release(),
+        get held() {
+          return holdGate?.reached;
+        },
+        /** A copy of graph 1's workflow rows right now (gate or held-write checkpoint). */
         checkpoint: async (): Promise<Checkpoint> => ({ rows: await copyRows(graph.workflows), write: 0 }),
       };
     },
@@ -391,6 +450,9 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
 
     /** Call at the end of a test to stop the event workers every graph started. */
     async stop() {
+      // Release holds first: a parked write blocks the execution `stopWorkers()`
+      // awaits, so stopping before releasing would deadlock.
+      for (const hold of holds.splice(0)) hold.release();
       for (const graph of graphs) await graph.mastra?.stopWorkers?.();
     },
   };
