@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeCoreLoader,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
-  createKnowledgeUlid,
   isKnowledgeNodeVisible,
-  isKnowledgeScopeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -14,41 +12,45 @@ import {
   KNOWLEDGE_NODE_SCOPES_SCHEMA,
   KNOWLEDGE_PROPOSALS_SCHEMA,
   KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+  KNOWLEDGE_SCHEMA_SCHEMA,
   KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
-  KNOWLEDGE_SCHEMA_SCHEMA,
-  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  knowledgeScopeIdsKey,
+  RETIRED_KNOWLEDGE_TABLE_NAMES,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCHEMA,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+} from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import {
+  createKnowledgeUlid,
+  isKnowledgeScopeVisible,
+  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
   KNOWLEDGE_MENTIONS_SCHEMA,
   KNOWLEDGE_NODES_SCHEMA,
   KNOWLEDGE_RECORDS_SCHEMA,
-  knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
-  KnowledgeSchemaError,
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
-  sanitizeKnowledgeImportError,
-  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_IMPORT_RUNS,
-  TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_NODE_ADDRESSES,
-  TABLE_KNOWLEDGE_NODE_SCOPES,
   TABLE_KNOWLEDGE_NODES,
-  TABLE_KNOWLEDGE_PROPOSALS,
-  TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_RECORDS,
-  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-  TABLE_KNOWLEDGE_SCOPE_GRANTS,
-  TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
@@ -94,6 +96,8 @@ import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
 import { getSchemaSnapshot } from '../../db/schema-snapshot';
+
+const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
 interface QueryResult {
   rows: Record<string, unknown>[];
@@ -543,6 +547,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
     const snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
     const existingNames = snapshot
       ? new Set([...snapshot.tables].filter(table => table.startsWith('mastra_knowledge_')))
@@ -1509,6 +1514,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const { sanitizeKnowledgeImportError } = await loadKnowledgeCore();
     return this.#transaction(async tx => {
       const existing = await tx.execute({
         sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
