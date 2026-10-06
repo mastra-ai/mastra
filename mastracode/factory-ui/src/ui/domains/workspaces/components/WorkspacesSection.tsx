@@ -1,4 +1,5 @@
 import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -357,10 +358,12 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
+          className={cn('text-muted-foreground', 'hover:text-foreground pl-3 text-left')}
         >
-          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          <Txt as="span" variant="caption" className="block">
+            {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          </Txt>
         </button>
       )}
     </section>
