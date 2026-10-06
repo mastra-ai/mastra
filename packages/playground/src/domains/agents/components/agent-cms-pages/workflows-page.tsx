@@ -111,7 +111,7 @@ export function WorkflowsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={workflow.value} className="bg-background">
+                  <Entity key={workflow.value}>
                     <EntityContent>
                       <EntityName>{workflow.label}</EntityName>
                       <EntityDescription>

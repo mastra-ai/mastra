@@ -57,6 +57,35 @@ A decision removes the actions; clearing it restores them for a retry. `disabled
 decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
 `children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
 
+### Entity cards
+
+Entity uses the same surface and title styles as Card. Compose row cards with `EntityIcon`, `EntityContent`, `EntityName`, and `EntityDescription`. For settings that expand below their heading, use `variant="section"` with `EntityHeader` and `EntityBody`.
+
+```tsx
+import {
+  Entity,
+  EntityHeader,
+  EntityBody,
+  EntityContent,
+  EntityName,
+  EntityDescription,
+} from '@mastra/playground-ui/components/Entity';
+
+<Entity variant="section">
+  <EntityHeader>
+    <EntityContent>
+      <EntityName>Message History</EntityName>
+      <EntityDescription>Number of recent messages to include in context</EntityDescription>
+    </EntityContent>
+  </EntityHeader>
+  <EntityBody>{settingsFields}</EntityBody>
+</Entity>;
+```
+
+`EntityPageHeader` from `components/EntityHeader` names the page-level heading used on workflow details. The previous `EntityHeader` export from that path remains compatible; the `EntityHeader` exported by `components/Entity` is the card part.
+
+Use `Txt.variant` to choose a complete text role and `Txt.as` to choose HTML semantics. A heading element does not change the visual role. Keep `className` for layout, truncation, and wrapping; do not replace the role with font-size, weight, or line-height classes. The Entity stories show the row and settings compositions used by Studio, and the Txt roles story renders the shared tokens directly.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.

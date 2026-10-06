@@ -37,34 +37,14 @@ export const Default: Story = {
   },
 };
 
-/**
- * One class per role: the weight and line height are part of the role, so two
- * components asking for the same role cannot disagree about how it looks.
- */
 export const Roles: Story = {
   render: () => (
     <div className="flex max-w-xl flex-col gap-3">
-      <Txt as="h1" variant="display">
-        display · 22/500 · onboarding hero
-      </Txt>
-      <Txt as="h1" variant="title">
-        title · 18/500 · page title
-      </Txt>
-      <Txt as="h2" variant="heading">
-        heading · 16/500 · page and panel headings
-      </Txt>
-      <Txt as="h3" variant="subheading">
-        subheading · 14/500 · sections and cards
-      </Txt>
-      <Txt variant="body">body · 14/400 · prose and descriptions</Txt>
-      <Txt variant="label">label · 13/500 · control labels, nav items, buttons</Txt>
-      <Txt variant="card-title">card-title · 13/550 · expanded card title</Txt>
-      <Txt variant="card-title-tight">card-title-tight · 13/550 · compact card title</Txt>
-      <Txt variant="card-title-strong">card-title-strong · 13/600 · emphasized card title</Txt>
-      <Txt variant="body-sm">body-sm · 13/400 · table cells, menus, field values</Txt>
-      <Txt variant="column">column · 12/500 · column headers</Txt>
-      <Txt variant="caption">caption · 12/400 · secondary copy</Txt>
-      <Txt variant="meta">meta · 10/500 · badges and keycaps</Txt>
+      {TextRoles.map(role => (
+        <Txt key={role} variant={role}>
+          {role} · The quick brown fox jumps over the lazy dog
+        </Txt>
+      ))}
     </div>
   ),
 };

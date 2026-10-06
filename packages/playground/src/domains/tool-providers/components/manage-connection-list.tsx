@@ -29,10 +29,7 @@ export const ManageConnectionList = ({
       <DialogBody data-testid={`${testIdPrefix}-list`}>
         <div className="flex flex-col gap-2" role="list">
           {connections.map(connection => (
-            <Entity
-              key={connection.connectionId}
-              className="relative items-center rounded-lg px-2 py-2 hover:bg-fill-subtle"
-            >
+            <Entity interactive key={connection.connectionId} className="relative items-center">
               <EntityContent className="min-w-0">
                 <button
                   type="button"

@@ -37,8 +37,6 @@ export function ToolsPage() {
   } = getEditorOwnership(isCodeAgentOverride, editorConfig);
   const canEditToolMembership = !readOnly && !descriptionsOnly && !isToolsLocked;
   const canEditToolDescriptions = !readOnly && ownsToolDescriptions;
-  // MCP clients and integration tools are tool-membership additions, so they
-  // are hidden whenever tool membership cannot be edited (locked or descriptions-only).
   const hideToolMembershipSections = isToolsLocked || descriptionsOnly;
 
   const options = useMemo(() => {
@@ -108,14 +106,12 @@ export function ToolsPage() {
     (providerId: string, tools: Map<string, string>) => {
       const next = { ...selectedIntegrationTools };
 
-      // Remove all tools from this provider
       for (const key of Object.keys(next)) {
         if (key.startsWith(`${providerId}:`)) {
           delete next[key];
         }
       }
 
-      // Add selected tools, preserving existing config (rules) if available
       for (const [id, description] of tools) {
         next[id] = selectedIntegrationTools?.[id] || { description };
       }
@@ -126,9 +122,6 @@ export function ToolsPage() {
   );
 
   const selectedOptions = useMemo(() => {
-    // Include all selected tools, even agent-level tools not in the global list.
-    // Tools registered on the agent (not at the Mastra instance level) won't
-    // appear in useTools() but are still valid selections in the stored config.
     return selectedToolIds.map(id => {
       const existing = options.find(opt => opt.value === id);
       return existing || { value: id, label: id, description: selectedTools?.[id]?.description || '' };
@@ -152,9 +145,9 @@ export function ToolsPage() {
 
   const renderToolEntity = (tool: (typeof options)[number]) => {
     return (
-      <Entity key={tool.value} className="bg-background">
+      <Entity key={tool.value}>
         <EntityContent>
-          <EntityName className="! text-subheading!">{tool.label}</EntityName>
+          <EntityName>{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"

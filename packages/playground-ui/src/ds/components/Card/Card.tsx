@@ -1,6 +1,8 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import type { TxtProps } from '../Txt';
+import { Txt } from '../Txt';
 import { surfaceRimFocus } from '@/ds/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
@@ -59,7 +61,6 @@ export function CardLink({ className, elevation, LinkComponent: Link = 'a', ...p
   return <Link className={cn(cardVariants({ elevation, interactive: true }), className)} {...props} />;
 }
 
-// Card Header component
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ className, ...props }, ref) => (
@@ -67,25 +68,20 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ c
 ));
 CardHeader.displayName = 'CardHeader';
 
-// Card Title component
-export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
+export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement> & { as?: TxtProps['as'] };
 
-export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
-  <h3 ref={ref} className={cn('text-subheading text-foreground', className)} {...props} />
+export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ as = 'h3', ...props }, ref) => (
+  <Txt ref={ref} as={as} variant="subheading" tone="ink" {...props} />
 ));
 CardTitle.displayName = 'CardTitle';
 
-// Card Description component
-export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
+export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement> & { as?: TxtProps['as'] };
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
-  ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-caption text-muted-foreground', className)} {...props} />
-  ),
+  ({ as = 'p', ...props }, ref) => <Txt ref={ref} as={as} variant="caption" tone="muted" {...props} />,
 );
 CardDescription.displayName = 'CardDescription';
 
-// Card Content component
 const cardContentVariants = cva('', {
   variants: {
     density: {
@@ -107,7 +103,6 @@ export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
 );
 CardContent.displayName = 'CardContent';
 
-// Card Footer component
 export type CardFooterProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ className, ...props }, ref) => (

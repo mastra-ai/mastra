@@ -2,14 +2,14 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 
-export type EntityHeaderProps = {
+export type EntityPageHeaderProps = {
   icon: React.ReactNode;
   title: string;
   isLoading?: boolean;
   children?: React.ReactNode;
 };
 
-export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderProps) => {
+export const EntityPageHeader = ({ icon, title, isLoading, children }: EntityPageHeaderProps) => {
   return (
     <div className="w-full overflow-x-hidden p-3 pb-1">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -31,3 +31,6 @@ export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderP
     </div>
   );
 };
+
+export const EntityHeader = EntityPageHeader;
+export type EntityHeaderProps = EntityPageHeaderProps;

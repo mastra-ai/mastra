@@ -1,18 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
 import { Badge } from '../Badge';
-import { EntityHeader } from './entity-header';
+import { EntityPageHeader } from './entity-header';
 
-const meta: Meta<typeof EntityHeader> = {
-  title: 'Composite/EntityHeader',
-  component: EntityHeader,
+const meta: Meta<typeof EntityPageHeader> = {
+  title: 'Composite/EntityPageHeader',
+  component: EntityPageHeader,
   parameters: {
     layout: 'centered',
   },
 };
 
 export default meta;
-type Story = StoryObj<typeof EntityHeader>;
+type Story = StoryObj<typeof EntityPageHeader>;
 
 export const Default: Story = {
   args: {
@@ -32,9 +32,9 @@ export const Loading: Story = {
 export const WithChildren: Story = {
   render: () => (
     <div className="w-100 rounded-lg bg-card">
-      <EntityHeader icon={<Workflow />} title="Data Processing Pipeline">
+      <EntityPageHeader icon={<Workflow />} title="Data Processing Pipeline">
         <p className="text-body text-muted-foreground">Processes incoming data and transforms it for analysis</p>
-      </EntityHeader>
+      </EntityPageHeader>
     </div>
   ),
 };
@@ -42,12 +42,12 @@ export const WithChildren: Story = {
 export const WithBadge: Story = {
   render: () => (
     <div className="w-100 rounded-lg bg-card">
-      <EntityHeader icon={<Database />} title="Production Database">
+      <EntityPageHeader icon={<Database />} title="Production Database">
         <div className="flex gap-2">
           <Badge variant="success">Active</Badge>
           <Badge>PostgreSQL</Badge>
         </div>
-      </EntityHeader>
+      </EntityPageHeader>
     </div>
   ),
 };
@@ -55,7 +55,7 @@ export const WithBadge: Story = {
 export const LongTitle: Story = {
   render: () => (
     <div className="w-75 rounded-lg bg-card">
-      <EntityHeader
+      <EntityPageHeader
         icon={<Settings />}
         title="This is a very long title that should be truncated when it exceeds the available width"
       />
@@ -65,8 +65,8 @@ export const LongTitle: Story = {
 
 export const WithRichContent: Story = {
   render: () => (
-    <div className="w-[450px] rounded-lg bg-card">
-      <EntityHeader icon={<Bot />} title="AI Assistant">
+    <div className="w-112 rounded-lg bg-card">
+      <EntityPageHeader icon={<Bot />} title="AI Assistant">
         <div className="space-y-2">
           <p className="text-body text-muted-foreground">An intelligent assistant for customer support tasks</p>
           <div className="flex items-center gap-4 text-caption text-muted-foreground">
@@ -75,7 +75,7 @@ export const WithRichContent: Story = {
             <span>Max Tokens: 4096</span>
           </div>
         </div>
-      </EntityHeader>
+      </EntityPageHeader>
     </div>
   ),
 };

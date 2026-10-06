@@ -1,7 +1,7 @@
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
-import { EntityHeader } from '@/ds/components/EntityHeader';
+import { EntityPageHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
@@ -26,7 +26,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
 
   return (
     <TooltipProvider>
-      <EntityHeader icon={<WorkflowIcon />} title={workflowName} isLoading={isLoading}>
+      <EntityPageHeader icon={<WorkflowIcon />} title={workflowName} isLoading={isLoading}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -64,7 +64,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
             </Tooltip>
           )}
         </div>
-      </EntityHeader>
+      </EntityPageHeader>
     </TooltipProvider>
   );
 };

@@ -123,7 +123,7 @@ export function ScorersPage() {
 
                 return (
                   <div key={scorer.value} className="flex flex-col">
-                    <Entity className="bg-background">
+                    <Entity>
                       <EntityContent>
                         <EntityName>{scorer.label}</EntityName>
                         <EntityDescription>

@@ -87,11 +87,9 @@ export function MCPClientList() {
     const currentTools = form.getValues('tools') ?? {};
     const next = { ...currentTools };
 
-    // Remove old MCP tools
     for (const name of Object.keys(oldClient?.selectedTools ?? {})) {
       delete next[name];
     }
-    // Add new MCP tools
     for (const [name, toolConfig] of Object.entries(config.selectedTools)) {
       next[name] = { description: toolConfig.description };
     }
@@ -116,7 +114,6 @@ export function MCPClientList() {
       form.setValue('tools', next, { shouldDirty: true });
     }
 
-    // Track persisted clients for deletion on save
     if (removed?.id) {
       const toDelete = form.getValues('mcpClientsToDelete') ?? [];
       form.setValue('mcpClientsToDelete', [...toDelete, removed.id], { shouldDirty: true });
@@ -165,7 +162,7 @@ export function MCPClientList() {
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}
-                  className="items-center bg-background"
+                  className="items-center"
                   onClick={() => setViewIndex(index)}
                 >
                   <div
