@@ -23,6 +23,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
