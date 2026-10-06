@@ -1,0 +1,23 @@
+{
+  "pr": "https://github.com/mastra-ai/mastra/pull/25931",
+  "before": "98b5e44e1b870ab705d9a22f997fa997f85b84de",
+  "after": "345227f07ad1baabb33f0c20a0349afa402c13a5",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "colorScheme": "dark",
+  "fixedTime": "2026-10-06T09:00:00Z",
+  "data": "Matching deterministic network fixtures; real Factory and Studio applications.",
+  "files": [
+    "factory-before-sidebar.png",
+    "factory-after-sidebar.png",
+    "studio-before-sidebar.png",
+    "studio-after-sidebar.png",
+    "studio-after-customize.png",
+    "factory-before.png",
+    "factory-after.png",
+    "studio-before.png",
+    "studio-after.png"
+  ]
+}
