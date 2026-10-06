@@ -1,0 +1,326 @@
+---
+title: "Reference: MastraAuthOidc | Auth"
+description: "API reference for MastraAuthOidc, the generic OpenID Connect provider for authenticating Mastra APIs and Studio against any compliant issuer."
+packages:
+  - "@mastra/auth-oidc"
+  - "@mastra/core"
+---
+
+# MastraAuthOidc class
+
+The `MastraAuthOidc` class authenticates Mastra against any OpenID Connect (OIDC) provider. Endpoints are read from the issuer's discovery document at `{issuer}/.well-known/openid-configuration`, so only the issuer and client credentials are required. The protocol is handled by [openid-client](https://github.com/panva/openid-client), the OpenID Foundation certified relying party library. Register it with the Mastra server using the `auth` option.
+
+Use a dedicated package such as [MastraAuthAuth0](/reference/auth/auth0), [MastraAuthOkta](/reference/auth/okta), or [MastraAuthGoogle](/reference/auth/google) when one exists for your provider. Those packages add provider-specific features that the generic implementation can't offer.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOidc } from '@mastra/auth-oidc'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOidc({
+      issuer: process.env.OIDC_ISSUER,
+      clientId: process.env.OIDC_CLIENT_ID,
+      clientSecret: process.env.OIDC_CLIENT_SECRET,
+      redirectUri: process.env.OIDC_REDIRECT_URI,
+    }),
+  },
+})
+```
+
+:::note
+
+You can omit the constructor parameters if the matching environment variables are set. In that case, use `new MastraAuthOidc()` without any arguments.
+
+:::
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'issuer',
+    type: 'string',
+    description:
+      'Issuer URL of the OpenID Provider, for example `https://id.example.com/realms/acme`. Must match the `issuer` value in the discovery document. Trailing slashes are removed.',
+    isOptional: true,
+    defaultValue: 'process.env.OIDC_ISSUER',
+  },
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'The OAuth client ID registered with the provider.',
+    isOptional: true,
+    defaultValue: 'process.env.OIDC_CLIENT_ID',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description:
+      'The OAuth client secret. Setting it enables the SSO login flow, session cookies, and the Studio login button. Without it the provider only verifies Bearer tokens.',
+    isOptional: true,
+    defaultValue: 'process.env.OIDC_CLIENT_SECRET',
+  },
+  {
+    name: 'redirectUri',
+    type: 'string',
+    description:
+      'The redirect URI for the SSO callback, typically `http://localhost:4111/api/auth/sso/callback`. Must match a redirect URI registered with the provider. Used when the caller does not supply one.',
+    isOptional: true,
+    defaultValue: 'process.env.OIDC_REDIRECT_URI',
+  },
+  {
+    name: 'audience',
+    type: 'string | string[]',
+    description:
+      'Expected `aud` claim for Bearer tokens. Defaults to the client ID, which matches OIDC ID tokens. Set it to the API audience to accept access tokens, or pass an array to accept several. Does not affect the ID token verified during the login flow, which always uses the client ID.',
+    isOptional: true,
+    defaultValue: 'process.env.OIDC_AUDIENCE ?? clientId',
+  },
+  {
+    name: 'scopes',
+    type: 'string[]',
+    description: 'Scopes requested during login. `OIDC_SCOPES` accepts a comma- or space-separated list.',
+    isOptional: true,
+    defaultValue: "['openid', 'profile', 'email']",
+  },
+  {
+    name: 'serverMetadata',
+    type: 'ServerMetadata',
+    description:
+      'Authorization Server Metadata to use instead of running discovery, for providers that publish no discovery document. Uses the field names from RFC 8414, such as `issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`, and `end_session_endpoint`.',
+    isOptional: true,
+  },
+  {
+    name: 'tokenEndpointAuthMethod',
+    type: "'client_secret_post' | 'client_secret_basic' | 'none'",
+    description: 'Client authentication method at the token endpoint.',
+    isOptional: true,
+    defaultValue: "'client_secret_post'",
+  },
+  {
+    name: 'allowInsecureRequests',
+    type: 'boolean',
+    description:
+      'Allow plain HTTP requests to the provider. Only for local development or a trusted private network, since tokens and secrets travel in clear text.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'label',
+    type: 'string',
+    description:
+      'Display name of the identity provider, used for the Studio login button text (`Sign in with {label}`).',
+    isOptional: true,
+    defaultValue: "'SSO'",
+  },
+  {
+    name: 'mapClaims',
+    type: '(payload: JWTPayload) => OidcUser',
+    description:
+      'Maps verified token claims to a user. Use it for providers that send non-standard claim names. Defaults to `mapOidcClaimsToUser`.',
+    isOptional: true,
+  },
+  {
+    name: 'session',
+    type: 'OidcSessionOptions',
+    description: 'Session cookie configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'OidcSessionOptions',
+        parameters: [
+          {
+            name: 'cookieName',
+            type: 'string',
+            description: 'Name of the session cookie.',
+            isOptional: true,
+            defaultValue: "'oidc_session'",
+          },
+          {
+            name: 'cookieMaxAge',
+            type: 'number',
+            description: 'Cookie max age in seconds.',
+            isOptional: true,
+            defaultValue: '86400 (24 hours)',
+          },
+          {
+            name: 'cookiePassword',
+            type: 'string',
+            description:
+              'Password used to encrypt session cookies and sign the OAuth state. Must be at least 32 characters. Required in production when SSO is enabled; outside production an auto-generated value is used that does not survive restarts.',
+            isOptional: true,
+            defaultValue: 'process.env.OIDC_COOKIE_PASSWORD',
+          },
+          {
+            name: 'secureCookies',
+            type: 'boolean',
+            description: 'Set the `Secure` flag on session cookies.',
+            isOptional: true,
+            defaultValue: 'true in production, false otherwise',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: OidcUser) => boolean | Promise<boolean>',
+    description:
+      'Replaces the default authorization check. Use it to restrict access by group, email domain, or any other claim.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'oidc'",
+  },
+]}
+/>
+
+### Environment variables
+
+The following environment variables are used when the matching constructor options aren't provided:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'OIDC_ISSUER',
+    type: 'string',
+    description: 'Issuer URL of the OpenID Provider.',
+  },
+  {
+    name: 'OIDC_CLIENT_ID',
+    type: 'string',
+    description: 'The OAuth client ID.',
+  },
+  {
+    name: 'OIDC_CLIENT_SECRET',
+    type: 'string',
+    description: 'The OAuth client secret. Enables the SSO login flow.',
+    isOptional: true,
+  },
+  {
+    name: 'OIDC_REDIRECT_URI',
+    type: 'string',
+    description: 'Redirect URI for the SSO callback.',
+    isOptional: true,
+  },
+  {
+    name: 'OIDC_AUDIENCE',
+    type: 'string',
+    description: 'Expected `aud` claim for Bearer tokens. Defaults to the client ID.',
+    isOptional: true,
+  },
+  {
+    name: 'OIDC_SCOPES',
+    type: 'string',
+    description: 'Comma- or space-separated scopes to request during login.',
+    isOptional: true,
+  },
+  {
+    name: 'OIDC_COOKIE_PASSWORD',
+    type: 'string',
+    description: 'Password for encrypting session cookies. Must be at least 32 characters.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Authentication flow
+
+`MastraAuthOidc` authenticates requests in the following order:
+
+1. **Session cookie**: when SSO is enabled, the encrypted session cookie is decrypted. A valid, unexpired session authenticates the request.
+1. **Bearer token**: otherwise the `Authorization` header token is verified against the issuer's JWKS, checking the `iss` claim against `issuer` and the `aud` claim against `audience`.
+
+After authentication, `authorizeUser` accepts any user that has an `id`. Pass your own `authorizeUser` to apply stricter rules.
+
+The login flow runs the authorization code grant through `openid-client`, with an OIDC `nonce` and Proof Key for Code Exchange (PKCE) when the provider advertises `code_challenge_methods_supported`. The `state` parameter is an encrypted token carrying the nonce, redirect URI, and PKCE verifier, so no login state is held in server memory and the flow survives restarts and multiple instances.
+
+### `OidcUser` type
+
+`OidcUser` extends the base `EEUser` interface:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'User identifier, taken from the `sub` claim.',
+  },
+  {
+    name: 'sub',
+    type: 'string',
+    description: 'The `sub` claim, the provider’s stable identifier for the user.',
+  },
+  {
+    name: 'email',
+    type: 'string',
+    description: 'From the `email` claim.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'From the `name` claim, falling back to `given_name` plus `family_name`, then `preferred_username`, then `email`.',
+    isOptional: true,
+  },
+  {
+    name: 'avatarUrl',
+    type: 'string',
+    description: 'From the `picture` claim.',
+    isOptional: true,
+  },
+  {
+    name: 'groups',
+    type: 'string[]',
+    description: 'From the `groups` claim, when the provider sends one.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Holds `emailVerified` and `preferredUsername` from the token claims.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Methods
+
+#### `getConfig()`
+
+Resolves the underlying `openid-client` configuration, running discovery on first use and caching the result for the lifetime of the instance. A failed attempt isn't cached, so the next call retries. Use `config.serverMetadata()` to read the provider's resolved endpoints.
+
+Returns: `Promise<Configuration>`
+
+#### `getUser(userId)`
+
+Always resolves to `null`. OpenID Connect defines no standard user lookup API, so users are only available from the incoming request.
+
+#### `isSSOEnabled()`
+
+Returns `true` when a client secret is configured. The SSO and session methods are only present on the instance in that case, so Studio doesn't offer a login button the provider can't complete.
+
+### `mapOidcClaimsToUser(payload)`
+
+Default claim mapper, exported for reuse inside a custom `mapClaims` function.
+
+```typescript title="src/mastra/index.ts"
+import { mapOidcClaimsToUser, MastraAuthOidc } from '@mastra/auth-oidc'
+
+new MastraAuthOidc({
+  mapClaims: payload => ({
+    ...mapOidcClaimsToUser(payload),
+    groups: payload.roles as string[],
+  }),
+})
+```
+
+Returns: `OidcUser`

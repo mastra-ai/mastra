@@ -794,6 +794,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'auth/oidc',
+          label: 'OpenID Connect',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/openid/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/openid/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'auth/supabase',
           label: 'Supabase',
           customProps: { icon: 'https://cdn.simpleicons.org/supabase?viewbox=auto&size=28' },

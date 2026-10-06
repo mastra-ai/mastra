@@ -1,0 +1,260 @@
+---
+title: "OpenID Connect | Auth"
+description: "Secure Mastra APIs and Studio with any OpenID Connect provider using discovery, encrypted cookie sessions, and Bearer token verification."
+packages:
+  - "@mastra/auth-oidc"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# OpenID Connect
+
+The `@mastra/auth-oidc` package authenticates Mastra against any OpenID Connect (OIDC) provider. You give it an issuer URL, and it reads the authorization, token, JWKS, and logout endpoints from that issuer's discovery document. The protocol work is handled by [openid-client](https://github.com/panva/openid-client), the OpenID Foundation certified relying party library.
+
+Use it when your identity provider speaks OIDC but has no dedicated Mastra package, for example Keycloak, Authentik, Zitadel, Microsoft Entra ID, Ping Identity, or Dex. If a dedicated package exists for your provider, such as [Auth0](/integrations/auth/auth0), [Okta](/integrations/auth/okta), or [Google](/integrations/auth/google), prefer it: those packages add provider-specific features like directory lookups and group-based roles.
+
+## Prerequisites
+
+In your identity provider, register a confidential client (one that has a client secret) with the authorization code grant enabled, and add `http://localhost:4111/api/auth/sso/callback` to its allowed redirect URIs.
+
+Then set your environment variables.
+
+```env title=".env"
+OIDC_ISSUER=https://id.example.com/realms/acme
+OIDC_CLIENT_ID=mastra
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_REDIRECT_URI=http://localhost:4111/api/auth/sso/callback
+OIDC_COOKIE_PASSWORD=a-random-string-at-least-32-characters-long
+```
+
+The issuer is the value of the `iss` claim in your provider's tokens. It's the part of the discovery URL before `/.well-known/openid-configuration`, so you can confirm it by opening that URL in a browser.
+
+:::note
+
+`OIDC_COOKIE_PASSWORD` encrypts session cookies and signs the OAuth state. Outside production, an auto-generated value is used when it's missing, which doesn't survive restarts. In production the provider refuses to start without it.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/auth-oidc
+```
+
+## Usage examples
+
+### Basic usage with environment variables
+
+With the environment variables above set, all constructor parameters are optional:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOidc } from '@mastra/auth-oidc'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOidc(),
+  },
+})
+```
+
+### Explicit configuration
+
+Set `label` to name your provider on the Studio login button, which otherwise reads "Sign in with SSO":
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOidc } from '@mastra/auth-oidc'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOidc({
+      issuer: 'https://id.example.com/realms/acme',
+      clientId: 'mastra',
+      clientSecret: process.env.OIDC_CLIENT_SECRET,
+      redirectUri: 'http://localhost:4111/api/auth/sso/callback',
+      label: 'Keycloak',
+    }),
+  },
+})
+```
+
+### Token verification without login
+
+Omit the client secret to verify Bearer tokens only. No login button is shown in Studio, and no session cookies are issued:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthOidc } from '@mastra/auth-oidc'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOidc({
+      issuer: 'https://id.example.com/realms/acme',
+      clientId: 'mastra',
+      audience: 'api://mastra',
+    }),
+  },
+})
+```
+
+Visit [MastraAuthOidc](/reference/auth/oidc) for all available configuration options.
+
+## Authentication flow
+
+Requests are resolved in two steps:
+
+1. **Session cookie**: when SSO is configured, the encrypted `oidc_session` cookie is decrypted and used if it hasn't expired.
+1. **Bearer token**: otherwise the `Authorization` header token is verified against the issuer's JWKS. The `iss` claim must match `issuer` and the `aud` claim must match `audience`.
+
+`audience` defaults to your client ID, which is the audience of an OIDC ID token. Access tokens usually carry a different audience, such as an API identifier configured in your provider. Set `audience` to match the tokens you send, or pass an array to accept several:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOidc({
+  audience: ['mastra', 'api://mastra'],
+})
+```
+
+Authorization accepts any user whose token resolves to a subject. Pass `authorizeUser` to narrow that, for example to a group claim:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOidc({
+  authorizeUser: async user => user.groups?.includes('mastra-users') ?? false,
+})
+```
+
+## Custom claims
+
+Claims are mapped with the standard OIDC names (`sub`, `email`, `name`, `picture`, `groups`). Providers that use different claim names need a `mapClaims` function. For example, Microsoft Entra ID sends the email address as `upn` and roles as `roles`:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOidc({
+  mapClaims: payload => ({
+    id: payload.sub!,
+    sub: payload.sub!,
+    email: payload.upn as string,
+    name: payload.name as string,
+    groups: payload.roles as string[],
+  }),
+})
+```
+
+## Providers without discovery
+
+If your provider doesn't publish a discovery document, or you route requests through an internal gateway, pass the Authorization Server Metadata yourself. Doing so skips the discovery request:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOidc({
+  issuer: 'https://id.example.com',
+  clientId: 'mastra',
+  clientSecret: process.env.OIDC_CLIENT_SECRET,
+  serverMetadata: {
+    issuer: 'https://id.example.com',
+    authorization_endpoint: 'https://id.example.com/oauth2/authorize',
+    token_endpoint: 'https://id.example.com/oauth2/token',
+    jwks_uri: 'https://id.example.com/oauth2/keys',
+    end_session_endpoint: 'https://id.example.com/oauth2/logout',
+  },
+})
+```
+
+The field names come from the [Authorization Server Metadata](https://www.rfc-editor.org/rfc/rfc8414.html) spec, so you can copy them straight out of another provider's discovery document.
+
+## Client authentication
+
+Credentials are sent in the token request body (`client_secret_post`), which most providers accept. Switch methods if yours requires something else:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOidc({
+  tokenEndpointAuthMethod: 'client_secret_basic',
+})
+```
+
+Proof Key for Code Exchange (PKCE) is added automatically when the provider advertises support for it in `code_challenge_methods_supported`.
+
+## Client-side setup
+
+When auth is enabled, requests to Mastra routes require authentication. Users sign in through your provider's hosted login page, and an encrypted session cookie is set on return.
+
+### Cookie session (recommended)
+
+For cross-origin requests (e.g. a frontend on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthOidc(),
+    cors: {
+      origin: 'http://localhost:3000',
+      credentials: true,
+    },
+  },
+})
+```
+
+Configure the client to include credentials:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+  credentials: 'include',
+})
+```
+
+### Bearer token
+
+Service callers can send a token from your provider instead:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const createMastraClient = (token: string) => {
+  return new MastraClient({
+    baseUrl: 'http://localhost:4111',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+```
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+
+### Making authenticated requests
+
+<Tabs>
+  <TabItem value="client" label="MastraClient">
+    ```typescript title="src/api/agents.ts"
+    import { mastraClient } from '../lib/mastra-client'
+
+    const agent = mastraClient.getAgent('weatherAgent')
+    const response = await agent.generate('Weather in London')
+    console.log(response)
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-oidc-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+## Troubleshooting
+
+- **`authorization server issuer does not match`**: `OIDC_ISSUER` must equal the `issuer` value inside the discovery document, character for character. Open `{issuer}/.well-known/openid-configuration` and copy the `issuer` field.
+- **Discovery request fails**: the discovery URL isn't reachable from the Mastra server. Check network access and, for providers without a discovery document, pass `serverMetadata`.
+- **`only requests to HTTPS are allowed`**: the issuer uses plain HTTP. Use HTTPS, or set `allowInsecureRequests: true` for local development only.
+- **401 with an `aud` mismatch**: the Bearer token's audience doesn't match. Set `audience` to the audience of the tokens you send. See [Authentication flow](#authentication-flow).
+- **`invalid_client` during the token exchange**: the client secret is wrong, or the provider expects a different client authentication method. See [Client authentication](#client-authentication).
+- **Logout doesn't redirect**: the provider publishes no `end_session_endpoint`. Add one through `serverMetadata` if the provider supports logout at a non-standard URL.
+- **Cookies not sent cross-origin**: set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Session lost on restart**: set `OIDC_COOKIE_PASSWORD` to a stable value of at least 32 characters.

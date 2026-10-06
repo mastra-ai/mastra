@@ -114,6 +114,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
         { type: 'doc', id: 'auth/neon', label: 'Neon' },
         { type: 'doc', id: 'auth/okta', label: 'Okta' },
+        { type: 'doc', id: 'auth/oidc', label: 'OpenID Connect' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
         { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
       ],
