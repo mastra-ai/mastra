@@ -3,7 +3,7 @@
  *
  * Resource-scoped lists such as OM include the `resourceId` so switching
  * factories yields a distinct cache entry instead of leaking another factory's
- * data. Personal settings such as model packs use one user-scoped key. Keeping
+ * data. Personal settings such as the default model use one user-scoped key. Keeping
  * every key in one place makes mutation invalidation unambiguous.
  */
 /**
@@ -116,9 +116,7 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
-  modelPacksAll: () => ['model-packs'] as const,
-  modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
-    [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
+  defaultModel: () => ['default-model'] as const,
   om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,

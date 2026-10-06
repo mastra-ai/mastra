@@ -6,7 +6,6 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
-  ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -454,11 +453,9 @@ const AgentComposer = ({
             void submit();
           }}
         >
-          <ComposerAttachments>
-            <ChatComposerAttachments />
-          </ComposerAttachments>
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ChatComposerAttachments />
               <ComposerInput
                 ref={textareaRef}
                 value={text}

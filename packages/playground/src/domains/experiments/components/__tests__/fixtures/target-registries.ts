@@ -9,6 +9,12 @@ export const agent = (id: string, name: string): GetAgentResponse => ({
   tools: {},
   workflows: {},
   agents: {},
+  skills: [],
+  workspaceTools: [],
+  browserTools: [],
+  hasBrowser: false,
+  inputProcessors: [],
+  outputProcessors: [],
   provider: 'openai',
   modelId: 'gpt-4o-mini',
   modelVersion: 'v2',
@@ -45,6 +51,7 @@ export const processor = (id: string, name: string): GetProcessorResponse => ({
   phases: ['input'],
   agentIds: [],
   isWorkflow: false,
+  configurations: [],
 });
 
 export const agents: Record<string, GetAgentResponse> = { 'agent-1': agent('agent-1', 'Support Agent') };

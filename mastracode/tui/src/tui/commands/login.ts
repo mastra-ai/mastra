@@ -137,7 +137,7 @@ async function performLogin(
           const hasSelectedModel = ctx.state.session.model.get() !== '';
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel && !hasSelectedModel) {
-            await ctx.state.session.model.switch({ modelId: defaultModel });
+            await ctx.state.session.model.switch(defaultModel);
             ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             ctx.showInfo(`Successfully logged in to ${providerName}`);

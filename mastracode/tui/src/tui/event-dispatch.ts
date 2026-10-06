@@ -53,6 +53,7 @@ import {
   clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { reconcilePackAfterModeChange } from './model-packs/apply.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
@@ -357,7 +358,7 @@ export async function dispatchEvent(
     }
 
     case 'info':
-      ectx.showInfo(event.message);
+      ectx.showInfo(event.message.replace(/^Switched model route:/, 'Switched model pack:'));
       break;
 
     case 'error':
@@ -365,10 +366,12 @@ export async function dispatchEvent(
       break;
 
     case 'mode_changed':
+      await reconcilePackAfterModeChange(ectx, event.modeId);
       await ectx.refreshModelAuthStatus();
       break;
 
     case 'model_changed':
+      ectx.updateStatusLine();
       await ectx.refreshModelAuthStatus();
       break;
 
