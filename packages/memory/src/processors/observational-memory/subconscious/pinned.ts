@@ -1,4 +1,3 @@
-import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
 import { KnowledgeNotFoundError } from '@mastra/core/storage';
 import type { KnowledgeRecord, KnowledgeScopeIds } from '@mastra/core/storage';
@@ -150,9 +149,9 @@ async function requirePin(
 
 /**
  * Pin lifecycle tools. Pin appends a record on the reserved node; unpin soft-deletes it
- * (auditable, restorable); edit appends the replacement before removing the original because
- * knowledge records are immutable, so an edited pin carries a new record id and a failed append
- * never loses the existing pin. Every write is authorized through the Knowledge facade.
+ * (auditable, restorable); edit atomically retires the original and appends the replacement
+ * (records are immutable, so an edited pin carries a new record id). Every write is authorized
+ * through the Knowledge facade.
  */
 export function createPinnedTools(
   memory: PinnedMemory,
@@ -232,46 +231,26 @@ export function createPinnedTools(
         const record = await requirePin(knowledge, value.recordId, options.scopeIds);
         const { pins } = await listPinnedKnowledge({ knowledge, scopeIds: options.scopeIds });
         assertBudget(options, pins, value.text, record);
-        // Removing the original needs `manageAccess`; check it before appending so a session that
-        // may append but not remove gets a clean rejection instead of a duplicated pin.
-        const storage = await knowledge.getStorageInternal();
-        const [nodeScopeIds, recordScopeIds] = await Promise.all([
-          storage.getNodeScopeIds(record.nodeId),
-          storage.getRecordScopeIds(record.id),
-        ]);
-        const frontier = await knowledge.evaluateAccess(vouched);
-        assertKnowledgeTargetCapability({
-          frontier,
-          scopeIds: nodeScopeIds,
-          capability: 'manageAccess',
-          targetType: 'record',
-          targetId: record.id,
-        });
-        assertKnowledgeScopeCapabilities({
-          frontier,
-          scopeIds: recordScopeIds,
-          capability: 'manageAccess',
-          targetType: 'scope',
-        });
-        const replacement = await knowledge.createRecord({
-          node: record.nodeId,
-          text: value.text,
-          scopeIds: recordScopeIds,
-          resolutionScopeIds: vouched,
-          metadata: {
-            ...record.metadata,
-            sourceThreadId: options.sourceThreadId,
-            ...(value.reason ? { reason: value.reason } : {}),
-          },
-          vouchedScopeIds: vouched,
-        });
-        await knowledge.deleteRecord({
+        const recordScopeIds = await (await knowledge.getStorageInternal()).getRecordScopeIds(record.id);
+        // One atomic, epoch-fenced mutation: the replacement exists only if the original is retired,
+        // so a grant change mid-edit can neither duplicate nor lose the pin.
+        return knowledge.replaceRecord({
           id: record.id,
           version: record.version,
           deletedBy: PIN_IDENTITY,
+          record: {
+            text: value.text,
+            ...(record.source ? { source: record.source } : {}),
+            scopeIds: recordScopeIds,
+            resolutionScopeIds: vouched,
+            metadata: {
+              ...record.metadata,
+              sourceThreadId: options.sourceThreadId,
+              ...(value.reason ? { reason: value.reason } : {}),
+            },
+          },
           vouchedScopeIds: vouched,
         });
-        return replacement;
       },
     }),
   };

@@ -1,6 +1,6 @@
 import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createPinnedTools, listPinnedKnowledge, PINNED_NODE_NAME, Subconscious } from '../subconscious';
 
@@ -46,6 +46,10 @@ async function getStore(memory: ReturnType<typeof createMemory>) {
 }
 
 describe('Subconscious pinned knowledge', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('is off unless configured, and resolves a bounded budget when enabled', () => {
     expect(new Subconscious().resolved.pins).toBe(false);
     expect(new Subconscious({ pins: false }).resolved.pins).toBe(false);
@@ -231,6 +235,57 @@ describe('Subconscious pinned knowledge', () => {
     ).rejects.toThrow();
     const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins.map(pin => pin.text)).toEqual(['original']);
+  });
+
+  it('leaves exactly the original pin when access is revoked mid-edit', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const store = await getStore(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'original', scope: 'thread' } as any, {} as any);
+    const storage = await memory.knowledge.getStorageInternal();
+    const replace = storage.replaceNodeRecords.bind(storage);
+    // Authorization has passed; the grant is downgraded before the storage mutation commits.
+    vi.spyOn(storage, 'replaceNodeRecords').mockImplementation(async input => {
+      await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'edit' });
+      return replace(input);
+    });
+    await expect(
+      tools.knowledge_edit_pin!.execute!({ recordId: pinned.id, text: 'replacement' } as any, {} as any),
+    ).rejects.toThrow();
+    vi.restoreAllMocks();
+    await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'owner' });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
+  });
+
+  it('never duplicates a pin when access is revoked after the first edit write commits', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const store = await getStore(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'original', scope: 'thread' } as any, {} as any);
+    const storage = await memory.knowledge.getStorageInternal();
+    let downgraded = false;
+    const downgradeAfter =
+      <T extends (...args: any[]) => Promise<unknown>>(write: T) =>
+      async (...args: Parameters<T>) => {
+        const result = await write(...args);
+        if (!downgraded) {
+          downgraded = true;
+          await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'edit' });
+        }
+        return result;
+      };
+    const createRecord = downgradeAfter(storage.createRecord.bind(storage));
+    const replaceNodeRecords = downgradeAfter(storage.replaceNodeRecords.bind(storage));
+    vi.spyOn(storage, 'createRecord').mockImplementation(createRecord as any);
+    vi.spyOn(storage, 'replaceNodeRecords').mockImplementation(replaceNodeRecords as any);
+    await tools.knowledge_edit_pin!.execute!({ recordId: pinned.id, text: 'replacement' } as any, {} as any).catch(
+      () => undefined,
+    );
+    vi.restoreAllMocks();
+    await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'owner' });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
+    expect(pins.map(pin => pin.text)).toEqual(['replacement']);
   });
 
   it('fails closed without a Knowledge instance', async () => {
