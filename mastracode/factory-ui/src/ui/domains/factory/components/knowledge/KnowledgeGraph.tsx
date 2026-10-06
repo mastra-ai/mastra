@@ -696,7 +696,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           {node.isScope ? (
             <>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Type</dt>
-              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind === 'scope' ? 'scope' : node.kind}</dd>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+                {node.kind === 'scope' ? 'scope' : node.kind}
+              </dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Content nodes</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.contentNodeCount ?? '—'}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Child scopes</dt>
@@ -712,7 +714,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
-              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.rung ? RUNG_LABELS[node.rung] : '—'}</dd>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+                {node.rung ? RUNG_LABELS[node.rung] : '—'}
+              </dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Connections</dt>
@@ -722,7 +726,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
             </>
           )}
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}</dd>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+            {node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}
+          </dd>
         </dl>
       </div>
     );
