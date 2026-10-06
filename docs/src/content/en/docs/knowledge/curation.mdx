@@ -1,52 +1,58 @@
 ---
 title: 'Knowledge curation'
-description: 'Integrate provisional evidence through host-bound curator profiles and governed mutations.'
+description: 'Integrate committed observations into Knowledge with the observation-time curate agent and ordinary authority.'
 packages:
   - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Knowledge curation
 
-Curation integrates provisional evidence into governed Knowledge. Register profiles in host code, then create a curator by profile ID.
+Curation turns committed session observations into durable Knowledge. The Subconscious `curate` observation agent is the only Subconscious writer. It runs after each successful observation commit on a durable thread keyed to the parent session, and it writes through ordinary, authorized Knowledge tools.
 
-```typescript
-await knowledge.registerCuratorProfile({
-  id: 'default-curator',
-  identityScope: {
-    address: 'identity:curator:default',
-    name: 'Default curator',
-    contextualScopeAddress: 'org:acme',
+```typescript title="src/mastra/memory.ts"
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { Memory, Subconscious } from '@mastra/memory'
+
+const storage = new LibSQLStore({ id: 'memory-storage', url: 'file:./mastra.db' })
+const knowledge = new Knowledge({ id: 'mastra', storage })
+
+export const memory = new Memory({
+  storage,
+  knowledge,
+  options: {
+    observationalMemory: {
+      model: 'openai/gpt-5-mini',
+      experimental_subconscious: new Subconscious({ observation: ['remind', 'curate'] }),
+    },
   },
-  grants: [{ scopeAddress: 'shared-product', role: 'edit' }],
-})
-
-const curator = knowledge.createCurator({
-  profileId: 'default-curator',
-  companionScopeId,
-  contextScopeId,
 })
 ```
 
-Use installed types for the complete registration shape. Missing or unknown profiles fail closed. Re-registering an identical profile is idempotent. Conflicting definitions fail.
+Use the installed package types for the complete configuration shape. There is no curator profile, curator registration, worklist, cadence, or curation cursor to configure.
 
-## Curator tools
+## Lifecycle
 
-A curator exposes bounded tools for listing work and refining, promoting, merging, discarding, or retaining evidence. It doesn't expose unrestricted legacy write tools. Tool runs must end with the required completion marker after all requested worklist pages are handled.
+- Dispatch happens only after an observation commits. Blank, failed, or uncommitted observations don't dispatch.
+- Dispatch is detached. Curation never blocks the parent agent's turn, and curator model or routing failures stay isolated from the parent.
+- Observations are framed as untrusted evidence. Their text can't change the curator's instructions, scopes, or tool permissions.
 
-The worklist is bounded and cursor-driven. Evidence, merge candidates, and destinations are filtered by curator authority and operator visibility before pagination or counts. Inaccessible evidence serializes as empty rather than leaking metadata.
+Curation is a best-effort background safety net. Agents that need a fact stored should still file it deliberately.
 
-## Actions
+## Authority
 
-- **Refine** edits provisional content while preserving provenance.
-- **Promote** moves accepted evidence into an authorized curated destination.
-- **Merge** combines duplicate nodes and moves all source-owned records.
-- **Discard** removes rejected provisional material.
-- **Retain** marks evidence as intentionally unintegrated.
+The curator acts with the parent session's host-vouched authority. It gets no separate grants. Every read and write uses the same capability checks as any other caller:
 
-Every action uses numeric compare-and-swap versions. Late records or stale target versions conflict rather than being silently overwritten. Suggest-only profiles can refine, retain, and propose promotion for review. They can't merge or discard, so the curation UI doesn't show those controls without the corresponding direct authority.
+- It reads relevant accessible Knowledge before writing.
+- It writes directly only where the parent holds the needed capability, and uses numeric versions for compare-and-swap.
+- Suggest capability doesn't permit direct writes. Where the parent can only suggest, the write is denied.
+- Denied writes, conflicts, and deleted records are never bypassed, forced, or restored.
 
-## Governance
+Revoking the parent's access revokes the curator's access on the next operation.
 
-Promotion and merging use public governed Knowledge mutations, not raw storage. Affected records are authorized and restamped atomically. Managed profile grants reconcile atomically and remove stale managed grants while preserving unrelated host grants.
+## Placement
 
-Test prompt-injection resistance: evidence text is untrusted data and can't change the curator's instructions, profile, scopes, completion protocol, or tool permissions.
+The curator writes into the session's authorized resource and thread scopes, or into host-configured structural scopes inside that frontier. Scope descriptions guide placement but don't grant authority.
+
+Provisional scopes are optional. A host can configure a provisional scope with a mirror from its public parent for staging. That scope has exactly the parent's effective capabilities, so it isn't private. Names and suffixes such as `:internal` or `:uncurated` never establish privacy. See [access and scopes](/docs/knowledge/access) for explicit private placement.
