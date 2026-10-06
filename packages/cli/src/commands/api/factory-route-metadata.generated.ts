@@ -124,6 +124,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "decisions"
     }
   },
+  "GET /web/factory/projects/:id/environment": {
+    "contractKey": "projectEnvironmentGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment",
+    "description": "Get the sandbox environment of a Factory project: resources and its repositories in order",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "contractKey": "healthThresholdsGet",
     "method": "GET",
@@ -208,6 +224,30 @@ export const FACTORY_API_ROUTE_METADATA = {
       "description",
       "name",
       "slackWorkItemsEnabled"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /web/factory/projects/:id/environment": {
+    "contractKey": "projectEnvironmentUpdate",
+    "method": "PATCH",
+    "path": "/web/factory/projects/:id/environment",
+    "description": "Update the sandbox environment of a Factory project: resources, repository order and setup",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "repositories",
+      "sandboxCpuCount",
+      "sandboxIdleTimeoutMinutes",
+      "sandboxMemoryMb",
+      "sandboxProvider",
+      "sandboxWorkdir",
+      "workspaceSetupCommand"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -903,6 +943,185 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/environment": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "object",
+          "properties": {
+            "sandboxProvider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sandboxWorkdir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sandboxCpuCount": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "sandboxMemoryMb": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "sandboxIdleTimeoutMinutes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "workspaceSetupCommand": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateHeads": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "projectRepositoryId": {
+                    "type": "string"
+                  },
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "repositoryId": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "defaultBranch": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "inEnvironment": {
+                    "type": "boolean"
+                  },
+                  "setupCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "teardownCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuildStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unbuilt",
+                      "configured",
+                      "failed"
+                    ]
+                  },
+                  "lastBuildError": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuiltAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectRepositoryId",
+                  "connectionId",
+                  "repositoryId",
+                  "slug",
+                  "defaultBranch",
+                  "position",
+                  "inEnvironment",
+                  "setupCommand",
+                  "teardownCommand",
+                  "lastBuildStatus",
+                  "lastBuildError",
+                  "lastBuiltAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "sandboxProvider",
+            "sandboxWorkdir",
+            "sandboxCpuCount",
+            "sandboxMemoryMb",
+            "sandboxIdleTimeoutMinutes",
+            "workspaceSetupCommand",
+            "activeTemplateId",
+            "activeTemplateHeads",
+            "repositories"
+          ]
+        }
+      },
+      "required": [
+        "environment"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1164,6 +1383,324 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
+      ]
+    }
+  },
+  "PATCH /web/factory/projects/:id/environment": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sandboxProvider": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "sandboxWorkdir": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "sandboxCpuCount": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sandboxMemoryMb": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "sandboxIdleTimeoutMinutes": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "workspaceSetupCommand": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "repositories": {
+          "$ref": "#/$defs/__schema8"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "$ref": "#/$defs/__schema3"
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "__schema3": {
+          "type": "null"
+        },
+        "__schema4": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "__schema5": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 65536
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1440
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema8": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema9"
+          }
+        },
+        "__schema9": {
+          "type": "object",
+          "properties": {
+            "projectRepositoryId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "inEnvironment": {
+              "type": "boolean"
+            },
+            "setupCommand": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "teardownCommand": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "projectRepositoryId"
+          ]
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "object",
+          "properties": {
+            "sandboxProvider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sandboxWorkdir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sandboxCpuCount": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "sandboxMemoryMb": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "sandboxIdleTimeoutMinutes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "workspaceSetupCommand": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateHeads": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "projectRepositoryId": {
+                    "type": "string"
+                  },
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "repositoryId": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "defaultBranch": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "inEnvironment": {
+                    "type": "boolean"
+                  },
+                  "setupCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "teardownCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuildStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unbuilt",
+                      "configured",
+                      "failed"
+                    ]
+                  },
+                  "lastBuildError": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuiltAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectRepositoryId",
+                  "connectionId",
+                  "repositoryId",
+                  "slug",
+                  "defaultBranch",
+                  "position",
+                  "inEnvironment",
+                  "setupCommand",
+                  "teardownCommand",
+                  "lastBuildStatus",
+                  "lastBuildError",
+                  "lastBuiltAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "sandboxProvider",
+            "sandboxWorkdir",
+            "sandboxCpuCount",
+            "sandboxMemoryMb",
+            "sandboxIdleTimeoutMinutes",
+            "workspaceSetupCommand",
+            "activeTemplateId",
+            "activeTemplateHeads",
+            "repositories"
+          ]
+        }
+      },
+      "required": [
+        "environment"
       ]
     }
   },
@@ -2342,11 +2879,13 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
   "decisionList": "GET /web/factory/projects/:id/decisions",
+  "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "supervisorHealth": "GET /web/factory/projects/:id/supervisor/health",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "projectUpdate": "PATCH /web/factory/projects/:id",
+  "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
   "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",

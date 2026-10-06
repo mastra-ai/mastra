@@ -686,4 +686,191 @@ describe('ProjectRoutes', () => {
       ).status,
     ).toBe(400);
   });
+
+  describe('environment', () => {
+    async function seedEnvironment() {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+      const github = seed.sourceControl.forIntegration('github');
+      const installation = await github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'gh-1',
+        accountName: 'acme',
+      });
+      const connection = await github.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const links = [];
+      for (const slug of ['acme/docs', 'acme/api', 'acme/web']) {
+        const repository = await github.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId: slug, slug, defaultBranch: 'main' },
+        });
+        links.push(
+          await github.projectRepositories.link({
+            orgId: 'org-1',
+            connectionId: connection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'user-1',
+            branch: 'main',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace',
+            setupCommand: 'pnpm i',
+          }),
+        );
+      }
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed, ['github']));
+      return { seed, project, github, links, app };
+    }
+
+    const patch = (app: Hono, projectId: string, body: unknown) =>
+      app.request(`/web/factory/projects/${projectId}/environment`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    it('reads defaults and the ordered repositories, and writes settings, order and membership', async () => {
+      const { project, links, app, github } = await seedEnvironment();
+
+      const read = await app.request(`/web/factory/projects/${project.id}/environment`);
+      expect(read.status).toBe(200);
+      const initial = (await read.json()) as { environment: Record<string, unknown> };
+      expect(initial.environment).toMatchObject({
+        sandboxProvider: null,
+        sandboxWorkdir: null,
+        sandboxCpuCount: 4,
+        sandboxMemoryMb: 8192,
+        sandboxIdleTimeoutMinutes: null,
+        workspaceSetupCommand: null,
+        activeTemplateId: null,
+        activeTemplateHeads: null,
+      });
+      expect(
+        (initial.environment.repositories as Array<Record<string, unknown>>).map(r => [
+          r.slug,
+          r.position,
+          r.inEnvironment,
+          r.lastBuildStatus,
+        ]),
+      ).toEqual([
+        ['acme/docs', 1, true, 'unbuilt'],
+        ['acme/api', 2, true, 'unbuilt'],
+        ['acme/web', 3, true, 'unbuilt'],
+      ]);
+
+      const updated = await patch(app, project.id, {
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/home/user',
+        sandboxCpuCount: 8,
+        sandboxMemoryMb: 16384,
+        sandboxIdleTimeoutMinutes: 30,
+        workspaceSetupCommand: 'pnpm -r build',
+        repositories: [
+          { projectRepositoryId: links[2]!.id, position: 1 },
+          { projectRepositoryId: links[0]!.id, position: 2, inEnvironment: false, setupCommand: null },
+          { projectRepositoryId: links[1]!.id, position: 3, teardownCommand: 'docker compose down' },
+        ],
+      });
+      expect(updated.status).toBe(200);
+      const after = (await updated.json()) as { environment: Record<string, unknown> };
+      expect(after.environment).toMatchObject({
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/home/user',
+        sandboxCpuCount: 8,
+        sandboxMemoryMb: 16384,
+        sandboxIdleTimeoutMinutes: 30,
+        workspaceSetupCommand: 'pnpm -r build',
+      });
+      expect(
+        (after.environment.repositories as Array<Record<string, unknown>>).map(r => [
+          r.slug,
+          r.position,
+          r.inEnvironment,
+          r.setupCommand,
+          r.teardownCommand,
+        ]),
+      ).toEqual([
+        ['acme/web', 1, true, 'pnpm i', null],
+        ['acme/docs', 2, false, null, null],
+        ['acme/api', 3, true, 'pnpm i', 'docker compose down'],
+      ]);
+      // Existing per-link fields are untouched by the environment route.
+      const stored = await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id });
+      expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local', sandboxWorkdir: '/workspace' });
+
+      // Re-reading returns the same shape the PATCH returned.
+      const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+      expect(reread).toEqual(after);
+    });
+
+    it('rejects invalid payloads without writing anything', async () => {
+      const { project, links, app } = await seedEnvironment();
+      const before = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+
+      const cases: unknown[] = [
+        {},
+        { sandboxCpuCount: null },
+        { sandboxCpuCount: 0 },
+        { sandboxCpuCount: 65 },
+        { sandboxMemoryMb: 256 },
+        { sandboxIdleTimeoutMinutes: 0 },
+        { sandboxWorkdir: 'relative/path' },
+        { repositories: [{ projectRepositoryId: links[0]!.id, position: 2 }] },
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[1]!.id, position: 1 },
+          ],
+        },
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[0]!.id, position: 2 },
+          ],
+        },
+        {
+          repositories: [{ projectRepositoryId: links[0]!.id, position: 1 }, { projectRepositoryId: links[1]!.id }],
+        },
+      ];
+      for (const body of cases) {
+        const response = await patch(app, project.id, body);
+        expect(response.status, JSON.stringify(body)).toBe(400);
+        expect(await response.json()).toEqual({ error: 'invalid_environment' });
+      }
+
+      const foreign = await patch(app, project.id, {
+        sandboxCpuCount: 2,
+        repositories: [{ projectRepositoryId: '00000000-0000-4000-8000-000000000000', inEnvironment: false }],
+      });
+      expect(foreign.status).toBe(404);
+
+      const after = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+      expect(after).toEqual(before);
+    });
+
+    it('scopes the environment to the organization', async () => {
+      const { seed, project, links } = await seedEnvironment();
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-2', organizationId: 'org-2' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed, ['github']));
+      expect((await app.request(`/web/factory/projects/${project.id}/environment`)).status).toBe(404);
+      expect(
+        (await patch(app, project.id, { repositories: [{ projectRepositoryId: links[0]!.id, inEnvironment: false }] }))
+          .status,
+      ).toBe(404);
+    });
+  });
 });

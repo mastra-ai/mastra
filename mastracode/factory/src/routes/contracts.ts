@@ -61,6 +61,79 @@ export const updateProjectBodySchema = z
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
 
+const environmentRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  repositoryId: z.string(),
+  slug: z.string(),
+  defaultBranch: z.string(),
+  position: z.number().int(),
+  inEnvironment: z.boolean(),
+  setupCommand: z.string().nullable(),
+  teardownCommand: z.string().nullable(),
+  lastBuildStatus: z.enum(['unbuilt', 'configured', 'failed']),
+  lastBuildError: z.string().nullable(),
+  lastBuiltAt: z.string().nullable(),
+});
+
+export const projectEnvironmentResponseSchema = z.object({
+  environment: z.object({
+    sandboxProvider: z.string().nullable(),
+    sandboxWorkdir: z.string().nullable(),
+    sandboxCpuCount: z.number().int(),
+    sandboxMemoryMb: z.number().int(),
+    sandboxIdleTimeoutMinutes: z.number().int().nullable(),
+    workspaceSetupCommand: z.string().nullable(),
+    activeTemplateId: z.string().nullable(),
+    activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
+    repositories: z.array(environmentRepositorySchema),
+  }),
+});
+
+const environmentRepositoryPatchSchema = z.object({
+  projectRepositoryId: uuidSchema,
+  position: z.number().int().min(1).optional(),
+  inEnvironment: z.boolean().optional(),
+  setupCommand: nullableTrimmed(2_000).optional(),
+  teardownCommand: nullableTrimmed(2_000).optional(),
+});
+
+export const updateProjectEnvironmentBodySchema = z
+  .object({
+    sandboxProvider: nullableTrimmed(100).optional(),
+    sandboxWorkdir: nullableTrimmed(1_000)
+      .refine(value => value === null || value.startsWith('/'), { message: 'sandboxWorkdir must be absolute' })
+      .optional(),
+    // Never null: the backfill reads a null cpu as "not yet backfilled".
+    sandboxCpuCount: z.number().int().min(1).max(64).optional(),
+    sandboxMemoryMb: z.number().int().min(512).max(65_536).optional(),
+    sandboxIdleTimeoutMinutes: z.number().int().min(1).max(1_440).nullable().optional(),
+    workspaceSetupCommand: nullableTrimmed(2_000).optional(),
+    repositories: z
+      .array(environmentRepositoryPatchSchema)
+      .max(100)
+      .superRefine((entries, ctx) => {
+        const ids = new Set(entries.map(entry => entry.projectRepositoryId));
+        if (ids.size !== entries.length) {
+          ctx.addIssue({ code: 'custom', message: 'Each repository may be listed once' });
+        }
+        const positions = entries.flatMap(entry => (entry.position === undefined ? [] : [entry.position]));
+        if (positions.length === 0) return;
+        const expected = Array.from({ length: entries.length }, (_, index) => index + 1);
+        if (
+          positions.length !== entries.length ||
+          [...positions].sort((a, b) => a - b).some((p, i) => p !== expected[i])
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Positions must be a permutation of 1..n over the listed repositories',
+          });
+        }
+      })
+      .optional(),
+  })
+  .refine(input => Object.keys(input).length > 0, { message: 'At least one environment field is required' });
+
 const stagesSchema = z
   .array(
     z
@@ -349,6 +422,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: updateProjectBodySchema,
     responseSchema: projectResponseSchema,
+  },
+  projectEnvironmentGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/environment',
+    description: 'Get the sandbox environment of a Factory project: resources and its repositories in order',
+    pathSchema: projectPathSchema,
+    responseSchema: projectEnvironmentResponseSchema,
+  },
+  projectEnvironmentUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/environment',
+    description: 'Update the sandbox environment of a Factory project: resources, repository order and setup',
+    pathSchema: projectPathSchema,
+    bodySchema: updateProjectEnvironmentBodySchema,
+    responseSchema: projectEnvironmentResponseSchema,
   },
   projectApplyDefaultModel: {
     method: 'POST',

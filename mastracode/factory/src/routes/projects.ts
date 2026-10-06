@@ -3,7 +3,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { DEFAULT_SANDBOX_CPU_COUNT, DEFAULT_SANDBOX_MEMORY_MB } from '../storage/domains/source-control/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -232,6 +233,58 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
     const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
     return { ...projectRepository, repository };
+  }
+
+  /** Every link of the project across every handle, with the handle that owns it, in position order. */
+  async #environmentLinks(orgId: string, projectId: string) {
+    const links: Array<{ handle: SourceControlStorageHandle; projectRepository: ProjectRepository }> = [];
+    for (const handle of await this.#handles()) {
+      for (const projectRepository of await handle.projectRepositories.listByProject({
+        orgId,
+        factoryProjectId: projectId,
+      })) {
+        links.push({ handle, projectRepository });
+      }
+    }
+    return links.sort(
+      (a, b) =>
+        a.projectRepository.position - b.projectRepository.position ||
+        a.projectRepository.createdAt.getTime() - b.projectRepository.createdAt.getTime(),
+    );
+  }
+
+  async #environmentPayload(orgId: string, project: FactoryProject) {
+    const repositories = [];
+    for (const { handle, projectRepository } of await this.#environmentLinks(orgId, project.id)) {
+      const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
+      repositories.push({
+        projectRepositoryId: projectRepository.id,
+        connectionId: projectRepository.connectionId,
+        repositoryId: projectRepository.repositoryId,
+        slug: repository?.slug ?? '',
+        defaultBranch: repository?.defaultBranch ?? '',
+        position: projectRepository.position,
+        inEnvironment: projectRepository.inEnvironment,
+        setupCommand: projectRepository.setupCommand,
+        teardownCommand: projectRepository.teardownCommand,
+        lastBuildStatus: projectRepository.lastBuildStatus,
+        lastBuildError: projectRepository.lastBuildError,
+        lastBuiltAt: projectRepository.lastBuiltAt,
+      });
+    }
+    return {
+      environment: {
+        sandboxProvider: project.sandboxProvider,
+        sandboxWorkdir: project.sandboxWorkdir,
+        sandboxCpuCount: project.sandboxCpuCount ?? DEFAULT_SANDBOX_CPU_COUNT,
+        sandboxMemoryMb: project.sandboxMemoryMb ?? DEFAULT_SANDBOX_MEMORY_MB,
+        sandboxIdleTimeoutMinutes: project.sandboxIdleTimeoutMinutes,
+        workspaceSetupCommand: project.workspaceSetupCommand,
+        activeTemplateId: project.activeTemplateId,
+        activeTemplateHeads: project.activeTemplateHeads,
+        repositories,
+      },
+    };
   }
 
   async #retireProjectRepositorySessions(
@@ -580,6 +633,61 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
           );
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          return context.json(await this.#environmentPayload(tenant.orgId, project));
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
+          const { repositories: repositoryPatches, ...projectInput } = parsed.data;
+
+          // Resolve every listed link before writing anything, so a foreign id leaves the project untouched.
+          const links = new Map(
+            (await this.#environmentLinks(tenant.orgId, projectId)).map(link => [link.projectRepository.id, link]),
+          );
+          for (const patch of repositoryPatches ?? []) {
+            if (!links.has(patch.projectRepositoryId))
+              return context.json({ error: 'Project repository not found' }, 404);
+          }
+
+          let updated = project;
+          if (Object.keys(projectInput).length > 0) {
+            updated =
+              (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input: projectInput })) ??
+              project;
+          }
+          for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
+            if (Object.keys(input).length === 0) continue;
+            await links.get(projectRepositoryId)!.handle.projectRepositories.update({
+              orgId: tenant.orgId,
+              id: projectRepositoryId,
+              input,
+            });
+          }
+          return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
