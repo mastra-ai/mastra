@@ -10,6 +10,10 @@ import { getRecordingOptions, liveKitAgentName } from './livekit';
 import { resolveCallRecording } from './recording-playback';
 import { phoneConversationWorkflow } from './workflows/phone-conversation';
 
+function isLocalRecordingDemo() {
+  return process.env.LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO === 'true' && process.env.NODE_ENV !== 'production';
+}
+
 export const mastra = new Mastra({
   // `callCenter` answers the agent worker; `triage` is the classifier used by the workflow
   // worker's per-turn workflow; `superRegulated` answers the regulated worker
@@ -41,16 +45,17 @@ export const mastra = new Mastra({
         agentName: liveKitAgentName,
         // Auto recording starts before joining, so it cannot wait for in-call consent.
         // Enable it only for the Meridian agent, never the regulated consent demo.
-        recording: ({ body }) =>
-          body.agentId === 'callCenter' || body.agentId === 'call-center' ? getRecordingOptions() : undefined,
+        recording: ({ body }) => {
+          if (!isLocalRecordingDemo()) return undefined;
+          return body.agentId === 'callCenter' || body.agentId === 'call-center' ? getRecordingOptions() : undefined;
+        },
         // Local demo only — protect this route in production.
         requiresAuth: false,
       }),
       liveKitRecordingRoute({
         resolveRecording: resolveCallRecording,
         // Explicit local-demo opt-in. Replace with authenticated, trace-specific access in production.
-        authorize: () =>
-          process.env.LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO === 'true' && process.env.NODE_ENV !== 'production',
+        authorize: isLocalRecordingDemo,
         requiresAuth: false,
       }),
     ],

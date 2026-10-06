@@ -146,6 +146,7 @@ Recording is disabled by default. To record Meridian calls into one mixed OGG au
 
 ```dotenv
 LIVEKIT_RECORDING_ENABLED=true
+LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true
 RECORDINGS_S3_BUCKET=your-recordings-bucket
 RECORDINGS_S3_REGION=us-east-1
 RECORDINGS_S3_ACCESS_KEY=your-storage-access-key
@@ -154,7 +155,7 @@ RECORDINGS_S3_SECRET=your-storage-secret
 
 Use LiveKit Cloud or deploy LiveKit's egress service yourself. Restart the Mastra server after changing `.env`. The shared server-only configuration in `src/mastra/livekit.ts` validates the storage settings and saves files under `voice-agent/{room_name}.ogg`. Always use a unique room name so each call maps to one file. It doesn't change the recording settings inside your LiveKit Cloud project.
 
-For browser calls, start the default worker and open **Meridian Trades Front Desk** in Studio. The connection route applies recording only when `agentId` is `callCenter` or `call-center`. It creates a fresh room, configures recording, and dispatches the agent before returning connection details. Storage credentials aren't included in the participant token or dispatch metadata. The frontend request and response formats stay unchanged.
+For browser calls, start the default worker and open **Meridian Trades Front Desk** in Studio. The connection route applies recording only when `agentId` is `callCenter` or `call-center`, `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true`, and `NODE_ENV` is not `production`. Without that local-demo opt-in, browser calls remain unrecorded even when `LIVEKIT_RECORDING_ENABLED=true`. It creates a fresh room, configures recording, and dispatches the agent before returning connection details. Storage credentials aren't included in the participant token or dispatch metadata. The frontend request and response formats stay unchanged.
 
 For a server-initiated session, run:
 
@@ -181,7 +182,7 @@ See the [recording guide](https://mastra.ai/integrations/voice/livekit#record-ca
 
 For a browser-call test with real AWS S3 credentials, follow [Test recording with AWS S3](#test-recording-with-aws-s3) below.
 
-For local playback, set `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true` in `.env` and restart `pnpm dev`. The example denies recording access by default; this explicit demo policy allows all traces and refuses access when `NODE_ENV=production`.
+For local playback, set `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true` in `.env` and restart `pnpm dev`. The example denies recording access by default; this explicit demo policy permits browser recording and playback of all traces, and disables both when `NODE_ENV=production`. Recording creation also requires `LIVEKIT_RECORDING_ENABLED=true`.
 
 Open a `voice call` trace under **Observability → Traces**, then select **Review Audio** in the trace panel. The player supports playback, pause, and seeking. If the upload is still finishing, select **Refresh recording** when the file is ready. Closing the dialog stops playback; reopening it requests a new link.
 
@@ -189,7 +190,7 @@ The registered `liveKitRecordingRoute()` reads the room name from the stored tra
 
 The configured S3 credentials now need `s3:GetObject` for playback as well as upload permissions. `s3:ListBucket` allows S3 to report a missing file as `404`; without it, missing files may appear as access errors. You can use separate read credentials in the playback resolver. For S3-compatible storage, set `RECORDINGS_S3_ENDPOINT` to an endpoint reachable by the recording service, the Mastra server, and the browser.
 
-This example disables authentication on both custom routes for local development. Before deployment, restore `requiresAuth: true`, configure server authentication, and replace the demo `authorize({ traceId, context })` callback with a check of the authenticated user's access to the requested trace. The callback is required even when authentication is disabled. Returning anything other than `true` denies access before trace lookup or URL signing. Signed URLs grant temporary access to an individual file and must not be logged or stored in trace metadata. Existing timestamped recordings need a room-to-object mapping in the resolver; this example looks up the exact filename shown above.
+This example disables authentication on both custom routes for local development. Before deployment, restore `requiresAuth: true`, configure server authentication, and replace the local-demo recording gate with an application policy that limits who can start recordings. Apply per-user rate limits or session quotas. Replace the demo `authorize({ traceId, context })` callback with a check of the authenticated user's access to the requested trace. The callback is required even when authentication is disabled. Returning anything other than `true` denies access before trace lookup or URL signing. Signed URLs grant temporary access to an individual file and must not be logged or stored in trace metadata. Existing timestamped recordings need a room-to-object mapping in the resolver; this example looks up the exact filename shown above.
 
 ### Test recording with AWS S3
 
