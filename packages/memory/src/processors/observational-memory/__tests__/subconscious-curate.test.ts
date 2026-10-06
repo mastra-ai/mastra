@@ -206,6 +206,9 @@ describe('Subconscious observation curator', () => {
       'knowledge_write_node_content',
       'knowledge_write_node_description',
     ]);
+    expect(await curatorAgent!.getInstructions()).toContain(
+      "When the observations or records give an entity's canonical real-world URL, such as its official website, source repository, or documentation, include that URL in the description.",
+    );
   });
 
   it('surfaces structural scope descriptions reachable from the curator frontier', async () => {

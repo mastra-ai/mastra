@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../..';
 import type { SubconsciousConfig } from '../..';
+import { createKnowledgeTools } from '../../processors/observational-memory/subconscious/knowledge-tools';
 import {
   createKnowledgeWriteTools,
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
@@ -848,6 +849,27 @@ describe('Subconscious knowledge write tools', () => {
       'knowledge_write_node_description',
       'knowledge_write_node_content',
     ]);
+  });
+
+  it('round-trips a description with its canonical link to readers who can read the node', async () => {
+    const { memory, store, target, tools } = await fixture();
+    const description = 'Project Atlas is the launch program. Docs: https://atlas.example.com/docs';
+
+    const written = (await tools.knowledge_write_node_description!.execute?.(
+      { node: target.id, expectedVersion: target.version, description },
+      {} as any,
+    )) as any;
+    expect(written).toMatchObject({ id: target.id, version: target.version + 1, metadata: { description } });
+    expect((await store.getNode(target.id))?.metadata).toMatchObject({ description });
+
+    const reader = createKnowledgeTools(memory, scopeIds.slice(1));
+    const read = (await reader.knowledge_read!.execute?.({ id: target.id }, {} as any)) as any;
+    expect(read).toMatchObject({ found: true, node: { id: target.id, metadata: { description } } });
+
+    const otherThread = await store.createNode({ name: 'Thread beta', isScope: true, scopeIds: [scopeIds[1]!] });
+    await store.upsertScopeGrant({ scopeNodeId: otherThread.id, scopeRefId: otherThread.id, role: 'owner' });
+    const outsider = createKnowledgeTools(memory, [otherThread.id]);
+    await expect(outsider.knowledge_read!.execute?.({ id: target.id }, {} as any)).resolves.toEqual({ found: false });
   });
 
   it('bounds node descriptions in UTF-16 code units with CAS and explicit clears', async () => {
