@@ -51,8 +51,11 @@
  *
  * `redeliver(match, { viaPublish: true })` replays through
  * `EventEmitterPubSub.publish` instead — a fresh id with `deliveryAttempt` 1,
- * i.e. exactly what the durability harness's `CapturePubSub` did. Ports of
- * harness redelivery cases should use it so they exercise the same path.
+ * i.e. exactly what the durability harness's `CapturePubSub` did, so it
+ * reproduces the harness's verdict. A real broker never sends that (it keeps
+ * the payload id and bumps the attempt), so assert the real contract with the
+ * default and reach for `viaPublish` only where a case has to match the
+ * harness exactly.
  *
  * Redelivering the step.run of a step that already *completed* re-executes it
  * (F4). The only thing dropping a duplicate today is the id-keyed step lease
@@ -267,8 +270,9 @@ export class RedeliveryDriver {
    * Pass `viaPublish: true` to replay through `EventEmitterPubSub.publish`
    * instead: the mechanism the durability harness used, which mints a fresh id
    * and forces `deliveryAttempt: 1`, so the duplicate arrives as a brand new
-   * event. Reuse it when porting a harness redelivery case, so the port
-   * exercises the same path the harness did.
+   * event — the mechanism the durability harness used, which reproduces its
+   * verdicts. A real broker never sends that, so assert the real contract with
+   * the default and reach for this only to match a harness case exactly.
    */
   async redeliver(
     match: RedeliveryMatch,
