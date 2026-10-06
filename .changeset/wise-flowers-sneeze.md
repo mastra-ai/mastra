@@ -1,8 +1,8 @@
 ---
-'@mastra/core': major
+'@mastra/core': minor
 ---
 
-Changed `session.model.switch` to accept a model ID followed by an optional options object. Pass `{ thinkingLevel }` to apply and persist model and reasoning effort together. Every `model_changed` event includes the current thinking level, even when it is unchanged.
+Changed `session.model.switch` to accept a model ID followed by an optional options object. Pass `{ thinkingLevel }` to apply and persist model and thinking level together. Every `model_changed` event includes the current thinking level, even when it is unchanged.
 
 ```ts
 // Before
