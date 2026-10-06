@@ -57,7 +57,12 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../co
 
 export type RestartKind = 'durable' | 'evented' | 'evented-fallback' | 'workflow';
 
-const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * How long a scenario waits for a restart to settle. Also the budget tests pass
+ * to `vi.waitFor`, which otherwise gives up after 1s — under load the engine can
+ * take longer than that to delete a finished run's snapshot.
+ */
+export const DEFAULT_TIMEOUT_MS = 10_000;
 
 /** One module graph: every import a scenario needs, loaded after `vi.resetModules()`. */
 export async function loadGraph() {

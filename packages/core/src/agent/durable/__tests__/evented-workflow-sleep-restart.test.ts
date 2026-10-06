@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { createGate, createRestartScenario, findRow } from './restart-harness';
+import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow } from './restart-harness';
 import type { Checkpoint, Gate } from './restart-harness';
 
 const gates: Gate[] = [];
@@ -66,9 +66,12 @@ describe('T58 evented workflow sleep restart in a fresh module graph', () => {
       });
       const reached = await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)]);
       if (!reached) throw new Error('not exercised: run ended before the gated step');
-      await vi.waitFor(async () => {
-        expect(statusAt(await original.checkpoint(), 't58-wf', runId, 'after')).toBe('running');
-      });
+      await vi.waitFor(
+        async () => {
+          expect(statusAt(await original.checkpoint(), 't58-wf', runId, 'after')).toBe('running');
+        },
+        { timeout: DEFAULT_TIMEOUT_MS },
+      );
 
       const checkpoint = await original.checkpoint();
       expect(findRow(checkpoint, 't58-wf', runId)?.snapshot.status).toBe('running');

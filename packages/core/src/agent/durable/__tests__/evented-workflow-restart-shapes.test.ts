@@ -12,7 +12,7 @@
 // interrupted between two persisted states rather than inside a step.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createGate, createRestartScenario, findRow } from './restart-harness';
+import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow } from './restart-harness';
 import type { Checkpoint, CoreGraph, Gate } from './restart-harness';
 
 const N = z.object({ n: z.number() });
@@ -187,11 +187,15 @@ describe('T65 wf-evented-restart shapes in a fresh module graph', () => {
         expect(reached, 'not exercised: run ended before the gate').toBe(true);
         // The step is parked; wait until its entry is persisted as in-flight. Evented foreach marks
         // the entry success and keeps a null slot for the item still running, so it has its own probe.
-        await vi.waitFor(async () => {
-          const entry = ctxOf(findRow(await original.checkpoint(), id, runId)?.snapshot, shape.blockStep ?? 'block');
-          if (shape.blockStep === 'item') expect(entry?.output?.[0] != null && entry?.output?.[1] === null).toBe(true);
-          else expect(entry?.status).toBe('running');
-        });
+        await vi.waitFor(
+          async () => {
+            const entry = ctxOf(findRow(await original.checkpoint(), id, runId)?.snapshot, shape.blockStep ?? 'block');
+            if (shape.blockStep === 'item')
+              expect(entry?.output?.[0] != null && entry?.output?.[1] === null).toBe(true);
+            else expect(entry?.status).toBe('running');
+          },
+          { timeout: DEFAULT_TIMEOUT_MS },
+        );
         checkpoint = await original.checkpoint();
       }
       expect(findRow(checkpoint, id, runId)?.snapshot.status).toBe('running');

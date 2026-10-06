@@ -2,7 +2,14 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DurableStepIds, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { consumeText, createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
+import {
+  DEFAULT_TIMEOUT_MS,
+  consumeText,
+  createGate,
+  createRestartScenario,
+  findRow,
+  loadGraph,
+} from './restart-harness';
 import type { Gate } from './restart-harness';
 
 const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
@@ -139,10 +146,12 @@ describe('restart harness', () => {
       expect(originalText).toBe('done');
       expect(toolCalls.filter(c => c.generation === 1).map(c => c.index)).toEqual([0, 1]);
       // Graph 1 finished and cleaned up in its own store...
-      await vi.waitFor(async () =>
-        expect(
-          await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
-        ).toBeFalsy(),
+      await vi.waitFor(
+        async () =>
+          expect(
+            await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
+          ).toBeFalsy(),
+        { timeout: DEFAULT_TIMEOUT_MS },
       );
 
       // ...and nothing it did reached graph 2. `finishEvents`/`onFinishCalls`
@@ -248,10 +257,12 @@ describe('restart harness', () => {
     expect(await consumeText((await original.driven) as any)).toBe('done');
 
     // A finished run deleted its snapshots, so there is nothing to recover.
-    await vi.waitFor(async () =>
-      expect(
-        await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
-      ).toBeFalsy(),
+    await vi.waitFor(
+      async () =>
+        expect(
+          await original.graph.workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }),
+        ).toBeFalsy(),
+      { timeout: DEFAULT_TIMEOUT_MS },
     );
     const finished = await original.checkpoint();
     expect(findRow(finished, DurableStepIds.AGENTIC_LOOP, runId)).toBeUndefined();
