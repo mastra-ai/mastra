@@ -12,8 +12,13 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
     storage: new InMemoryStore({ id: `static-import-${role}` }),
     structure: {
       scopes: [
-        { address: 'org:acme', name: 'Acme' },
-        { address: scopeAddress, name: 'Mastra', parentAddresses: ['org:acme'] },
+        { address: 'org:acme', name: 'Acme', grants: [{ scopeRefAddress: 'org:acme', role: 'owner' }] },
+        {
+          address: scopeAddress,
+          name: 'Mastra',
+          parentAddresses: ['org:acme'],
+          grants: [{ scopeRefAddress: scopeAddress, role: 'owner' }],
+        },
       ],
     },
     importers: [

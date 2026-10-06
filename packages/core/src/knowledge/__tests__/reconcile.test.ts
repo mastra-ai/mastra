@@ -258,6 +258,16 @@ describe('Knowledge structure reconciliation', () => {
       expect(ownerGrants(plan, 'team:core')).toEqual([]);
     });
 
+    it('lets the context that materialized a custom scope read it without owning it', () => {
+      const plan = materializeKnowledgeScopePlan(undefined, {
+        address: 'team:core',
+        contextualScopeAddress: 'resource:alice',
+      });
+      expect(plan.scopes.find(scope => scope.address === 'team:core')!.grants).toEqual([
+        expect.objectContaining({ scopeRefAddress: 'resource:alice', role: 'readonly' }),
+      ]);
+    });
+
     it('keeps the built-in owner grant on identity scope types', () => {
       for (const address of ['org:acme', 'resource:alice', 'resource:alice:thread:t-1']) {
         const plan = materializeKnowledgeScopePlan(undefined, { address, contextualScopeAddress: address });

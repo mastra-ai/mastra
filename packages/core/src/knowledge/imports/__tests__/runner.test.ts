@@ -7,9 +7,19 @@ const one = { source: 'calendar:primary', scope: 'project:one' } as const;
 const two = { source: 'calendar:secondary', scope: 'project:two' } as const;
 const structure = {
   scopes: [
-    { address: 'org:acme', name: 'Acme' },
-    { address: one.scope, name: 'One', parentAddresses: ['org:acme'] },
-    { address: two.scope, name: 'Two', parentAddresses: ['org:acme'] },
+    { address: 'org:acme', name: 'Acme', grants: [{ scopeRefAddress: 'org:acme', role: 'owner' }] },
+    {
+      address: one.scope,
+      name: 'One',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: one.scope, role: 'owner' }],
+    },
+    {
+      address: two.scope,
+      name: 'Two',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: two.scope, role: 'owner' }],
+    },
   ],
 } as const;
 

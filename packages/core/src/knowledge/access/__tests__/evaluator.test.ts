@@ -35,13 +35,76 @@ describe('Knowledge access frontier evaluator', () => {
     });
 
     expect(frontier.accessEpoch).toBe(7);
-    expect(getKnowledgeScopeAccess(frontier, PRINCIPAL)?.capabilities.read).toBe(true);
+    expect(getKnowledgeScopeAccess(frontier, PRINCIPAL)).toBeUndefined();
     expect(getKnowledgeScopeAccess(frontier, TEAM)?.capabilities).toMatchObject({ read: true, edit: false });
     expect(getKnowledgeScopeAccess(frontier, PROJECT)?.capabilities).toMatchObject({ read: true, edit: true });
     expect(Object.isFrozen(frontier)).toBe(true);
     expect(Object.isFrozen(frontier.vouchedScopeIds)).toBe(true);
     expect(Object.isFrozen(frontier.scopes)).toBe(true);
     expect(Object.isFrozen(frontier.scopes[PROJECT])).toBe(true);
+  });
+
+  it('converges owner and suggest through mirror cycles regardless of traversal order (S1)', () => {
+    const H = PRINCIPAL;
+    const A = TEAM;
+    const B = PROJECT;
+    const M = COMPANION;
+    const N = SIBLING;
+    const SUGGESTER = '10000000-0000-4000-8000-000000000006';
+    const X = '10000000-0000-4000-8000-000000000007';
+    const Y = '10000000-0000-4000-8000-000000000008';
+    const grants = [
+      grant(A, H, 'readonly'),
+      grant(B, H, 'readonly'),
+      grant(M, A, 'mirror'),
+      grant(N, M, 'mirror'),
+      grant(A, N, 'mirror'),
+      grant(A, B, 'owner'),
+      grant(SUGGESTER, H, 'readonly'),
+      grant(A, SUGGESTER, 'readonly', true),
+      grant(X, Y, 'mirror'),
+      grant(Y, X, 'mirror'),
+    ];
+    const expected = {
+      read: true,
+      append: true,
+      edit: true,
+      delete: true,
+      createChildren: true,
+      manageAccess: true,
+      suggest: true,
+    };
+    for (const ordering of [grants, [...grants].reverse(), [...grants.slice(5), ...grants.slice(0, 5)]]) {
+      const frontier = evaluateKnowledgeAccessFrontier({ vouchedScopeIds: [H], grants: ordering, accessEpoch: 1 });
+      expect(frontier.scopes[A]).toEqual(expected);
+      expect(frontier.scopes[M]).toEqual(expected);
+      expect(frontier.scopes[N]).toEqual(expected);
+      expect(frontier.scopes[X]).toBeUndefined();
+      expect(frontier.scopes[Y]).toBeUndefined();
+      expect(frontier.scopes[H]).toBeUndefined();
+    }
+  });
+
+  it('does not make a host-vouched seed readable or mirror capability it never had (S1)', () => {
+    const SUGGEST_ONLY = '10000000-0000-4000-8000-000000000006';
+    const frontier = evaluateKnowledgeAccessFrontier({
+      vouchedScopeIds: [PRINCIPAL],
+      grants: [
+        grant(PROJECT, PRINCIPAL, 'mirror'),
+        grant(SUGGEST_ONLY, TEAM, 'mirror'),
+        grant(TEAM, PRINCIPAL, 'readonly', true),
+        grant(SIBLING, COMPANION, 'edit'),
+        grant(COMPANION, PRINCIPAL, 'mirror'),
+      ],
+      accessEpoch: 1,
+    });
+
+    expect(frontier.scopes[PRINCIPAL]).toBeUndefined();
+    expect(frontier.scopes[PROJECT]).toBeUndefined();
+    expect(frontier.scopes[COMPANION]).toBeUndefined();
+    expect(frontier.scopes[SIBLING]).toBeUndefined();
+    expect(canAccessKnowledgeNode(frontier, [PRINCIPAL])).toBe(false);
+    expect(frontier.scopes[TEAM]).toMatchObject({ read: true, suggest: true, append: false });
   });
 
   it('combines successful paths and mirrors the complete effective capability set', () => {

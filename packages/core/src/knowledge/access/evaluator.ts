@@ -26,30 +26,33 @@ export function evaluateKnowledgeAccessFrontier(input: {
   accessEpoch: number;
 }): KnowledgeAccessFrontier {
   const vouchedScopeIds = canonicalizeKnowledgeScopeIds([...input.vouchedScopeIds]);
+  const seedScopeIds = new Set(vouchedScopeIds);
   const capabilitiesByScopeId = new Map<string, KnowledgeCapabilities>();
   const grantsByReference = new Map<string, KnowledgeScopeGrant[]>();
-  const worklist: string[] = [];
+  const pending = new Set<string>(vouchedScopeIds);
 
-  for (const scopeId of vouchedScopeIds) {
-    capabilitiesByScopeId.set(scopeId, { ...NO_KNOWLEDGE_CAPABILITIES, read: true });
-    worklist.push(scopeId);
-  }
   for (const grant of input.grants) {
     const referencing = grantsByReference.get(grant.scopeRefId) ?? [];
     referencing.push(grant);
     grantsByReference.set(grant.scopeRefId, referencing);
   }
 
-  for (let index = 0; index < worklist.length; index += 1) {
-    const referencedScopeId = worklist[index]!;
-    const referencedCapabilities = capabilitiesByScopeId.get(referencedScopeId)!;
+  // Monotone fixed point: a scope is reprocessed whenever its capability set grows, so later owner or
+  // suggest paths still reach every mirror dependent. Host vouching only makes a scope eligible to
+  // activate ordinary grants that reference it; it never grants readability or owner by itself.
+  while (pending.size > 0) {
+    const referencedScopeId = pending.values().next().value!;
+    pending.delete(referencedScopeId);
+    const referencedCapabilities = capabilitiesByScopeId.get(referencedScopeId) ?? NO_KNOWLEDGE_CAPABILITIES;
+    const activatesRoleGrants = seedScopeIds.has(referencedScopeId) || referencedCapabilities.read;
     for (const grant of grantsByReference.get(referencedScopeId) ?? []) {
+      if (grant.role !== 'mirror' && !activatesRoleGrants) continue;
       const grantedCapabilities = resolveKnowledgeGrantCapabilities(grant, referencedCapabilities);
       const current = capabilitiesByScopeId.get(grant.scopeNodeId);
       const combined = combineKnowledgeCapabilities(current ? [current, grantedCapabilities] : [grantedCapabilities]);
-      if (capabilitiesEqual(current, combined)) continue;
+      if (capabilitiesEqual(current ?? NO_KNOWLEDGE_CAPABILITIES, combined)) continue;
       capabilitiesByScopeId.set(grant.scopeNodeId, combined);
-      worklist.push(grant.scopeNodeId);
+      pending.add(grant.scopeNodeId);
     }
   }
 

@@ -46,9 +46,10 @@ const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId:thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
-  // Materializing an unmatched (custom) address creates the scope; it confers no
-  // ownership. Hosts that want owners on custom scopes configure a `custom` scope type.
-  custom: {},
+  // Materializing an unmatched (custom) address lets the materializing context read the scope but
+  // confers no ownership, since readability comes only from grants. Hosts that want owners or
+  // writers on custom scopes configure a `custom` scope type.
+  custom: { access: [{ principal: 'self', role: 'readonly' }] },
 };
 
 export function validateKnowledgeScopeTypes(
@@ -237,6 +238,49 @@ function substituteParameters(template: string, parameters: Record<string, strin
     const value = parameters[name];
     if (!value) throw new Error(`Missing host-vouched Knowledge scope parameter: ${name}`);
     return value;
+  });
+}
+
+/**
+ * Declared structure scopes whose address matches a configured scope type receive that type's creation-template
+ * grants, exactly as lazy materialization would. Without this, declaring an identity scope such as `org:acme`
+ * up front would create it without the self grant that makes it readable to its own host-vouched callers.
+ */
+export function applyKnowledgeScopeTypeTemplates(
+  scopeTypes: KnowledgeScopeTypesConfig | undefined,
+  plan: KnowledgeStructurePlan,
+): KnowledgeStructurePlan {
+  const types = validateKnowledgeScopeTypes(scopeTypes);
+  return validateKnowledgeStructurePlan({
+    ...plan,
+    scopes: plan.scopes.map(scope => {
+      const typed = Object.entries(types)
+        .filter(([pattern]) => pattern !== 'custom')
+        .map(([pattern, config]) => ({ config, parameters: matchPattern(pattern, scope.address) }))
+        .filter((match): match is { config: KnowledgeScopeTypeConfig; parameters: Record<string, string> } =>
+          Boolean(match.parameters),
+        );
+      if (typed.length > 1) {
+        throw new Error(`Knowledge scope address ${scope.address} matches multiple configured patterns`);
+      }
+      const match = typed[0];
+      if (!match) return scope;
+      const input = {
+        address: scope.address,
+        parentAddresses: scope.parentAddresses,
+        contextualScopeAddress: scope.address,
+      };
+      const templateGrants = (match.config.access ?? []).flatMap<KnowledgeStructureGrant>(access => {
+        const principal = resolvePrincipal(access.principal, input, match.parameters);
+        if (!principal) return [];
+        return [{ scopeRefAddress: principal, role: access.role, canSuggest: access.canSuggest }];
+      });
+      const grants = [...(scope.grants ?? [])];
+      for (const grant of templateGrants) {
+        if (!grants.some(existing => existing.scopeRefAddress === grant.scopeRefAddress)) grants.push(grant);
+      }
+      return { ...scope, grants };
+    }),
   });
 }
 
