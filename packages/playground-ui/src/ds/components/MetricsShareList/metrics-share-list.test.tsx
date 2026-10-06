@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MetricsShareList } from './metrics-share-list';
-import type { MetricsShareListRow } from './metrics-share-list';
+import type { MetricsShareListRow } from './metrics-share-list-types';
 
 const row = (key: string, share: number, extra: Partial<MetricsShareListRow> = {}): MetricsShareListRow => ({
   key,
@@ -14,7 +14,9 @@ const row = (key: string, share: number, extra: Partial<MetricsShareListRow> = {
 
 const labels = () => screen.getAllByRole('listitem').map(li => li.textContent ?? '');
 const strip = (container: HTMLElement) =>
-  [...container.querySelectorAll<HTMLSpanElement>('.h-2 > span')].map(s => s.style.flex);
+  within(container)
+    .queryAllByTestId('metrics-share-segment')
+    .map(s => s.style.flex);
 
 describe('MetricsShareList', () => {
   afterEach(() => cleanup());
@@ -142,7 +144,7 @@ describe('MetricsShareList', () => {
 
   it('dims the other rows while one is hovered', () => {
     render(<MetricsShareList rows={[row('a', 2), row('b', 1)]} valueLabel="Runs" />);
-    const [a, b] = screen.getAllByRole('listitem').map(li => li.firstElementChild as HTMLElement);
+    const [a, b] = screen.getAllByRole('listitem').map(li => li.querySelector<HTMLElement>(':scope > *'));
     if (!a || !b) throw new Error('expected two rows');
     fireEvent.mouseEnter(a);
     expect(b.style.opacity).toBe('0.5');
@@ -151,10 +153,8 @@ describe('MetricsShareList', () => {
 
   it('follows a custom lead color with violet and teal, not the green or sky it may resemble', () => {
     const rows = ['a', 'b', 'c', 'd', 'e', 'f'].map((k, i) => row(k, 6 - i));
-    const { container } = render(
-      <MetricsShareList rows={rows} valueLabel="Runs" palette="hues" color="var(--chart-blue)" limit={6} />,
-    );
-    const colors = [...container.querySelectorAll<HTMLSpanElement>('.h-2 > span')].map(s => s.style.backgroundColor);
+    render(<MetricsShareList rows={rows} valueLabel="Runs" palette="hues" color="var(--chart-blue)" limit={6} />);
+    const colors = screen.getAllByTestId('metrics-share-segment').map(s => s.style.backgroundColor);
     expect(colors).toEqual([
       'var(--chart-blue)',
       'var(--chart-share-3)',

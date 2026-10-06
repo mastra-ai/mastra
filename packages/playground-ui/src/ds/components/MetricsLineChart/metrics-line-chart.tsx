@@ -124,8 +124,8 @@ export function MetricsLineChart({
     ...(onPointClick && {
       style: { cursor: 'pointer' },
       onClick: (_: unknown, payload: unknown) => {
-        const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
-        if (datum) onPointClick(datum, s.dataKey);
+        // Recharts passes the dot's props; the hovered row is under `payload`.
+        if (isRecord(payload) && isRecord(payload.payload)) onPointClick(payload.payload, s.dataKey);
       },
     }),
   });
@@ -181,4 +181,8 @@ export function MetricsLineChart({
       </ChartPlot>
     </div>
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

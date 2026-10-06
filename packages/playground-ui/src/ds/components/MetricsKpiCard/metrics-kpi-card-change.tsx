@@ -9,6 +9,13 @@ const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFracti
 // A change that rounds to 0.0% is no change: a neutral badge, no arrow.
 const isFlat = (changePct: number) => Math.abs(changePct) < 0.05;
 
+// Green when the value moved the good way, red when it moved the bad way.
+function changeVariant(changePct: number, lowerIsBetter?: boolean) {
+  if (isFlat(changePct)) return 'neutral';
+  const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
+  return isGood ? 'success' : 'destructive';
+}
+
 // Past +1000% a percentage is unreadable, so show how many times bigger the value got instead.
 function formatChange(changePct: number) {
   if (isFlat(changePct)) return '0%';
@@ -36,7 +43,6 @@ export function MetricsKpiCardChange({
   className?: string;
 }) {
   const flat = isFlat(changePct);
-  const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
   const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
   const formattedChange = formatChange(changePct);
   const description = prevValue ? `${comparison} (${prevValue})` : comparison;
@@ -46,7 +52,7 @@ export function MetricsKpiCardChange({
       <Tooltip>
         <TooltipTrigger render={<span tabIndex={0} className="inline-flex rounded-full" />}>
           <Badge
-            variant={flat ? 'neutral' : isGood ? 'success' : 'destructive'}
+            variant={changeVariant(changePct, lowerIsBetter)}
             emphasis="strong"
             size="xs"
             icon={flat ? undefined : <Icon />}

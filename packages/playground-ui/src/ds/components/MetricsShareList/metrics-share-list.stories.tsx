@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { MetricsShareList } from './metrics-share-list';
-import type { MetricsShareListRow } from './metrics-share-list';
+import type { MetricsShareListRow } from './metrics-share-list-types';
 
 const n = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
