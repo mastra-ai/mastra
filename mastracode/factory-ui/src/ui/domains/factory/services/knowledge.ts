@@ -67,6 +67,8 @@ export interface KnowledgeScopeTreePayload {
   nextCursor?: string;
   /** Initial child-page cursors keyed by parent scope id. */
   childCursors?: Record<string, string>;
+  /** True when the org has more scopes than the server reads, so some are missing from the tree. */
+  truncated?: boolean;
 }
 
 /**
