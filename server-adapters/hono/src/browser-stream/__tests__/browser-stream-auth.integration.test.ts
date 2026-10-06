@@ -2,11 +2,13 @@ import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
+import { SimpleAuth } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
 import { setupBrowserStream } from '../index.js';
+import type { BrowserStreamOrigin } from '../index.js';
 
 const authConfig: MastraAuthConfig = {
   authenticateToken: async (token, request) => {
@@ -63,30 +65,40 @@ function handshake(url: string, headers?: Record<string, string>): Promise<Hands
   });
 }
 
+/**
+ * Boot a real HTTP server serving the browser stream routes, so handshakes exercise
+ * the same upgrade path a browser would use.
+ */
+async function startBrowserStreamServer(options: { mastra?: Mastra; allowedOrigins?: BrowserStreamOrigin } = {}) {
+  const app = new Hono();
+  const browserStream = await setupBrowserStream(app, {
+    mastra: options.mastra ?? createStubMastra(authConfig),
+    getToolset: () => undefined,
+    allowedOrigins: options.allowedOrigins,
+  });
+
+  if (!browserStream?.injectWebSocket) {
+    throw new Error('Expected @hono/node-ws to be available in this test environment');
+  }
+
+  const server = serve({ fetch: app.fetch, port: 0 }) as Server;
+  browserStream.injectWebSocket(server);
+
+  await new Promise<void>(resolve => server.once('listening', () => resolve()));
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Failed to get server address');
+  }
+
+  return { server, streamUrl: `ws://localhost:${address.port}/browser/agent-1/stream?threadId=thread-1` };
+}
+
 describe('hono browser-stream WebSocket authentication', () => {
   let server: Server;
   let streamUrl: string;
 
   beforeEach(async () => {
-    const app = new Hono();
-    const browserStream = await setupBrowserStream(app, {
-      mastra: createStubMastra(authConfig),
-      getToolset: () => undefined,
-    });
-
-    if (!browserStream?.injectWebSocket) {
-      throw new Error('Expected @hono/node-ws to be available in this test environment');
-    }
-
-    server = serve({ fetch: app.fetch, port: 0 }) as Server;
-    browserStream.injectWebSocket(server);
-
-    await new Promise<void>(resolve => server.once('listening', () => resolve()));
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Failed to get server address');
-    }
-    streamUrl = `ws://localhost:${address.port}/browser/agent-1/stream?threadId=thread-1`;
+    ({ server, streamUrl } = await startBrowserStreamServer());
   });
 
   afterEach(async () => {
@@ -117,5 +129,93 @@ describe('hono browser-stream WebSocket authentication', () => {
     const result = await handshake(`${streamUrl}&apiKey=valid-token`);
 
     expect(result).toEqual({ opened: true });
+  });
+});
+
+describe('hono browser-stream WebSocket origin validation', () => {
+  const allowedOrigin = 'https://studio.example.com';
+  let server: Server;
+  let streamUrl: string;
+
+  beforeEach(async () => {
+    ({ server, streamUrl } = await startBrowserStreamServer({ allowedOrigins: [allowedOrigin] }));
+  });
+
+  afterEach(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  });
+
+  it('refuses an upgrade from a disallowed origin even with a valid session cookie', async () => {
+    // Cross-site WebSocket hijacking: the browser attaches the session cookie for
+    // the page's origin, which is exactly what we must not accept.
+    const result = await handshake(streamUrl, {
+      Origin: 'https://evil.example.com',
+      Cookie: 'session=valid-token',
+    });
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(403);
+  });
+
+  it('upgrades a valid session cookie from an allow-listed origin', async () => {
+    const result = await handshake(streamUrl, {
+      Origin: allowedOrigin,
+      Cookie: 'session=valid-token',
+    });
+
+    expect(result).toEqual({ opened: true });
+  });
+
+  it('still requires a credential from an allow-listed origin', async () => {
+    const result = await handshake(streamUrl, { Origin: allowedOrigin });
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
+  });
+
+  it('does not block a client that sends no Origin header', async () => {
+    // Non-browser clients (and the Node WebSocket client used here) don't send
+    // Origin, so the allowlist must not become a blanket rejection.
+    const result = await handshake(streamUrl, { Cookie: 'session=valid-token' });
+
+    expect(result).toEqual({ opened: true });
+  });
+});
+
+describe('hono browser-stream WebSocket authentication with a configured provider', () => {
+  // `SimpleAuth` is the provider from `@mastra/core`, so this exercises the real
+  // credential path instead of a hand-rolled callback: the `mastra-token` cookie it
+  // issues is what a signed-in Studio session sends on a same-origin handshake.
+  let server: Server;
+  let streamUrl: string;
+
+  beforeEach(async () => {
+    ({ server, streamUrl } = await startBrowserStreamServer({
+      mastra: createStubMastra(new SimpleAuth({ tokens: { 'test-token': { sub: 'test-user' } } })),
+    }));
+  });
+
+  afterEach(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  });
+
+  it('refuses to upgrade an unauthenticated connection', async () => {
+    const result = await handshake(streamUrl);
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
+  });
+
+  it('upgrades a connection carrying the provider session cookie', async () => {
+    const result = await handshake(streamUrl, { Cookie: 'mastra-token=test-token' });
+
+    expect(result).toEqual({ opened: true });
+  });
+
+  it('refuses to upgrade a connection carrying an invalid provider session cookie', async () => {
+    const result = await handshake(streamUrl, { Cookie: 'mastra-token=wrong-token' });
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
   });
 });

@@ -236,11 +236,19 @@ export async function createHonoServer(
   // to avoid "can't modify immutable headers" error on WebSocket upgrade
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
+  //
+  // Only an explicitly configured origin is enforced on the WebSocket upgrade;
+  // `getCorsConfig` applies the same permissive default (reflect or `*`) below, so
+  // an install without an origin allowlist keeps working across origins.
+  const browserStreamOrigins =
+    server?.cors && typeof server.cors === 'object' && 'origin' in server.cors ? server.cors.origin : undefined;
+
   const browserStreamSetup =
     options.browserStream === false
       ? null
       : await setupBrowserStream(app, {
           mastra,
+          allowedOrigins: browserStreamOrigins,
           getToolset: async (agentId: string) => {
             // Look up agent and return its browser if configured.
             // First try the runtime registry (code-defined + previously hydrated agents),

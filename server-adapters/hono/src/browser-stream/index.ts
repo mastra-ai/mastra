@@ -2,9 +2,18 @@ import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
 import type { Mastra } from '@mastra/core/mastra';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
-import type { Env, Hono, Schema } from 'hono';
+import type { Context, Env, Hono, MiddlewareHandler, Schema } from 'hono';
 
 import { createAuthMiddleware } from '../auth-middleware';
+
+/**
+ * Allowed `Origin` values for browser WebSocket upgrades. Accepts the same shape
+ * as Hono's `cors.origin` option.
+ */
+export type BrowserStreamOrigin =
+  | string
+  | string[]
+  | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
 
 /**
  * Hono-specific browser stream configuration.
@@ -20,6 +29,37 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
    * middleware is a no-op.
    */
   mastra: Mastra;
+
+  /**
+   * Origin allowlist for the browser WebSocket upgrade.
+   *
+   * Browsers always send an `Origin` header on a WebSocket handshake and attach
+   * the session cookie to it, so without an allowlist a page on any origin could
+   * open a cookie-authenticated stream and drive the agent's browser. When this is
+   * set, an upgrade from an origin that isn't allowed is rejected with `403`.
+   *
+   * Requests without an `Origin` header (non-browser clients) are not affected,
+   * and the check is skipped entirely when this is unset. The deployer passes the
+   * explicitly configured `server.cors.origin` here; its permissive default is
+   * left as-is so cross-origin Studio deployments keep working.
+   */
+  allowedOrigins?: BrowserStreamOrigin;
+}
+
+/**
+ * Resolve an `allowedOrigins` value against the request's `Origin` header.
+ */
+async function isOriginAllowed(allowedOrigins: BrowserStreamOrigin, origin: string, c: Context): Promise<boolean> {
+  if (allowedOrigins === '*') {
+    return true;
+  }
+  if (typeof allowedOrigins === 'string') {
+    return allowedOrigins === origin;
+  }
+  if (Array.isArray(allowedOrigins)) {
+    return allowedOrigins.includes('*') || allowedOrigins.includes(origin);
+  }
+  return Boolean(await allowedOrigins(origin, c));
 }
 
 /**
@@ -103,8 +143,29 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // request's cookies and token-based clients pass `?apiKey=`.
   const authenticate = createAuthMiddleware({ mastra: config.mastra });
 
+  // Reject browser WebSocket upgrades from origins that aren't explicitly
+  // allow-listed. Browsers send `Origin` automatically and attach cookies to the
+  // handshake, so without this a page on any origin could open a
+  // cookie-authenticated stream and drive the agent's browser (CSWSH). Sessions
+  // that authenticate with a query token are unaffected in practice, but the
+  // check applies to the route rather than the credential. Non-browser clients
+  // send no `Origin` and are never blocked, and nothing is enforced unless the
+  // server configured an explicit origin.
+  const allowedOrigins = config.allowedOrigins;
+  const checkOrigin: MiddlewareHandler = async (c, next) => {
+    const origin = c.req.header('origin');
+    if (!allowedOrigins || !origin) {
+      return next();
+    }
+    if (!(await isOriginAllowed(allowedOrigins, origin, c))) {
+      return c.text('Forbidden', 403);
+    }
+    return next();
+  };
+
   app.get(
     '/browser/:agentId/stream',
+    checkOrigin,
     authenticate,
     upgradeWebSocket(c => {
       const agentId = c.req.param('agentId')!;

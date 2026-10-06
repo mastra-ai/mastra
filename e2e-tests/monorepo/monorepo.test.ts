@@ -1588,7 +1588,7 @@ class AliasDeployer extends Deployer {
             )
             .replace(
               'server: {',
-              "server: {\n    auth: new SimpleAuth({ tokens: { 'test-token': { sub: 'test-user' } } }),",
+              "server: {\n    auth: new SimpleAuth({ tokens: { 'test-token': { sub: 'test-user' } } }),\n    cors: { origin: 'https://studio.example.com' },",
             );
           await writeFile(mastraConfigPath, authenticatedMastraConfig);
 
@@ -1636,6 +1636,21 @@ class AliasDeployer extends Deployer {
           expect(unauthenticatedUpgrade.status, 'GET /browser/:agentId/stream').toBe(401);
           await unauthenticatedUpgrade.body?.cancel();
 
+          // A configured CORS origin also gates the upgrade: browsers attach the
+          // session cookie to a handshake from any origin, so a disallowed origin is
+          // refused before auth runs.
+          const disallowedOriginUpgrade = await fetch(`${baseUrl}/browser/${agentId}/stream?threadId=thread-1`, {
+            headers: { Origin: 'https://evil.example.com' },
+          });
+          expect(disallowedOriginUpgrade.status, 'GET /browser/:agentId/stream (disallowed origin)').toBe(403);
+          await disallowedOriginUpgrade.body?.cancel();
+
+          const allowedOriginUpgrade = await fetch(`${baseUrl}/browser/${agentId}/stream?threadId=thread-1`, {
+            headers: { Origin: 'https://studio.example.com' },
+          });
+          expect(allowedOriginUpgrade.status, 'GET /browser/:agentId/stream (allowed origin)').toBe(401);
+          await allowedOriginUpgrade.body?.cancel();
+
           for (const [label, headers] of [
             ['Authorization header', { Authorization: 'Bearer test-token' }],
             ['session cookie', { Cookie: 'mastra-token=test-token' }],
@@ -1648,7 +1663,8 @@ class AliasDeployer extends Deployer {
           }
 
           // A WebSocket handshake cannot carry an Authorization header, so the token
-          // has to travel as a query param for non-cookie providers.
+          // has to travel as a query param for non-cookie providers. Node's WebSocket
+          // sends no Origin header, so the configured allowlist does not apply here.
           await expect(canOpenWebSocket(`${baseUrl}/browser/${agentId}/stream?threadId=thread-1`)).resolves.toBe(false);
           await expect(
             canOpenWebSocket(`${baseUrl}/browser/${agentId}/stream?threadId=thread-1&apiKey=test-token`),
