@@ -57,6 +57,17 @@ describe('Knowledge core compatibility', () => {
     );
     expect(knowledgeCompat.knowledgeScopeIdsKey(scopeIds)).toBe(coreStorage.knowledgeScopeIdsKey(scopeIds));
 
+    for (const binding of ['[" github ","repo:mastra "]', '["github","repo:mastra"]']) {
+      expect(knowledgeCompat.canonicalizeKnowledgeImporterBindingKey(binding)).toBe(
+        coreStorage.canonicalizeKnowledgeImporterBindingKey(binding),
+      );
+    }
+    for (const binding of ['["github"]', '["github",""]', '[1,"repo"]', 'not json']) {
+      const message = 'Knowledge importer binding must encode a [source, scope] tuple';
+      expect(() => knowledgeCompat.canonicalizeKnowledgeImporterBindingKey(binding)).toThrow(new Error(message));
+      expect(() => coreStorage.canonicalizeKnowledgeImporterBindingKey(binding)).toThrow(new Error(message));
+    }
+
     const cases: [{ id: string; isScope: boolean }, string[], string[]][] = [
       [{ id: SCOPE_A, isScope: true }, [], [SCOPE_A]],
       [{ id: SCOPE_A, isScope: false }, [], [SCOPE_A]],
