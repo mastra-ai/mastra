@@ -165,7 +165,7 @@ describe('model pack application', () => {
     ];
     const { ctx, modelSwitch } = makeContext();
 
-    await expect(applyCurrentThreadPack(ctx, { packId: 'custom:Primary' })).resolves.toBeUndefined();
+    await expect(applyCurrentThreadPack(ctx, { packId: 'custom:Primary' })).resolves.toEqual({ applied: true });
 
     expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-default' });
     expect(ctx.state.session.state.set).toHaveBeenCalledWith({
@@ -177,7 +177,9 @@ describe('model pack application', () => {
   it('preserves the restored model when no pack resolves during thread restore', async () => {
     const { ctx, modelSwitch } = makeContext();
 
-    await expect(applyCurrentThreadPack(ctx, { packId: null, applyModeDefault: false })).resolves.toBeUndefined();
+    await expect(applyCurrentThreadPack(ctx, { packId: null, applyModeDefault: false })).resolves.toEqual({
+      applied: true,
+    });
 
     expect(modelSwitch).not.toHaveBeenCalled();
     expect(ctx.state.session.state.set).toHaveBeenCalledWith({
@@ -271,6 +273,45 @@ describe('model pack application', () => {
     });
   });
 
+  it('rejects a no-pack mode switch superseded during its final state write', async () => {
+    mocks.settings.models.activeModelPackId = null;
+    const { ctx } = makeContext();
+    ctx.state.session.thread.list.mockResolvedValue([{ id: 'thread-1', metadata: {} }]);
+    let releaseStateWrite = () => {};
+    ctx.state.session.state.set.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseStateWrite = resolve;
+        }),
+    );
+
+    const switching = switchModeWithPack(ctx, 'plan');
+    await vi.waitFor(() => expect(ctx.state.session.state.set).toHaveBeenCalled());
+    const newerApplication = applyPackToSession(ctx, 'custom:Primary', { modeId: 'plan' });
+    releaseStateWrite();
+
+    await expect(switching).rejects.toThrow('Mode switch was superseded before its model selection completed.');
+    await expect(newerApplication).resolves.toMatchObject({ applied: true });
+  });
+
+  it('rejects a mode switch when the pack application is superseded by a thread change', async () => {
+    const { ctx } = makeContext();
+    let resolveThreads = (_threads: Array<{ id: string; metadata: Record<string, unknown> }>) => {};
+    ctx.state.session.thread.list.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveThreads = resolve;
+        }),
+    );
+
+    const switching = switchModeWithPack(ctx, 'plan');
+    await vi.waitFor(() => expect(ctx.state.session.thread.list).toHaveBeenCalled());
+    ctx.state.session.thread.getId.mockReturnValue('thread-2');
+    resolveThreads([{ id: 'thread-1', metadata: { activeModelPackId: 'custom:Primary' } }]);
+
+    await expect(switching).rejects.toThrow('Mode switch was superseded before its model selection completed.');
+  });
+
   it('does not apply a resolved pack after the active thread changes', async () => {
     const { ctx, modelSwitch } = makeContext();
     let resolveThreads = (_threads: Array<{ id: string; metadata: Record<string, unknown> }>) => {};
@@ -284,7 +325,7 @@ describe('model pack application', () => {
     const application = applyCurrentThreadPack(ctx, { modeId: 'build' });
     ctx.state.session.thread.getId.mockReturnValue('thread-2');
     resolveThreads([{ id: 'thread-1', metadata: { activeModelPackId: 'custom:Primary' } }]);
-    await application;
+    await expect(application).resolves.toEqual({ applied: false });
 
     expect(modelSwitch).not.toHaveBeenCalled();
     expect(ctx.state.session.thread.setSetting).not.toHaveBeenCalled();

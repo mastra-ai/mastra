@@ -197,7 +197,7 @@ describe('runMC', () => {
       session,
       prompt: 'Continue with the restored model',
       thread: { id: restoredThreadId },
-      modeDefaults: { default: packModel!.id },
+      modeDefaults: { default: 'does-not-exist/default' },
     }).result;
 
     expect(result.status).toBe('completed');
@@ -377,14 +377,29 @@ describe('runMC', () => {
     expect(result.exitCode).toBe(2);
   });
 
-  it('returns a structured error result for an unknown model (no throw)', async () => {
+  it('returns a structured error result for an unknown model without mutating the session', async () => {
     const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('unused') }) });
+    const initialResourceId = session.identity.getResourceId();
+    const initialThreadId = session.thread.getId();
+    const initialThreadIds = (await session.thread.list()).map(thread => thread.id);
+    const initialModeId = session.mode.get();
 
-    const result = await runMC({ controller, session, prompt: 'x', model: 'does-not-exist/model' }).result;
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'x',
+      resourceId: 'different-resource',
+      mode: 'build',
+      model: 'does-not-exist/model',
+    }).result;
 
     expect(result.status).toBe('error');
     expect(result.exitCode).toBe(1);
     expect(result.error?.message).toMatch(/Unknown model/);
+    expect(session.identity.getResourceId()).toBe(initialResourceId);
+    expect(session.thread.getId()).toBe(initialThreadId);
+    expect((await session.thread.list()).map(thread => thread.id)).toEqual(initialThreadIds);
+    expect(session.mode.get()).toBe(initialModeId);
   });
 
   it('returns a structured error result when thread resolution fails', async () => {

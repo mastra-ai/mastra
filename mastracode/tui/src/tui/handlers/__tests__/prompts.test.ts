@@ -4,7 +4,14 @@ import * as path from 'node:path';
 import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ switchModeWithPack: vi.fn(async () => undefined) }));
+const mocks = vi.hoisted(() => ({
+  approvePlanFile: vi.fn(async () => undefined),
+  switchModeWithPack: vi.fn(async () => undefined),
+}));
+vi.mock('@mastra/code-sdk/utils/plans', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/code-sdk/utils/plans')>()),
+  approvePlanFile: mocks.approvePlanFile,
+}));
 vi.mock('../../model-packs/apply.js', () => ({ switchModeWithPack: mocks.switchModeWithPack }));
 
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
@@ -27,6 +34,7 @@ function createTmpProjectWithPlan(title: string, plan: string, filename = getPla
 }
 
 beforeEach(() => {
+  mocks.approvePlanFile.mockClear();
   mocks.switchModeWithPack.mockClear();
 });
 
@@ -383,6 +391,9 @@ describe('handlePlanApproval regular approval', () => {
       expect(state.activeInlinePlanApproval).toBe(component);
       expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
       expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+      expect(state.session.state.set).not.toHaveBeenCalled();
+      expect(state.previousPlanSnapshot).toBeDefined();
+      expect(mocks.approvePlanFile).not.toHaveBeenCalled();
       expect(runPermissionResult).not.toHaveBeenCalled();
 
       mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
@@ -390,6 +401,8 @@ describe('handlePlanApproval regular approval', () => {
       await promise;
 
       expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+      expect(state.previousPlanSnapshot).toBeUndefined();
+      expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
       expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
         path: PLAN_PATH,
       });

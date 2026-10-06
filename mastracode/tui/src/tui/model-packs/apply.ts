@@ -219,14 +219,14 @@ async function resolveActivePackId(
 export async function applyCurrentThreadPack(
   ctx: ModelPackContext,
   options: { modeId?: string; packId?: string | null; applyModeDefault?: boolean } = {},
-): Promise<(PackSelection & { applied: boolean }) | undefined> {
+): Promise<{ applied: boolean }> {
   const settings = loadSettings();
   const modeId = options.modeId ?? ctx.state.session.mode.get();
   const resolution =
     options.packId === undefined
       ? await resolveActivePackId(ctx, settings)
       : { packId: options.packId, threadId: ctx.state.session.thread.getId() };
-  if (!resolution) return undefined;
+  if (!resolution) return { applied: false };
   if (resolution.packId && resolvePackSelection(settings, resolution.packId, modeId)) {
     return applyPackToSession(ctx, resolution.packId, {
       modeId,
@@ -237,27 +237,30 @@ export async function applyCurrentThreadPack(
 
   const application = beginPackApplication(ctx, modeId, resolution.threadId);
   return application.run(async () => {
-    if (!application.isCurrent()) return undefined;
+    if (!application.isCurrent()) return { applied: false };
     if (options.applyModeDefault !== false) {
       const mode = ctx.state.controller.listModes().find(item => item.id === modeId);
       const modelId = settings.models.modeDefaults[modeId] ?? mode?.defaultModelId;
       if (modelId && ctx.state.session.model.get() !== modelId) {
         await ctx.state.session.model.switch({ modelId });
-        if (!application.isCurrent()) return undefined;
+        if (!application.isCurrent()) return { applied: false };
       }
     }
     if (resolution.threadId) {
       await ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
-      if (!application.isCurrent()) return undefined;
+      if (!application.isCurrent()) return { applied: false };
     }
     await ctx.state.session.state.set({ modelRoute: undefined, [MODEL_FALLBACK_STATE_KEY]: null });
-    return undefined;
+    return { applied: application.isCurrent() };
   });
 }
 
 export async function switchModeWithPack(ctx: ModelPackContext, modeId: string): Promise<void> {
   await ctx.state.session.mode.switch({ modeId });
-  await applyCurrentThreadPack(ctx, { modeId });
+  const application = await applyCurrentThreadPack(ctx, { modeId });
+  if (!application.applied) {
+    throw new Error('Mode switch was superseded before its model selection completed.');
+  }
 }
 
 export async function reconcilePackAfterModeChange(ctx: ModelPackContext, modeId: string): Promise<void> {

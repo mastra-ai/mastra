@@ -89,10 +89,11 @@ function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
 async function resolveThread<TState extends Record<string, unknown>>(
   session: Session<TState>,
   threadId: string,
+  resourceId?: string,
 ): Promise<{ threadId: string } | { error: string }> {
-  const threads = await session.thread.list();
+  const threads = await session.thread.list(resourceId ? { allResources: true } : undefined);
 
-  const byId = threads.find(t => t.id === threadId);
+  const byId = threads.find(thread => thread.id === threadId && (!resourceId || thread.resourceId === resourceId));
   if (byId) return { threadId: byId.id };
 
   return { error: `No thread found with ID "${threadId}"` };
@@ -330,6 +331,58 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       }
     });
 
+    // --- Thread resolution (read-only) ---
+    const thread = options.thread;
+    const targetResourceId = options.resourceId ?? session.identity.getResourceId();
+    let restoredThreadId: string | undefined;
+    try {
+      if (thread?.id) {
+        const resolved = await resolveThread(session, thread.id, targetResourceId);
+        if ('error' in resolved) return fail(resolved.error);
+        restoredThreadId = resolved.threadId;
+      } else if (thread?.continueLatest) {
+        const threads = await session.thread.list(targetResourceId ? { allResources: true } : undefined);
+        const resourceThreads = targetResourceId
+          ? threads.filter(candidate => candidate.resourceId === targetResourceId)
+          : threads;
+        if (resourceThreads.length > 0) {
+          restoredThreadId = [...resourceThreads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!.id;
+        }
+      }
+    } catch (err) {
+      return fail(`Failed to resolve thread: ${(err as Error).message}`);
+    }
+
+    // --- Config validation (read-only) ---
+    const restoredThreadSelection = Boolean(restoredThreadId || thread?.clone);
+    const modeIdForModel = options.mode ?? session.mode.get();
+    const configuredDefaultModelId = options.modeDefaults?.[modeIdForModel];
+    const modelIdToApply =
+      options.model ?? (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
+    try {
+      if (options.mode && !controller.listModes().some(mode => mode.id === options.mode)) {
+        return fail(`Unknown mode: "${options.mode}"`);
+      }
+
+      if (modelIdToApply) {
+        const available = await controller.listAvailableModels();
+        const match = available.find(model => model.id === modelIdToApply);
+        if (!match) {
+          return options.model
+            ? fail(`Unknown model: "${modelIdToApply}"`)
+            : fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
+        }
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          return options.model
+            ? fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`)
+            : fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
+        }
+      }
+    } catch (err) {
+      return fail(`Failed to resolve run config: ${(err as Error).message}`);
+    }
+
     // --- Resource id ---
     try {
       if (options.resourceId) {
@@ -340,21 +393,9 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     }
 
     // --- Thread selection ---
-    let restoredThreadSelection = false;
     try {
-      const thread = options.thread;
-      if (thread?.id) {
-        const resolved = await resolveThread(session, thread.id);
-        if ('error' in resolved) return fail(resolved.error);
-        await session.thread.switch({ threadId: resolved.threadId });
-        restoredThreadSelection = true;
-      } else if (thread?.continueLatest) {
-        const threads = await session.thread.list();
-        if (threads.length > 0) {
-          const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-          await session.thread.switch({ threadId: sorted[0]!.id });
-          restoredThreadSelection = true;
-        }
+      if (restoredThreadId) {
+        await session.thread.switch({ threadId: restoredThreadId });
       } else if (!thread?.clone) {
         await session.thread.create();
       }
@@ -363,51 +404,27 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     }
 
     // --- Clone ---
-    if (options.thread?.clone) {
+    if (thread?.clone) {
       try {
         await session.thread.clone();
-        restoredThreadSelection = true;
       } catch (err) {
         return fail(`Failed to clone thread: ${(err as Error).message}`);
       }
     }
 
-    // --- Config resolution (model / mode / thinking) ---
+    // --- Config application ---
     try {
       if (options.mode) {
         await session.mode.switch({ modeId: options.mode });
       }
-
-      if (options.model) {
-        const available = await controller.listAvailableModels();
-        const match = available.find(m => m.id === options.model);
-        if (!match) return fail(`Unknown model: "${options.model}"`);
-        if (!match.hasApiKey) {
-          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-          return fail(`Model "${options.model}" has no API key configured.${keyHint}`);
-        }
-        await session.model.switch({ modelId: options.model });
-      } else if (options.mode || !restoredThreadSelection) {
-        const modeId = options.mode ?? session.mode.get();
-        const modelId = options.modeDefaults?.[modeId];
-        if (modelId) {
-          const available = await controller.listAvailableModels();
-          const match = available.find(m => m.id === modelId);
-          if (!match) return fail(`Unknown model "${modelId}" configured for mode "${modeId}"`);
-          if (!match.hasApiKey) {
-            const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-            return fail(`Model "${modelId}" (mode: ${modeId}) has no API key configured.${keyHint}`);
-          }
-          await session.model.switch({ modelId });
-        }
-        // No configured model for mode → fall through to default (no failure).
+      if (modelIdToApply) {
+        await session.model.switch({ modelId: modelIdToApply });
       }
-
       if (options.thinkingLevel) {
         await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
       }
     } catch (err) {
-      return fail(`Failed to resolve run config: ${(err as Error).message}`);
+      return fail(`Failed to apply run config: ${(err as Error).message}`);
     }
 
     // --- Title ---

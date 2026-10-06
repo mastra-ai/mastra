@@ -447,13 +447,13 @@ export async function handlePlanApproval(
       previousPlan,
       onApprove: async () => {
         releaseApprovalFocus();
-        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
         try {
           await switchModeWithPack(ctx, 'build');
         } catch (error) {
           restoreApprovalAfterError(error);
           return;
         }
+        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
         firePermissionResult('approved');
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
         // The controller emits the resumed tool's terminal events while this
@@ -464,13 +464,13 @@ export async function handlePlanApproval(
       },
       onGoal: async () => {
         releaseApprovalFocus();
-        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
         try {
           await switchModeWithPack(ctx, 'build');
         } catch (error) {
           restoreApprovalAfterError(error);
           return;
         }
+        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
         firePermissionResult('approved');
 
         // The approved run keeps going into implementation, so the plan has to
