@@ -1,6 +1,7 @@
 import { createKnowledgeSchemaResetTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_ACTIVITY_SCHEMA,
+  KNOWLEDGE_CURSORS_SCHEMA,
   KNOWLEDGE_MENTIONS_SCHEMA,
   KNOWLEDGE_NODES_SCHEMA,
   KNOWLEDGE_RECORDS_SCHEMA,
@@ -9,6 +10,7 @@ import {
   KnowledgeSchemaResetRequiredError,
   MastraCompositeStore,
   TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_RECORDS,
@@ -72,6 +74,13 @@ async function seedPublishedKnowledgeV1(schemaName: string): Promise<void> {
       tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
       schemaName,
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_CURSORS,
+      schema: KNOWLEDGE_CURSORS_SCHEMA,
+      schemaName,
+      compositePrimaryKey: ['sourceThreadId', 'agent'],
       includeAllConstraints: true,
     }),
     `CREATE UNIQUE INDEX idx_knowledge_nodes_identity ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" ("type", "scopeKey", "canonicalName")`,
@@ -165,6 +174,48 @@ describe('PostgreSQL knowledge schema reset dependents', () => {
 });
 
 describe('PostgreSQL knowledge legacy schema boundary', () => {
+  it('keeps the retired cursor table of another schema when replacing or resetting', async () => {
+    const emptySchema = `knowledge_retired_empty_${Date.now()}`;
+    const rowsSchema = `knowledge_retired_rows_${Date.now()}`;
+    const otherSchema = `knowledge_retired_other_${Date.now()}`;
+    const cursorRow = (schemaName: string) =>
+      pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_CURSORS}" ("sourceThreadId",agent,"lastKnowledgeId","updatedAt") VALUES ('thread','observer','k1',NOW())`,
+      );
+    const otherCursors = async () =>
+      (await pool.query(`SELECT "sourceThreadId" FROM "${otherSchema}"."${TABLE_KNOWLEDGE_CURSORS}"`)).rows;
+    const tableExists = async (schemaName: string, table: string) =>
+      (await pool.query('SELECT to_regclass($1) AS oid', [`"${schemaName}"."${table}"`])).rows[0]?.oid !== null;
+    for (const schemaName of [emptySchema, rowsSchema, otherSchema]) {
+      await pool.query(`CREATE SCHEMA "${schemaName}"`);
+      await seedPublishedKnowledgeV1(schemaName);
+    }
+    // Unqualified names resolve to otherSchema, standing in for the default `public` schema.
+    const searchPathPool = new Pool({ connectionString, options: `-c search_path=${otherSchema}` });
+    try {
+      await cursorRow(otherSchema);
+      await cursorRow(rowsSchema);
+
+      const emptyStore = new KnowledgePG({ pool: searchPathPool, schemaName: emptySchema });
+      await emptyStore.init();
+      expect(await emptyStore.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect(await tableExists(emptySchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
+
+      const rowsStore = new KnowledgePG({ pool: searchPathPool, schemaName: rowsSchema });
+      await expect(rowsStore.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      await rowsStore.dangerouslyReset();
+      expect(await rowsStore.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
+
+      expect(await otherCursors()).toEqual([{ sourceThreadId: 'thread' }]);
+    } finally {
+      await searchPathPool.end();
+      for (const schemaName of [emptySchema, rowsSchema, otherSchema]) {
+        await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      }
+    }
+  });
+
   it('replaces the empty v1 tables every published PostgreSQL store created', async () => {
     const schemaName = `knowledge_empty_v1_${Date.now()}`;
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
