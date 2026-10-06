@@ -40,8 +40,10 @@ export interface T79PeerResult {
 runPeer<T79PeerArgs>(async peer => {
   const { engine, agentId, runId } = peer.args;
   // Memory-configured like the harness's peer agent (`@mastra/memory`'s real
-  // `Memory` there, core's `MockMemory` here — see xproc-abort.test.ts). Inert
-  // in this process: the peer streams no run of its own, it only aborts one.
+  // `Memory` there, core's `MockMemory` here), kept for shape parity. Inert
+  // here: this process streams no run of its own, it only aborts one, and
+  // agent-level memory has no bearing on `abortRunStream` — a run is found
+  // through the call's thread id, not through the agent.
   const { agent } = createStepAgent({ id: agentId, steps: 0, memory: new MockMemory() });
   const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new LibSQLStore({ id: `t79-peer-${process.pid}`, url: peer.dbUrl });

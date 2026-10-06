@@ -21,11 +21,13 @@ export interface StepAgentOptions {
   steps: number;
   /**
    * Configure memory on the agent, as the harness's script agent does. It is
-   * not inert: a run issued from an agent that has memory is wrapped by the
-   * until-idle stream wrapper, and that wrapper is the run slot
-   * `abortRunStream(runId)` closes. Without memory there is no wrapper to close
-   * and the abort has nothing to act on (see the plain cell in
-   * xproc-abort.test.ts).
+   * not what makes a run abortable: `abortRunStream(runId)` finds a run through
+   * the *call's* thread id (the stream option `memory: { thread, resource }`),
+   * not through the agent's memory instance. Agent-level memory neither
+   * registers the run nor is required to — a call that carries no thread id
+   * registers nothing and the abort is a silent no-op either way (measured:
+   * with agent memory but no call thread id, the abort lands 0/10). Kept for
+   * shape parity with the harness's agent; no check reads memory contents.
    */
   memory?: MastraMemory;
   /** Park the tool at this step until `release` resolves or the run is aborted. */

@@ -66,16 +66,13 @@
  * - The agent is model-free in both (the harness marks the case
  *   `modelFree: true`).
  * - Memory: the harness gives its script agent the real `Memory` (from
- *   `@mastra/memory`) bound to the case's storage, and streams with
- *   `memory: { thread, resource }`. This package does not depend on
- *   `@mastra/memory`, so the cells that need memory configured use core's own
- *   `MockMemory` — the same shape (an agent that has memory, a memory-scoped
- *   stream) with an in-memory backend instead of the shared file. It is needed
- *   rather than cosmetic: a run started from an agent that has memory is wrapped
- *   by the until-idle stream wrapper, and that wrapper is the run slot
- *   `abortRunStream(runId)` closes. Only the plain engine depends on it for its
- *   abort to have any effect; the durable and evented engines register their own
- *   run slot. No check in this case reads memory contents.
+ *   `@mastra/memory`) bound to the case's storage. These agents carry none.
+ *   What makes a run abortable is the thread id on the *call* — the stream's
+ *   `memory: { thread, resource }` — which registers the run's abort controller
+ *   in the thread-stream runtime. Agent-level memory neither registers a run
+ *   nor is required to, so dropping it changes no assertion here (verified 5/5
+ *   for the plain cell, which is the one whose abort depended on it). No check
+ *   in this case reads memory contents.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -86,7 +83,6 @@ import {
   createEventedAgent,
 } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { MockMemory } from '@mastra/core/memory';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LibSQLStore } from '../../storage';
@@ -304,7 +300,6 @@ for (const spec of CELLS) {
           steps: 3,
           blockAt: 2,
           release: release.promise,
-          memory: spec.engine === 'plain' ? new MockMemory() : undefined,
           onToolEvent: event => {
             toolLog.push(event);
             if (event.event === 'reached') reached.resolve();
@@ -384,8 +379,11 @@ for (const spec of CELLS) {
           onError,
           onAbort,
           onFinish,
-          // The harness's memory scope. For durable/evented the engine owns its
-          // run storage; for plain this is what makes the run memory-scoped.
+          // The harness's memory scope. This is what makes every cell
+          // abortable, whatever the engine: `abortRunStream(runId)` finds the
+          // run through the call's thread id (the thread-stream runtime
+          // registers the run's abort controller for it), not through anything
+          // on the agent.
           memory: { thread: `t79-thread-${id}`, resource: `t79-resource-${id}` },
         });
         const chunks: Array<{ type: string }> = [];
