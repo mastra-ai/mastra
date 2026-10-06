@@ -953,7 +953,6 @@ export type ProviderModelsMap = {
     'sakana/fugu-max',
     'sakana/fugu-ultra',
     'sakana/fugu-ultra-v1.1',
-    'sakana/sakana-namazu',
     'sarvam-105b',
     'shisa-ai/shisa-v2-llama3.3-70b',
     'shisa-ai/shisa-v2.1-llama3.3-70b',
