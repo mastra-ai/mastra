@@ -450,7 +450,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           session,
           goalManager,
           pendingNewThread: false,
-          planStartedGoalId: undefined,
         } as any;
         const objective = await goalManager.setGoal(state, goal.objective, goal.judgeModelId, goal.maxRuns);
         if (!objective) return fail('Failed to set goal.');
