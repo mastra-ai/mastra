@@ -84,14 +84,9 @@ describe('message meta', () => {
   });
 
   it('waits for the reply to finish before offering to copy it', () => {
-    const { container } = renderWithProviders(
-      <TranscriptEntries
-        entries={[messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'still writ' }], true)]}
-        onApprove={() => {}}
-        onRespond={() => {}}
-        running
-      />,
-    );
+    const { container } = renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'still writ' }], true),
+    ]);
 
     expect(container.querySelector('time')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();

@@ -1646,7 +1646,7 @@ describe('accumulateChunk - tripwire', () => {
 // FINISH / ABORT
 // =============================================================================
 
-describe('accumulateChunk - finish / abort finalization', () => {
+describe('accumulateChunk - finish / abort / error finalization', () => {
   it('finish marks streaming text parts done', () => {
     const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), finishChunk('stop')]);
     const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
@@ -1657,6 +1657,13 @@ describe('accumulateChunk - finish / abort finalization', () => {
     const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), abortChunk()]);
     const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
     expect(text.state).toBe('done');
+  });
+
+  it('error marks the reply streaming reasoning done before appending the error message', () => {
+    const out = reduce([startChunk(), reasoningStartChunk(), reasoningDeltaChunk('weighing'), errorChunk('boom')]);
+    const reasoning = out[0].content.parts.find(p => p.type === 'reasoning') as MastraReasoningPart;
+    expect(reasoning.state).toBe('done');
+    expect(out[1].content.metadata).toMatchObject({ status: 'error' });
   });
 });
 
@@ -1730,6 +1737,14 @@ describe('finishStreamingAssistantMessage', () => {
     const finished = finishStreamingAssistantMessage(out);
     const text = finished[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
     expect(text.state).toBe('done');
+  });
+
+  it('marks streaming reasoning done on an assistant message followed by a user message', () => {
+    const out = reduce([startChunk(), reasoningStartChunk(), reasoningDeltaChunk('weighing')]);
+    const finished = finishStreamingAssistantMessage([...out, pendingUserMessage('u-1', 'follow-up')]);
+    const reasoning = finished[0].content.parts.find(p => p.type === 'reasoning') as MastraReasoningPart;
+    expect(reasoning.state).toBe('done');
+    expect(finished[1].id).toBe('u-1');
   });
 
   it('is a no-op when there is no trailing assistant', () => {

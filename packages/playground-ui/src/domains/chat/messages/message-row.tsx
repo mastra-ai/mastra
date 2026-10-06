@@ -217,7 +217,7 @@ export const MessageRow = memo(function MessageRow({
       );
     };
     return {
-      Reasoning: part => <ReasoningPartRenderer part={isRunning ? part : { ...part, state: 'done' }} />,
+      Reasoning: part => <ReasoningPartRenderer part={part} />,
       Data: part => (
         <Arriving>
           <DataPartRenderer part={part} />

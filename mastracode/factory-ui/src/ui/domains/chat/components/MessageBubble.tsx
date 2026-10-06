@@ -47,12 +47,11 @@ function steeringLabel(entry: MessageEntry): string | undefined {
 function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
   if (entry.message.role === 'user') return prose || undefined;
 
-  return reply;
+  return entry.streaming ? undefined : reply;
 }
 
 export function MessageBubble({
   entry,
-  streaming,
   suspensions,
   reply,
   isSubmitting,
@@ -60,7 +59,6 @@ export function MessageBubble({
   viewerId,
 }: {
   entry: MessageEntry;
-  streaming: boolean;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
   isSubmitting: boolean;
@@ -68,7 +66,7 @@ export function MessageBubble({
   viewerId?: string;
 }) {
   const written = renderableParts(entry);
-  const parts = useRevealedParts(written, streaming);
+  const parts = useRevealedParts(written, Boolean(entry.streaming));
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
@@ -79,7 +77,7 @@ export function MessageBubble({
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
-  const meta = metaText(entry, prose, streaming ? undefined : reply);
+  const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
@@ -140,14 +138,14 @@ export function MessageBubble({
       }
 
       return (
-        <MarkdownRenderer className="my-3" streaming={streaming}>
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
           {part.text}
         </MarkdownRenderer>
       );
     },
     Reasoning: (part: ReasoningPart) => (
       <ReasoningPartRenderer
-        part={{ ...part, state: streaming ? (part.state ?? 'streaming') : 'done' }}
+        part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }}
         defaultOpen={false}
       />
     ),

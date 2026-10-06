@@ -2,10 +2,8 @@
 import '@/test/inert-resize-observer';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { ChunkFrom } from '@mastra/core/stream';
-import type { ChunkType } from '@mastra/core/stream';
 import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
-import { accumulateChunk, MastraReactProvider } from '@mastra/react';
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -708,49 +706,6 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('thinking out loud')).toBeTruthy();
-  });
-
-  describe('when a reasoning part is still marked streaming', () => {
-    const chunks: ChunkType[] = [
-      { type: 'start', runId: 'first-run', from: ChunkFrom.AGENT, payload: { messageId: 'reasoning-response' } },
-      { type: 'reasoning-start', runId: 'first-run', from: ChunkFrom.AGENT, payload: { id: 'reasoning-1' } },
-      {
-        type: 'reasoning-delta',
-        runId: 'first-run',
-        from: ChunkFrom.AGENT,
-        payload: { id: 'reasoning-1', text: 'Weighing the options' },
-      },
-    ];
-    const conversation = chunks.reduce<MastraDBMessage[]>(
-      (messages, chunk) =>
-        accumulateChunk({ chunk, conversation: messages, metadata: { mode: 'stream', runId: 'first-run' } }),
-      [],
-    );
-    const row = (isRunning: boolean, activeRunId: string) => (
-      <ChatRunningContext.Provider
-        value={{ isRunning, activeRunId, cancelRun: () => {}, canSendWhileStreaming: false }}
-      >
-        {conversation.map(message => (
-          <MessageRow key={message.id} message={message} />
-        ))}
-      </ChatRunningContext.Provider>
-    );
-
-    it('shimmers while its run is live', async () => {
-      render(row(true, 'first-run'), { wrapper: Providers });
-      const reasoning = await screen.findByRole('group', { name: 'Reasoning' });
-      expect(reasoning.getAttribute('aria-busy')).toBe('true');
-    });
-
-    it.each([
-      ['its run has stopped', false, 'first-run'],
-      ['a later run is live', true, 'later-run'],
-    ])('settles once %s', async (_case, isRunning, activeRunId) => {
-      const { rerender } = render(row(true, 'first-run'), { wrapper: Providers });
-      await screen.findByRole('group', { name: 'Reasoning' });
-      rerender(row(isRunning, activeRunId));
-      expect(screen.getByRole('group', { name: 'Reasoning' }).getAttribute('aria-busy')).toBe('false');
-    });
   });
 
   it('routes a dynamic-tool part into ToolCard (generic tool badge)', () => {

@@ -44,7 +44,7 @@ describe('a reply that calls a tool mid-sentence', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
-        <TranscriptEntries entries={[reply]} onApprove={() => {}} onRespond={() => {}} running />
+        <TranscriptEntries entries={[reply]} onApprove={() => {}} onRespond={() => {}} />
       </MemoryRouter>,
     );
 

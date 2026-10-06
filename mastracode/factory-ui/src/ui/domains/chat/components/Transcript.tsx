@@ -87,7 +87,7 @@ export function TranscriptEntries({
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-  /** Holds the room open under the live turn and lets messages stream; both settle when the agent stops. */
+  /** Holds the room open under the live turn, and releases it when the agent stops. */
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
@@ -118,9 +118,6 @@ export function TranscriptEntries({
   // A steer interjects into a reply still being written: it keeps its turn for the
   // rail and history, but claims no room and no trip — the reader stays with the stream.
   const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
-  // A message whose end never arrived is no longer written once its run has stopped.
-  const stillWriting = (entry: TimelineEntry): boolean =>
-    running && entry.kind === 'message' && entry.streaming === true;
 
   const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTimeGap });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
@@ -159,7 +156,6 @@ export function TranscriptEntries({
               <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
                 <TranscriptEntryContent
                   entry={entry}
-                  streaming={stillWriting(entry)}
                   suspensions={suspensions}
                   reply={entry === replyEnd ? reply : undefined}
                   redundantSuspension={
@@ -194,7 +190,6 @@ export function TranscriptEntries({
  */
 const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry,
-  streaming,
   suspensions,
   reply,
   redundantSuspension,
@@ -204,7 +199,6 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   onRespond,
 }: {
   entry: TimelineEntry;
-  streaming: boolean;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
   redundantSuspension: boolean;
@@ -218,7 +212,6 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
       return (
         <MessageBubble
           entry={entry}
-          streaming={streaming}
           suspensions={suspensions}
           reply={reply}
           isSubmitting={isSubmitting}

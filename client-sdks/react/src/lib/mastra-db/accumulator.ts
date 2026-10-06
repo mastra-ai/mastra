@@ -194,27 +194,26 @@ const partState = (part: MastraMessagePart): string | undefined => (part as { st
 const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> | undefined =>
   (part as { providerMetadata?: Record<string, unknown> }).providerMetadata;
 
-/**
- * Set any streaming text/reasoning parts on the trailing assistant message to
- * `state: 'done'`. Mirrors the previous `finishStreamingAssistantMessage` from
- * the AI-SDK accumulator.
- */
+const isStreamingProse = (part: MastraMessagePart): boolean =>
+  (part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming';
+
+const settleStreamingProse = (message: MastraDBMessage): MastraDBMessage => {
+  if (message.role !== 'assistant' || !message.content.parts.some(isStreamingProse)) return message;
+  return withParts(
+    message,
+    message.content.parts.map(part => (isStreamingProse(part) ? { ...part, state: 'done' } : part)),
+  );
+};
+
+/** Settles streaming text/reasoning on every assistant message and drops an empty trailing assistant message. */
 export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[]): MastraDBMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
-  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
-  if (lastMessage.content.parts.length === 0) return conversation.slice(0, -1);
-
-  const nextParts = lastMessage.content.parts.map(part => {
-    if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
-      return {
-        ...(part as MastraTextPart | MastraReasoningPart),
-        state: 'done' as const,
-      } as unknown as MastraMessagePart;
-    }
-    return part;
-  });
-
-  return replaceLast(conversation, withParts(lastMessage, nextParts));
+  const kept =
+    lastMessage?.role === 'assistant' && lastMessage.content.parts.length === 0
+      ? conversation.slice(0, -1)
+      : conversation;
+  const settled = kept.map(settleStreamingProse);
+  return settled.some((message, index) => message !== kept[index]) ? settled : kept;
 };
 
 /**
@@ -1599,7 +1598,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           status: 'error',
         },
       );
-      return [...result, newMessage];
+      return [...finishStreamingAssistantMessage(result), newMessage];
     }
 
     // ----- Rotated response message ids (`step-start.payload.messageId` carries
