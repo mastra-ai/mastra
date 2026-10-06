@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -337,7 +338,9 @@ describe('tool event handlers', () => {
 
     expect(ctx.state.pendingSubagents.has('call-1')).toBe(true);
     expect(
-      ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
+      stripVTControlCharacters(
+        ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
+      ),
     ).toContain('background · task-1');
 
     handleToolEnd(ctx, 'call-1', 'Authoritative Alexandria result', false);

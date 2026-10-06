@@ -1499,7 +1499,9 @@ describe('renderExistingMessages subagents', () => {
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
-    expect(state.chatContainer.render(120).join('\n').includes('background · visible-demo-123')).toBe(enabled === true);
+    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {

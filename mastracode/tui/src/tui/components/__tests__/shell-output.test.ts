@@ -62,13 +62,11 @@ function renderedLines(component: ShellStreamComponent) {
     .map(line => line.trimEnd());
 }
 
-/** The rows of the shaded output panel, between the ▄ top edge and the ▀ bottom edge. */
-function panelRows(lines: string[]) {
-  const top = lines.findIndex(line => /^▄+$/.test(line));
-  const bottom = lines.findIndex(line => /^▀+$/.test(line));
-  expect(top).toBeGreaterThan(0);
-  expect(bottom).toBe(lines.length - 1);
-  return lines.slice(top + 1, bottom);
+/** A tool card: the title row and the output rows between the card's ▄ top edge and ▀ bottom edge. */
+function card(lines: string[]) {
+  expect(lines[0]).toMatch(/^▄+$/);
+  expect(lines.at(-1)).toMatch(/^▀+$/);
+  return { title: lines[1], output: lines.slice(2, -1) };
 }
 
 describe('ShellStreamComponent', () => {
@@ -83,17 +81,16 @@ describe('ShellStreamComponent', () => {
     component.appendOutput('stdout one\nstderr partial');
 
     const running = renderedLines(component);
-    // Running: dot + command, no duration or failure mark yet.
-    expect(running[0]).toBe('• $ pnpm test');
-    expect(panelRows(running)).toEqual(['  stdout one', '  stderr partial']);
+    // Running: dot + command, no duration or failure mark yet, with the output under it on one card.
+    expect(card(running)).toEqual({ title: '• $ pnpm test', output: ['  stdout one', '  stderr partial'] });
     expect(running.join('\n')).not.toMatch(/[│╭╰]/);
 
     component.finish(2);
 
     const finished = renderedLines(component);
-    expect(finished[0]).toMatch(/^• \$ pnpm test \d+ms ✗$/);
-    // The partial line is flushed and the exit code is the last panel row.
-    expect(panelRows(finished)).toEqual(['  stdout one', '  stderr partial', '  Exit code: 2']);
+    expect(card(finished).title).toMatch(/^• \$ pnpm test \d+ms ✗$/);
+    // The partial line is flushed and the exit code is the last card row.
+    expect(card(finished).output).toEqual(['  stdout one', '  stderr partial', '  Exit code: 2']);
   });
 
   it('renders only the title row when there is no output', () => {
@@ -111,9 +108,9 @@ describe('ShellStreamComponent', () => {
 
     component.appendOutput(output);
 
-    const collapsed = panelRows(renderedLines(component));
+    const collapsed = card(renderedLines(component)).output;
     expect(collapsed).toHaveLength(21);
-    // Truncation note sits at the top of the panel.
+    // Truncation note sits at the top of the output.
     expect(collapsed[0]).toBe('  … 180 earlier lines · ctrl+e to expand');
     expect(collapsed[1]).toBe('  line-186');
     expect(collapsed.at(-1)).toBe('  line-205');
@@ -121,7 +118,7 @@ describe('ShellStreamComponent', () => {
 
     component.setExpanded(true);
 
-    const expanded = panelRows(renderedLines(component));
+    const expanded = card(renderedLines(component)).output;
     expect(expanded).toHaveLength(200);
     expect(expanded[0]).toBe('  line-6');
     expect(expanded.at(-1)).toBe('  line-205');
@@ -129,7 +126,7 @@ describe('ShellStreamComponent', () => {
     expect(expanded.some(line => line.includes('earlier lines'))).toBe(false);
   });
 
-  it('truncates output lines to the terminal width minus the panel indent', () => {
+  it('truncates output lines to the terminal width minus the card indent', () => {
     const component = new ShellStreamComponent('echo long');
 
     component.appendOutput('x'.repeat(120) + '\n');

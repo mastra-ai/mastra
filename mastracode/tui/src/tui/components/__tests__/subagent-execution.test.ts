@@ -18,17 +18,15 @@ function nonEmpty(lines: string[]): string[] {
 }
 
 /**
- * Splits a tool-style block into its "• title" row and the rows of the shaded panel between the ▄ and ▀ edges.
+ * Splits a tool card into its "• title" row and the output rows under it, between the card's ▄ and ▀ edges.
  * Asserts the block uses that structure and no box borders.
  */
 function toolBlockParts(lines: string[]): { title: string; panel: string[] } {
-  const top = lines.findIndex(l => /^▄+$/.test(l.trim()));
-  const bottom = lines.findIndex(l => /^▀+$/.test(l.trim()));
-  expect(lines[0]).toMatch(/^• /);
-  expect(top).toBe(1);
-  expect(bottom).toBe(lines.length - 1);
+  expect(lines[0]!.trim()).toMatch(/^▄+$/);
+  expect(lines[1]).toMatch(/^• /);
+  expect(lines.at(-1)!.trim()).toMatch(/^▀+$/);
   expect(lines.join('\n')).not.toMatch(/[╭╰│]/);
-  return { title: lines[0]!, panel: lines.slice(top + 1, bottom) };
+  return { title: lines[1]!, panel: lines.slice(2, -1) };
 }
 
 describe('SubagentExecutionComponent', () => {

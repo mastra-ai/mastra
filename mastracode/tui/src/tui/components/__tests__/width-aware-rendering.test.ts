@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { Text, visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
@@ -53,7 +54,7 @@ describe('width-aware custom component rendering', () => {
   it('reflows judge output without changing its result', () => {
     const component = new JudgeDisplayComponent({ decision: 'continue', reason: source }, 2, 10);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows notifications while retaining metadata and source content', () => {
@@ -64,7 +65,7 @@ describe('width-aware custom component rendering', () => {
       kind: 'status',
     });
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('keeps background completion notifications compact until expanded', () => {
@@ -97,7 +98,7 @@ describe('width-aware custom component rendering', () => {
     const component = new OMOutputComponent({ type: 'observation', observations: source });
     component.setExpanded(true);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows streaming shell output without changing expansion or its buffer', () => {
@@ -106,7 +107,7 @@ describe('width-aware custom component rendering', () => {
     component.appendOutput(source);
     expectReflow(component);
     expect(component.isExpanded()).toBe(true);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows ANSI-styled shell output across simple and complex Unicode widths', () => {
@@ -116,14 +117,14 @@ describe('width-aware custom component rendering', () => {
 
     expectReflow(component, 180, 32);
     expect(component.render(32).every(line => visibleWidth(line) <= 32)).toBe(true);
-    expect(component.render(180).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(180).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows expanded slash-command output without collapsing it', () => {
     const component = new SlashCommandComponent('review', source);
     component.setExpanded(true);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('renders slash-command output at widths narrower than its fixed chrome', () => {
@@ -137,7 +138,7 @@ describe('width-aware custom component rendering', () => {
     component.addText(source);
     component.finish(false, 25, source);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('renders subagent tasks at widths narrower than their fixed chrome', () => {
@@ -150,7 +151,7 @@ describe('width-aware custom component rendering', () => {
     component.setExpanded(true);
     expectReflow(component);
     expect(component.isExpanded()).toBe(true);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('wraps the error card message under its left bar at narrow widths', () => {

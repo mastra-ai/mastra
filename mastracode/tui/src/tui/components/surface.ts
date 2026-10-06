@@ -122,8 +122,9 @@ export function fadePanel(rows: string[], width: number, step: number): string[]
 
 /** Background of the prompt and sent messages. */
 export const promptSurface = () => surfaceShade(2);
-/** Background of tool output panels. */
-export const toolSurface = () => surfaceShade(1);
+/** Tool blocks with output: the title band is a step lighter than the output panel under it. */
+const toolTitleSurface = () => surfaceShade(2);
+const toolOutputSurface = () => surfaceShade(1);
 
 /** Glyph of the dot in front of a tool-style row; the same small bullet as the Working row's pulse. */
 export const TOOL_DOT = '•';
@@ -136,21 +137,22 @@ export function statusDot(status: 'running' | 'done' | 'error'): string {
 }
 
 /**
- * Tool-style block: a "● title" row (further title rows indented under it), then the output on a shade-1
- * panel. No panel when there's no output.
+ * Tool-style block: a "• title" row (further title rows indented under it). With output, the title rows sit
+ * on a lighter band directly above the output panel, the output lined up under the title text. Without output
+ * it's just the title rows, so runs of quiet calls stay one row each.
  */
 export function toolBlock(dot: string, title: string | string[], output: string[], width: number): string[] {
   const [first = '', ...rest] = Array.isArray(title) ? title : [title];
-  const rows = [`${dot} ${first}`, ...rest.map(line => `  ${line}`)];
-  if (output.length === 0) return rows;
+  const titleRows = [`${dot} ${first}`, ...rest.map(line => `  ${line}`)];
+  if (output.length === 0) return titleRows;
   const contentWidth = Math.max(1, width - 3);
+  const titleBg = toolTitleSurface();
+  const outputBg = toolOutputSurface();
   return [
-    ...rows,
-    ...halfBlockPanel(
-      output.map(line => `  ${truncateAnsi(line, contentWidth)}`),
-      width,
-      toolSurface(),
-    ),
+    panelEdge('▄', width, titleBg),
+    ...titleRows.map(line => fillBg(line, width, titleBg)),
+    ...output.map(line => fillBg(`  ${truncateAnsi(line, contentWidth)}`, width, outputBg)),
+    panelEdge('▀', width, outputBg),
   ];
 }
 
