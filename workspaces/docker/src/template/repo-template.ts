@@ -100,7 +100,10 @@ export interface DockerRepoTemplateOptions {
     | undefined;
   /**
    * Branch, tag, or commit to prepare. The current head of a branch/tag is
-   * resolved at each template resolution and pinned into the identity.
+   * resolved at each template resolution and pinned into the identity. A
+   * branch or tag is cloned directly, so the first setup pass runs on it; a
+   * commit (or any other `refs/…` name) is reached by checkout after a clone
+   * of the default branch.
    * @default the remote's default branch
    */
   ref?: string;
@@ -256,9 +259,7 @@ async function resolveRepoTemplate(
     repos.push({
       cloneUrl,
       sha,
-      // A branch or tag ref is cloned directly so the first setup pass runs
-      // on it; a commit ref has no clonable name.
-      branch: entry.ref && !FULL_SHA_PATTERN.test(entry.ref) ? entry.ref : undefined,
+      branch: cloneBranch(entry.ref),
       token,
       // The single form keeps its historical secret name; list entries are
       // numbered by caller position so public/private reordering never
@@ -414,8 +415,9 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
   }
   template = template.runCmd(`mkdir -p ${shellQuote(workingDirectory)}`).setWorkdir(workingDirectory);
 
-  // Public repositories first so their layers sit below any credential
-  // layer; caller order within each group.
+  // Public repositories first, caller order within each group: the same
+  // layout as the other templates (no cache effect here, credentials are
+  // build secrets and never part of a layer).
   const ordered = [...repos.filter(repo => !repo.token), ...repos.filter(repo => repo.token)];
   for (const repo of ordered) {
     const repoDir = repoDirName(repo.cloneUrl);
@@ -442,15 +444,30 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
   return template;
 }
 
-/** A Dockerfile `RUN` cannot span lines, so a setup command cannot either. */
+/**
+ * A Dockerfile `RUN` only spans lines through `\\` continuation, which the
+ * parser folds away; a bare newline would start a new instruction.
+ */
 function assertSingleLineCommands(commands: string | string[] | undefined, option: string): void {
   for (const command of normalizeSetupCommands(commands)) {
-    if (/[\r\n]/.test(command)) {
+    if (/(?<!\\)\n|\r/.test(command)) {
       throw new Error(
-        `createDockerRepoTemplate: ${option} entries must be single lines; pass an array of commands instead`,
+        `createDockerRepoTemplate: ${option} entries cannot contain a bare newline; end the line with \\ or pass separate commands`,
       );
     }
   }
+}
+
+/**
+ * The name to clone directly so the first setup pass runs on it: a branch or
+ * tag, with a `refs/heads/` or `refs/tags/` prefix stripped. A commit or any
+ * other `refs/…` name (pull heads, notes) cannot be cloned by name and is
+ * reached by the checkout instead.
+ */
+function cloneBranch(ref: string | undefined): string | undefined {
+  if (!ref || FULL_SHA_PATTERN.test(ref)) return undefined;
+  const short = ref.replace(/^refs\/(heads|tags)\//, '');
+  return short.startsWith('refs/') ? undefined : short;
 }
 
 function pinCommand(destination: string, sha: string): string {
