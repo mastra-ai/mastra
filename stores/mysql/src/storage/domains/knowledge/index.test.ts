@@ -88,7 +88,7 @@ describe('MySQL canonical Knowledge support', () => {
     }
   });
 
-  it('lets a fenced scope delete finish ahead of a grant change queued behind it, without a lock-upgrade deadlock', async () => {
+  it('rejects a grant change queued behind a fenced scope delete once the delete commits', async () => {
     const store = createStore();
     await store.init();
     const [deleted, grantTarget, grantRef] = await Promise.all(
