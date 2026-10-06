@@ -385,6 +385,82 @@ name.
 step. `workingDirectory` sets the cwd for the build and the sandbox, and the
 repository is cloned to `<workingDirectory>/<repo>`.
 
+Each setup command runs twice: once right after the clone and again after the
+checkout is pinned to the resolved head. The clone step carries no commit, so
+the clone and the first install layer are reused across commits; only the pin
+and the second, incremental setup pass run per commit. Setup commands must
+therefore be safe to run twice in the same checkout. Templates built with an
+earlier version rebuild once after upgrading. E2B caches layers on command
+text, so the cached clone layer drifts from the branch tip over time and the
+second setup pass grows accordingly.
+
+#### Several repositories in one template
+
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories
+into one template, each with its own credential resolver and setup command:
+
+```typescript
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    repos: [
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+        }),
+        setupCommand: 'pnpm install --frozen-lockfile',
+      },
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/template-docs-expert.git',
+        }),
+        setupCommand: 'npm install',
+      },
+    ],
+    workspaceSetupCommand: 'touch .workspace-ready',
+    continueOnSetupFailure: true,
+    workingDirectory: '/home/user/workspace',
+    cpuCount: 4,
+    memoryMB: 8192,
+  }),
+})
+```
+
+Every repository lands at `<workingDirectory>/<repo>`. Public repositories
+(entries whose access resolves without `authorization`) are built before
+private ones, keeping the caller's order within each group, so their layers
+can outlive credential rotation. Private credentials enter the template
+definition as `GH_TOKEN_<n>` build envs, where `n` is the entry's position in
+`repos`. Build envs are visible to every build step, so any repository's setup
+command can read every other repository's token: only list repositories whose
+setup commands you trust together.
+
+`workspaceSetupCommand` runs at the working directory after every repository
+is set up; a failure fails the build. `continueOnSetupFailure` (default
+`false`) lets a failing per-repository setup command record that repository's
+directory name in `.mastra-sandbox/setup-failed` (one line per repository,
+whether one or both setup passes failed) and continue; clone, pin, workspace
+and marker steps still fail the build. Both options require `repos` and throw
+a `TypeError` otherwise, as does passing `repos` together with
+`getRepositoryAccess`. An empty `repos` array behaves like no repository at
+all.
+
+Markers tell a session what the image already ran. The single form writes
+`.mastra-sandbox/setup` only when every setup command succeeded. The list form
+writes `.mastra-sandbox/repos/<repo>` per repository once every step for it
+ran, and `.mastra-sandbox/workspace-setup` after the workspace commands (even
+when there were none); with `continueOnSetupFailure`, check
+`.mastra-sandbox/setup-failed` first.
+
+The template name hashes the working directory and every entry's clone URL
+and setup command in list order, so it never collides with the single form of
+its first repository, and the tag is `sha-<hash>` over every repository's
+pinned sha. If any entry's access can't be resolved the whole resolution
+rejects and the sandbox falls back to its default template, as the single
+form does. A repository whose head can't be resolved is cloned unpinned while
+the others keep their pins, and the ref degrades to the `current` tag. Two
+entries that would clone into the same directory name are rejected.
+
 Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
 spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the
 template's sandboxes run on:
