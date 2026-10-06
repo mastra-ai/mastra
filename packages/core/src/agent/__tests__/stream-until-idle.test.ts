@@ -618,6 +618,56 @@ describe('Agent.streamUntilIdle', () => {
     expect(onFinishCalled).toBe(false);
   });
 
+  it('does not recurse when resumeStream inherits untilIdle from defaultOptions', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([toolCallResponse('approval'), textResponse('resumed')]);
+    let defaultsRead = 0;
+    let untilIdleDefault = false;
+    const agent = new Agent({
+      id: 'resume-default-until-idle',
+      name: 'resume-default-until-idle',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (untilIdleDefault && ++defaultsRead > 20) {
+          throw new Error('untilIdle recursively re-entered defaultOptions');
+        }
+        return untilIdleDefault ? { untilIdle: true } : {};
+      },
+      tools: {
+        approval: createTool({
+          id: 'approval',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ approved: z.boolean() }),
+          execute: async (_, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ question: 'Continue?' });
+            return context.agent.resumeData;
+          },
+        }),
+      },
+    });
+    mastra.addAgent(agent, 'resume-default-until-idle');
+
+    const memoryOptions = { thread: 'resume-default-thread', resource: 'user-1' };
+    const initial = await agent.stream('start', { memory: memoryOptions });
+    const initialChunks = await drain(initial.fullStream as ReadableStream<any>);
+    expect(initialChunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+    untilIdleDefault = true;
+    const resumed = await agent.resumeStream(
+      { approved: true },
+      { runId: initial.runId, toolCallId: 'approval', memory: memoryOptions },
+    );
+    const resumedChunks = await drain(resumed.fullStream as ReadableStream<any>);
+
+    expect(resumedChunks.some(chunk => chunk.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(2);
+    expect(defaultsRead).toBeLessThan(5);
+  });
+
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
     const memory = new MockMemory();
     const { model } = makeScriptedModel([
