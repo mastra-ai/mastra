@@ -22,16 +22,17 @@ Options:
 
 ### If `main`
 
-The workflow rejects `refs/heads/main`, so publish from a new branch created from up-to-date `main`. Run from the repository root (`git rev-parse --show-toplevel`). Stop if the working tree is dirty (`git status --porcelain`) instead of stashing or discarding the user's work.
+The workflow rejects `refs/heads/main`, so publish from a new branch created from up-to-date `origin/main`. Do not `git checkout main` or switch the current worktree's branch: `main` is usually checked out in another worktree (so checkout fails), and switching would disturb the user's current work. Instead, create a dedicated temporary worktree from `origin/main`:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-git checkout main
-git pull --ff-only origin main
+git fetch origin main
 branch="playground-snapshot/$(date +%Y%m%d-%H%M%S)"
-git checkout -b "$branch"
-git push -u origin "$branch"
+snapshot_dir=$(mktemp -d)/mastra-snapshot
+git worktree add -b "$branch" "$snapshot_dir" origin/main --no-track
+git -C "$snapshot_dir" push -u origin "$branch"
 ```
+
+Run every later git command for this branch with `git -C "$snapshot_dir"` (or from inside it). Once the workflow has been dispatched and the run found, remove the worktree with `git worktree remove "$snapshot_dir"` (the remote branch stays for the workflow).
 
 ### If current branch
 
