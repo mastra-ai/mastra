@@ -223,11 +223,14 @@ describe('createDockerRepoTemplate', () => {
     expect(() => createDockerRepoTemplate({ getRepositoryAccess, continueOnSetupFailure: false })).toThrow(TypeError);
   });
 
-  it('rejects multi-line setup commands up front, since a Dockerfile RUN cannot span lines', () => {
+  it('rejects a bare newline in a setup command up front, but keeps backslash continuation', () => {
     const getRepositoryAccess = async () => ({ cloneUrl });
     expect(() => createDockerRepoTemplate({ getRepositoryAccess, setupCommand: 'npm ci\nnpm test' })).toThrow(
-      /single lines/,
+      /bare newline/,
     );
+    expect(() =>
+      createDockerRepoTemplate({ getRepositoryAccess, setupCommand: 'npm ci \\\n  --omit=dev' }),
+    ).not.toThrow();
     expect(() =>
       createDockerRepoTemplate({ repos: [{ getRepositoryAccess }], workspaceSetupCommand: ['ok', 'a\nb'] }),
     ).toThrow(/workspaceSetupCommand/);
@@ -420,6 +423,19 @@ describe('createDockerRepoTemplate', () => {
         await expect(
           createDockerRepoTemplate({ repos: [{ getRepositoryAccess }, { getRepositoryAccess }] })!(),
         ).rejects.toThrow(/both clone into/);
+      });
+    });
+
+    it('strips refs/heads and refs/tags for the clone and skips --branch for other refs/ names', async () => {
+      await withFakeGit(`printf '${headSha}\\tx\\n'`, async () => {
+        const getRepositoryAccess = async () => ({ cloneUrl });
+        const heads = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/heads/release/1.x' })!();
+        expect(heads.dockerfile).toContain("git clone --branch 'release/1.x' ");
+        const tags = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/tags/v1' })!();
+        expect(tags.dockerfile).toContain("git clone --branch 'v1' ");
+        const pull = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/pull/7/head' })!();
+        expect(pull.dockerfile).not.toContain('--branch');
+        expect(pull.dockerfile).toContain(`checkout --detach '${headSha}'`);
       });
     });
 
