@@ -141,6 +141,9 @@ describe('Knowledge description compiler', () => {
     });
     await direct.reconcile();
     const root = await direct.resolveScopeAddress('org:acme');
+    const rootGrantsBefore = (await (await direct.getStorageInternal()).listScopeGrants()).filter(
+      grant => grant.scopeNodeId === root!.scopeNodeId,
+    );
 
     const compiled = new Knowledge({
       id: 'compiled',
@@ -164,7 +167,9 @@ describe('Knowledge description compiler', () => {
     expect(await domain.getNodeScopeIds(root!.scopeNodeId)).toEqual([
       (await compiled.resolveScopeAddress('identity:host'))!.scopeNodeId,
     ]);
-    expect((await domain.listScopeGrants()).filter(grant => grant.scopeNodeId === root!.scopeNodeId)).toHaveLength(1);
+    expect((await domain.listScopeGrants()).filter(grant => grant.scopeNodeId === root!.scopeNodeId)).toEqual(
+      rootGrantsBefore,
+    );
     expect(await compiled.resolveScopeAddress('org:acme:shared')).not.toBeNull();
   });
 
