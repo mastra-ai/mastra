@@ -60,10 +60,11 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
+                      'text-foreground',
+                      'w-full border-l-2 px-3 py-2.5 text-left',
                       controlStateColorTransition,
                       isSelected
-                        ? 'border-border-strong bg-fill-hover text-foreground'
+                        ? 'border-border-strong bg-fill-hover'
                         : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >

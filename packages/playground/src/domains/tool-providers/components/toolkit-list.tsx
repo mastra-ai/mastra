@@ -36,28 +36,32 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(undefined)}
           className={cn(
-            'rounded-md px-3 py-2 text-left text-caption',
+            'text-foreground',
+            'rounded-md px-3 py-2 text-left',
             controlStateColorTransition,
-            selectedToolkit === undefined
-              ? 'bg-fill-hover font-medium text-foreground'
-              : cn(quietTextHover, 'hover:bg-fill-subtle'),
+            selectedToolkit === undefined ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
-          All
+          <Txt as="span" variant="column" className="block">
+            All
+          </Txt>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
           className={cn(
-            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-caption',
+            'text-foreground',
+            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left',
             controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-fill-hover font-medium text-foreground'
+              ? 'bg-fill-hover'
               : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
-          Selected
+          <Txt as="span" variant="column" className="block">
+            Selected
+          </Txt>
           {selectedCount > 0 && (
             <Txt
               as="span"
@@ -74,16 +78,17 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             key={toolkit.slug}
             type="button"
             onClick={() => onSelectToolkit(toolkit.slug)}
-            className={cn(
-              'truncate rounded-md px-3 py-2 text-left text-caption',
-              controlStateColorTransition,
-              selectedToolkit === toolkit.slug
-                ? 'bg-fill-hover font-medium text-foreground'
-                : cn(quietTextHover, 'hover:bg-fill-subtle'),
-            )}
             title={toolkit.name}
+            className={cn(
+              'text-foreground',
+              'truncate rounded-md px-3 py-2 text-left',
+              controlStateColorTransition,
+              selectedToolkit === toolkit.slug ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
+            )}
           >
-            {toolkit.name}
+            <Txt as="span" variant="column" className="block">
+              {toolkit.name}
+            </Txt>
           </button>
         ))}
       </div>

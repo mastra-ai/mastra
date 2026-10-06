@@ -177,6 +177,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    initialModelOverride: Boolean(initialState?.currentModelId),
     ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
