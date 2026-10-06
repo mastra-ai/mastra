@@ -1963,10 +1963,14 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   // keeps a loop of many distinct short lines from multiplying the bound.
   // Grouping ignores indentation but the budget counts it, plus one newline
   // per occurrence. A line that occurs once never counts, however padded.
+  // Format scaffolding (lines that are only an XML tag, and `Date:` headers)
+  // is required once per thread block, so it grows with the number of threads
+  // rather than with any loop and is left out of the budget.
   const shortLineCounts = new Map<string, { count: number; chars: number }>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
+    if (/^<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?>$/.test(trimmed) || trimmed.startsWith('Date:')) continue;
     const entry = shortLineCounts.get(trimmed) ?? { count: 0, chars: 0 };
     entry.count++;
     entry.chars += line.length + 1;

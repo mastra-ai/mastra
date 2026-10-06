@@ -294,3 +294,50 @@ describe('detectDegenerateRepetition short-line loops', () => {
     expect(detectDegenerateRepetition(splitRuns(6))).toBe(true);
   });
 });
+
+describe('format scaffolding in many-thread output', () => {
+  it('accepts resource-scoped Reflector output with many thread blocks', () => {
+    const blocks = Array.from({ length: 250 }, (_, t) =>
+      [
+        `<thread id="t${t}">`,
+        'Date: Jan 1, 2026',
+        `- 🔴 Thread ${t} user asked for the deploy checklist`,
+        `- 🟡 Thread ${t} assistant listed the rollout steps`,
+        'Date: Jan 2, 2026',
+        `- 🟢 Thread ${t} deploy finished without incident`,
+        '</thread>',
+      ].join('\n'),
+    );
+    const text = `<observations>\n${blocks.join('\n')}\n</observations>`;
+    expect(text.length).toBeGreaterThan(20_000);
+    expect(detectDegenerateRepetition(text)).toBe(false);
+  });
+
+  it('accepts multi-thread Observer output with many threads', () => {
+    const threads = Array.from({ length: 100 }, (_, t) =>
+      [
+        `<thread id="t${t}">`,
+        '<observations>',
+        'Date: Jan 1, 2026',
+        `- 🔴 Thread ${t} user asked to fix flaky test number ${t}`,
+        '</observations>',
+        '<current-task>',
+        `Fix flaky test number ${t}`,
+        '</current-task>',
+        '<suggested-response>',
+        `Report the fix for test ${t}`,
+        '</suggested-response>',
+        '</thread>',
+      ].join('\n'),
+    );
+    const text = threads.join('\n');
+    expect(text.length).toBeGreaterThan(10_000);
+    expect(detectDegenerateRepetition(text)).toBe(false);
+  });
+
+  it('still flags a short-line loop alongside scaffolding', () => {
+    const loop = Array.from({ length: 1_200 }, () => '* step ok').join('\n');
+    const text = `<thread id="t1">\nDate: Jan 1, 2026\n${loop}\n</thread>`;
+    expect(detectDegenerateRepetition(text)).toBe(true);
+  });
+});
