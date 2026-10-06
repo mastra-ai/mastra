@@ -2,8 +2,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Bot, Brain, Hourglass, MessageSquare, User, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { PANEL } from './panel';
-
 type PreviewKind = 'activity' | 'running' | 'stalled' | 'attention';
 
 /** A static outline of a list row, without invented titles, stages, or timestamps. */
@@ -72,8 +70,8 @@ function PreviewRows({ kind }: { kind: PreviewKind }) {
 /** Echo the populated list's actors, titles, stage pills, and times with one short status. */
 export function OverviewListEmptyState({ kind, title }: { kind: PreviewKind; title: string }) {
   return (
-    <div className={`${PANEL} flex min-h-32 items-center gap-6 px-4 py-5`}>
-      <svg aria-hidden="true" viewBox="0 0 240 96" className="text-placeholder w-28 shrink-0 sm:w-44">
+    <div className="flex min-h-32 items-center gap-6 sm:gap-10">
+      <svg aria-hidden="true" viewBox="0 0 240 96" className="text-placeholder w-28 shrink-0 sm:w-48">
         <PreviewRows kind={kind} />
       </svg>
       <Txt as="h3" variant="subheading">
