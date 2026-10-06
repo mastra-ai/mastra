@@ -828,7 +828,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
     const { limit, after } = parseListKnowledgeScopeNodesInput(input);
-    if (input.addresses?.length === 0) return { scopes: [], nextCursor: null };
+    if (input.addresses?.length === 0 || input.ids?.length === 0) return { scopes: [], nextCursor: null };
     const args: Array<string | number> = [];
     const where = [`n."isScope"`, `n."deletedAt" IS NULL`];
     let within = '';
@@ -841,6 +841,10 @@ export class KnowledgePG extends KnowledgeStorage {
     if (input.addresses) {
       where.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
       args.push(...input.addresses);
+    }
+    if (input.ids) {
+      where.push(`n.id IN (${input.ids.map(() => '?').join(',')})`);
+      args.push(...input.ids);
     }
     if (after) {
       where.push('(n.name COLLATE "C" > ? OR (n.name = ? AND n.id > ?))');
