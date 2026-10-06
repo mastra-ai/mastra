@@ -10,12 +10,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
 
 const embedder: EmbeddingModel<string> = {
@@ -72,8 +74,10 @@ describe('Pinned knowledge live proof', () => {
       },
     });
 
+    const knowledge = new Knowledge({ id: 'default', storage });
     const memory = new Memory({
       storage,
+      knowledge,
       vector,
       embedder,
       options: {
@@ -99,9 +103,15 @@ describe('Pinned knowledge live proof', () => {
     requestContext.set('organizationId', 'acme');
     const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
 
-    const scope = [`org:acme`, `resource:${resourceId}`, `thread:${threadId}`];
-    const tools = createPinnedTools({ storage } as any, {
-      scope,
+    const scopeIds = await resolveKnowledgeScopeIds(
+      memory as any,
+      {
+        agent: { threadId, resourceId },
+        requestContext,
+      } as any,
+    );
+    const tools = createPinnedTools(memory as any, {
+      scopeIds,
       sourceThreadId: threadId,
       maxPins: 20,
       maxCharacters: 2_000,
