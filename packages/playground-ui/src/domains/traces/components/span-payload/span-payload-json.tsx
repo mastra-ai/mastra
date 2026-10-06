@@ -16,8 +16,9 @@ export function SpanPayloadJson({ value, className }: SpanPayloadJsonProps) {
       data-slot="span-payload-json"
       className={cn(
         raisedSurfaceStyle,
-        'rounded-lg p-3 text-caption text-wrap break-all text-muted-foreground',
+        'rounded-lg p-3 text-wrap break-all text-muted-foreground',
         className,
+        'text-caption',
       )}
     />
   );

@@ -1,5 +1,18 @@
 # @mastra/connect
 
+## 1.0.0-alpha.3
+
+### Minor Changes
+
+- Connect tool calls now show up in traces. When observability is enabled, every platform API call and proxied vendor call appears as a child span under the tool call span, recording the method, a safe route template, connection id, and response status. Spans never include query strings, headers, bodies, or vendor path segments; apps without observability configured are unaffected. ([#26080](https://github.com/mastra-ai/mastra/pull/26080))
+
+### Patch Changes
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`d253891`](https://github.com/mastra-ai/mastra/commit/d2538914d2305d905bc9ed1dc7928b7f7ecc931a), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`af5086d`](https://github.com/mastra-ai/mastra/commit/af5086da68bd70cd263d9234684e7fa5c90fc61d), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+  - @mastra/mcp@2.2.0-alpha.2
+  - @mastra/discord@1.3.0-alpha.1
+
 ## 1.0.0-alpha.2
 
 ### Major Changes

@@ -1,5 +1,14 @@
 # @mastra/docker
 
+## 0.9.3-alpha.0
+
+### Patch Changes
+
+- Fixed Docker sandbox process output corrupting non-ASCII characters. Emoji, CJK, and accented text in `stdout`/`stderr` no longer turn into `�` when a character spans Docker stream frames — streamed output, `handle.stdout`/`handle.stderr`, and `wait()` results now contain the original text. ([#26015](https://github.com/mastra-ai/mastra/pull/26015))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 0.9.2
 
 ### Patch Changes

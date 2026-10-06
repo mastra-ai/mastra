@@ -1610,8 +1610,9 @@ describe('PIIDetector', () => {
       // Only configure email detection (regex-only, no buffering)
       const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: ['email'] });
 
-      // Phone should NOT be detected
-      const phoneResult = await detector.processOutputStream({
+      // Phone should NOT be detected: the held text is released when the step finishes
+      const phoneState: Record<string, any> = {};
+      await detector.processOutputStream({
         part: {
           type: 'text-delta',
           payload: { id: 'test-id', text: 'Call 555-123-4567' },
@@ -1619,10 +1620,16 @@ describe('PIIDetector', () => {
           from: ChunkFrom.AGENT,
         },
         streamParts: [],
-        state: {},
+        state: phoneState,
         abort: vi.fn() as any,
       });
-      expect(phoneResult).not.toBeNull();
+      const phoneResult = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state: phoneState,
+        abort: vi.fn() as any,
+      });
+      expect(phoneResult).toMatchObject({ type: 'text-delta', payload: { text: 'Call 555-123-4567' } });
 
       // Email SHOULD be detected
       const emailResult = await detector.processOutputStream({
@@ -1802,7 +1809,7 @@ describe('PIIDetector', () => {
       await detector.processOutputStream({
         part: {
           type: 'text-delta',
-          payload: { id: 'text-0', text: 'a'.repeat(190) },
+          payload: { id: 'text-0', text: 'a '.repeat(95) },
           runId: 'test-run-id',
           from: ChunkFrom.AGENT,
         },
@@ -1833,8 +1840,8 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      // No full email yet — should pass through
-      expect(result1).not.toBeNull();
+      // No full email yet, but the prefix is held until it can be checked
+      expect(result1).toBeNull();
 
       // Second chunk: completes the email
       const result2 = await detector.processOutputStream({
@@ -1850,6 +1857,14 @@ describe('PIIDetector', () => {
       });
       // Now the carryover + new chunk forms "test@example.com" — should filter
       expect(result2).toBeNull();
+
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: ' is here' } });
     });
 
     it('should redact PII split across chunks correctly', async () => {
@@ -2236,6 +2251,125 @@ describe('PIIDetector', () => {
       }
     });
 
+    it.each([
+      ['block', ''],
+      ['filter', ' end'],
+    ] as const)('applies %s before releasing PII at every two-chunk split', async (strategy, expected) => {
+      const text = `${'a'.repeat(100)} mail «secret@example.com», n°123-45-6789, card 4111 1111 1111 1111 end`;
+      const stream = async (chunks: string[]) => {
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy,
+          detectionTypes: ['email', 'ssn', 'credit-card'],
+        });
+        const state: Record<string, any> = {};
+        const abort = vi.fn((reason?: string) => {
+          throw new TripWire(reason ?? 'blocked');
+        }) as any;
+        const parts = [
+          ...chunks.map((chunk, i) => ({ type: 'text-delta', payload: { id: `text-${i}`, text: chunk } })),
+          { type: 'step-finish', payload: {} },
+        ];
+        let output = '';
+        let blocked = false;
+        try {
+          for (const part of parts) {
+            const result = await detector.processOutputStream({
+              part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+              streamParts: [],
+              state,
+              abort,
+            });
+            if (result?.type === 'text-delta') output += result.payload.text;
+          }
+        } catch (error) {
+          if (!(error instanceof TripWire)) throw error;
+          blocked = true;
+        }
+        return { output, blocked };
+      };
+
+      const whole = await stream([text]);
+      expect(whole).toEqual({ output: expected, blocked: strategy === 'block' });
+      for (let i = 1; i < text.length; i++) {
+        const chunks = [text.slice(0, i), text.slice(i)];
+        expect(await stream(chunks), JSON.stringify(chunks)).toEqual(whole);
+      }
+    });
+
+    it.each([
+      ['block', ['Your SSN is ', '123', '-45', '-678', '9', '.'], ''],
+      ['filter', ['Your SSN is ', '123', '-45', '-678', '9', '.'], '.'],
+      ['filter', ['Reach me at ', 'john', '.doe', '@', 'acme', '.co', 'm', ' anytime'], ' anytime'],
+      ['filter', ['Mail ', 'secret@example.com'], ''],
+    ] as const)('%s releases no prefix of PII split over many chunks: %j', async (strategy, chunks, expected) => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy,
+        detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+      });
+      const state: Record<string, any> = {};
+      const abort = vi.fn((reason?: string) => {
+        throw new TripWire(reason ?? 'blocked');
+      }) as any;
+      let output = '';
+      const run = async () => {
+        for (const part of [
+          ...chunks.map((text, i) => ({ type: 'text-delta', payload: { id: `text-${i}`, text } })),
+          { type: 'step-finish', payload: {} },
+        ]) {
+          const result = await detector.processOutputStream({
+            part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+            streamParts: [],
+            state,
+            abort,
+          });
+          if (result?.type === 'text-delta') output += result.payload.text;
+        }
+      };
+
+      if (strategy === 'block') await expect(run()).rejects.toThrow(TripWire);
+      else await run();
+      expect(output).toBe(expected);
+    });
+
+    it.each(['block', 'filter', 'redact'] as const)(
+      '%s holds an email address longer than the carryover until it is complete',
+      async strategy => {
+        const address = `${'a'.repeat(64)}@${'1'.repeat(63)}.${'2'.repeat(63)}.com`;
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy,
+          redactionMethod: 'placeholder',
+          detectionTypes: ['email'],
+        });
+        const state: Record<string, any> = {};
+        const abort = vi.fn((reason?: string) => {
+          throw new TripWire(reason ?? 'blocked');
+        }) as any;
+        let output = '';
+        const run = async () => {
+          for (const part of [
+            { type: 'text-delta', payload: { id: 'text-0', text: `Mail ${address.slice(0, -4)}` } },
+            { type: 'text-delta', payload: { id: 'text-1', text: `${address.slice(-4)} now` } },
+            { type: 'step-finish', payload: {} },
+          ]) {
+            const result = await detector.processOutputStream({
+              part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+              streamParts: [],
+              state,
+              abort,
+            });
+            if (result?.type === 'text-delta') output += result.payload.text;
+          }
+        };
+
+        if (strategy === 'block') await expect(run()).rejects.toThrow(TripWire);
+        else await run();
+        expect(output).toBe({ block: 'Mail ', filter: 'Mail  now', redact: 'Mail [EMAIL] now' }[strategy]);
+      },
+    );
+
     it('keeps mixed-mode sentence fragments in regex carryover', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',
@@ -2429,7 +2563,7 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      expect(state._piiBuffer).toBe('Hello world');
+      expect(state._piiRegexTail).toBe('Hello world');
 
       // Non-text part triggers flush — gets queued
       const nonText1 = {
@@ -2466,7 +2600,7 @@ describe('PIIDetector', () => {
       // Queue is drained
       expect(state._piiPendingNonText).toBeUndefined();
       // Text was re-buffered
-      expect(state._piiBuffer).toBe('more text');
+      expect(state._piiRegexTail).toBe('more text');
     });
 
     it('should use default bufferSize of 200 when not specified', async () => {
