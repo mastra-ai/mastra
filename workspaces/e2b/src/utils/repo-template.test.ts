@@ -179,8 +179,8 @@ describe('createRepoTemplate', () => {
     const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', '', '   '] }));
     const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
     const setupSteps = definition.steps.filter(step => step.type === 'RUN' && step.args.join(' ').includes('cd '));
-    // The one surviving command runs twice: before and after the pin.
-    expect(setupSteps.map(step => step.args.join(' '))).toEqual(['cd "hello" && pnpm i', 'cd "hello" && pnpm i']);
+    expect(setupSteps).toHaveLength(1);
+    expect(setupSteps[0]!.args.join(' ')).toBe('cd "hello" && pnpm i');
   });
 
   it('treats an all-blank setupCommand as absent, including for identity', async () => {
@@ -247,12 +247,11 @@ describe('createRepoTemplate', () => {
     expect((await resolve(BASE)).ref).toBe('mastra-repo-octocat-hello-c93a3d90:sha-aaaaaaaaaaaa');
   });
 
-  it('pins the commit after the first setup pass and runs setup again after it', async () => {
+  it('clones, pins the commit, then runs setup in the checkout and writes the marker', async () => {
     const steps = runSteps(await serializedSteps(await resolve(BASE)));
     const clone = steps.findIndex(step => step.startsWith('git clone'));
-    expect(steps.slice(clone, clone + 6)).toEqual([
+    expect(steps.slice(clone, clone + 5)).toEqual([
       "git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'",
-      'cd "hello" && pnpm install',
       `git -C "hello" fetch origin ${SHA}`,
       `git -C "hello" checkout ${SHA}`,
       'cd "hello" && pnpm install',
@@ -546,7 +545,7 @@ describe('createRepoTemplate with repos', () => {
     expect(createRepoTemplate({ repos: [] })).toBeUndefined();
   });
 
-  it('lays out public repositories before private ones, each around its own pin, then the workspace steps', async () => {
+  it('lays out public repositories before private ones, each after its own pin, then the workspace steps', async () => {
     const spec = await resolve(listOptions);
     const steps = runSteps(await serializedSteps(spec));
     const start = steps.indexOf('mkdir -p "/workspace"');
@@ -555,15 +554,12 @@ describe('createRepoTemplate with repos', () => {
     const auth = `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)"`;
     expect(steps.slice(start + 1)).toEqual([
       "git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'",
-      guard('hello', 'pnpm i'),
-      guard('hello', 'pnpm build'),
       `git -C "hello" fetch origin ${SHA}`,
       `git -C "hello" checkout ${SHA}`,
       guard('hello', 'pnpm i'),
       guard('hello', 'pnpm build'),
       markerStep(repoSetupMarkerPath('hello'), 'pnpm i', 'pnpm build'),
       `git ${auth} clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`,
-      guard('widgets', 'npm ci'),
       `git -C "widgets" ${auth} fetch origin ${PRIVATE_SHA}`,
       `git -C "widgets" checkout ${PRIVATE_SHA}`,
       guard('widgets', 'npm ci'),

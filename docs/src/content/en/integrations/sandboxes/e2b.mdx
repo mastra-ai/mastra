@@ -385,19 +385,6 @@ name.
 step. `workingDirectory` sets the cwd for the build and the sandbox, and the
 repository is cloned to `<workingDirectory>/<repo>`.
 
-Each setup command runs twice: once right after the clone and again after the
-checkout is pinned to the resolved head. The clone step carries no commit, so
-the clone and the first install layer are reused across commits; only the pin
-and the second, incremental setup pass run per commit. Setup commands must
-therefore be safe to run twice in the same checkout. This cache benefit
-applies to repositories built without a credential: a private repository's
-token is a build env set before the clone, and a rotated token invalidates
-every layer after it, so both setup passes run again. Template names and tags
-are unchanged, so an existing `sha-<sha>` tag keeps its old layering; the new
-layering applies the next time the default branch moves. E2B caches layers on
-command text, so the cached clone layer drifts from the branch tip over time
-and the second setup pass grows accordingly.
-
 #### Several repositories in one template
 
 Pass `repos` instead of `getRepositoryAccess` to clone several repositories
@@ -444,9 +431,8 @@ setup commands you trust together.
 `workspaceSetupCommand` runs at the working directory after every repository
 is set up; a failure fails the build. `continueOnSetupFailure` (default
 `false`) lets a failing per-repository setup command record that repository's
-directory name in `.mastra-sandbox/setup-failed` (one line per repository,
-whether one or both setup passes failed) and continue; clone, pin, workspace
-and marker steps still fail the build. Both options require `repos` and throw
+directory name in `.mastra-sandbox/setup-failed` (one line per repository)
+and continue; clone, pin, workspace and marker steps still fail the build. Both options require `repos` and throw
 a `TypeError` otherwise, as does passing `repos` together with
 `getRepositoryAccess`. An empty `repos` array behaves like no repository at
 all.
