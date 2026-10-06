@@ -1,14 +1,16 @@
 import type { JsonSchemaType } from '@modelcontextprotocol/client';
 
 /**
- * JSON Schema draft-07 meta-schema, used to check that a server-supplied tool input schema is
- * itself a valid JSON Schema before it is handed to a model provider.
+ * Structural JSON Schema meta-schema, used to check that a server-supplied tool input schema is
+ * shaped like a JSON Schema before it is handed to a model provider.
  *
- * Source: https://json-schema.org/draft-07/schema (copied unmodified; `$schema`/`$id` dropped so
- * the validator does not try to resolve them). Draft-07 is used because its meta-schema is a
- * single self-contained document; the 2020-12 meta-schema is split across vocabulary documents.
- * The block at the end of `properties` adds the 2019-09/2020-12 subschema keywords so they are
- * checked too. Unknown keywords stay allowed, as in every dialect.
+ * Based on https://json-schema.org/draft-07/schema (`$schema`/`$id` dropped so the validator does
+ * not try to resolve them). Draft-07 is used because its meta-schema is a single self-contained
+ * document; the 2020-12 meta-schema is split across vocabulary documents. Changes from upstream:
+ * - `format`, `uniqueItems` and the non-empty `enum` rule are removed, so only wrong value types
+ *   and non-schemas in schema positions drop a tool, not regex dialects, non-URI ids or duplicates;
+ * - the block at the end of `properties` adds the 2019-09/2020-12 subschema keywords.
+ * Unknown keywords stay allowed, as in every dialect.
  */
 export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
   title: 'Core schema meta-schema',
@@ -31,7 +33,6 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
     stringArray: {
       type: 'array',
       items: { type: 'string' },
-      uniqueItems: true,
       default: [],
     },
   },
@@ -39,15 +40,12 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
   properties: {
     $id: {
       type: 'string',
-      format: 'uri-reference',
     },
     $schema: {
       type: 'string',
-      format: 'uri',
     },
     $ref: {
       type: 'string',
-      format: 'uri-reference',
     },
     $comment: {
       type: 'string',
@@ -91,7 +89,6 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
     minLength: { $ref: '#/definitions/nonNegativeIntegerDefault0' },
     pattern: {
       type: 'string',
-      format: 'regex',
     },
     additionalItems: { $ref: '#' },
     items: {
@@ -122,7 +119,6 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
     patternProperties: {
       type: 'object',
       additionalProperties: { $ref: '#' },
-      propertyNames: { format: 'regex' },
       default: {},
     },
     dependencies: {
@@ -136,8 +132,6 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
     enum: {
       type: 'array',
       items: true,
-      minItems: 1,
-      uniqueItems: true,
     },
     type: {
       anyOf: [
@@ -146,7 +140,6 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
           type: 'array',
           items: { $ref: '#/definitions/simpleTypes' },
           minItems: 1,
-          uniqueItems: true,
         },
       ],
     },

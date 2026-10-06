@@ -3690,6 +3690,10 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
     ['refs into $defs', { type: 'object', properties: { a: { $ref: '#/$defs/A' } }, $defs: { A: { type: 'string' } } }],
     ['unknown extension keywords', { type: 'object', 'x-vendor': ['anything'], properties: {} }],
     ['a declared 2020-12 dialect', { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object' }],
+    ['duplicate required entries', { type: 'object', properties: { a: { type: 'string' } }, required: ['a', 'a'] }],
+    ['duplicate and empty enums', { type: 'object', properties: { a: { enum: ['x', 'x'] }, b: { enum: [] } } }],
+    ['a Python-style pattern', { type: 'object', properties: { a: { type: 'string', pattern: '^(?P<x>\\d+)$' } } }],
+    ['a non-URI $id', { $id: 'my tool schema', type: 'object' }],
   ])('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
     const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
 
