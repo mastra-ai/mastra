@@ -375,6 +375,30 @@ describe('HttpTransport', () => {
         expect(JSON.parse(fetchMock.mock.calls[1][1].body).logs.map((l: any) => l.msg)).toEqual(['good']);
       });
 
+      it('sends logs queued during a permanently rejected request without waiting for the next interval', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let reject!: () => void;
+        fetchMock.mockImplementationOnce(
+          () =>
+            new Promise(resolve => {
+              reject = () => resolve({ ok: false, status: 400, statusText: 'Error', headers: new Headers() });
+            }),
+        );
+        const t = makeTransport();
+        t.write({ msg: 'bad', level: 'info' });
+        const first = t._flush();
+
+        t.write({ msg: 'queued', level: 'info' });
+        void t._flush();
+        reject();
+        await expect(first).rejects.toThrow('HTTP 400');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body).logs.map((l: any) => l.msg)).toEqual(['queued']);
+        expect(t.getBufferedLogs()).toHaveLength(0);
+      });
+
       it('re-queues a batch after transient failures', async () => {
         fetchMock.mockImplementation(() => respond(503));
         const t = makeTransport();

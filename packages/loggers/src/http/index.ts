@@ -180,15 +180,18 @@ export class HttpTransport extends LoggerTransport {
     });
     this.flushPromise = flush;
     // Flushes requested while this request was in flight only got this promise back, so send their logs now,
-    // and keep draining full batches. On failure, wait for the next interval instead of retrying straight away.
-    flush.then(
-      () => {
-        if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
-          this.requestFlush();
-        }
-      },
-      () => {},
-    );
+    // and keep draining full batches. On a transient failure, wait for the next interval instead of retrying
+    // straight away. A permanently rejected batch was dropped, so the logs behind it can go out now.
+    const continueDraining = () => {
+      if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
+        this.requestFlush();
+      }
+    };
+    flush.then(continueDraining, error => {
+      if (error instanceof HttpResponseError && !isRetryableStatus(error.status)) {
+        continueDraining();
+      }
+    });
     return flush;
   }
 

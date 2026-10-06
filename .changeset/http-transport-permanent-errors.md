@@ -2,4 +2,6 @@
 '@mastra/loggers': patch
 ---
 
-`HttpTransport` no longer retries requests the logging endpoint rejected permanently. A 400, 401, 403, 404, 413 or other client error now fails right away. The rejected batch is dropped and counted in `getDroppedLogCount()`, so it can't block the logs queued behind it. Network errors, timeouts and 408, 425, 429 and 5xx responses are still retried. When a retried response includes a valid `Retry-After` header, the transport waits that long, up to the request `timeout`.
+Fixed `HttpTransport` retrying logs that the endpoint will never accept. When the endpoint rejects a batch as invalid, such as with a 400 or 413 response, the transport stops retrying right away. It drops that batch and counts it in `getDroppedLogCount()`, so newer logs are no longer stuck behind it.
+
+Temporary failures are still retried, including network errors, timeouts, rate limits and server errors. If the server sends a `Retry-After` header, the transport waits that long before retrying, up to the request `timeout`.
