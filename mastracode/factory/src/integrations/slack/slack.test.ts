@@ -1449,9 +1449,16 @@ describe('session start (onSessionStart)', () => {
     return {
       mode: { get: () => mode },
       thread: {
+        getId: vi.fn(() => 'thread-1'),
+        getById: vi.fn(async () => ({ metadata: Object.fromEntries(settings) })),
         getSetting: vi.fn(async ({ key }: { key: string }) => settings.get(key) ?? null),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-          settings.set(key, value);
+          if (value === undefined) settings.delete(key);
+          else settings.set(key, value);
+        }),
+        setSettingOn: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+          if (value === undefined) settings.delete(key);
+          else settings.set(key, value);
         }),
       },
       model: {
@@ -1460,6 +1467,7 @@ describe('session start (onSessionStart)', () => {
         // model and writes it to the thread's current model setting.
         switch: vi.fn(async ({ modelId }: { modelId: string }) => {
           settings.set('currentModelId', modelId);
+          settings.set('modelPersistenceVersion', 2);
         }),
       },
       om: {
@@ -1718,22 +1726,34 @@ describe('session start (onSessionStart)', () => {
 
   // A restarted process restores the generation model from the thread, then
   // uses that provider while reapplying the project and sender memory settings.
-  it('re-applies memory settings on a restarted session using the persisted model provider', async () => {
+  it('migrates the legacy model before reapplying memory settings on restart', async () => {
     const deps = makeStartDeps({
       personalMemoryRecord: { reflectionThreshold: 333 },
     });
-    const session = makeSession({ persistedModeModel: 'deepseek/deepseek-chat' });
+    const settings = new Map<string, unknown>([
+      ['modeModelId_plan', 'openai/gpt-5.2-codex'],
+      ['modeModelId_fast', 'cerebras/qwen-3-coder-480b'],
+    ]);
+    const session = makeSession({
+      persistedModel: 'openai/gpt-5.5',
+      persistedModeModel: 'deepseek/deepseek-chat',
+      settings,
+    });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
-    // Still no model re-resolution: the persisted thread choice remains authoritative.
+    // Still no model re-resolution: the migrated thread choice remains authoritative.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
+    expect(settings.get('modelPersistenceVersion')).toBe(2);
+    expect(settings.has('modeModelId_build')).toBe(false);
+    expect(settings.has('modeModelId_plan')).toBe(false);
+    expect(settings.has('modeModelId_fast')).toBe(false);
   });
 
   // Reaching a storage domain can fail on its own (uninitialized table, a

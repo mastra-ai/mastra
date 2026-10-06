@@ -46,6 +46,7 @@ import { enforceThreadAccess } from './utils';
  */
 const RESERVED_THREAD_METADATA_KEYS = {
   currentModelId: true,
+  modelPersistenceVersion: true,
   currentModeId: true,
   observerModelId: true,
   reflectorModelId: true,

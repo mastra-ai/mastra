@@ -4,7 +4,7 @@ import { InMemoryStore } from '../storage/mock';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
-import type { Session } from './session';
+import { migratePersistedModelSelection, type Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
 type AgentControllerTestState = { currentModelId?: string };
@@ -147,7 +147,7 @@ describe('AgentController single-model persistence across restarts', () => {
     expect(session2.model.get()).toBe('cerebras/qwen-3-coder-480b');
   });
 
-  it('restores a legacy modeModelId key when currentModelId is absent', async () => {
+  it('migrates the active legacy model, then preserves a new selection on reopen', async () => {
     const { session: session1 } = await buildController(storage);
     const thread = await session1.thread.create();
     const memory = await storage.getStore('memory');
@@ -156,7 +156,10 @@ describe('AgentController single-model persistence across restarts', () => {
       title: 'legacy thread',
       metadata: {
         currentModeId: 'fast',
-        currentModelId: null,
+        currentModelId: 'openai/gpt-5.5',
+        modelPersistenceVersion: null,
+        modeModelId_build: 'anthropic/claude-opus-4-6',
+        modeModelId_plan: 'openai/gpt-5.2-codex',
         modeModelId_fast: 'cerebras/qwen-3-coder-480b',
       },
     });
@@ -166,6 +169,20 @@ describe('AgentController single-model persistence across restarts', () => {
 
     expect(session2.mode.get()).toBe('fast');
     expect(session2.model.get()).toBe('cerebras/qwen-3-coder-480b');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'cerebras/qwen-3-coder-480b',
+      modelPersistenceVersion: 2,
+    });
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_build');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_plan');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_fast');
+
+    await session2.model.switch({ modelId: 'anthropic/claude-sonnet-4-6' });
+    const { session: session3 } = await buildController(storage);
+    await session3.thread.switch({ threadId: thread.id });
+
+    expect(session3.mode.get()).toBe('fast');
+    expect(session3.model.get()).toBe('anthropic/claude-sonnet-4-6');
   });
 
   it('falls back to the restored mode default when no model is persisted', async () => {

@@ -81,10 +81,16 @@ export const SUSPENDED_RUN_MEMORY_KEY = createRunScopeKey<MastraMemory>('agent-c
  * its state purely in memory.
  */
 export interface ThreadSettingsStore {
+  /** Read all settings for a specific thread. */
+  getAllOn(threadId: string): Promise<Record<string, unknown>>;
   /** Read a setting for the active thread, or undefined when unset/unavailable. */
   get(key: string): Promise<unknown>;
+  /** Return the active thread id, or undefined when no thread is bound. */
+  getThreadId(): string | undefined;
   /** Persist a setting for the active thread (no-op when storage is unavailable). */
   set(key: string, value: unknown): Promise<void>;
+  /** Persist a setting to a specific thread. */
+  setOn(threadId: string, key: string, value: unknown): Promise<void>;
 }
 
 /** Process-local listener awaited before a terminal agent event is emitted. */
@@ -133,6 +139,89 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 
+/** Version marker for thread metadata using the single-model persistence format. */
+export const MODEL_PERSISTENCE_VERSION = 2 as const;
+export const MODEL_PERSISTENCE_VERSION_KEY = 'modelPersistenceVersion' as const;
+
+const modelPersistenceQueues = new Map<string, Promise<void>>();
+
+async function runModelPersistenceOperation<T>(threadId: string | undefined, operation: () => Promise<T>): Promise<T> {
+  if (!threadId) return operation();
+
+  const previous = modelPersistenceQueues.get(threadId) ?? Promise.resolve();
+  const result = previous.catch(() => {}).then(operation);
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  modelPersistenceQueues.set(threadId, settled);
+
+  try {
+    return await result;
+  } finally {
+    if (modelPersistenceQueues.get(threadId) === settled) modelPersistenceQueues.delete(threadId);
+  }
+}
+
+/**
+ * Resolve and migrate a thread's persisted model selection.
+ *
+ * Threads created before single-model sessions have a create-time `currentModelId`
+ * plus the actual last selection in `modeModelId_<mode>`. Without the version
+ * marker, the active mode's legacy value wins. Migration copies that selection
+ * to `currentModelId`, stamps the marker, then removes all obsolete mode keys.
+ */
+export async function migratePersistedModelSelection({
+  metadata,
+  getMetadata,
+  modeId,
+  onResolved,
+  set,
+  threadId,
+  validModeIds,
+}: {
+  metadata?: Record<string, unknown>;
+  getMetadata?: () => Promise<Record<string, unknown>>;
+  modeId: string;
+  onResolved?: (modelId: string) => void | Promise<void>;
+  set: (key: string, value: unknown) => Promise<void>;
+  threadId?: string;
+  validModeIds?: readonly string[];
+}): Promise<string | undefined> {
+  return runModelPersistenceOperation(threadId, async () => {
+    const persistedMetadata = getMetadata ? await getMetadata() : (metadata ?? {});
+    const currentModelId =
+      typeof persistedMetadata.currentModelId === 'string' ? persistedMetadata.currentModelId : undefined;
+    const persistedModeId = persistedMetadata.currentModeId;
+    const migrationModeId =
+      typeof persistedModeId === 'string' && (!validModeIds || validModeIds.includes(persistedModeId))
+        ? persistedModeId
+        : modeId;
+    const legacyKey = `modeModelId_${migrationModeId}`;
+    const legacyModelId = typeof persistedMetadata[legacyKey] === 'string' ? persistedMetadata[legacyKey] : undefined;
+    const legacyKeys = Object.keys(persistedMetadata).filter(
+      key => key.startsWith('modeModelId_') && persistedMetadata[key] !== undefined,
+    );
+    const persistenceVersion = persistedMetadata[MODEL_PERSISTENCE_VERSION_KEY];
+    const isNewerFormat = typeof persistenceVersion === 'number' && persistenceVersion > MODEL_PERSISTENCE_VERSION;
+    const isSingleModelFormat = persistenceVersion === MODEL_PERSISTENCE_VERSION || isNewerFormat;
+    const modelId = isSingleModelFormat ? currentModelId : (legacyModelId ?? currentModelId);
+
+    if (isNewerFormat || (isSingleModelFormat && legacyKeys.length === 0)) {
+      if (modelId) await onResolved?.(modelId);
+      return modelId;
+    }
+    if (!modelId && legacyKeys.length === 0) return undefined;
+
+    if (modelId) await set('currentModelId', modelId);
+    for (const key of legacyKeys) await set(key, undefined);
+    await set(MODEL_PERSISTENCE_VERSION_KEY, MODEL_PERSISTENCE_VERSION);
+    if (modelId) await onResolved?.(modelId);
+
+    return modelId;
+  });
+}
+
 /**
  * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
  * runtime bookkeeping (selected model/mode, observer/reflector config, token
@@ -143,6 +232,7 @@ const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
  */
 const RESERVED_THREAD_METADATA_KEYS = [
   'currentModelId',
+  MODEL_PERSISTENCE_VERSION_KEY,
   MODE_ID_KEY,
   'observerModelId',
   'reflectorModelId',
@@ -674,6 +764,7 @@ export class SessionThread {
     const metadata: Record<string, unknown> = {};
     if (modelId) {
       metadata.currentModelId = modelId;
+      metadata[MODEL_PERSISTENCE_VERSION_KEY] = MODEL_PERSISTENCE_VERSION;
     }
 
     // Stamp the session's scope so thread selection can filter listings back to
@@ -986,17 +1077,22 @@ export class SessionThread {
         }
       }
 
-      // Resolve the thread's selected model. Prefer the single-model key, then
-      // read the legacy per-mode key for existing threads, then seed from the
-      // restored mode's default.
+      // Migrate legacy per-mode selections before restoring the session model.
+      // Legacy threads also contain a create-time currentModelId, so the active
+      // mode's legacy value wins until the single-model version marker exists.
       const currentModeId = session.mode.get();
-      const currentModelId = meta?.currentModelId;
-      const legacyModeModelId = meta?.[`modeModelId_${currentModeId}`];
-      if (typeof currentModelId === 'string') {
-        session.model.set({ modelId: currentModelId });
-      } else if (typeof legacyModeModelId === 'string') {
-        session.model.set({ modelId: legacyModeModelId });
-      } else {
+      const persistedModelId = await migratePersistedModelSelection({
+        getMetadata: async () =>
+          ((await store.getById({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
+        modeId: currentModeId,
+        onResolved: modelId => {
+          if (this.#threadId === threadId) session.model.set({ modelId });
+        },
+        set: (key, value) => this.setSettingOn({ threadId, key, value }),
+        threadId,
+        validModeIds: store.getModeIds(),
+      });
+      if (!persistedModelId) {
         const currentMode = session.mode.resolve();
         if (currentMode.defaultModelId) {
           session.model.set({ modelId: currentMode.defaultModelId });
@@ -1824,6 +1920,8 @@ export class SessionModel {
   readonly #bus: SessionBus;
   /** Reads the active mode id for the legacy per-mode restore fallback. */
   #getCurrentModeId: (() => string) | undefined;
+  /** Reads configured mode ids so persisted mode metadata can be validated. */
+  #getModeIds: (() => string[]) | undefined;
   /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
   #trackModelUse: ModelUseCountTracker | undefined;
 
@@ -1832,9 +1930,14 @@ export class SessionModel {
     this.#bus = bus;
   }
 
-  /** Attach the active-mode accessor and optional model-use tracker. */
-  setResolver(options: { getCurrentModeId: () => string; trackModelUse?: ModelUseCountTracker }): void {
+  /** Attach mode accessors and the optional model-use tracker. */
+  setResolver(options: {
+    getCurrentModeId: () => string;
+    getModeIds: () => string[];
+    trackModelUse?: ModelUseCountTracker;
+  }): void {
     this.#getCurrentModeId = options.getCurrentModeId;
+    this.#getModeIds = options.getModeIds;
     this.#trackModelUse = options.trackModelUse;
   }
 
@@ -1868,22 +1971,27 @@ export class SessionModel {
   /**
    * Re-sync the in-memory selection from the persisted thread model.
    *
-   * `currentModelId` is the source of truth. The legacy
-   * `modeModelId_<current mode>` key remains a read-only fallback for threads
-   * created before sessions became single-model. Only emits when the selection
-   * actually changes.
+   * Unmarked legacy metadata is migrated before the selection is applied. Only
+   * emits when the persisted model actually changes the in-memory selection.
    */
   async syncFromPersisted(): Promise<void> {
     const store = this.#store();
-    const currentModelId = (await store?.get('currentModelId')) as string | undefined;
+    if (!store) return;
+    const threadId = store.getThreadId();
+    if (!threadId) return;
     const currentModeId = this.#getCurrentModeId?.() ?? '';
-    const legacyModeModelId = currentModeId
-      ? ((await store?.get(`modeModelId_${currentModeId}`)) as string | undefined)
-      : undefined;
-    const stored = currentModelId ?? legacyModeModelId;
-    if (!stored || stored === this.#id) return;
-    this.#id = stored;
-    this.#bus.emit({ type: 'model_changed', modelId: stored });
+    await migratePersistedModelSelection({
+      getMetadata: () => store.getAllOn(threadId),
+      modeId: currentModeId,
+      onResolved: modelId => {
+        if (store.getThreadId() !== threadId || modelId === this.#id) return;
+        this.#id = modelId;
+        this.#bus.emit({ type: 'model_changed', modelId });
+      },
+      set: (key, value) => store.setOn(threadId, key, value),
+      threadId,
+      validModeIds: this.#getModeIds?.(),
+    });
   }
 
   /**
@@ -1893,8 +2001,17 @@ export class SessionModel {
    * and emits `model_changed`.
    */
   async switch({ modelId }: { modelId: string }): Promise<void> {
-    this.set({ modelId });
-    await this.#store()?.set('currentModelId', modelId);
+    const store = this.#store();
+    const threadId = store?.getThreadId();
+    let appliedToActiveThread = !threadId;
+    await runModelPersistenceOperation(threadId, async () => {
+      appliedToActiveThread = !threadId || store?.getThreadId() === threadId;
+      if (appliedToActiveThread) this.set({ modelId });
+      if (threadId) {
+        await store?.setOn(threadId, 'currentModelId', modelId);
+        await store?.setOn(threadId, MODEL_PERSISTENCE_VERSION_KEY, MODEL_PERSISTENCE_VERSION);
+      }
+    });
 
     try {
       await Promise.resolve(this.#trackModelUse?.(modelId));
@@ -1902,7 +2019,9 @@ export class SessionModel {
       console.error('Failed to track model usage count', error);
     }
 
-    this.#bus.emit({ type: 'model_changed', modelId });
+    if (appliedToActiveThread && (!threadId || store?.getThreadId() === threadId)) {
+      this.#bus.emit({ type: 'model_changed', modelId });
+    }
   }
 }
 

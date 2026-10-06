@@ -5,7 +5,7 @@ import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
 import type { Agent } from '@mastra/core/agent';
-import { AgentController } from '@mastra/core/agent-controller';
+import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
   AgentControllerConfig,
@@ -875,9 +875,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // No session here owns the resource. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;
-    // A long-running system must be able to drive work unattended, so restore
-    // the thread's current model first, then its legacy per-mode model, then a
-    // real mode or live-session default rather than failing the run.
+    // A long-running system must be able to drive work unattended, so migrate
+    // and restore the thread's persisted model before falling back to a real
+    // mode or live-session default rather than failing the run.
     const targetThread = await session.thread.getById({ threadId });
     const metadata =
       targetThread?.resourceId === resourceId
@@ -890,15 +890,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       typeof savedModeId === 'string' && modes.some(mode => mode.id === savedModeId)
         ? savedModeId
         : (defaultMode?.id ?? session.mode.get());
-    const currentModelId = metadata?.currentModelId;
-    const legacyModeModelId = metadata?.[`modeModelId_${modeId}`];
+    const persistedModelId = metadata
+      ? await migratePersistedModelSelection({
+          getMetadata: async () =>
+            ((await session.thread.getById({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
+          modeId,
+          set: (key: string, value: unknown) => session.thread.setSettingOn({ threadId, key, value }),
+          threadId,
+          validModeIds: modes.map(mode => mode.id),
+        })
+      : undefined;
     const defaultModeModelId = modes.find(mode => mode.id === modeId)?.defaultModelId;
-    const modelId =
-      (typeof currentModelId === 'string' ? currentModelId : undefined) ??
-      (typeof legacyModeModelId === 'string' ? legacyModeModelId : undefined) ??
-      defaultModeModelId ??
-      session.model.get() ??
-      '';
+    const modelId = persistedModelId ?? defaultModeModelId ?? session.model.get() ?? '';
     const baseState = { ...session.state.get() } as MastraCodeState;
     delete baseState.modelRoute;
     delete baseState.mastracodePendingModelFallback;

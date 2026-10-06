@@ -6,7 +6,12 @@
  * `@mastra/core/harness` for backwards compatibility.
  */
 export { AgentController } from './agent-controller';
-export { Session } from './session';
+export {
+  Session,
+  MODEL_PERSISTENCE_VERSION,
+  MODEL_PERSISTENCE_VERSION_KEY,
+  migratePersistedModelSelection,
+} from './session';
 export { SessionStartupCancelledError, isSessionStartupCancelledError } from './errors';
 export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener } from './session';
 export type { MessageAuthor } from './message-author';

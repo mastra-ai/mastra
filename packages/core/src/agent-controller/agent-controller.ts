@@ -377,14 +377,18 @@ export class AgentController<TState = {}> {
     const defaultMode = this.#defaultMode;
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
+      getAllOn: async threadId => (await session.thread.getById({ threadId }))?.metadata ?? {},
       get: key => session.thread.getSetting({ key }),
+      getThreadId: () => session.thread.getId() ?? undefined,
       set: (key, value) => session.thread.setSetting({ key, value }),
+      setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
+      getModeIds: () => this.config.modes.map(mode => mode.id),
       trackModelUse: this.config.modelUseCountTracker,
     });
     session.om.setResolver({

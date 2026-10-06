@@ -1,3 +1,4 @@
+import { migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import type {
   ChannelHandler,
@@ -572,13 +573,21 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // recovery is the resolution that has to clear that marker with it.
     await seedSessionOrg(session, owner.orgId);
 
-    const currentModelId = await session.thread.getSetting({ key: 'currentModelId' });
-    const legacyModeModelId =
-      typeof currentModelId === 'string'
-        ? undefined
-        : await session.thread.getSetting({ key: `modeModelId_${session.mode.get()}` });
-    const persistedModelId = typeof currentModelId === 'string' ? currentModelId : legacyModeModelId;
-    if (typeof persistedModelId === 'string') {
+    const modeId = session.mode.get();
+    const activeThreadId = session.thread.getId();
+    const persistedModelId = await migratePersistedModelSelection({
+      getMetadata: async () =>
+        activeThreadId
+          ? (((await session.thread.getById({ threadId: activeThreadId }))?.metadata as
+              | Record<string, unknown>
+              | undefined) ?? {})
+          : {},
+      modeId,
+      set: (key: string, value: unknown) =>
+        activeThreadId ? session.thread.setSettingOn({ threadId: activeThreadId, key, value }) : Promise.resolve(),
+      threadId: activeThreadId ?? undefined,
+    });
+    if (persistedModelId) {
       // A restarted session restores its generation model from the thread, but
       // still needs the project memory row and a provider-compatible fallback.
       await hydrateFactorySession(session, {

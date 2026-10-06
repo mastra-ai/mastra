@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -65,7 +65,7 @@ describe('SessionModel.syncFromPersisted', () => {
     expect(replica.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it('falls back to the legacy current-mode model key', async () => {
+  it('migrates a legacy current-mode model over the create-time seed', async () => {
     const { session } = await buildController(storage);
     const thread = await session.thread.create();
     const memory = await storage.getStore('memory');
@@ -74,7 +74,9 @@ describe('SessionModel.syncFromPersisted', () => {
       title: 'legacy thread',
       metadata: {
         currentModeId: 'plan',
-        currentModelId: null,
+        currentModelId: 'openai/gpt-5.5',
+        modelPersistenceVersion: null,
+        modeModelId_build: 'openai/gpt-5.2-codex',
         modeModelId_plan: 'anthropic/claude-opus-4-6',
       },
     });
@@ -86,6 +88,54 @@ describe('SessionModel.syncFromPersisted', () => {
     await replica.model.syncFromPersisted();
 
     expect(replica.model.get()).toBe('anthropic/claude-opus-4-6');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'anthropic/claude-opus-4-6',
+      modelPersistenceVersion: 2,
+    });
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_build');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_plan');
+  });
+
+  it('does not overwrite a model switch that starts during legacy migration', async () => {
+    const { session } = await buildController(storage);
+    const thread = await session.thread.create();
+    const memory = await storage.getStore('memory');
+    const { session: replica } = await buildController(storage, 'replica-session');
+    await replica.thread.switch({ threadId: thread.id });
+    await memory!.updateThread({
+      id: thread.id,
+      title: 'legacy thread',
+      metadata: {
+        currentModeId: 'build',
+        currentModelId: 'openai/gpt-5.5',
+        modelPersistenceVersion: null,
+        modeModelId_build: 'anthropic/claude-opus-4-6',
+      },
+    });
+    const persistedThread = await memory!.getThreadById({ threadId: thread.id });
+    let releaseMetadata!: () => void;
+    const metadataBlocked = new Promise<void>(resolve => {
+      releaseMetadata = resolve;
+    });
+    const originalGetById = replica.thread.getById.bind(replica.thread);
+    vi.spyOn(replica.thread, 'getById')
+      .mockImplementationOnce(async () => {
+        await metadataBlocked;
+        return persistedThread!;
+      })
+      .mockImplementation(originalGetById);
+
+    const migration = replica.model.syncFromPersisted();
+    const modelSwitch = replica.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    releaseMetadata();
+    await Promise.all([migration, modelSwitch]);
+
+    expect(replica.model.get()).toBe('openai/gpt-5.2-codex');
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'openai/gpt-5.2-codex',
+      modelPersistenceVersion: 2,
+    });
+    expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_build');
   });
 
   it('keeps the in-memory selection when no model was persisted', async () => {
