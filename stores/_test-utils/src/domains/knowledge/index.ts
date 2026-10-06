@@ -1906,6 +1906,7 @@ export function createKnowledgeStorageTests(
       await expect(store.getVisibleProposal({ id: proposal.id, ...complete })).resolves.toMatchObject({
         id: proposal.id,
       });
+    });
 
     it('atomically applies verified gap mutations with their approval transition', async () => {
       const node = await store.createNode({ name: 'Gap target', scopeIds: [PROJECT_SCOPE_ID] });
