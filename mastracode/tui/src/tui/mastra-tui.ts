@@ -1028,6 +1028,7 @@ export class MastraTUI {
     if (event.type === 'model_changed') {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
+        thinkingLevel: event.thinkingLevel,
         mode: this.state.session.mode.get(),
         threadId: this.state.session.thread.getId(),
         resourceId: this.state.session.identity.getResourceId(),
@@ -1497,7 +1498,7 @@ export class MastraTUI {
           const { PROVIDER_DEFAULT_MODELS } = await import('@mastra/code-sdk/auth/storage');
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
-            await this.state.session.model.switch({ modelId: defaultModel });
+            await this.state.session.model.switch(defaultModel);
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);

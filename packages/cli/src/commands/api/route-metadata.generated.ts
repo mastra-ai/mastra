@@ -6696,7 +6696,8 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "modelId"
+      "modelId",
+      "thinkingLevel"
     ],
     "hasQuery": true,
     "hasBody": true,

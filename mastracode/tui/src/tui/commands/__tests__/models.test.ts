@@ -549,7 +549,7 @@ describe('handleModelCommand', () => {
     await command;
 
     expect(mocks.saveSettings).toHaveBeenLastCalledWith(settings);
-    expect(switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(switchModel).toHaveBeenCalledWith('openai/gpt-5.6-sol');
     expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: apply failed');
   });
 });

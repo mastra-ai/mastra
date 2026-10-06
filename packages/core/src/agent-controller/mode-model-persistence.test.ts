@@ -108,7 +108,7 @@ describe('AgentController single-model persistence across restarts', () => {
   it('keeps the selected model when switching modes', async () => {
     const { session } = await buildController(storage);
     await session.thread.create();
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
 
     await session.mode.switch({ modeId: 'fast' });
 
@@ -137,7 +137,7 @@ describe('AgentController single-model persistence across restarts', () => {
   it('restores currentModelId on reopen', async () => {
     const { session: session1 } = await buildController(storage);
     const thread = await session1.thread.create();
-    await session1.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
+    await session1.model.switch('cerebras/qwen-3-coder-480b');
     await session1.mode.switch({ modeId: 'fast' });
 
     const { session: session2 } = await buildController(storage);
@@ -177,7 +177,7 @@ describe('AgentController single-model persistence across restarts', () => {
     expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_plan');
     expect((await memory!.getThreadById({ threadId: thread.id }))?.metadata).not.toHaveProperty('modeModelId_fast');
 
-    await session2.model.switch({ modelId: 'anthropic/claude-sonnet-4-6' });
+    await session2.model.switch('anthropic/claude-sonnet-4-6');
     const { session: session3 } = await buildController(storage);
     await session3.thread.switch({ threadId: thread.id });
 

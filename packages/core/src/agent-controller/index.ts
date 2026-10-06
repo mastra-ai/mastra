@@ -48,6 +48,7 @@ export type {
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
   AgentControllerThread,
+  AgentControllerThinkingLevel,
   IntervalHandler,
   ModelAuthStatus,
   ModelUseCountProvider,

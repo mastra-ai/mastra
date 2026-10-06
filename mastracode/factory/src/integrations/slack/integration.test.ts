@@ -172,6 +172,6 @@ describe('SlackIntegration.channels', () => {
     } as any);
 
     expect(modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(session.model.switch).toHaveBeenLastCalledWith('openai/gpt-5.6');
   });
 });
