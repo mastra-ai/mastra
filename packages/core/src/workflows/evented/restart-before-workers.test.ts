@@ -22,12 +22,8 @@ const STALL_TIMEOUT_MS = 5_000;
 function createGate() {
   let release!: () => void;
   const released = new Promise<void>(resolve => (release = resolve));
-  let reached!: () => void;
-  const reachedPromise = new Promise<void>(resolve => (reached = resolve));
   return {
-    reached: reachedPromise,
     async wait() {
-      reached();
       await released;
     },
     release() {
@@ -82,8 +78,10 @@ describe('evented restart before workers have started', () => {
       });
       expect(snapshot?.status).toBe('running');
     });
-    // Guard against a vacuous pass: the run really is parked inside generation 1.
-    expect(log).toEqual([{ generation: 1, event: 'start' }]);
+    // The snapshot is marked `running` before `block.execute` runs, so wait for the
+    // step itself before asserting. This also guards against a vacuous pass: the run
+    // really is parked inside generation 1.
+    await vi.waitFor(() => expect(log).toEqual([{ generation: 1, event: 'start' }]));
 
     const secondProcess = new Mastra({
       logger: false,

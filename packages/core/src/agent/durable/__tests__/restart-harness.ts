@@ -398,7 +398,11 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
           held = true;
           // The write has landed; the engine does not get past the call until the
           // test releases the hold, so nothing else can be persisted meanwhile.
-          return holdGate.wait();
+          // Wait first, then hand back the original result: `updateWorkflowState`
+          // and `updateWorkflowResults` return data the engine reads, and releasing
+          // the hold must not turn that into `undefined`.
+          await holdGate.wait();
+          return result;
         };
       }
       const value = drive({ ...graph, runId: options.runId });
