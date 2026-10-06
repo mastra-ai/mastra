@@ -111,8 +111,8 @@ describe('platformFetch instrumentation', () => {
     const child = children[0]!;
     expect(child.error).toHaveBeenCalledTimes(1);
     const recorded = child.error.mock.calls[0]![0] as { error: Error; endSpan: boolean };
-    expect(recorded.error.message).toBe('connect request failed (TypeError)');
-    expect(recorded.error.name).toBe('TypeError');
+    expect(recorded.error.message).toBe('connect request failed');
+    expect(recorded.error.name).toBe('Error');
     expect(recorded.error.message).not.toContain(TOKEN);
     expect(recorded.error.message).not.toContain('query-secret');
     expect(recorded.endSpan).toBe(true);

@@ -106,18 +106,15 @@ export function endPlatformCallSpan(span: Span<SpanType.GENERIC> | undefined, st
 }
 
 /**
- * Records a transport-level failure on a platform-call span. The original
- * error message is never recorded — fetch failures can embed the request URL,
- * which may carry secret query params — only the error's constructor name.
- * Never throws.
+ * Records a transport-level failure on a platform-call span. Nothing from the
+ * original error is recorded — fetch failures can embed the request URL in
+ * both `message` and `name`, which may carry secret query params — so the
+ * span gets a fixed, constant error. Never throws.
  */
-export function errorPlatformCallSpan(span: Span<SpanType.GENERIC> | undefined, error: unknown): void {
+export function errorPlatformCallSpan(span: Span<SpanType.GENERIC> | undefined, _error: unknown): void {
   if (!span) return;
   try {
-    const name = error instanceof Error ? error.name : 'Error';
-    const safeError = new Error(`connect request failed (${name})`);
-    safeError.name = name;
-    span.error({ error: safeError, endSpan: true });
+    span.error({ error: new Error('connect request failed'), endSpan: true });
   } catch {
     // instrumentation must never break a request
   }

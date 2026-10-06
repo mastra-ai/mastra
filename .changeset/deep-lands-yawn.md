@@ -2,17 +2,36 @@
 '@mastra/connect': minor
 ---
 
-Added observability for outbound Connect HTTP calls. When tracing is enabled, every Mastra Platform API call and every vendor call routed through the connection proxy now appears as a child span under the active span (e.g. the tool call span), with method, a safe route template, connection id, and response status — so a failing provider tool call can be traced end to end inside the agent trace. Spans never record query strings, headers, bodies, or vendor path segments, and apps without observability configured are unaffected.
+Added tracing for outbound Connect HTTP calls.
 
-No new API — configure observability on your Mastra instance as usual and Connect tool calls are traced automatically:
+When observability is enabled, every Mastra Platform API call and every vendor call routed through the connection proxy appears as a child span under the active span, such as the tool call span. Each span records the HTTP method, a safe route template, the connection id, and the response status. Spans never record query strings, headers, bodies, or vendor path segments. Apps without observability configured are unaffected.
+
+No new API — configure observability on your Mastra instance as usual:
 
 ```ts
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { Observability, MastraStorageExporter } from '@mastra/observability';
 import { tools } from '@mastra/connect';
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You manage Linear issues.',
+  model: 'openai/gpt-5.1',
+  tools: tools({ integrations: ['linear'] }),
+});
 
 const mastra = new Mastra({
   agents: { myAgent },
-  observability: { default: { enabled: true } },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new MastraStorageExporter()],
+      },
+    },
+  }),
 });
 
 // an agent using Connect tools now produces traces like:
