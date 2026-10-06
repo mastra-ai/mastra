@@ -6,7 +6,10 @@ import { createRecordingRoom } from './recording';
 import type { LiveKitRecordingOptions } from './recording';
 
 export interface DispatchVoiceSessionOptions {
-  /** Room to dispatch the agent into (created on demand). */
+  /**
+   * Room to dispatch the agent into (created on demand). With recording enabled, use a unique
+   * name for each call. An existing room throws LiveKitRecordingRoomConflictError.
+   */
   roomName: string;
   /** Must match the worker's `agentName`. Defaults to `'mastra-voice'`. */
   agentName?: string;

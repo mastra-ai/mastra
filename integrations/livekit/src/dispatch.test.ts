@@ -8,6 +8,7 @@ import {
 } from 'livekit-server-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchVoiceSession } from './dispatch';
+import { LiveKitRecordingRoomConflictError } from './recording';
 import type { LiveKitRecordingOptions } from './recording';
 
 const credentials = {
@@ -91,7 +92,12 @@ describe('dispatchVoiceSession', () => {
 
   it('rejects existing rooms before creating or dispatching', async () => {
     vi.mocked(RoomServiceClient.prototype.listRooms).mockResolvedValue([new Room({ name: 'call-42' })]);
-    await expect(dispatchVoiceSession({ ...options, recording })).rejects.toThrow('room "call-42" already exists');
+    const result = dispatchVoiceSession({ ...options, recording });
+    await expect(result).rejects.toBeInstanceOf(LiveKitRecordingRoomConflictError);
+    await expect(result).rejects.toMatchObject({
+      roomName: 'call-42',
+      message: expect.stringContaining('room "call-42" already exists'),
+    });
     expect(RoomServiceClient.prototype.createRoom).not.toHaveBeenCalled();
     expect(AgentDispatchClient.prototype.createDispatch).not.toHaveBeenCalled();
   });

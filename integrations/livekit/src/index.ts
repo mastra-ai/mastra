@@ -6,6 +6,7 @@ export { liveKitConnectionRoute } from './routes';
 export type { LiveKitConnectionRouteOptions, LiveKitConnectionDetails, ConnectionRequestArgs } from './routes';
 export { dispatchVoiceSession } from './dispatch';
 export type { DispatchVoiceSessionOptions } from './dispatch';
+export { LiveKitRecordingRoomConflictError } from './recording';
 export type { LiveKitRecordingOptions } from './recording';
 export { liveKitRecordingRoute } from './recording-route';
 export type {

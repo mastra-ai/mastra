@@ -492,7 +492,7 @@ await dispatchVoiceSession({
 // Add the phone participant to roomName through your existing LiveKit SIP code.
 ```
 
-Use a fresh room name for each recorded session and await dispatch before dialing. Mastra rejects a room found to already exist. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
+Use a fresh room name for each recorded session and await dispatch before dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
 
 For browser sessions, pass the same settings to the connection route:
 
@@ -512,7 +512,7 @@ With recording enabled, the route creates the room and dispatches the agent when
 
 The route also accepts a synchronous or asynchronous `recording` callback. It receives `{ body, context, roomName }`, including the resolved room name, so your server can choose settings for each session. Return `undefined` to skip recording for that request. Recording configuration isn't read directly from the request body.
 
-Room creation and dispatch errors reject the operation; the route doesn't issue a token on failure. If dispatch fails after room creation, the room remains in LiveKit. Successful setup doesn't guarantee that the recording finishes or uploads successfully. Use LiveKit's [egress events](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/#webhook-events) to check completion and retrieve file details before making a recording available to users. To verify the setup, make a test call, end the room, and listen to the completed file under `calls/` in your bucket for audio from both participants.
+An existing recording room returns HTTP 409 before agent dispatch or token issuance. Other room creation and dispatch errors reject the operation; the route doesn't issue a token on failure. If dispatch fails after room creation, the room remains in LiveKit. Successful setup doesn't guarantee that the recording finishes or uploads successfully. Use LiveKit's [egress events](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/#webhook-events) to check completion and retrieve file details before making a recording available to users. To verify the setup, make a test call, end the room, and listen to the completed file under `calls/` in your bucket for audio from both participants.
 
 #### Recording lifecycle and consent
 
@@ -1767,7 +1767,8 @@ The route accepts a JSON body with optional `agentId`, `threadId`, and `resource
   {
     name: 'roomName',
     type: 'string | (args) => string',
-    description: 'Room name or a function that derives one from the request.',
+    description:
+      'Room name or a function that derives one from the request. With recording enabled, use a unique name for each call. An existing room returns HTTP 409 before agent dispatch or token issuance.',
     isOptional: true,
   },
   {
@@ -1787,7 +1788,7 @@ The route accepts a JSON body with optional `agentId`, `threadId`, and `resource
     name: 'recording',
     type: 'LiveKitRecordingOptions | (args) => LiveKitRecordingOptions | undefined | Promise<LiveKitRecordingOptions | undefined>',
     description:
-      'Creates a fresh room with automatic recording and dispatches the agent before returning connection details. The server-side callback receives body, context, and the resolved roomName. Return undefined to skip recording. Existing rooms and setup failures reject the request.',
+      'Creates a fresh room with automatic recording and dispatches the agent before returning connection details. The server-side callback receives body, context, and the resolved roomName. Return undefined to skip recording. Existing rooms return HTTP 409. Other setup failures reject the request.',
     isOptional: true,
   },
 ]}
@@ -1814,7 +1815,8 @@ await dispatchVoiceSession({
   {
     name: 'roomName',
     type: 'string',
-    description: 'Room to dispatch the agent into. Created on demand.',
+    description:
+      'Room to dispatch the agent into. Created on demand. With recording enabled, use a unique name for each call. An existing room throws LiveKitRecordingRoomConflictError.',
   },
   {
     name: 'agentName',

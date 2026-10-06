@@ -1,5 +1,12 @@
 import type { ContextWithMastra } from '@mastra/core/server';
-import { AgentDispatch, AgentDispatchClient, Room, RoomEgress, RoomServiceClient } from 'livekit-server-sdk';
+import {
+  AccessToken,
+  AgentDispatch,
+  AgentDispatchClient,
+  Room,
+  RoomEgress,
+  RoomServiceClient,
+} from 'livekit-server-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveKitRecordingOptions } from './recording';
 import { liveKitConnectionRoute } from './routes';
@@ -138,16 +145,27 @@ describe('liveKitConnectionRoute recording', () => {
     },
   );
 
-  it('rejects an existing room without issuing connection details', async () => {
-    vi.mocked(RoomServiceClient.prototype.listRooms).mockResolvedValue([new Room({ name: 'existing' })]);
-    const { context, json } = fakeContext();
-    await expect(
-      getHandler(liveKitConnectionRoute({ ...credentials, roomName: 'existing', recording }))(context),
-    ).rejects.toThrow('room "existing" already exists');
-    expect(RoomServiceClient.prototype.createRoom).not.toHaveBeenCalled();
-    expect(AgentDispatchClient.prototype.createDispatch).not.toHaveBeenCalled();
-    expect(json).not.toHaveBeenCalled();
-  });
+  it.each(['existing', () => 'existing'])(
+    'returns 409 for an existing recording room without dispatching or signing a token (%s)',
+    async roomName => {
+      vi.mocked(RoomServiceClient.prototype.listRooms).mockResolvedValue([new Room({ name: 'existing' })]);
+      const toJwt = vi.spyOn(AccessToken.prototype, 'toJwt');
+      const { context, json } = fakeContext();
+      await expect(
+        getHandler(liveKitConnectionRoute({ ...credentials, roomName, recording }))(context),
+      ).resolves.toEqual({
+        payload: { error: 'Recording requires a new room. Use a unique roomName for each call.' },
+        status: 409,
+      });
+      expect(RoomServiceClient.prototype.createRoom).not.toHaveBeenCalled();
+      expect(AgentDispatchClient.prototype.createDispatch).not.toHaveBeenCalled();
+      expect(toJwt).not.toHaveBeenCalled();
+      expect(json).toHaveBeenCalledExactlyOnceWith(
+        { error: 'Recording requires a new room. Use a unique roomName for each call.' },
+        409,
+      );
+    },
+  );
 
   it.each(['configuration', 'room', 'dispatch'])('does not issue connection details when %s fails', async stage => {
     const error = new Error('Recording setup failed');

@@ -5,6 +5,7 @@ import { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';
 import { dispatchVoiceSession } from './dispatch';
 import { serializeSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
+import { LiveKitRecordingRoomConflictError } from './recording';
 import type { LiveKitRecordingOptions } from './recording';
 
 /** Response body of the connection-details route. Matches LiveKit's frontend starter contract. */
@@ -38,6 +39,11 @@ export interface LiveKitConnectionRouteOptions {
   ttl?: string | number;
   /** Defaults to `true` (Mastra custom routes require auth unless opted out). */
   requiresAuth?: boolean;
+  /**
+   * Room name or a function that derives one from the request. Defaults to a generated name.
+   * With recording enabled, use a unique name for each call. An existing room returns HTTP 409
+   * before agent dispatch or token issuance.
+   */
   roomName?: string | ((args: ConnectionRequestArgs) => string);
   participantIdentity?: string | ((args: ConnectionRequestArgs) => string);
   /**
@@ -119,15 +125,22 @@ export function liveKitConnectionRoute(options: LiveKitConnectionRouteOptions = 
     const recording =
       typeof options.recording === 'function' ? await options.recording({ ...args, roomName }) : options.recording;
     if (recording !== undefined) {
-      await dispatchVoiceSession({
-        roomName,
-        agentName: options.agentName,
-        metadata,
-        serverUrl,
-        apiKey,
-        apiSecret,
-        recording,
-      });
+      try {
+        await dispatchVoiceSession({
+          roomName,
+          agentName: options.agentName,
+          metadata,
+          serverUrl,
+          apiKey,
+          apiSecret,
+          recording,
+        });
+      } catch (error) {
+        if (error instanceof LiveKitRecordingRoomConflictError) {
+          return c.json({ error: 'Recording requires a new room. Use a unique roomName for each call.' }, 409);
+        }
+        throw error;
+      }
     }
 
     const token = new AccessToken(apiKey, apiSecret, { identity, ttl: options.ttl ?? '15m' });

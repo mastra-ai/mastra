@@ -7,6 +7,19 @@ import { RoomEgress, RoomServiceClient } from 'livekit-server-sdk';
  */
 export type LiveKitRecordingOptions = NonNullable<ConstructorParameters<typeof RoomEgress>[0]>;
 
+/** A recording-enabled session cannot reuse an existing LiveKit room. */
+export class LiveKitRecordingRoomConflictError extends Error {
+  readonly roomName: string;
+
+  constructor(roomName: string) {
+    super(
+      `@mastra/livekit: recording requires a new room, but room "${roomName}" already exists. Use a fresh room name.`,
+    );
+    this.name = 'LiveKitRecordingRoomConflictError';
+    this.roomName = roomName;
+  }
+}
+
 /** Creates a fresh room with recording configured before any agent or caller joins. */
 export async function createRecordingRoom(options: {
   roomName: string;
@@ -25,9 +38,7 @@ export async function createRecordingRoom(options: {
   // This preflight is not atomic: callers must use a fresh name and serialize room creation.
   const rooms = await client.listRooms([roomName]);
   if (rooms.length > 0) {
-    throw new Error(
-      `@mastra/livekit: recording requires a new room, but room "${roomName}" already exists. Use a fresh room name.`,
-    );
+    throw new LiveKitRecordingRoomConflictError(roomName);
   }
 
   return client.createRoom({ name: roomName, egress: new RoomEgress(recording) });
