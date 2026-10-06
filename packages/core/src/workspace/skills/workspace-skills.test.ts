@@ -807,6 +807,82 @@ Read the diff carefully.
         expect(results.map(r => r.skillName)).toEqual(['pr-review', 'diff-tool']);
       });
 
+      it('simple search ignores one- and two-letter words when the query has longer ones', async () => {
+        // "a", "do" and "it" appear in almost any text; they must not make every skill match
+        expect(await createSkills().search('do a kubernetes deploy on it')).toEqual([]);
+        // A query made only of short words still searches with them
+        expect((await createSkills().search('pr'))[0]?.skillName).toBe('pr-review');
+      });
+
+      describe('reference files', () => {
+        const DIFF_TOOL_SKILL_MD = `---\nname: diff-tool\ndescription: Compares files\n---\n\nRun it on two files.\n`;
+
+        function createSkillsWithReferences() {
+          const filesystem = createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/pr-review/references/style.md': 'Naming conventions for variables.',
+            'skills/diff-tool/SKILL.md': DIFF_TOOL_SKILL_MD,
+            'skills/diff-tool/references/flags.md': 'Flags for naming output files.',
+          });
+          const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: ['skills'] });
+          const referenceReads = () =>
+            (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.filter(([path]) =>
+              String(path).includes('/references/'),
+            ).length;
+          return { skills, referenceReads };
+        }
+
+        it('scores references at half weight and lists their file', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('naming conventions');
+          expect(results.map(r => [r.skillName, r.source, r.score])).toEqual([
+            ['pr-review', 'references/style.md', 0.5],
+            ['diff-tool', 'references/flags.md', 0.25],
+          ]);
+        });
+
+        it('ranks a reference match below a skill whose description matches the same words', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('compares naming');
+          // diff-tool's description has 1 of 2 words (0.5); each reference also has 1 of 2 (0.25).
+          // Equal scores keep read order, and the matching skill's references are read first.
+          expect(results.map(r => [r.skillName, r.source])).toEqual([
+            ['diff-tool', 'SKILL.md'],
+            ['diff-tool', 'references/flags.md'],
+            ['pr-review', 'references/style.md'],
+          ]);
+        });
+
+        it('skips reading references when enough skills already outscore any reference', async () => {
+          const { skills, referenceReads } = createSkillsWithReferences();
+          await skills.list();
+          const before = referenceReads();
+          const results = await skills.search('review correctness', { topK: 1 });
+          expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+          expect(referenceReads()).toBe(before);
+        });
+
+        it('stops reading references after topK reference matches', async () => {
+          const { skills, referenceReads } = createSkillsWithReferences();
+          await skills.list();
+          const before = referenceReads();
+          const results = await skills.search('naming', { topK: 1 });
+          expect(results.map(r => r.source)).toEqual(['references/style.md']);
+          expect(referenceReads() - before).toBe(1);
+        });
+
+        it('returns skills and references in discovery order for an empty query', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('', { topK: 10 });
+          expect(results.map(r => r.source).sort()).toEqual([
+            'SKILL.md',
+            'SKILL.md',
+            'references/flags.md',
+            'references/style.md',
+          ]);
+        });
+      });
+
       it('indexes name and description as a SKILL.md document', async () => {
         const searchEngine = createMockSearchEngine();
         const skills = createSkills(searchEngine);

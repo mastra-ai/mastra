@@ -387,6 +387,18 @@ describe('SkillsProcessor', () => {
         expect(mockMessageList.addSystem).not.toHaveBeenCalled();
       });
 
+      it('respects activeTools', async () => {
+        const searchFirst = new SkillsProcessor({ injectCatalog: false });
+        const run = (activeTools: string[]) =>
+          searchFirst.processInputStep({ messageList: mockMessageList as any, tools: skillTools, activeTools } as any);
+
+        await run(['skill', 'skill_read']);
+        expect(mockMessageList.addSystem).not.toHaveBeenCalled();
+
+        await run(['skill', 'skill_search']);
+        expect(systemContents()).toHaveLength(1);
+      });
+
       it('records injectCatalog on the span', async () => {
         const update = vi.fn();
         const searchFirst = new SkillsProcessor({ injectCatalog: false });

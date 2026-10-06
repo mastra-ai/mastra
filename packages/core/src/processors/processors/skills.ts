@@ -342,7 +342,14 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Process input step - inject available skills metadata into the system
    * message.  Tools are provided by `Agent.listSkillTools()` instead.
    */
-  async processInputStep({ messageList, stepNumber, requestContext, tracingContext, tools }: ProcessInputStepArgs) {
+  async processInputStep({
+    messageList,
+    stepNumber,
+    requestContext,
+    tracingContext,
+    tools,
+    activeTools,
+  }: ProcessInputStepArgs) {
     const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
 
     // Revalidate skills on first step only (not every step in the agentic loop).
@@ -376,9 +383,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // Without a catalog, point the model at skill_search. Gate on the tool
     // rather than this processor's own skills: the agent builds the skill tools
     // from agent-level and workspace skills together, and drops them when an
-    // on-demand discovery processor takes over.
+    // on-demand discovery processor takes over, or when `activeTools` excludes it.
     if (!this._injectCatalog) {
-      if (tools && 'skill_search' in tools) {
+      if (tools && 'skill_search' in tools && (!activeTools || activeTools.includes('skill_search'))) {
         messageList.addSystem({ role: 'system', content: SKILL_SEARCH_HINT });
       }
       return;

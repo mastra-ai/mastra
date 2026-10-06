@@ -377,6 +377,17 @@ describe('skill tool', () => {
       expect(search).toHaveBeenCalledWith('release notes', { topK: 5, includeReferences: false });
     });
 
+    it.each(['/', '-', ''])('suggests nothing for a name with no words (%j)', async name => {
+      const search = vi.fn(async () => []);
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills), search });
+      const { skill: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { name });
+
+      expect(search).not.toHaveBeenCalled();
+      expect(result).toBe(`Skill "${name}" not found. Use the \`skill_search\` tool to find other skills.`);
+    });
+
     it('suggests a real skill matched by its description', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-suggest-'));
       try {

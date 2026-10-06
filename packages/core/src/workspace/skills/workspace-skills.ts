@@ -1558,39 +1558,29 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #simpleSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const { topK = 5, skillNames, includeReferences = true } = options;
-    // Score by the share of query words found (case-insensitive), so keyword
-    // queries rank skills instead of needing every word or the exact phrase.
-    // Words found in the name or description count double: they say what the
-    // skill is for. An empty query matches everything.
-    const terms = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
-    const countMatches = (text: string) => {
-      const lower = text.toLowerCase();
-      return terms.filter(term => lower.includes(term)).length;
-    };
-    const results: SkillSearchResult[] = [];
 
+    const skills: Skill[] = [];
     for (const candidates of this.#skills.values()) {
       // Use tie-break winner for each name
       const skill = await this.#tieBreak(candidates);
-      if (!skill) continue;
+      if (skill && (!skillNames || skillNames.includes(skill.name))) skills.push(skill);
+    }
 
-      // Filter by skill names if specified
-      if (skillNames && !skillNames.includes(skill.name)) {
-        continue;
-      }
+    // Score by the share of query words found (case-insensitive), so keyword
+    // queries rank skills instead of needing every word or the exact phrase.
+    // Words found in the name or description count double: they say what the
+    // skill is for. Words of one or two letters ("a", "do") appear in almost
+    // every skill, so they're ignored unless the query has nothing longer.
+    const allTerms = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+    const longTerms = allTerms.filter(term => term.length > 2);
+    const terms = longTerms.length > 0 ? longTerms : allTerms;
 
-      if (terms.length === 0) {
-        results.push({
-          skillName: skill.name,
-          skillPath: skill.path,
-          source: 'SKILL.md',
-          content: skill.instructions.substring(0, 200),
-          score: 1,
-        });
-        if (results.length >= topK) break;
-        continue;
-      }
+    if (terms.length === 0) {
+      return this.#listSkillDocuments(skills, topK, includeReferences);
+    }
 
+    const skillHits: SkillSearchResult[] = [];
+    for (const skill of skills) {
       const lowerAbout = `${skill.name}\n${skill.description}`.toLowerCase();
       const lowerBody = skill.instructions.toLowerCase();
       let aboutMatches = 0;
@@ -1604,7 +1594,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         }
       }
       if (weighted > 0) {
-        results.push({
+        skillHits.push({
           skillName: skill.name,
           skillPath: skill.path,
           source: 'SKILL.md',
@@ -1613,27 +1603,70 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           score: weighted / terms.length,
         });
       }
+    }
+    // Stable sort keeps discovery order for equal scores
+    skillHits.sort((a, b) => b.score - a.score);
 
-      if (includeReferences) {
+    // Reference files are read from the filesystem, which may be remote, so read
+    // as few as possible. A reference scores at most 0.5, so skip them when topK
+    // skills already score higher. Otherwise read the best-matching skills'
+    // references first and stop after topK reference hits.
+    const referenceHits: SkillSearchResult[] = [];
+    if (includeReferences && skillHits.filter(hit => hit.score > 0.5).length < topK) {
+      const skillsByPath = new Map(skills.map(skill => [skill.path, skill]));
+      const byRank = skillHits.map(hit => skillsByPath.get(hit.skillPath)!);
+      for (const hit of skillHits) skillsByPath.delete(hit.skillPath);
+      byRank.push(...skillsByPath.values());
+      search: for (const skill of byRank) {
         for (const refPath of skill.references) {
           const content = await this.getReference(skill.name, `references/${refPath}`);
-          const matched = content ? countMatches(content) : 0;
-          if (content && matched > 0) {
-            results.push({
-              skillName: skill.name,
-              skillPath: skill.path,
-              source: `references/${refPath}`,
-              content: content.substring(0, 200),
-              score: (0.5 * matched) / terms.length,
-            });
-          }
+          if (!content) continue;
+          const lower = content.toLowerCase();
+          const matched = terms.filter(term => lower.includes(term)).length;
+          if (matched === 0) continue;
+          referenceHits.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: (0.5 * matched) / terms.length,
+          });
+          if (referenceHits.length >= topK) break search;
         }
       }
     }
 
-    if (terms.length === 0) return results.slice(0, topK);
-    // Stable sort keeps discovery order for equal scores
-    return results.sort((a, b) => b.score - a.score).slice(0, topK);
+    return [...skillHits, ...referenceHits].sort((a, b) => b.score - a.score).slice(0, topK);
+  }
+
+  /** Empty-query search: every skill and reference file, in discovery order. */
+  async #listSkillDocuments(skills: Skill[], topK: number, includeReferences: boolean): Promise<SkillSearchResult[]> {
+    const results: SkillSearchResult[] = [];
+    for (const skill of skills) {
+      if (results.length >= topK) break;
+      results.push({
+        skillName: skill.name,
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        content: skill.instructions.substring(0, 200),
+        score: 1,
+      });
+      if (!includeReferences) continue;
+      for (const refPath of skill.references) {
+        if (results.length >= topK) break;
+        const content = await this.getReference(skill.name, `references/${refPath}`);
+        if (content) {
+          results.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: 0.8,
+          });
+        }
+      }
+    }
+    return results;
   }
 
   /**
