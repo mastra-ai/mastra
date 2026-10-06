@@ -25,14 +25,13 @@ const providersDir = join(packageDir, 'src/providers');
 const outFile = join(repoRoot, 'docs/src/content/en/reference/connect/providers.mdx');
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['anthropic', 'microsoft-teams', 'stripe', 'twitter-v2']);
+const EXCLUDE = new Set(['anthropic', 'google-analytics', 'microsoft-teams', 'stripe', 'twitter-v2']);
 
 const DISPLAY: Record<string, string> = {
   clerk: 'Clerk',
   discord: 'Discord',
   fireflies: 'Fireflies.ai',
   github: 'GitHub',
-  'google-analytics': 'Google Analytics',
   'google-calendar': 'Google Calendar',
   'google-docs': 'Google Docs',
   'google-drive': 'Google Drive',
@@ -59,7 +58,6 @@ const LOGOS: Record<string, Logo> = {
   discord: { slug: 'discord' },
   fireflies: { src: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
   github: { slug: 'github', mono: true },
-  'google-analytics': { slug: 'googleanalytics' },
   'google-calendar': { slug: 'googlecalendar' },
   'google-docs': { slug: 'googledocs' },
   'google-drive': { slug: 'googledrive' },

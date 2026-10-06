@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` includes generated toolsets for 22 providers (888 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+`@mastra/connect` includes generated toolsets for 21 providers (877 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -21,7 +21,6 @@ MCP providers (Airtable, Attio, Canva, Clay, Granola, Neon, Render, Robinhood, a
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 33 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 46 |
-| <ProviderLogo slug="googleanalytics" /> [Google Analytics](#google-analytics) | `google-analytics` | 11 |
 | <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
 | <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
 | <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 30 |
@@ -215,24 +214,6 @@ Provider ID: `github` · 46 tools
 | `github_update_label` | Update a repository label's name, color, or description. |
 | `github_update_pull_request` | Edit a pull request's title, body, base branch, or state. |
 | `github_update_release` | Edit release metadata such as name, notes, or draft state. |
-
-## Google Analytics
-
-Provider ID: `google-analytics` · 11 tools
-
-| Tool | Description |
-| - | - |
-| `google_analytics_archive_conversion_event` | Archive a GA4 conversion event. |
-| `google_analytics_batch_run_reports` | Run multiple GA4 reports in one request. |
-| `google_analytics_create_conversion_event` | Create a conversion event for a GA4 property. |
-| `google_analytics_create_data_stream` | Create a data stream for a GA4 property. |
-| `google_analytics_create_property` | Create a GA4 property under an account. |
-| `google_analytics_get_metadata` | Retrieve GA4 dimensions and metrics metadata. |
-| `google_analytics_run_pivot_report` | Run a GA4 pivot report. |
-| `google_analytics_run_realtime_report` | Run a realtime GA4 report. |
-| `google_analytics_run_report` | Run a GA4 report for a property |
-| `google_analytics_update_data_stream` | Update a GA4 data stream. |
-| `google_analytics_update_property` | Update a GA4 property. |
 
 ## Google Calendar
 

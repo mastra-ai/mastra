@@ -17,7 +17,6 @@ A provider is a service you can connect to your project, identified by a provide
 | `discord` | <ProviderLogo slug="discord" /> Discord | Tools, channel |
 | `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai | Tools |
 | `github` | <ProviderLogo slug="github" mono /> GitHub | Tools |
-| `google-analytics` | <ProviderLogo slug="googleanalytics" /> Google Analytics | Tools |
 | `google-calendar` | <ProviderLogo slug="googlecalendar" /> Google Calendar | Tools |
 | `google-docs` | <ProviderLogo slug="googledocs" /> Google Docs | Tools |
 | `google-drive` | <ProviderLogo slug="googledrive" /> Google Drive | Tools |
@@ -128,7 +127,7 @@ The `incident-io` toolset reads and updates incidents, posts incident updates, m
 
 A triage agent that reads incidents and posts updates needs **View data** and **Edit incidents**, and the incident.io [permissions reference](https://docs.incident.io/admin/api-keys#permissions-reference) describes each permission.
 
-`incident_io_create_incident` requires an `idempotency_key`, and incident.io rejects a second incident with the same key. An API key can open 10 incidents an hour that create a Slack or Microsoft Teams channel. Listing incidents is limited to 60 requests a minute. If the agent hits `429` errors, tell it to filter incidents instead of paging through all of them.
+`incident_io_create_incident` requires an `idempotency_key`, and incident.io rejects a second incident with the same key. An API key can open 10 incidents an hour that create a chat channel. Listing incidents is limited to 60 requests a minute. If the agent hits `429` errors, tell it to filter incidents instead of paging through all of them.
 
 ## Fix a failing provider
 
