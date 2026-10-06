@@ -587,7 +587,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
       .map(table => `"${table}"`)
       .join(', ');
-    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables}`);
     await this.init();
   }
 
