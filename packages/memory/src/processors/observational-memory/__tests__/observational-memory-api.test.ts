@@ -3010,12 +3010,8 @@ describe('accessor methods', () => {
     om = createOM(storage);
   });
 
-  it('getStorage should return the configured storage wrapped with lock retries', async () => {
-    const getThreadById = vi.spyOn(storage, 'getThreadById');
-    const s = om.getStorage();
-    expect(s).toBeInstanceOf(InMemoryMemory);
-    await s.getThreadById({ threadId: 'thread-1' });
-    expect(getThreadById).toHaveBeenCalledWith({ threadId: 'thread-1' });
+  it('getStorage should return the storage instance', () => {
+    expect(om.getStorage()).toBe(storage);
   });
 
   it('getTokenCounter should return a TokenCounter', () => {
