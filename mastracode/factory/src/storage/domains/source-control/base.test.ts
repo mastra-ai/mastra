@@ -521,6 +521,333 @@ describe('SourceControlStorage', () => {
     expect(await github.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: link.id })).toBeNull();
   });
+
+  describe('environment', () => {
+    /** Links under their own installation + connection so one project can hold the same slug several times. */
+    async function linkUnderOwnInstallation(args: {
+      factoryProjectId: string;
+      externalId: string;
+      slug: string;
+      createdAt: Date;
+      handle?: SourceControlStorageHandle;
+      sandboxWorkdir?: string;
+    }): Promise<ProjectRepository> {
+      const handle = args.handle ?? github;
+      const installation = await createInstallation(handle, { externalId: `installation-${args.externalId}` });
+      const repository = await handle.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, ...repositoryInput, externalId: args.externalId, slug: args.slug },
+      });
+      const connection = await handle.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: args.factoryProjectId,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const link = await handle.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        ...projectRepositoryInput,
+        sandboxWorkdir: args.sandboxWorkdir ?? projectRepositoryInput.sandboxWorkdir,
+      });
+      await backend.ops.updateMany('factory_project_repositories', { id: link.id }, { created_at: args.createdAt });
+      return link;
+    }
+
+    /** Put rows back into the shape they had before the environment columns existed. */
+    async function resetToPreEnvironmentShape(projectId: string): Promise<void> {
+      await backend.ops.updateMany('factory_project_repositories', {}, { position: 0, in_environment: true });
+      await backend.ops.updateMany(
+        'factory_projects',
+        { id: projectId },
+        { sandbox_provider: null, sandbox_workdir: null, sandbox_cpu_count: null, sandbox_memory_mb: null },
+      );
+    }
+
+    async function snapshot() {
+      return {
+        projects: await backend.ops.findMany('factory_projects', {}, { orderBy: [['id', 'asc']] }),
+        links: await backend.ops.findMany('factory_project_repositories', {}, { orderBy: [['id', 'asc']] }),
+      };
+    }
+
+    const at = (second: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, second));
+
+    async function seedDuplicateSlugProject() {
+      const project = await createProject();
+      const first = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r1',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(1),
+        sandboxWorkdir: '/workspace/oldest',
+      });
+      const second = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r2',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(2),
+        handle: gitlab,
+      });
+      const third = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r3',
+        slug: 'mastra-ai/docs',
+        createdAt: at(3),
+      });
+      const fourth = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r4',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(4),
+      });
+      await resetToPreEnvironmentShape(project.id);
+      return { project, first, second, third, fourth };
+    }
+
+    it('backfills positions, dedupes slugs and copies the oldest link onto the project', async () => {
+      const { project, first, second, third, fourth } = await seedDuplicateSlugProject();
+
+      await domain.init();
+
+      const linkRow = async (id: string) =>
+        backend.ops.findOne<{ position: number; in_environment: boolean }>('factory_project_repositories', { id });
+      expect(await linkRow(first.id)).toMatchObject({ position: 1, in_environment: true });
+      expect(await linkRow(second.id)).toMatchObject({ position: 2, in_environment: false });
+      expect(await linkRow(third.id)).toMatchObject({ position: 3, in_environment: true });
+      expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
+      expect(await projects.getById({ id: project.id })).toMatchObject({
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/oldest',
+        sandboxCpuCount: 4,
+        sandboxMemoryMb: 8192,
+      });
+    });
+
+    it('is a no-op when re-run', async () => {
+      await seedDuplicateSlugProject();
+      await domain.init();
+      const before = await snapshot();
+
+      await domain.init();
+
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it('leaves a new project unconfigured until the next init, then fills resources and the oldest link', async () => {
+      const withLink = await createProject({ name: 'with link' });
+      const withoutLink = await createProject({ name: 'without link' });
+      expect(await projects.getById({ id: withLink.id })).toMatchObject({
+        sandboxProvider: null,
+        sandboxWorkdir: null,
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
+        sandboxIdleTimeoutMinutes: null,
+        workspaceSetupCommand: null,
+        activeTemplateId: null,
+        activeTemplateHeads: null,
+      });
+      await linkUnderOwnInstallation({
+        factoryProjectId: withLink.id,
+        externalId: 'r1',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(1),
+        sandboxWorkdir: '/workspace/linked',
+      });
+
+      await domain.init();
+
+      expect(await projects.getById({ id: withLink.id })).toMatchObject({
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/linked',
+        sandboxCpuCount: 4,
+        sandboxMemoryMb: 8192,
+      });
+      expect(await projects.getById({ id: withoutLink.id })).toMatchObject({
+        sandboxProvider: null,
+        sandboxWorkdir: null,
+        sandboxCpuCount: 4,
+        sandboxMemoryMb: 8192,
+      });
+    });
+
+    it('adds the project columns itself when the projects domain has not initialized yet', async () => {
+      const fresh = new LibSQLFactoryStorage({ id: 'source-control-order-test', url: ':memory:' });
+      const sourceControl = fresh.registerDomain(new SourceControlStorage());
+      const projectsDomain = fresh.registerDomain(new FactoryProjectsStorage());
+      try {
+        await sourceControl.init();
+        expect(
+          await fresh.ops.findMany('factory_projects', { sandbox_cpu_count: null }, { orderBy: [['id', 'asc']] }),
+        ).toEqual([]);
+
+        await Promise.all([sourceControl.init(), projectsDomain.init()]);
+        const created = await projectsDomain.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Late' } });
+        expect(created.sandboxCpuCount).toBeNull();
+      } finally {
+        await fresh.close();
+      }
+    });
+
+    it('never overwrites values a user set between boots', async () => {
+      const { project, second } = await seedDuplicateSlugProject();
+      await domain.init();
+      await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxWorkdir: '/workspace/custom' } });
+      await gitlab.projectRepositories.update({ orgId: 'org-1', id: second.id, input: { inEnvironment: true } });
+      await backend.ops.updateMany('factory_projects', { id: project.id }, { sandbox_cpu_count: null });
+
+      await domain.init();
+
+      expect(await projects.getById({ id: project.id })).toMatchObject({
+        sandboxWorkdir: '/workspace/custom',
+        sandboxCpuCount: 4,
+      });
+      expect(await gitlab.projectRepositories.get({ orgId: 'org-1', id: second.id })).toMatchObject({
+        position: 2,
+        inEnvironment: true,
+      });
+    });
+
+    it('link assigns the next position and keeps a duplicate slug out of the environment', async () => {
+      const project = await createProject();
+      const first = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r1',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(1),
+      });
+      const duplicate = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r2',
+        slug: 'mastra-ai/mastra',
+        createdAt: at(2),
+        handle: gitlab,
+      });
+      const other = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r3',
+        slug: 'mastra-ai/docs',
+        createdAt: at(3),
+      });
+
+      expect(first).toMatchObject({ position: 1, inEnvironment: true, lastBuildStatus: 'unbuilt' });
+      expect(duplicate).toMatchObject({ position: 2, inEnvironment: false });
+      expect(other).toMatchObject({ position: 3, inEnvironment: true });
+    });
+
+    it('listByProject orders by position within the handle integration', async () => {
+      const project = await createProject();
+      const a = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r1',
+        slug: 'mastra-ai/a',
+        createdAt: at(1),
+      });
+      const b = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r2',
+        slug: 'mastra-ai/b',
+        createdAt: at(2),
+      });
+      const c = await linkUnderOwnInstallation({
+        factoryProjectId: project.id,
+        externalId: 'r3',
+        slug: 'mastra-ai/c',
+        createdAt: at(3),
+        handle: gitlab,
+      });
+      await github.projectRepositories.update({ orgId: 'org-1', id: a.id, input: { position: 5 } });
+
+      expect(
+        (await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id })).map(
+          link => link.id,
+        ),
+      ).toEqual([b.id, a.id]);
+      expect(
+        (await gitlab.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id })).map(
+          link => link.id,
+        ),
+      ).toEqual([c.id]);
+      expect(
+        await github.projectRepositories.listByProject({ orgId: 'other-org', factoryProjectId: project.id }),
+      ).toEqual([]);
+    });
+
+    it('update round-trips position and inEnvironment; setBuildStatus records the last build', async () => {
+      const project = await createProject();
+      const link = await linkRepository({ factoryProjectId: project.id });
+
+      const updated = await github.projectRepositories.update({
+        orgId: 'org-1',
+        id: link.id,
+        input: { position: 7, inEnvironment: false },
+      });
+      expect(updated).toMatchObject({ position: 7, inEnvironment: false, lastBuildStatus: 'unbuilt' });
+
+      const builtAt = at(10);
+      expect(
+        await github.projectRepositories.setBuildStatus({
+          orgId: 'org-1',
+          id: link.id,
+          status: 'failed',
+          error: 'pnpm install exited 1',
+          builtAt,
+        }),
+      ).toMatchObject({ lastBuildStatus: 'failed', lastBuildError: 'pnpm install exited 1', lastBuiltAt: builtAt });
+      expect(
+        await github.projectRepositories.setBuildStatus({ orgId: 'other-org', id: link.id, status: 'configured' }),
+      ).toBeNull();
+    });
+
+    it('the in-memory handle mirrors link ordering, dedupe, listByProject and setBuildStatus', async () => {
+      const store = new SourceControlStorageInMemory();
+      const installation = await store.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '1',
+      });
+      const connection = await store.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const linkSlug = async (externalId: string, slug: string) => {
+        const repository = await store.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId, slug, defaultBranch: 'main' },
+        });
+        return store.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId: connection.id,
+          repositoryId: repository.id,
+          ...projectRepositoryInput,
+        });
+      };
+      const first = await linkSlug('1', 'mastra-ai/mastra');
+      const duplicate = await linkSlug('2', 'mastra-ai/mastra');
+      const other = await linkSlug('3', 'mastra-ai/docs');
+      expect(first).toMatchObject({ position: 1, inEnvironment: true });
+      expect(duplicate).toMatchObject({ position: 2, inEnvironment: false });
+      expect(other).toMatchObject({ position: 3, inEnvironment: true });
+
+      await store.projectRepositories.update({ orgId: 'org-1', id: first.id, input: { position: 9 } });
+      expect(
+        (await store.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: 'project-1' })).map(
+          link => link.id,
+        ),
+      ).toEqual([duplicate.id, other.id, first.id]);
+      expect(
+        await store.projectRepositories.setBuildStatus({
+          orgId: 'org-1',
+          id: other.id,
+          status: 'configured',
+          builtAt: at(1),
+        }),
+      ).toMatchObject({ lastBuildStatus: 'configured', lastBuildError: null, lastBuiltAt: at(1) });
+    });
+  });
 });
 
 describe('SourceControlStorageInMemory sessions.markMaterialized', () => {

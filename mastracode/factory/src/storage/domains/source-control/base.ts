@@ -1,7 +1,13 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
+
 const FACTORY_PROJECTS = 'factory_projects';
+
+/** Resources today's hosts hardcode; the backfill writes them onto projects that predate the columns. */
+export const DEFAULT_SANDBOX_CPU_COUNT = 4;
+export const DEFAULT_SANDBOX_MEMORY_MB = 8192;
 const INSTALLATIONS = 'source_control_installations';
 const REPOSITORIES = 'source_control_repositories';
 const CONNECTIONS = 'factory_project_source_control_connections';
@@ -96,6 +102,11 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
       teardown_command: { type: 'text', nullable: true },
+      position: { type: 'integer', default: 0 },
+      in_environment: { type: 'boolean', default: true },
+      last_build_status: { type: 'text', default: 'unbuilt' },
+      last_build_error: { type: 'text', nullable: true },
+      last_built_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -200,6 +211,8 @@ export interface CreateProjectSourceControlConnectionInput {
   createdByUserId: string;
 }
 
+export type ProjectRepositoryBuildStatus = 'unbuilt' | 'configured' | 'failed';
+
 export interface ProjectRepository {
   id: string;
   connectionId: string;
@@ -210,6 +223,13 @@ export interface ProjectRepository {
   sandboxWorkdir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
+  /** 1-based order within the project's environment (display and setup order only). */
+  position: number;
+  /** Whether the repository is part of the project's sandbox environment. */
+  inEnvironment: boolean;
+  lastBuildStatus: ProjectRepositoryBuildStatus;
+  lastBuildError: string | null;
+  lastBuiltAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -244,6 +264,16 @@ export interface UpdateProjectRepositoryInput {
   sandboxWorkdir?: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
+  position?: number;
+  inEnvironment?: boolean;
+}
+
+export interface SetProjectRepositoryBuildStatusInput {
+  orgId: string;
+  id: string;
+  status: ProjectRepositoryBuildStatus;
+  error?: string | null;
+  builtAt?: Date | null;
 }
 
 /**
@@ -330,9 +360,13 @@ export interface SourceControlStorageHandle {
      * without probing every repository an installation can see.
      */
     listConfiguredExternalKeys(): Promise<ConfiguredExternalRepositoryKey[]>;
+    /** Every link of this integration's connections to the project, ordered by `position`. */
+    listByProject(args: { orgId: string; factoryProjectId: string }): Promise<ProjectRepository[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectRepository | null>;
     link(args: LinkProjectRepositoryInput): Promise<ProjectRepository>;
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
+    /** Record the outcome of the last environment build for this repository. */
+    setBuildStatus(args: SetProjectRepositoryBuildStatusInput): Promise<ProjectRepository | null>;
     unlink(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly sessions: {
@@ -426,8 +460,22 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   sandbox_workdir: string;
   setup_command: string | null;
   teardown_command: string | null;
+  position: number | null;
+  in_environment: boolean | null;
+  last_build_status: string | null;
+  last_build_error: string | null;
+  last_built_at: Date | null;
   created_at: Date;
   updated_at: Date;
+}
+
+/** The environment columns on `factory_projects` the backfill reads and writes. */
+interface EnvironmentProjectRow extends Record<string, unknown> {
+  id: string;
+  sandbox_provider: string | null;
+  sandbox_workdir: string | null;
+  sandbox_cpu_count: number | null;
+  sandbox_memory_mb: number | null;
 }
 
 interface SessionDbRow extends Record<string, unknown> {
@@ -498,9 +546,23 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
     teardownCommand: row.teardown_command,
+    position: row.position ?? 0,
+    inEnvironment: row.in_environment ?? true,
+    lastBuildStatus: toBuildStatus(row.last_build_status),
+    lastBuildError: row.last_build_error,
+    lastBuiltAt: row.last_built_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function toBuildStatus(value: string | null): ProjectRepositoryBuildStatus {
+  return value === 'configured' || value === 'failed' ? value : 'unbuilt';
+}
+
+/** Oldest first; ties (same millisecond) break on id so re-runs see one order. */
+function byCreatedAt(a: ProjectRepositoryDbRow, b: ProjectRepositoryDbRow): number {
+  return a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 function toSession(row: SessionDbRow): SourceControlSession {
@@ -531,6 +593,97 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections(SOURCE_CONTROL_SCHEMAS);
+    await this.#backfillEnvironment();
+  }
+
+  /**
+   * One-time fill of the environment columns from the rows that predate them.
+   * Idempotent and non-destructive: a project is touched only while its
+   * `sandbox_cpu_count` is null, every other write lands only where the
+   * stored value is still the column default, and nothing is deleted. Runs
+   * on every start; reports what it could not resolve instead of throwing,
+   * because a throwing `init()` only leaves the domain not-ready.
+   */
+  async #backfillEnvironment(): Promise<void> {
+    // Domains initialize in parallel, so the project columns may not exist yet.
+    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA]);
+    let missingRepositories = 0;
+    let failedProjects = 0;
+    try {
+      const projects = await this.ops.findMany<EnvironmentProjectRow>(FACTORY_PROJECTS, { sandbox_cpu_count: null });
+      if (projects.length === 0) return;
+      const connections = await this.ops.findMany<ConnectionDbRow>(CONNECTIONS, {});
+      const links = await this.ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {});
+      const repositories = await this.ops.findMany<RepositoryDbRow>(REPOSITORIES, {});
+      const slugByRepositoryId = new Map(repositories.map(row => [row.id, row.slug]));
+      const linksByConnectionId = new Map<string, ProjectRepositoryDbRow[]>();
+      for (const link of links) {
+        const bucket = linksByConnectionId.get(link.connection_id) ?? [];
+        bucket.push(link);
+        linksByConnectionId.set(link.connection_id, bucket);
+      }
+      const connectionsByProjectId = new Map<string, ConnectionDbRow[]>();
+      for (const connection of connections) {
+        const bucket = connectionsByProjectId.get(connection.factory_project_id) ?? [];
+        bucket.push(connection);
+        connectionsByProjectId.set(connection.factory_project_id, bucket);
+      }
+
+      for (const project of projects) {
+        try {
+          const projectLinks = (connectionsByProjectId.get(project.id) ?? [])
+            .flatMap(connection => linksByConnectionId.get(connection.id) ?? [])
+            .sort(byCreatedAt);
+          const slugOf = (link: ProjectRepositoryDbRow): string => {
+            const slug = slugByRepositoryId.get(link.repository_id);
+            if (slug !== undefined) return slug;
+            missingRepositories += 1;
+            return `missing-repository:${link.id}`;
+          };
+
+          // Positions continue after whatever the API already assigned; slugs
+          // already in the environment keep their newly positioned duplicates out.
+          let nextPosition = Math.max(0, ...projectLinks.map(link => link.position ?? 0));
+          const seenSlugs = new Set(
+            projectLinks.filter(link => (link.position ?? 0) > 0 && link.in_environment !== false).map(slugOf),
+          );
+          for (const link of projectLinks) {
+            if ((link.position ?? 0) > 0) continue;
+            nextPosition += 1;
+            const slug = slugOf(link);
+            const inEnvironment = link.in_environment !== false && !seenSlugs.has(slug);
+            if (inEnvironment) seenSlugs.add(slug);
+            await this.ops.updateMany(
+              PROJECT_REPOSITORIES,
+              { id: link.id },
+              { position: nextPosition, in_environment: inEnvironment },
+            );
+          }
+
+          const oldest = projectLinks[0];
+          await this.ops.updateMany(
+            FACTORY_PROJECTS,
+            { id: project.id },
+            {
+              sandbox_provider: project.sandbox_provider ?? oldest?.sandbox_provider ?? null,
+              sandbox_workdir: project.sandbox_workdir ?? oldest?.sandbox_workdir ?? null,
+              sandbox_cpu_count: DEFAULT_SANDBOX_CPU_COUNT,
+              sandbox_memory_mb: project.sandbox_memory_mb ?? DEFAULT_SANDBOX_MEMORY_MB,
+            },
+          );
+        } catch {
+          failedProjects += 1;
+        }
+      }
+    } catch (error) {
+      console.warn(`[factory] environment backfill did not run: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+    if (missingRepositories > 0 || failedProjects > 0) {
+      console.warn(
+        `[factory] environment backfill: ${missingRepositories} links point at a missing repository row, ${failedProjects} projects could not be updated`,
+      );
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -845,12 +998,52 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
           return targets;
         },
+        listByProject: async ({ orgId, factoryProjectId }) => {
+          const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
+            id: factoryProjectId,
+            org_id: orgId,
+          });
+          if (!project) return [];
+          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+            factory_project_id: factoryProjectId,
+            integration_id: integrationId,
+          });
+          if (connections.length === 0) return [];
+          const rows = await db().findMany<ProjectRepositoryDbRow>(
+            PROJECT_REPOSITORIES,
+            { connection_id: { in: connections.map(connection => connection.id) } },
+            {
+              orderBy: [
+                ['position', 'asc'],
+                ['created_at', 'asc'],
+              ],
+            },
+          );
+          return rows.map(toProjectRepository);
+        },
         get: getProjectRepository,
         link: async input => {
           const connection = await requireConnection({ orgId: input.orgId, id: input.connectionId });
           const repository = await requireRepository({ orgId: input.orgId, id: input.repositoryId });
           if (repository.installationId !== connection.installationId) {
             throw new Error('Repository does not belong to the connection installation.');
+          }
+          // Order and dedupe span every connection of the project, whatever the integration.
+          const siblingConnections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+            factory_project_id: connection.factoryProjectId,
+          });
+          const siblings = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+            connection_id: { in: siblingConnections.map(sibling => sibling.id) },
+          });
+          const position = 1 + Math.max(0, ...siblings.map(sibling => sibling.position ?? 0));
+          let inEnvironment = true;
+          for (const sibling of siblings) {
+            if (sibling.in_environment === false) continue;
+            const siblingRepository = await db().findOne<RepositoryDbRow>(REPOSITORIES, { id: sibling.repository_id });
+            if (siblingRepository?.slug === repository.slug) {
+              inEnvironment = false;
+              break;
+            }
           }
           const now = new Date();
           try {
@@ -863,6 +1056,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
               teardown_command: input.teardownCommand ?? null,
+              position,
+              in_environment: inEnvironment,
+              last_build_status: 'unbuilt',
+              last_build_error: null,
+              last_built_at: null,
               created_at: now,
               updated_at: now,
             });
@@ -888,7 +1086,24 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
           if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
           if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
+          if (input.position !== undefined) patch.position = input.position;
+          if (input.inEnvironment !== undefined) patch.in_environment = input.inEnvironment;
           await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
+          return getProjectRepository({ orgId, id });
+        },
+        setBuildStatus: async ({ orgId, id, status, error, builtAt }) => {
+          const existing = await getProjectRepository({ orgId, id });
+          if (!existing) return null;
+          await db().updateMany(
+            PROJECT_REPOSITORIES,
+            { id },
+            {
+              last_build_status: status,
+              last_build_error: error ?? null,
+              last_built_at: builtAt ?? null,
+              updated_at: new Date(),
+            },
+          );
           return getProjectRepository({ orgId, id });
         },
         unlink: async ({ orgId, id }) => {
