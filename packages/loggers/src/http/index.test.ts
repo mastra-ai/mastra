@@ -326,6 +326,103 @@ describe('HttpTransport', () => {
       expect(retryDelays).toEqual([10, 10]);
       setTimeoutSpy.mockRestore();
     });
+
+    describe('status classification', () => {
+      const respond = (status: number, headers: Record<string, string> = {}) =>
+        Promise.resolve({ ok: false, status, statusText: 'Error', headers: new Headers(headers) });
+
+      const makeTransport = () =>
+        new HttpTransport({
+          ...defaultOptions,
+          flushInterval: 60_000,
+          retryOptions: { maxRetries: 2, retryDelay: 10, exponentialBackoff: false },
+        });
+
+      it.each([400, 401, 403, 404, 413, 422])('does not retry a permanent %i response', async status => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        fetchMock.mockImplementation(() => respond(status));
+        const t = makeTransport();
+        await expect((t as any).makeHttpRequest([])).rejects.toThrow(`HTTP ${status}`);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        t.destroy();
+      });
+
+      it.each([408, 425, 429, 500, 502, 503])('retries a transient %i response', async status => {
+        fetchMock.mockImplementation(() => respond(status));
+        const t = makeTransport();
+        const assertion = expect((t as any).makeHttpRequest([])).rejects.toThrow(`HTTP ${status}`);
+        await vi.advanceTimersByTimeAsync(100);
+        await assertion;
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+      });
+
+      it('drops and counts a permanently rejected batch instead of re-queueing it', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        fetchMock.mockImplementationOnce(() => respond(400));
+        const t = makeTransport();
+        t.write({ msg: 'bad', level: 'info' });
+        t.write({ msg: 'bad2', level: 'info' });
+
+        await expect(t._flush()).rejects.toThrow('HTTP 400');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(t.getBufferedLogs()).toHaveLength(0);
+        expect(t.getDroppedLogCount()).toBe(2);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('HTTP 400'));
+
+        // Later logs are no longer blocked behind the rejected batch.
+        t.write({ msg: 'good', level: 'info' });
+        await t._flush();
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body).logs.map((l: any) => l.msg)).toEqual(['good']);
+      });
+
+      it('re-queues a batch after transient failures', async () => {
+        fetchMock.mockImplementation(() => respond(503));
+        const t = makeTransport();
+        t.write({ msg: 'later', level: 'info' });
+        const assertion = expect(t._flush()).rejects.toThrow('HTTP 503');
+        await vi.advanceTimersByTimeAsync(100);
+        await assertion;
+        expect(t.getBufferedLogs()).toHaveLength(1);
+        expect(t.getDroppedLogCount()).toBe(0);
+      });
+
+      const retryDelaysFor = async (headers: Record<string, string>) => {
+        fetchMock
+          .mockImplementationOnce(() => respond(429, headers))
+          .mockImplementationOnce(() => Promise.resolve({ ok: true }));
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+        const t = makeTransport();
+        const promise = (t as any).makeHttpRequest([]);
+        await vi.advanceTimersByTimeAsync(10_000);
+        await promise;
+        // Timers are: first request timeout, retry delay, second request timeout.
+        const delays = setTimeoutSpy.mock.calls.map(c => c[1]);
+        setTimeoutSpy.mockRestore();
+        expect(delays).toHaveLength(3);
+        return delays[1];
+      };
+
+      it('waits for a Retry-After given in seconds', async () => {
+        expect(await retryDelaysFor({ 'Retry-After': '2' })).toBe(2000);
+      });
+
+      it('waits for a Retry-After given as an HTTP date', async () => {
+        const date = new Date(Date.now() + 3000).toUTCString();
+        const delay = await retryDelaysFor({ 'Retry-After': date });
+        // HTTP dates have second precision, so the wait is between 2s and 3s.
+        expect(delay).toBeGreaterThan(2000);
+        expect(delay).toBeLessThanOrEqual(3000);
+      });
+
+      it('uses the backoff delay when Retry-After is invalid or in the past', async () => {
+        expect(await retryDelaysFor({ 'Retry-After': 'soon' })).toBe(10);
+        expect(await retryDelaysFor({ 'Retry-After': new Date(Date.now() - 60_000).toUTCString() })).toBe(10);
+      });
+
+      it('caps Retry-After at the request timeout', async () => {
+        expect(await retryDelaysFor({ 'Retry-After': '3600' })).toBe(defaultOptions.timeout);
+      });
+    });
   });
 
   describe('buffer limits', () => {
