@@ -16,6 +16,7 @@ import { attentionAuthorName, factoryAttentionTargetPath } from '../services/att
 import type { FactoryAttentionItem } from '../services/attention';
 import { PANEL, PANEL_ROW_LINK, TIMESTAMP } from './panel';
 import { StageBadge } from './StageBadge';
+import { OverviewListEmptyState } from './OverviewListEmptyState';
 
 /** Rows before the fold, and the ceiling once it is opened. */
 const PREVIEW_ROWS = 5;
@@ -36,10 +37,10 @@ function ActorIcon({ by }: { by: string | undefined }) {
   return <Glyph className="text-muted-foreground size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
 }
 
-function Empty({ children, description }: { children: ReactNode; description?: string }) {
+function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} flex min-h-32 items-center justify-center`}>
-      <EmptyState iconSlot={null} titleSlot={children} descriptionSlot={description} />
+      <EmptyState iconSlot={null} titleSlot={children} />
     </div>
   );
 }
@@ -149,8 +150,7 @@ export function RunningList({
   running: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (running.length === 0)
-    return <Empty description="Active agent sessions will appear here when work starts.">Nothing running</Empty>;
+  if (running.length === 0) return <OverviewListEmptyState kind="running" title="Nothing running" />;
 
   return (
     <Rows
@@ -176,8 +176,7 @@ export function StalledList({
   waiting: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (waiting.length === 0)
-    return <Empty description="Work waiting for its next step will appear here.">Nothing stalled</Empty>;
+  if (waiting.length === 0) return <OverviewListEmptyState kind="stalled" title="Nothing stalled" />;
 
   return (
     <Rows
@@ -203,10 +202,7 @@ export function ActivityFeed({
   moved: MovedItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (moved.length === 0)
-    return (
-      <Empty description="Stage changes will appear here as work moves through the pipeline.">Nothing moved</Empty>
-    );
+  if (moved.length === 0) return <OverviewListEmptyState kind="activity" title="Nothing moved" />;
 
   return (
     <Rows
@@ -254,7 +250,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
   if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
-  if (items.length === 0) return <Empty description="Requests for your input will appear here.">All clear</Empty>;
+  if (items.length === 0) return <OverviewListEmptyState kind="attention" title="All clear" />;
 
   return (
     <Rows
