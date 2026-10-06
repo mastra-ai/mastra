@@ -68,7 +68,7 @@ describe('Shipyard GitHub linked-workspace proof', () => {
       expect(result.agenticImport.decisionNodeId).toMatch(uuid);
       expect(result.agenticImport.recordId).toMatch(uuid);
       expect(result.staticImport.checkpoint).toBe(result.sourceWindow.mergeCommitSha);
-      expect(result.agenticImport.provenance).toBe(`[[pr:${result.sourceWindow.pullRequest}]]`);
+      expect(result.agenticImport.provenance).toBe(`[[${result.repository}:pr:${result.sourceWindow.pullRequest}]]`);
     },
     240_000,
   );

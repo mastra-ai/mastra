@@ -11,6 +11,7 @@ const repository = 'mastra-ai/mastra';
 const githubSource = `github:${repository}`;
 // Importer addresses carry the repository so same-numbered items in other repositories never collide (C06).
 const itemAddress = (kind: 'issue' | 'pr' | 'source', id: string | number) => `${repository}:${kind}:${id}`;
+const prLink = (number: number) => `[[${itemAddress('pr', number)}]]`;
 const agentSource = `github:${repository}:merged-pr`;
 const repoBinding = { source: githubSource, scope: 'repo:mastra' } as const;
 const featureBinding = { source: agentSource, scope: 'feature:knowledge' } as const;
@@ -191,8 +192,8 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
               name: file.filename,
               text:
                 index === 0
-                  ? `Source ${file.filename} at ${payload.cursor}: ${compact(payload.sourceExcerpt, 2_000)} [[pr:${payload.pull.number}]]`
-                  : `Changed source ${file.filename} (${file.status}) in [[pr:${payload.pull.number}]]`,
+                  ? `Source ${file.filename} at ${payload.cursor}: ${compact(payload.sourceExcerpt, 2_000)} ${prLink(payload.pull.number)}`
+                  : `Changed source ${file.filename} (${file.status}) in ${prLink(payload.pull.number)}`,
               metadata: { type: 'source', path: file.filename, status: file.status, sha: file.sha },
             })),
           ];
@@ -223,7 +224,7 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
             instructions: [
               `Distill PR #${pull.number} into exactly one durable decision node at address decision:pr-${pull.number}.`,
               'Set its name to one concise architectural outcome from the supplied diff, not a generic label.',
-              `Also set metadata.summary to that outcome and metadata.provenance to [[pr:${pull.number}]].`,
+              `Also set metadata.summary to that outcome and metadata.provenance to ${prLink(pull.number)}.`,
               'Use only the supplied bounded PR evidence; do not copy a changelog or invent rationale.',
             ].join(' '),
             data: {
@@ -249,9 +250,9 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
           const summary =
             typeof metadataSummary === 'string' && metadataSummary.trim() ? metadataSummary : decision.node.name;
           invariant(summary.trim(), 'Agentic distiller did not return a decision summary');
-          const text = summary.includes(`[[pr:${pull.number}]]`)
+          const text = summary.includes(prLink(pull.number))
             ? summary.trim()
-            : `${summary.trim()} [[pr:${pull.number}]]`;
+            : `${summary.trim()} ${prLink(pull.number)}`;
           const id = stableRecordId(`decision:pr-${pull.number}:${result.checkpoint}:${text}`);
           const records = await decision.listKnowledge();
           for (const record of records) if (record.id !== id) await decision.removeKnowledge(record.id);
@@ -259,7 +260,7 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
             await decision.appendKnowledge({
               id,
               text,
-              metadata: { provenance: `[[pr:${pull.number}]]`, mergeCommitSha: result.checkpoint },
+              metadata: { provenance: prLink(pull.number), mergeCommitSha: result.checkpoint },
             });
           }
           onAgentResult(result.text);
@@ -359,7 +360,7 @@ try {
   invariant(
     sourceAddresses.every(address =>
       staticRecords.some(
-        record => record.nodeId === address!.nodeId && record.text.includes(`[[pr:${sourceWindow.pull.number}]]`),
+        record => record.nodeId === address!.nodeId && record.text.includes(prLink(sourceWindow.pull.number)),
       ),
     ),
     'Static GitHub source records are not linked to PR provenance',
@@ -404,8 +405,19 @@ try {
     `Agentic run produced ${decisionRecords.length} visible decision records; activity: ${diagnosticActivity.map(event => `${event.action}:${event.targetType}`).join(',')}; completion: ${compact(agentText, 500)}`,
   );
   invariant(
-    decisionRecords[0]!.text.includes(`[[pr:${sourceWindow.pull.number}]]`),
+    decisionRecords[0]!.text.includes(prLink(sourceWindow.pull.number)),
     'Agentic decision record omitted PR provenance',
+  );
+  const decisionPrMentions = (
+    await knowledge.listMentioningRecords({
+      node: replayAddress.nodeId,
+      scopeIds: [featureScopeId, repoScopeId],
+      limit: 100,
+    })
+  ).records;
+  invariant(
+    decisionPrMentions.some(record => record.id === decisionRecords[0]!.id),
+    'Agentic decision provenance did not link the imported PR node',
   );
   const staticActivity = await knowledge.listActivity({
     scopeIds: [repoScopeId],
@@ -450,7 +462,7 @@ try {
       transcriptThreadId: agentic.transcriptThreadId,
       decisionNodeId: decisionAddress.nodeId,
       recordId: decisionRecords[0]!.id,
-      provenance: `[[pr:${sourceWindow.pull.number}]]`,
+      provenance: prLink(sourceWindow.pull.number),
       activityCount: agentActivity.length,
     },
   };
