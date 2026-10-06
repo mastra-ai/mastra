@@ -751,14 +751,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         },
         resource: {
           address: `resource:${input.projectId}`,
-          contextualScopeAddress: `org:${input.orgId}`,
+          contextualScopeAddress: `resource:${input.projectId}`,
           parameters: { resourceId: input.projectId },
         },
         ...(input.threadId
           ? {
               thread: {
                 address: `resource:${input.projectId}:thread:${input.threadId}`,
-                contextualScopeAddress: `resource:${input.projectId}`,
+                contextualScopeAddress: `resource:${input.projectId}:thread:${input.threadId}`,
                 parameters: { resourceId: input.projectId, threadId: input.threadId },
               },
             }
