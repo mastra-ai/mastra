@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Knowledge } from '..';
-import { InMemoryStore } from '../../storage';
+import { InMemoryStore, KnowledgeConflictError } from '../../storage';
 
 async function createFixture() {
   const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'mutation-authorization' }) });
@@ -391,7 +391,7 @@ describe('Knowledge mutation authorization', () => {
         record: replacement,
         vouchedScopeIds,
       }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
     expect(await records()).toEqual(before);
 
     const getRecordScopeIds = storage.getRecordScopeIds.bind(storage);
@@ -411,7 +411,7 @@ describe('Knowledge mutation authorization', () => {
         record: replacement,
         vouchedScopeIds,
       }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
     spy.mockRestore();
     await storage.upsertScopeGrant({
       scopeNodeId: ids['scope:owner']!,
@@ -420,10 +420,16 @@ describe('Knowledge mutation authorization', () => {
     });
     expect(await records()).toEqual(before);
 
+    const authorizedNode = (await storage.getNode(node.id))!;
     vi.spyOn(storage, 'getRecordScopeIds').mockImplementationOnce(async id => {
-      const current = (await storage.getNode(node.id))!;
-      await storage.updateNode({ id: node.id, version: current.version, scopeIds: [ids['scope:readonly']!] });
+      await storage.updateNode({ id: node.id, version: authorizedNode.version, scopeIds: [ids['scope:readonly']!] });
       return getRecordScopeIds(id);
+    });
+    const replaceNodeRecords = storage.replaceNodeRecords.bind(storage);
+    const fencedNodeVersions: number[] = [];
+    vi.spyOn(storage, 'replaceNodeRecords').mockImplementationOnce(async replace => {
+      fencedNodeVersions.push(replace.node.version);
+      return replaceNodeRecords(replace);
     });
     await expect(
       knowledge.replaceRecord({
@@ -433,7 +439,9 @@ describe('Knowledge mutation authorization', () => {
         record: replacement,
         vouchedScopeIds,
       }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
+    // Storage must be fenced on the node snapshot that was authorized, never one re-read after the move.
+    expect(fencedNodeVersions).toEqual([authorizedNode.version]);
     const moved = (await storage.getNode(node.id))!;
     expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:readonly']!]);
     expect(
