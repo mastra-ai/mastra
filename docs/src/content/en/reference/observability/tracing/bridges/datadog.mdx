@@ -115,8 +115,6 @@ Called by the Mastra observability instance during span construction. Creates a 
 
 **Returns:** `SpanIds | undefined` - `{ spanId, traceId, parentSpanId }`, or `undefined` if the bridge is disabled.
 
-Mastra does not call `createSpan` for span types listed in `excludeSpanTypes`, so no dd-trace span is started for them. Prefer `excludeSpanTypes` over `spanFilter` to drop span types with this bridge: a `spanFilter` decision happens after the span has ended, so its dd-trace span has already started, and dd-trace sends a trace only once every started span has finished.
-
 ### `executeInContext`
 
 ```typescript oxfmt:false
