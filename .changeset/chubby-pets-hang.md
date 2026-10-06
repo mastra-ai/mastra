@@ -2,7 +2,7 @@
 '@mastra/mcp': patch
 ---
 
-Fixed MCP Apps not opening in hosts that read the app link from a tool call result. `MCPServer` now returns a tool's `_meta.ui.resourceUri` (and the flat `ui/resourceUri` key for older hosts) on successful `tools/call` results, as it already does on `tools/list`. `getMcpCallToolMeta(result)` from Mastra's own client now returns the link. Fixes #21277.
+Fixed MCP Apps not opening in hosts that read the app link from a tool call result. `MCPServer` now returns a tool's `_meta.ui.resourceUri` (and the flat `ui/resourceUri` key for older hosts) on successful `tools/call` results, as it already does on `tools/list`. Mastra's own client can now read the link with `getMcpCallToolMeta(result)` when the tool returns an object. Fixes #21277.
 
 Two related cases change with it:
 
