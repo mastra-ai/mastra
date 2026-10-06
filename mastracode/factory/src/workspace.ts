@@ -47,6 +47,7 @@ import {
 } from './sandbox/session-sandbox.js';
 import type { SessionSetupGate } from './sandbox/session-sandbox.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { DEFAULT_SANDBOX_CPU_COUNT, DEFAULT_SANDBOX_MEMORY_MB } from './storage/domains/source-control/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -381,6 +382,81 @@ async function resolveSourceControlSession(
   return matches[0] ?? null;
 }
 
+/** One environment repository as the sandbox context and the boot need it, in position order. */
+export interface SessionEnvironmentRepo {
+  projectRepositoryId: string;
+  repositoryId: string;
+  slug: string;
+  defaultBranch: string;
+  position: number;
+  setupCommand: string | undefined;
+  teardownCommand: string | undefined;
+}
+
+/** The session's factory environment, resolved from the project and its `inEnvironment` links. */
+export interface SessionEnvironment {
+  repos: SessionEnvironmentRepo[];
+  workspaceSetupCommand: string | undefined;
+  /** Only an absolute root is passed on; the templates reject anything else. */
+  workingDirectory: string | undefined;
+  cpuCount: number;
+  memoryMB: number;
+}
+
+/**
+ * Resolve the factory environment a session boots from: the project's
+ * settings plus every `inEnvironment` link of the project under this
+ * source-control integration, ordered by position. `undefined` when the
+ * session carries no factory, the project is gone, or no link is in the
+ * environment, which keeps the single-repository sandbox of the session's
+ * own link. A link whose repository row is missing is skipped with a warning
+ * rather than failing every start of the session.
+ */
+async function resolveSessionEnvironment(
+  projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
+  storage: SourceControlStorageHandle,
+  session: SourceControlSession,
+): Promise<SessionEnvironment | undefined> {
+  if (!projects || !session.factoryProjectId) return undefined;
+  const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
+  if (!project) return undefined;
+  const links = (
+    await storage.projectRepositories.listByProject({ orgId: session.orgId, factoryProjectId: project.id })
+  )
+    .filter(link => link.inEnvironment)
+    .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
+  const repos: SessionEnvironmentRepo[] = [];
+  for (const link of links) {
+    const repository = await storage.repositories.get({ orgId: session.orgId, id: link.repositoryId });
+    if (!repository) {
+      console.warn('[Mastra Factory] Environment repository link has no repository row; skipping it', {
+        orgId: session.orgId,
+        factoryProjectId: project.id,
+        projectRepositoryId: link.id,
+      });
+      continue;
+    }
+    repos.push({
+      projectRepositoryId: link.id,
+      repositoryId: repository.id,
+      slug: repository.slug,
+      defaultBranch: link.branch || repository.defaultBranch,
+      position: link.position,
+      setupCommand: link.setupCommand ?? undefined,
+      teardownCommand: link.teardownCommand ?? undefined,
+    });
+  }
+  if (repos.length === 0) return undefined;
+  const workdir = project.sandboxWorkdir?.trim();
+  return {
+    repos,
+    workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
+    workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
+    cpuCount: project.sandboxCpuCount ?? DEFAULT_SANDBOX_CPU_COUNT,
+    memoryMB: project.sandboxMemoryMb ?? DEFAULT_SANDBOX_MEMORY_MB,
+  };
+}
+
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, projects, workItems } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
@@ -474,6 +550,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const repoFullName = repository.slug;
     if (githubProvider)
       registerGithubRefreshTarget(requestContext, { orgId: session.orgId, repositoryId: repository.id });
+    // The factory environment: every `inEnvironment` link of the session's
+    // factory in position order, with the project's settings. Absent when the
+    // factory has none (or the session predates `factoryProjectId`), which
+    // keeps the single-repository sandbox of the session's own link.
+    const environment = await resolveSessionEnvironment(projects, storage, session);
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
@@ -609,15 +690,43 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // original VM instead of provisioning a replacement.
           sandboxId: session.sandboxId ?? undefined,
           repoFullName,
-          // Stored nullable; the context speaks `undefined` for absent.
-          setupCommand: projectRepository.setupCommand ?? undefined,
-          // Deferred call — only dereferenced when a provider needs the repo
-          // outside the VM (template build time).
-          getRepositoryAccess: () =>
-            sourceControl.versionControl.getRepositoryAccess({
-              orgId: session.orgId,
-              repositoryId: repository.id,
-            }),
+          ...(environment
+            ? {
+                // The list form of the repo templates: one entry per
+                // environment repository, each minting its own token at build
+                // time; `getRepositoryAccess` stays present but undefined, the
+                // two being mutually exclusive for the template.
+                setupCommand: undefined,
+                getRepositoryAccess: undefined,
+                repos: environment.repos.map(repo => ({
+                  getRepositoryAccess: () =>
+                    sourceControl.versionControl.getRepositoryAccess({
+                      orgId: session.orgId,
+                      repositoryId: repo.repositoryId,
+                    }),
+                  ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+                })),
+                ...(environment.workspaceSetupCommand
+                  ? { workspaceSetupCommand: environment.workspaceSetupCommand }
+                  : {}),
+                // A repository whose setup fails still lands in the image;
+                // the boot hook re-runs that setup from `setup-failed`.
+                continueOnSetupFailure: true,
+                ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
+                cpuCount: environment.cpuCount,
+                memoryMB: environment.memoryMB,
+              }
+            : {
+                // Stored nullable; the context speaks `undefined` for absent.
+                setupCommand: projectRepository.setupCommand ?? undefined,
+                // Deferred call — only dereferenced when a provider needs the repo
+                // outside the VM (template build time).
+                getRepositoryAccess: () =>
+                  sourceControl.versionControl.getRepositoryAccess({
+                    orgId: session.orgId,
+                    repositoryId: repository.id,
+                  }),
+              }),
         });
         // Attached inside the construction closure, so exactly once per
         // instance — `constructSessionEntry` runs on every open and would

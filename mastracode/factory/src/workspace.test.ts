@@ -3070,3 +3070,150 @@ describe('FactorySkillSource layering', () => {
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
   });
 });
+
+describe('factory environment sandbox context', () => {
+  /**
+   * A factory with ordered environment links. The session's own link
+   * (`project-1`, the D1 bridge) is the position-1 repository; the fixture
+   * answers `listByProject` and per-id repository lookups on top of the
+   * single-link stubs above.
+   */
+  function environmentFixture(options: {
+    links: Array<{
+      id: string;
+      repositoryId: string;
+      slug: string;
+      position: number;
+      inEnvironment: boolean;
+      setupCommand?: string;
+    }>;
+    project?: Record<string, unknown>;
+  }) {
+    const github = fakeGithubIntegration();
+    const repositories = new Map(
+      options.links.map(link => [link.repositoryId, { id: link.repositoryId, slug: link.slug, defaultBranch: 'main' }]),
+    );
+    github.sourceControlStorage.repositories.get = vi.fn(
+      async ({ id }: { id: string }) => repositories.get(id) ?? null,
+    );
+    (github.sourceControlStorage.projectRepositories as any).listByProject = vi.fn(async () =>
+      options.links.map(link => ({
+        id: link.id,
+        connectionId: 'connection-1',
+        repositoryId: link.repositoryId,
+        branch: null,
+        position: link.position,
+        inEnvironment: link.inEnvironment,
+        setupCommand: link.setupCommand ?? null,
+        teardownCommand: null,
+        createdAt: new Date(0),
+      })),
+    );
+    const project = {
+      id: 'factory-1',
+      orgId: 'org-1',
+      sandboxWorkdir: '/workspace',
+      sandboxCpuCount: 8,
+      sandboxMemoryMb: 16384,
+      workspaceSetupCommand: 'touch .workspace-ready',
+      ...options.project,
+    };
+    const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
+    const resolver = createWorkspaceFactory({
+      sandbox: mocks.createSandbox as any,
+      github: github as any,
+      projects: projects as any,
+    });
+    return { resolver, projects };
+  }
+
+  const twoLinks = [
+    {
+      id: 'project-1',
+      repositoryId: 'repository-1',
+      slug: 'octocat/hello',
+      position: 1,
+      inEnvironment: true,
+      setupCommand: 'pnpm i',
+    },
+    { id: 'link-2', repositoryId: 'repository-2', slug: 'octocat/docs', position: 2, inEnvironment: true },
+    { id: 'link-3', repositoryId: 'repository-3', slug: 'octocat/legacy', position: 3, inEnvironment: false },
+  ];
+
+  it('builds the list-form context from every inEnvironment link in position order with the project resources', async () => {
+    const { resolver } = environmentFixture({ links: [...twoLinks].reverse() });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    expect(ctx).toMatchObject({
+      sessionId: 'session-a',
+      repoFullName: 'octocat/hello',
+      workspaceSetupCommand: 'touch .workspace-ready',
+      continueOnSetupFailure: true,
+      workingDirectory: '/workspace',
+      cpuCount: 8,
+      memoryMB: 16384,
+    });
+    // Mutually exclusive for the template: the key is present and undefined.
+    expect('getRepositoryAccess' in ctx).toBe(true);
+    expect(ctx.getRepositoryAccess).toBeUndefined();
+    expect(ctx.setupCommand).toBeUndefined();
+    expect(ctx.repos).toHaveLength(2);
+    expect(ctx.repos[0]).toMatchObject({ setupCommand: 'pnpm i' });
+    expect('setupCommand' in ctx.repos[1]).toBe(false);
+    // Each entry mints its own repository's token.
+    await expect(ctx.repos[0].getRepositoryAccess()).resolves.toMatchObject({
+      authorization: { token: 'repo-token-repository-1' },
+    });
+    await expect(ctx.repos[1].getRepositoryAccess()).resolves.toMatchObject({
+      authorization: { token: 'repo-token-repository-2' },
+    });
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
+  });
+
+  it('applies the default resources and no working directory when the project leaves them unset', async () => {
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: {
+        sandboxWorkdir: '~/relative',
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
+        workspaceSetupCommand: null,
+      },
+    });
+    addProject();
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    expect(ctx).toMatchObject({ cpuCount: 4, memoryMB: 8192, continueOnSetupFailure: true });
+    expect('workingDirectory' in ctx).toBe(false);
+    expect('workspaceSetupCommand' in ctx).toBe(false);
+    expect(ctx.repos).toHaveLength(2);
+  });
+
+  it('keeps the single-repository context when no link is in the environment or the session has no factory', async () => {
+    const { resolver } = environmentFixture({
+      links: twoLinks.map(link => ({ ...link, inEnvironment: false })),
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    addSession({ id: 'session-b', factoryProjectId: null });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+
+    for (const call of mocks.createSandbox.mock.calls) {
+      const ctx = call[0] as any;
+      expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
+      expect(typeof ctx.getRepositoryAccess).toBe('function');
+      expect('repos' in ctx).toBe(false);
+      expect('cpuCount' in ctx).toBe(false);
+    }
+  });
+});
