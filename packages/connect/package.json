@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "0.7.0-alpha.1",
+  "version": "1.0.0-alpha.2",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
@@ -32,6 +32,8 @@
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
+    "smoke-test": "tsx scripts/smoke-test/index.ts",
+    "smoke-test:channels": "tsx scripts/smoke-test/channels/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
     "test": "vitest run && tsc --noEmit"
   },
@@ -63,6 +65,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "hono": "^4.13.7",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",

@@ -117,6 +117,15 @@ describe('TelegramProvider — discovery + skeleton', () => {
     });
   });
 
+  it('is configured with a default botToken (self-managed credential source)', () => {
+    expect(makeProvider({ botToken: BOT_TOKEN }).provider.getInfo().isConfigured).toBe(true);
+  });
+
+  it('is configured with a tokenResolver (delegated mode, e.g. @mastra/connect)', () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    expect(provider.getInfo().isConfigured).toBe(true);
+  });
+
   it('mounts a single POST webhook route', () => {
     const routes = makeProvider().provider.getRoutes();
     expect(routes).toHaveLength(1);

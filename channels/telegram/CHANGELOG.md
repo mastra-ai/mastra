@@ -1,5 +1,21 @@
 # @mastra/telegram
 
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed Telegram showing as "Not configured" in Studio even though a bot credential was available, which hid the Connect button for a channel that was fully ready to connect. Telegram now reports configured as soon as a credential source exists instead of only after the first agent has connected. ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  ```ts
+  // before: isConfigured === false until the first successful connect()
+  // after: a credential source is enough
+  const telegram = new TelegramProvider({ tokenResolver: async () => platformToken });
+  telegram.getInfo().isConfigured; // true
+  ```
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 0.2.1
 
 ### Patch Changes

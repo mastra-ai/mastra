@@ -48,6 +48,7 @@ import type {
 } from '../types';
 import {
   createStandardSchemaIssuesError,
+  isValidationError,
   registerToolOutputValidationSchema,
   validateToolInput,
   validateToolOutput,
@@ -856,6 +857,10 @@ export class CoreToolBuilder extends MastraBase {
             return outputValidation.error;
           }
           result = outputValidation.data;
+        } else if (isValidationError(result)) {
+          // Mastra tools validate in Tool.execute() and return the error object instead of throwing
+          toolSpan?.end({ output: result, attributes: { success: false } });
+          return result;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)

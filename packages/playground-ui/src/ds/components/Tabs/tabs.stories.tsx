@@ -275,6 +275,27 @@ export const PillGhostVariant: Story = {
   ),
 };
 
+/** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
+export const SmallSize: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      {(['pill', 'pill-ghost'] as const).map(variant => (
+        <div key={variant} className="flex flex-col gap-3">
+          {(['md', 'sm'] as const).map(size => (
+            <Tabs key={size} defaultTab="busiest">
+              <TabList variant={variant} size={size}>
+                <Tab value="busiest">Busiest</Tab>
+                <Tab value="time">Time spent</Tab>
+                <Tab value="failing">Failing</Tab>
+              </TabList>
+            </Tabs>
+          ))}
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 export const CustomIndicatorColor: Story = {
   render: () => (
     <div className="flex flex-col gap-8">

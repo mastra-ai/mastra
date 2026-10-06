@@ -74,7 +74,6 @@ export const Tab = ({
           className,
         )
       : cn(
-          // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
           size === 'sm' ? small : 'text-label',
           quietTextHover,
           attention && 'relative',

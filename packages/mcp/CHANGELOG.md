@@ -1,5 +1,30 @@
 # @mastra/mcp
 
+## 2.2.0-alpha.1
+
+### Minor Changes
+
+- `MCPServer` now announces its full identity to MCP clients: `title`, `description`, `websiteUrl`, and `icons`, alongside `name` and `version`. Clients, including `MCPClient.getServerInfo()`, can show a display title, description, website, and logo for a Mastra server instead of only its name. The registry server info returned by `getServerInfo()` on the server is unchanged. Fixes #25856. ([#25985](https://github.com/mastra-ai/mastra/pull/25985))
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'weather-server',
+    version: '1.0.0',
+    title: 'Weather Server',
+    description: 'Forecasts and current conditions',
+    websiteUrl: 'https://weather.example.com',
+    icons: [{ src: 'https://weather.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'] }],
+    tools: { weatherTool },
+  });
+  ```
+
+  `@mastra/mcp` now requires `@mastra/core` 1.75.0 or later.
+
+### Patch Changes
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 2.2.0-alpha.0
 
 ### Minor Changes

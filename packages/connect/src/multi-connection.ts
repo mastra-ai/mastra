@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './client.js';
 import { platformMcpTransport } from './client.js';
-import { MastraConnectError } from './errors.js';
+import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import type { McpProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { applyToolFilter } from './toolset.js';
 
@@ -387,28 +387,28 @@ export async function buildMcpMultiConnectionTools(input: {
   connections: NamedConnection[];
   allowTools?: string[];
   disallowTools?: string[];
-  autoApproveTools?: string[];
+  requireApproval?: boolean | string[];
   client: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ToolsInput> {
-  const { registration, connections, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
+  const { registration, connections, allowTools, disallowTools, requireApproval, client, mcpClients, resolverId } =
     input;
-  const autoApproved = new Set(autoApproveTools ?? []);
+  const requireApprovalFor = Array.isArray(requireApproval) ? new Set(requireApproval) : undefined;
   // The `<provider>__list_connections` key exists only on the wrapper; strip
   // it from either filter that reaches MCP discovery so a caller that
   // references it never trips the unknown-tool guard.
   const listToolKey = listConnectionsToolKey(registration.integrationId);
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
   const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
-  // First pass: discover every inner catalog so `autoApproveTools` can be
+  // First pass: discover every inner catalog so `requireApproval` can be
   // validated against the UNION of tools across all connections. A tool that
   // appears on only a later connection would otherwise be rejected as
   // "unknown" against an earlier connection's catalog, even though the
   // wrapper still publishes it via the key-union below.
   //
   // Track MCP clients this call newly caches so a failure anywhere in the
-  // construction phase (discovery, autoApproveTools validation, or the
+  // construction phase (discovery, requireApproval validation, or the
   // list_connections collision assertion) evicts and disconnects them before
   // rethrowing. Otherwise a later refresh reuses a half-populated cache and
   // the caller's stale-client cleanup path in `connect.ts` never runs for
@@ -436,8 +436,17 @@ export async function buildMcpMultiConnectionTools(input: {
             servers: {
               [registration.integrationId]: {
                 ...transport,
-                requireToolApproval: ({ toolName }) =>
-                  !autoApproved.has(`${registration.integrationId}_${String(toolName)}`),
+                // Default: no approval required, matching @mastra/mcp's own
+                // default. Opt in with `requireApproval: true` or an array of
+                // tool keys to gate specific tools.
+                ...(requireApproval === true
+                  ? { requireToolApproval: true as const }
+                  : requireApprovalFor
+                    ? {
+                        requireToolApproval: ({ toolName }: { toolName: string }) =>
+                          requireApprovalFor.has(`${registration.integrationId}_${String(toolName)}`),
+                      }
+                    : {}),
               },
             },
           }),
@@ -456,14 +465,15 @@ export async function buildMcpMultiConnectionTools(input: {
     for (const catalog of rawInnerCatalogs.values()) {
       for (const key of Object.keys(catalog)) catalogUnion.add(key);
     }
-    const unknownAutoApprove = [...autoApproved].filter(name => !catalogUnion.has(name));
-    if (unknownAutoApprove.length > 0) {
-      throw new MastraConnectError(
-        'invalid_options',
-        `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknownAutoApprove.join(
-          ', ',
-        )}. Known tools: ${[...catalogUnion].join(', ')}.`,
-      );
+    if (requireApprovalFor) {
+      const unknown = [...requireApprovalFor].filter(name => !catalogUnion.has(name));
+      if (unknown.length > 0) {
+        throw new MastraConnectConfigError(
+          `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(
+            ', ',
+          )}. Known tools: ${[...catalogUnion].join(', ')}.`,
+        );
+      }
     }
     innerToolsByConnectionId = new Map<string, ToolsInput>();
     for (const [connectionId, catalog] of rawInnerCatalogs) {

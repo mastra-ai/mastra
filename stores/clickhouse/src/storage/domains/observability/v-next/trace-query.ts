@@ -343,7 +343,7 @@ export interface CompiledClickHouseTraceQuery {
  * Tenant conditions ANDed into every root and related-signal scan. Columns are
  * `Nullable(String)`, so rows without a tenant never match a scope.
  */
-function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
+export function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
   if (!scope) return '';
   let sql = `\n      AND organizationId = ${parameters.add(scope.organizationId, 'String')}`;
   if (scope.resourceId !== undefined) sql += `\n      AND resourceId = ${parameters.add(scope.resourceId, 'String')}`;
