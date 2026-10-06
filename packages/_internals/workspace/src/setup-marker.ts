@@ -76,11 +76,17 @@ export interface GuardedSetupCommandOptions {
  */
 export function guardedSetupCommand({ repoDir, command, continueOnFailure }: GuardedSetupCommandOptions): string {
   if (!continueOnFailure) return `cd "${repoDir}" && ${command}`;
+  // The command runs through `sh -c` so a trailing comment, heredoc or stray
+  // quote inside it cannot swallow the guard, and the whole step stays on one
+  // line (a Dockerfile RUN cannot span lines). One line per repository: the
+  // same guarded command runs before and after the pin.
   return (
-    `( cd "${repoDir}" && ( ${command}\n) ) || ` +
-    // One line per repository: the same guarded command runs before and after
-    // the pin, so a second failure must not add a second line.
+    `( cd "${repoDir}" && sh -c ${shellQuote(command)} ) || ` +
     `{ mkdir -p "${SETUP_MARKER_DIR}" && grep -qxF -- '${repoDir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || ` +
     `printf '%s\\n' '${repoDir}' >> "${SETUP_FAILED_MARKER_PATH}"; }`
   );
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
