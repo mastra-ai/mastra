@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
+import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -320,7 +321,7 @@ export function getDynamicModel(
   const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   const primary = resolveModel(modelId, resolveOptions);
-  const route = state?.modelRoute?.entries;
+  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
   const pendingEntryId =
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
   const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;

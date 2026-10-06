@@ -15,6 +15,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { setRequestAccountSelection } from '../auth/account-routing-context.js';
 import type { CredentialStore } from '../auth/types.js';
+import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
@@ -315,6 +316,18 @@ describe('getDynamicModel model route', () => {
 
     expect(Array.isArray(model)).toBe(false);
     expect((model as { modelId?: string }).modelId).toBe('gpt-5.4-mini');
+  });
+
+  it('caps route resolution for persisted state that bypassed schema validation', () => {
+    const oversizedRoute = Array.from({ length: MODEL_ROUTE_MAX_ENTRIES + 1 }, (_, index) => ({
+      id: `route-${index}`,
+      label: `Route ${index}`,
+      modelId: 'anthropic/claude-fable-5',
+    }));
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', { route: oversizedRoute }));
+
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toHaveLength(MODEL_ROUTE_MAX_ENTRIES);
+    expect((model as Array<{ id?: string }>).at(-1)?.id).toBe(`route-${MODEL_ROUTE_MAX_ENTRIES - 1}`);
   });
 
   it('truncates the route at an entry whose model cannot resolve', () => {

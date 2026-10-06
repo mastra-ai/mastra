@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants.js';
+import {
+  DEFAULT_CONFIG_DIR,
+  DEFAULT_OM_MODEL_ID,
+  MODEL_ROUTE_MAX_ENTRIES,
+  MODEL_ROUTE_MAX_FIELD_LENGTH,
+} from './constants.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 
@@ -148,15 +153,17 @@ export const stateSchema = z.object({
   modeId: z.string().optional(),
   modelRoute: z
     .object({
-      entries: z.array(
-        z.object({
-          id: z.string(),
-          label: z.string(),
-          modelId: z.string(),
-          accountId: z.string().optional(),
-          memoryModelId: z.string().optional(),
-        }),
-      ),
+      entries: z
+        .array(
+          z.object({
+            id: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            label: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            modelId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            accountId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH).optional(),
+            memoryModelId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH).optional(),
+          }),
+        )
+        .max(MODEL_ROUTE_MAX_ENTRIES),
     })
     .optional(),
   subagentModelId: z.string().optional(),

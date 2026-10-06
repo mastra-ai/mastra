@@ -5,7 +5,12 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import {
+  DEFAULT_OM_MODEL_ID,
+  DEFAULT_OBS_THRESHOLD,
+  DEFAULT_REF_THRESHOLD,
+  MODEL_ROUTE_MAX_ENTRIES,
+} from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
@@ -37,7 +42,7 @@ function resolveOmRoleModelForRequest(
   const pending = state?.mastracodePendingModelFallback;
   const sameThreadPending =
     pending && (pending.threadId === undefined || pending.threadId === controller?.threadId) ? pending : undefined;
-  const routeEntries = state?.modelRoute?.entries ?? [];
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
   const pendingIndex = sameThreadPending
     ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
     : -1;
