@@ -92,7 +92,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
   content={[
   {
     name: 'type',
-    type: "'ivfflat' | 'hnsw'",
+    type: "'ivfflat' | 'ivfpq' | 'hnsw'",
     description: 'Index type',
     defaultValue: 'hnsw',
     properties: [
@@ -102,7 +102,12 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
           {
             name: 'ivfflat',
             type: 'ivfflat',
-            description: 'Clusters vectors into lists for approximate search.',
+            description: 'Clusters vectors into partitions and stores full vectors for exact distances within each partition.',
+          },
+          {
+            name: 'ivfpq',
+            type: 'ivfpq',
+            description: 'IVF index with product quantization. Uses less memory than `ivfflat` with lower recall.',
           },
           {
             name: 'hnsw',
@@ -125,7 +130,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
     type: 'number',
     isOptional: true,
     defaultValue: '16',
-    description: 'Number of sub-vectors for product quantization',
+    description: 'Number of sub-vectors for product quantization. Only applies to `ivfpq`',
   },
   {
     name: 'hnsw',
@@ -320,7 +325,7 @@ interface IndexStats {
   dimension: number
   count: number
   metric: 'cosine' | 'euclidean' | 'dotproduct'
-  type: 'ivfflat' | 'hnsw'
+  type: 'ivfflat' | 'ivfpq' | 'hnsw'
   config: {
     m?: number
     efConstruction?: number

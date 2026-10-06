@@ -737,6 +737,18 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       }
 
       if (indexConfig.type === 'ivfflat') {
+        if (indexConfig.numSubVectors !== undefined) {
+          this.logger.warn(
+            `numSubVectors is ignored for 'ivfflat' indexes. Use type 'ivfpq' for product-quantized IVF indexes.`,
+          );
+        }
+        await table.createIndex(columnToIndex, {
+          config: Index.ivfFlat({
+            numPartitions: indexConfig.numPartitions || 128,
+            distanceType: metricType,
+          }),
+        });
+      } else if (indexConfig.type === 'ivfpq') {
         await table.createIndex(columnToIndex, {
           config: Index.ivfPq({
             numPartitions: indexConfig.numPartitions || 128,
