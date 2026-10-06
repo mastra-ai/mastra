@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -13,10 +14,16 @@ function createMemory() {
     await store.createNode({ id: resourceScope[0], name: 'Acme', isScope: true, scopeIds: [] });
     await store.createNode({ id: resourceScope[1], name: 'User 42', isScope: true, scopeIds: [resourceScope[0]!] });
     await store.createNode({ id: threadScope[2], name: 'Thread alpha', isScope: true, scopeIds: [resourceScope[1]!] });
+    // Pins run with the session's ordinary authority: the resource and thread rungs own themselves.
+    await store.upsertScopeGrant({ scopeNodeId: resourceScope[1]!, scopeRefId: resourceScope[1]!, role: 'owner' });
+    await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'owner' });
     return store;
   })();
+  const knowledge = new Knowledge({ id: 'default', storage });
   return {
     storage,
+    knowledge,
+    getKnowledgeInstance: () => knowledge,
     getKnowledgeStore: () => ready,
   };
 }
@@ -72,7 +79,7 @@ describe('Subconscious pinned knowledge', () => {
     const memory = createMemory();
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
-    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins).toHaveLength(1);
     expect(pins[0]!.id).toBe(pinned.id);
     expect(pins[0]!.text).toBe('Always answer in French.');
@@ -84,7 +91,7 @@ describe('Subconscious pinned knowledge', () => {
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Never force push.' } as any, {} as any);
     await tools.knowledge_unpin!.execute!({ recordId: pinned.id } as any, {} as any);
     const store = await getStore(memory);
-    const { pins } = await listPinnedKnowledge({ store, scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins).toHaveLength(0);
     const raw = await store.getRecord({ id: pinned.id, includeDeleted: true });
     expect(raw?.deletedAt).toBeTruthy();
@@ -96,7 +103,7 @@ describe('Subconscious pinned knowledge', () => {
     const a = await tools.knowledge_pin!.execute!({ text: 'keep me' } as any, {} as any);
     const b = await tools.knowledge_pin!.execute!({ text: 'drop me' } as any, {} as any);
     await tools.knowledge_unpin!.execute!({ recordId: b.id } as any, {} as any);
-    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([a.id]);
   });
 
@@ -109,7 +116,7 @@ describe('Subconscious pinned knowledge', () => {
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
-    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([edited.id]);
     expect(pins[0]!.text).toBe('Speak French. Loudly.');
   });
@@ -155,7 +162,7 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'thread-only pin', scope: 'thread' } as any, {} as any);
     expect(await (await getStore(memory)).getRecordScopeIds(pinned.id)).toContain(threadScope[2]);
-    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
   });
 
@@ -164,7 +171,7 @@ describe('Subconscious pinned knowledge', () => {
     const tools = createTools(memory);
     const pinned = await tools.knowledge_pin!.execute!({ text: 'resource pin' } as any, {} as any);
     expect(await (await getStore(memory)).getRecordScopeIds(pinned.id)).not.toContain(threadScope[2]);
-    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scopeIds: threadScope });
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
   });
 
@@ -177,8 +184,50 @@ describe('Subconscious pinned knowledge', () => {
     const store = await getStore(memory);
     const entity = await store.getNode(a.nodeId);
     expect(entity?.name).toBe(PINNED_NODE_NAME);
-    const { pins, nodeId } = await listPinnedKnowledge({ store, scopeIds: threadScope });
+    const { pins, nodeId } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
     expect(nodeId).toBe(a.nodeId);
     expect(pins).toHaveLength(2);
+  });
+  it('pins, unpins and edits only with the session capability, and stops reading revoked pins', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const store = await getStore(memory);
+    const kept = await tools.knowledge_pin!.execute!({ text: 'thread pin', scope: 'thread' } as any, {} as any);
+
+    // Downgrade the thread rung's self grant after a warm write: thread-scoped pin writes stop.
+    await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'readonly' });
+    await expect(
+      tools.knowledge_pin!.execute!({ text: 'denied', scope: 'thread' } as any, {} as any),
+    ).rejects.toThrow();
+    await expect(tools.knowledge_unpin!.execute!({ recordId: kept.id } as any, {} as any)).rejects.toThrow();
+    await expect(
+      tools.knowledge_edit_pin!.execute!({ recordId: kept.id, text: 'denied edit' } as any, {} as any),
+    ).rejects.toThrow();
+    expect((await store.getRecord({ id: kept.id }))?.deletedAt).toBeFalsy();
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
+    expect(pins.map(pin => pin.text)).toEqual(['thread pin']);
+
+    // A pin on a scope the session cannot read is never assembled into context.
+    const hidden = await store.createNode({ name: 'Elsewhere', isScope: true, scopeIds: [resourceScope[0]!] });
+    await store.createRecord({ node: kept.nodeId, text: 'hidden pin', scopeIds: [hidden.id] });
+    const visible = await listPinnedKnowledge({
+      knowledge: memory.knowledge,
+      scopeIds: [...threadScope.slice(0, 2), hidden.id],
+    });
+    expect(visible.pins).toEqual([]);
+  });
+
+  it('fails closed without a Knowledge instance', async () => {
+    const memory = createMemory();
+    const tools = createPinnedTools(
+      { getKnowledgeInstance: () => undefined },
+      { scopeIds: threadScope, sourceThreadId: 'alpha', maxPins: 20, maxCharacters: 2_000 },
+    );
+    await expect(tools.knowledge_pin!.execute!({ text: 'nope' } as any, {} as any)).rejects.toThrow(
+      /Knowledge instance/,
+    );
+    expect(
+      await (await getStore(memory)).resolveNode({ name: PINNED_NODE_NAME, scopeIds: threadScope.slice(1) }),
+    ).toBeNull();
   });
 });

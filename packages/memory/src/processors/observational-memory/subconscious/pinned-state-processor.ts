@@ -174,9 +174,11 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     // the memo is only trusted for later steps of the same turn AND the same
     // resolved scope.
     if (memo && memo.scopeKey === scopeKey && stepNumber > memo.atStep) return memo.entries;
-    const store = await this.deps.getKnowledgeStore();
-    if (!store) return undefined;
-    const { pins } = await listPinnedKnowledge({ store, scopeIds: scope });
+    // Pins are injected every turn, so they read through the session's readable frontier:
+    // a revoked grant drops them from context like any other unreadable record.
+    const knowledge = this.deps.getKnowledgeInstance();
+    if (!knowledge) return undefined;
+    const { pins } = await listPinnedKnowledge({ knowledge, scopeIds: scope });
     const entries = pins.map(pin => ({ id: pin.id, text: pin.text }));
     args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, scopeKey, entries });
     return entries;
