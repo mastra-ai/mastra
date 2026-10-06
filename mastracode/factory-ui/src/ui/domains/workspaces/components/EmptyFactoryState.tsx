@@ -171,7 +171,7 @@ export function EmptyFactoryState() {
                   Back
                 </Button>
               )}
-              <ol className="flex gap-2" aria-label="Factory setup progress">
+              <ol className="flex min-w-0 gap-2" aria-label="Factory setup progress">
                 {steps.map((item, index) => (
                   <li
                     key={item}
