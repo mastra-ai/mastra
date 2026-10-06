@@ -472,6 +472,31 @@ describe('HttpTransport', () => {
       guarded.destroy();
     });
 
+    it('does not pile up flush handlers when writes burst during a pending request', async () => {
+      let rejectRequest!: (error: Error) => void;
+      fetchMock.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectRequest = reject;
+          }),
+      );
+      const capped = new HttpTransport({ ...outageOptions, maxBufferSize: 10 });
+
+      for (let i = 0; i < 1_000; i++) {
+        capped.write({ msg: `m${i}` });
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(capped.getBufferedLogs()).toHaveLength(10);
+
+      // Every write used to attach its own error handler to the pending request, so one failure was reported per write.
+      rejectRequest(new Error('endpoint down'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(console.error).toHaveBeenCalledTimes(1);
+      capped.clearBuffer();
+      capped.destroy();
+    });
+
     it('waits for the next interval instead of retrying straight away after a failed flush', async () => {
       const capped = new HttpTransport({ ...outageOptions });
       for (let i = 0; i < 4; i++) {
@@ -481,6 +506,9 @@ describe('HttpTransport', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(capped.getBufferedLogs()).toHaveLength(4);
+
+      await vi.advanceTimersByTimeAsync(outageOptions.flushInterval);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       capped.clearBuffer();
       capped.destroy();
     });
@@ -497,7 +525,7 @@ describe('HttpTransport', () => {
       );
     });
 
-    it('returns the in-flight flush even after it has taken the last buffered batch', async () => {
+    it('lets a flush called while the last batch is in flight observe that request failing', async () => {
       const capped = new HttpTransport({ ...outageOptions });
       vi.spyOn(capped, '_flush').mockImplementation(() => Promise.resolve());
       capped._transform({ msg: 'm0' } as any, 'utf8', () => {});
@@ -508,43 +536,18 @@ describe('HttpTransport', () => {
       expect(capped.getBufferedLogs()).toHaveLength(0);
       const second = capped._flush();
 
-      expect(second).toBe(first);
+      await expect(first).rejects.toThrow('endpoint down');
       await expect(second).rejects.toThrow('endpoint down');
       capped.clearBuffer();
       capped.destroy();
     });
 
-    it('sends logs queued behind an in-flight request on destroy', async () => {
+    it('does not finish destroy until every queued batch, including a partial tail, has been sent', async () => {
       const resolvers: Array<(value: unknown) => void> = [];
       fetchMock.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)));
       const guarded = new HttpTransport({ ...outageOptions });
 
-      guarded._transform({ msg: 'm0' } as any, 'utf8', () => {});
-      guarded._transform({ msg: 'm1' } as any, 'utf8', () => {});
-      guarded._transform({ msg: 'm2' } as any, 'utf8', () => {});
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-
-      const callback = vi.fn();
-      guarded._destroy(null as any, callback);
-      resolvers[0]!({ ok: true });
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(JSON.parse(fetchMock.mock.calls[1]![1].body).logs.map((log: any) => log.msg)).toEqual(['m2']);
-      expect(callback).not.toHaveBeenCalled();
-
-      resolvers[1]!({ ok: true });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(callback).toHaveBeenCalledWith(null);
-      expect(guarded.getBufferedLogs()).toHaveLength(0);
-    });
-
-    it('does not finish destroy until every queued batch has been sent', async () => {
-      const resolvers: Array<(value: unknown) => void> = [];
-      fetchMock.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)));
-      const guarded = new HttpTransport({ ...outageOptions });
-
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 7; i++) {
         guarded._transform({ msg: `m${i}` } as any, 'utf8', () => {});
       }
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -566,7 +569,7 @@ describe('HttpTransport', () => {
         ['m0', 'm1'],
         ['m2', 'm3'],
         ['m4', 'm5'],
-        ['m6', 'm7'],
+        ['m6'],
       ]);
       expect(callback).toHaveBeenCalledWith(null);
       expect(guarded.getBufferedLogs()).toHaveLength(0);

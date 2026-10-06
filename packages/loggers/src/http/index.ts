@@ -69,11 +69,7 @@ export class HttpTransport extends LoggerTransport {
     this.lastFlush = Date.now();
 
     // Start flush interval
-    this.flushIntervalId = setInterval(() => {
-      this._flush().catch(err => {
-        console.error('Error flushing logs to HTTP endpoint:', err);
-      });
-    }, this.flushInterval);
+    this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
   }
 
   private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
@@ -128,6 +124,18 @@ export class HttpTransport extends LoggerTransport {
     this.droppedLogCount += overflow;
   }
 
+  // Internal fire-and-forget flush. While a request is in flight this only records the request, so writes
+  // during a slow or retrying request don't each attach another handler to the pending promise.
+  private requestFlush(): void {
+    if (this.flushPromise) {
+      this.flushRequested = true;
+      return;
+    }
+    this._flush().catch(err => {
+      console.error('Error flushing logs to HTTP endpoint:', err);
+    });
+  }
+
   _flush(): Promise<void> {
     // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
     if (this.flushPromise) {
@@ -148,9 +156,7 @@ export class HttpTransport extends LoggerTransport {
     flush.then(
       () => {
         if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
-          this._flush().catch(err => {
-            console.error('Error flushing logs to HTTP endpoint:', err);
-          });
+          this.requestFlush();
         }
       },
       () => {},
@@ -201,9 +207,7 @@ export class HttpTransport extends LoggerTransport {
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
-        this._flush().catch(err => {
-          console.error('Error flushing logs to HTTP endpoint:', err);
-        });
+        this.requestFlush();
       }
 
       // Pass through the log
