@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { MCPServerIcon } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import type { Client } from '@modelcontextprotocol/client';
 import { CLIENT_CAPABILITIES_META_KEY } from '@modelcontextprotocol/server';
@@ -548,6 +549,31 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
       });
       await mcpClient.disconnect();
       expect(mcpClient.getServerInfo()).toEqual({ current: undefined, older: undefined });
+    } finally {
+      await mcpClient.disconnect();
+      await served.close();
+    }
+  });
+
+  it('receives the full identity an MCPServer is configured with', async () => {
+    const icons: MCPServerIcon[] = [
+      { src: 'https://identity.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'], theme: 'light' },
+      { src: 'https://identity.example.com/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'], theme: 'dark' },
+    ];
+    const identity = {
+      name: 'identity-server',
+      version: '3.1.0',
+      title: 'Identity Server',
+      description: 'Announces every Implementation field',
+      websiteUrl: 'https://identity.example.com',
+      icons,
+    };
+    const served = await serveHTTP(new MCPServer({ ...identity, tools: {} }));
+    const mcpClient = new MCPClient({ id: 'full-identity', servers: { identity: { url: served.url } } });
+    try {
+      await mcpClient.listTools();
+      expect(mcpClient.getServerProtocolVersions()).toEqual({ identity: '2026-07-28' });
+      expect(mcpClient.getServerInfo()).toEqual({ identity });
     } finally {
       await mcpClient.disconnect();
       await served.close();

@@ -638,7 +638,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           // Set-based rather than a correlated EXISTS: the error-trace set is
           // built once and the outer traceId test runs against the sort key.
           conditions.push(`traceId ${filters.hasChildError ? 'IN' : 'NOT IN'} (
-            SELECT c.traceId FROM ${TABLE_SPANS} ${finalClause} c
+            SELECT c.traceId FROM ${TABLE_SPANS} c ${finalClause}
             WHERE c.error IS NOT NULL AND c.error != ''
           )`);
         }

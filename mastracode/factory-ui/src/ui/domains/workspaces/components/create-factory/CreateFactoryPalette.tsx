@@ -64,11 +64,12 @@ export function CreateFactoryPalette({
           </Button>
         )}
         <Txt
+          tone="ink"
           key={step}
           as="p"
           aria-hidden="true"
           variant="body"
-          className={cn('text-foreground min-w-0 flex-1 truncate', stepTransition)}
+          className={cn('min-w-0 flex-1 truncate', stepTransition)}
         >
           {title}
         </Txt>
@@ -133,7 +134,7 @@ export function CreateFactoryPaletteAlert({ children }: { children: ReactNode })
 
 export function CreateFactoryPaletteMessage({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="caption" className="text-muted-foreground m-0 px-3 py-2">
+    <Txt tone="muted" as="p" variant="caption" className="m-0 px-3 py-2">
       {children}
     </Txt>
   );

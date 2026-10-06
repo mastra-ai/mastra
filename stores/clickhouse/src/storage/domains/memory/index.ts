@@ -1202,6 +1202,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       const threadIdsToUpdate = new Set<string>();
       const updatePromises: Promise<any>[] = [];
+      // Merged content written per message, so the verify step compares against what was
+      // actually written rather than the caller's partial update.
+      const writtenContent = new Map<string, string>();
 
       for (const existingMessage of parsedExistingMessages) {
         const updatePayload = messages.find(m => m.id === existingMessage.id);
@@ -1241,6 +1244,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           // Ensure we're updating the content field
           setClauses.push(`content = {var_content_${paramIdx}:String}`);
           values[`var_content_${paramIdx}`] = JSON.stringify(newContent);
+          writtenContent.set(id, values[`var_content_${paramIdx}`]);
           paramIdx++;
           delete updatableFields.content;
         }
@@ -1265,7 +1269,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 WHERE id = {var_id_${paramIdx}:String}
               `;
 
-          console.info('Updating message:', id, 'with query:', updateQuery, 'values:', values);
+          this.logger?.debug?.('Updating message', { id });
 
           updatePromises.push(
             this.client.command({
@@ -1322,8 +1326,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             let needsRetry = false;
             for (const [key, value] of Object.entries(fieldsToUpdate)) {
               if (key === 'content') {
-                // For content updates, check if the content was updated
-                const expectedContent = typeof value === 'string' ? value : JSON.stringify(value);
+                // For content updates, check the stored content against the merged content written above
+                const expectedContent = writtenContent.get(id);
                 const actualContent =
                   typeof updatedMessage.content === 'string'
                     ? updatedMessage.content
@@ -1339,7 +1343,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             }
 
             if (needsRetry) {
-              console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
+              this.logger?.warn?.('Update not applied correctly, retrying with DELETE + INSERT', { id });
               // Use DELETE + INSERT as fallback
               await this.client.command({
                 query: `DELETE FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,

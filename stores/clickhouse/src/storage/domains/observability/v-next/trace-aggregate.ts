@@ -11,9 +11,11 @@ import type {
   TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 
+import { TABLE_METRIC_EVENTS } from './ddl';
 import type { CompiledClickHouseTraceQuery } from './trace-query';
 import {
   compileClickHouseTraceCandidates,
+  compileTenantScope,
   durationMsSql,
   ParameterBuilder,
   runWithClickHouseTraceQueryTimeout,
@@ -95,14 +97,46 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
       `fromUnixTimestamp64Milli(intDiv(toUnixTimestamp64Milli(r.startedAt), ${intervalMs}) * ${intervalMs}, 'UTC') AS bucket`,
     );
   }
+  const measureKinds = new Set(plan.measures.map(measure => measureRule(measure.name)?.kind));
+  const hasCost = measureKinds.has('cost');
+  let usageJoin = '';
+  if (hasCost || measureKinds.has('tokens')) {
+    ctes.push(compileUsageCte(plan, parameters));
+    usageJoin = '\n    LEFT JOIN usage u ON u.traceId = r.traceId';
+    // A non-matching LEFT JOIN row holds column defaults (0, ''), not NULL, unless
+    // `join_use_nulls` is set, so every usage column is read through the `hasUsage` marker.
+    // A usage-bearing trace with no row of a name contributes 0; any other trace contributes NULL.
+    USAGE_METRIC_NAMES.forEach((_, index) => factColumns.push(`if(u.hasUsage = 1, u.t${index}, NULL) AS t${index}`));
+    factColumns.push(
+      `u.hasUsage = 1 AS usageBearing`,
+      `if(u.hasUsage = 1 AND u.priced = 1, u.cost, NULL) AS traceCost`,
+      `u.hasUsage = 1 AND u.priced = 1 AND u.pricingFailure = 0 AS covered`,
+      `if(u.hasUsage = 1 AND u.priced = 1, u.unitMin, NULL) AS unitMin`,
+      `if(u.hasUsage = 1 AND u.priced = 1, u.unitMax, NULL) AS unitMax`,
+    );
+  }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM candidates r
+    FROM candidates r${usageJoin}
   )`);
+
+  // More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced.
+  const mixedUnitsSql = 'minOrNull(unitMin) != maxOrNull(unitMax)';
 
   // All measures are Float64 so having literals compare as Float64 parameters.
   const measureSql = (name: TrustedTraceAggregateMeasureName): string => {
     if (name === 'count') return 'toFloat64(count())';
+    const rule = measureRule(name);
+    // The -OrNull aggregates skip the NULL per-trace values of traces that are not usage-bearing
+    // (tokens) or not priced (cost), and return NULL rather than 0 when no trace qualifies.
+    if (rule?.kind === 'tokens' && rule.metricNames) {
+      const value = rule.metricNames.map(metricName => `t${usageMetricIndex(metricName)}`).join(' + ');
+      return `toFloat64(${rule.statistic === 'avg' ? 'avgOrNull' : 'sumOrNull'}(${value}))`;
+    }
+    if (rule?.kind === 'cost') {
+      const aggregate = rule.statistic === 'avg' ? 'avgOrNull' : 'sumOrNull';
+      return `if(${mixedUnitsSql}, NULL, toFloat64(${aggregate}(traceCost)))`;
+    }
     if (name === 'errorCount') return 'toFloat64(countIf(isError))';
     if (name === 'errorRate') return 'countIf(isError) / count()';
     if (name === 'duration.avg') return 'avg(durationMs)';
@@ -152,6 +186,14 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   const tiebreakSql = dimensionColumns.map(column => `${column} ASC NULLS LAST`);
   const measureColumns = plan.measures.map((measure, index) => `${measureSql(measure.name)} AS m${index}`);
   const measureNames = plan.measures.map((_, index) => `m${index}`);
+  if (hasCost) {
+    const mixedUnit = parameters.add(coreStorage.TRACE_AGGREGATE_MIXED_COST_UNIT, 'String');
+    measureColumns.push(
+      `countIf(covered) / nullIf(countIf(usageBearing), 0) AS costCoverage`,
+      `if(${mixedUnitsSql}, ${mixedUnit}, minOrNull(unitMin)) AS costUnit`,
+    );
+    measureNames.push('costCoverage', 'costUnit');
+  }
 
   if (plan.interval === undefined) {
     const limit = parameters.add(plan.limit + 1, 'UInt64');
@@ -177,7 +219,8 @@ LIMIT ${limit}`,
       'bucket',
       'grouping(bucket) = 1 AS __isGroup',
       ...measureColumns,
-      `(${havingSql}) AS __keep`,
+      // A NULL (UNKNOWN) having result over a null token or cost measure never keeps a group.
+      `ifNull(${havingSql}, 0) AS __keep`,
       `${orderTarget} AS __order`,
     ].join(', ')}
     FROM facts
@@ -206,6 +249,81 @@ ORDER BY __rank ASC, bucket ASC`,
   };
 }
 
+const USAGE_METRIC_NAMES: readonly string[] = coreStorage.TRACE_AGGREGATE_USAGE_METRIC_NAMES;
+
+function measureRule(name: string): coreStorage.TraceAggregateMeasureRule | undefined {
+  return coreStorage.isTraceAggregateCanonicalMeasure(name)
+    ? coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY[name]
+    : undefined;
+}
+
+function usageMetricIndex(name: string): number {
+  const index = USAGE_METRIC_NAMES.indexOf(name);
+  if (index === -1) throw new Error(`Unsupported trusted trace-aggregate token metric: ${name}`);
+  return index;
+}
+
+/**
+ * Builds `usage`: one row per candidate trace that has at least one token metric row, holding
+ * per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and the trace's
+ * pricing state. Metric rows are matched by traceId, usage metric name, tenant scope, and
+ * `timestamp >= from` only: a trace that starts in the window can emit metrics after `to`, and
+ * the candidates semi-join already bounds the scan.
+ *
+ * Rows are deduplicated with `LIMIT 1 BY metricId` at query time. `ReplacingMergeTree` only
+ * collapses rows with equal sort keys `(name, timestamp, metricId)`, so retried copies with
+ * different timestamps never merge, and copies with equal keys stay separate until a background
+ * merge runs.
+ */
+function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterBuilder): string {
+  const names = USAGE_METRIC_NAMES.map(name => parameters.add(name, 'String'));
+  const costNames = coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES.map(name => names[usageMetricIndex(name)]);
+  const costRow = `name IN (${costNames.join(', ')})`;
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const tenant = compileTenantScope(plan.scope, parameters);
+  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasError`;
+  const failed = `${costRow} AND (hasError OR (isNotNull(estimatedCost) AND isNull(costUnit)))`;
+  // Retried writes share a metricId, and copies with different timestamps never merge under the
+  // (name, timestamp, metricId) sort key. Collapse them with a parallel, spillable aggregation
+  // that deterministically keeps the latest copy; one tuple keeps every column from that copy.
+  return `usage AS (
+    SELECT traceId,
+      toUInt8(1) AS hasUsage,
+      ${names.map((name, index) => `sumIf(value, name = ${name}) AS t${index}`).join(',\n      ')},
+      sumIf(assumeNotNull(estimatedCost), ${priced}) AS cost,
+      toUInt8(countIf(${priced}) > 0) AS priced,
+      toUInt8(countIf(${failed}) > 0) AS pricingFailure,
+      minIf(assumeNotNull(costUnit), ${priced}) AS unitMin,
+      maxIf(assumeNotNull(costUnit), ${priced}) AS unitMax
+    FROM (
+      SELECT traceId,
+        latest.1 AS name,
+        latest.2 AS value,
+        latest.3 AS estimatedCost,
+        latest.4 AS costUnit,
+        latest.5 AS hasError
+      FROM (
+        SELECT traceId,
+          argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest
+        FROM (
+          SELECT traceId, metricId, timestamp, name, value, estimatedCost, costUnit,
+            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError
+          FROM ${TABLE_METRIC_EVENTS}
+          WHERE traceId IN (SELECT traceId FROM candidates)
+            AND name IN (${names.join(', ')})
+            AND timestamp >= ${from}${tenant}
+        )
+        GROUP BY traceId, metricId
+      )
+    )
+    GROUP BY traceId
+  )`;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 export async function aggregateTraces(
   client: ClickHouseClient,
   plan: TrustedTraceAggregatePlan,
@@ -227,9 +345,12 @@ export async function aggregateTraces(
     // Measures holds exactly the requested names, which the core record type cannot express.
     const shaped: TraceAggregateRow = {
       measures: Object.fromEntries(
-        plan.measures.map((measure, index) => [measure.name, Number(row[`m${index}`])]),
+        plan.measures.map((measure, index) => [measure.name, nullableNumber(row[`m${index}`])]),
       ) as TraceAggregateRow['measures'],
     };
+    if ('costCoverage' in row) {
+      shaped.cost = { coverage: nullableNumber(row.costCoverage), unit: (row.costUnit as string | null) ?? null };
+    }
     if (plan.dimensions.length > 0) {
       shaped.dimensions = Object.fromEntries(
         plan.dimensions.map((dimension, index) => [dimension, (row[`d${index}`] as string | null) ?? null]),

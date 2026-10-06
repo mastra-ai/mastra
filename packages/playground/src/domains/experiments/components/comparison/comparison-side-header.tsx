@@ -69,7 +69,7 @@ export function ComparisonSideHeader({
       </div>
 
       {experiment && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
           {experiment.name && (
             <TextAndIcon>
               <HashIcon /> {shortId}

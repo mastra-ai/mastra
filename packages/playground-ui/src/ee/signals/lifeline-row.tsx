@@ -117,7 +117,7 @@ export function LifelineRow({
           );
         })}
       </div>
-      <Txt as="span" variant="caption" tone="muted" font="mono" className="w-9 shrink-0 tabular-nums">
+      <Txt as="span" variant="caption" tone="muted" className="w-9 shrink-0 tabular-nums">
         {row.points.length}/{snapshots.length}
       </Txt>
     </li>

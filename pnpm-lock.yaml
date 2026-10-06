@@ -4648,6 +4648,9 @@ importers:
       '@mastra/slack':
         specifier: workspace:^
         version: link:../../channels/slack
+      '@mastra/teams':
+        specifier: workspace:^
+        version: link:../../channels/teams
       '@mastra/telegram':
         specifier: workspace:^
         version: link:../../channels/telegram
@@ -4661,6 +4664,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      hono:
+        specifier: 4.13.8
+        version: 4.13.8
       prettier:
         specifier: 3.9.5
         version: 3.9.5

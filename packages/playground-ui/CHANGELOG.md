@@ -1,5 +1,53 @@
 # @mastra/playground-ui
 
+## 61.0.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169), [`a879630`](https://github.com/mastra-ai/mastra/commit/a879630e3f8c696fdaa61e4103b8bb052b97730e)]:
+  - @mastra/core@1.75.0-alpha.6
+  - @mastra/memory@1.36.0-alpha.4
+  - @mastra/client-js@1.52.0-alpha.6
+  - @mastra/ai-sdk@1.10.7-alpha.1
+  - @mastra/react@1.8.0-alpha.6
+
+## 61.0.0-alpha.5
+
+### Minor Changes
+
+- Added an inset variant to `CommandDialog`. It wraps the search and results in one panel inside a muted frame, pins the dialog near the top so the input stays put while results change height, and takes a `footer` for actions like feedback links or keyboard hints. `DialogContent` also accepts `showCloseButton={false}` to hide its close button. ([#25894](https://github.com/mastra-ai/mastra/pull/25894))
+
+  ```tsx
+  <CommandDialog
+    variant="inset"
+    open={open}
+    onOpenChange={setOpen}
+    footer={
+      <Button variant="ghost" size="sm">
+        Send feedback
+      </Button>
+    }
+  >
+    <CommandInput placeholder="Search" />
+    <CommandList scrollArea scrollAreaViewportClassName="max-h-dropdown">
+      {/* groups */}
+    </CommandList>
+  </CommandDialog>
+  ```
+
+### Patch Changes
+
+- Fixed search fields and other form fields collapsing to a few pixels wide when placed inside the new sidebar navigation. ([#25986](https://github.com/mastra-ai/mastra/pull/25986))
+
+- Fixed trace views for recovered DurableAgent runs. A span that a crashed process left open now shows an "Interrupted" notice instead of being displayed as a regular result. ([#25862](https://github.com/mastra-ai/mastra/pull/25862))
+
+- Updated dependencies [[`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/memory@1.36.0-alpha.3
+  - @mastra/core@1.75.0-alpha.5
+  - @mastra/client-js@1.52.0-alpha.5
+  - @mastra/react@1.8.0-alpha.5
+  - @mastra/ai-sdk@1.10.7-alpha.1
+
 ## 61.0.0-alpha.4
 
 ### Minor Changes

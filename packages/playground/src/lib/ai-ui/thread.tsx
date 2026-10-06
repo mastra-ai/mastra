@@ -419,14 +419,14 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-caption">
+        <Txt variant="caption" role="alert">
           {preparationError || draftStatus?.error}
-        </p>
+        </Txt>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="sr-only">
+        <Txt variant="caption" role="status" className="sr-only">
           Restoring draft…
-        </p>
+        </Txt>
       )}
       <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
         <Composer

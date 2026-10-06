@@ -47,7 +47,9 @@ interface EnvironmentContributor {
 }
 
 function credentialToken(credential: ConnectionCredential): string {
-  return credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
+  if (credential.type === 'oauth2') return credential.accessToken;
+  if (credential.type === 'two_step') return credential.token;
+  return credential.apiKey;
 }
 
 /**
