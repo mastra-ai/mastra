@@ -1,12 +1,10 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -572,19 +570,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 : {}),
               type: 'approval',
               suspendedToolRunId: options.runId,
-              resumeSchema: JSON.stringify(
-                standardSchemaToJSONSchema(
-                  toStandardSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
-                  ),
-                ),
-              ),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 
