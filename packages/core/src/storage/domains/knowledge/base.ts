@@ -676,6 +676,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }): Promise<KnowledgeCurationCursor> {
     throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
+  /**
+   * Drops every Knowledge table, including retired ones, then initializes an empty canonical schema.
+   * Leaves all non-Knowledge storage untouched. Use only after `init()` reports an incompatible Knowledge schema.
+   */
+  async dangerouslyReset(): Promise<void> {
+    throw new KnowledgeUnsupportedError();
+  }
   async listActivity(_input: {
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;

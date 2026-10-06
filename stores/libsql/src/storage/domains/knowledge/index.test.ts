@@ -164,6 +164,30 @@ describe('KnowledgeLibSQL schema completion marker', () => {
       client.close();
     }
   });
+  it('explicitly resets retired Knowledge tables and leaves other storage untouched', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await client.execute('CREATE TABLE mastra_knowledge_cursors (id TEXT PRIMARY KEY)');
+      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
+      const store = new KnowledgeLibSQL({ client });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      await store.dangerouslyReset();
+
+      const tables = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
+      );
+      const names = tables.rows.map(row => String(row.name));
+      expect(names).not.toContain('mastra_knowledge_cursors');
+      expect(names).toContain(TABLE_KNOWLEDGE_SCHEMA);
+      const threads = await client.execute('SELECT id FROM mastra_threads');
+      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+      await new KnowledgeLibSQL({ client }).init();
+    } finally {
+      client.close();
+    }
+  });
 });
 
 describe('KnowledgeLibSQL semantic outbox claims', () => {
