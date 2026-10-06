@@ -325,13 +325,6 @@ interface IndexStats {
   dimension: number
   count: number
   metric: 'cosine' | 'euclidean' | 'dotproduct'
-  type: 'ivfflat' | 'ivfpq' | 'hnsw'
-  config: {
-    m?: number
-    efConstruction?: number
-    numPartitions?: number
-    numSubVectors?: number
-  }
 }
 ```
 
