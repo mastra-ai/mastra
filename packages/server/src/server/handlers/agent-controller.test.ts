@@ -1287,6 +1287,28 @@ describe('agent-controller routes', () => {
       expect(state).toMatchObject({ modelId: 'openai/gpt-5.5', settings: { thinkingLevel: 'high' } });
     });
 
+    it.each([undefined, 'high'] as const)(
+      'does not acknowledge a canceled switch with thinking level %s',
+      async thinkingLevel => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+        vi.spyOn(session.model, 'switch').mockRejectedValueOnce(
+          new Error('Model switch canceled because the active thread changed'),
+        );
+
+        await expect(
+          SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+            mastra,
+            controllerId: 'code',
+            resourceId: 'user-1',
+            modelId: 'openai/gpt-5.5',
+            thinkingLevel,
+          } as any),
+        ).rejects.toThrow('Model switch canceled');
+      },
+    );
+
     it('validates the thinking level on the request boundary', () => {
       const schema = SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.bodySchema!;
       expect(schema.safeParse({ modelId: 'openai/gpt-5.5', thinkingLevel: 'invalid' }).success).toBe(false);

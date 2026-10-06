@@ -319,7 +319,124 @@ describe('session.model.switch', () => {
     expect(session.state.get().thinkingLevel).toBe('off');
   });
 
-  it('does not apply an unbound switch after a thread is bound during validation', async () => {
+  it.each([undefined, { thinkingLevel: 'high' }] as const)(
+    'rejects an unbound switch with options %s canceled before it starts',
+    async options => {
+      const trackModelUse = vi.fn();
+      const { session } = await createSession(trackModelUse);
+      session.thread.clear();
+      session.model.set({ modelId: 'openai/gpt-4o' });
+      await session.state.set({ thinkingLevel: 'low' });
+      const listener = vi.fn();
+      session.subscribe(listener);
+
+      const switching = session.model.switch('openai/gpt-5.5', options);
+      session.thread.set({ threadId: 'newly-bound-thread' });
+      await expect(switching).rejects.toThrow('Model switch canceled');
+
+      expect(session.model.get()).toBe('openai/gpt-4o');
+      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(listener).not.toHaveBeenCalled();
+      expect(trackModelUse).not.toHaveBeenCalled();
+
+      session.thread.clear();
+      await session.model.switch('anthropic/claude-opus-4-6');
+      expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+      expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('anthropic/claude-opus-4-6');
+    },
+  );
+
+  it('rejects a bound paired switch canceled before committing anything', async () => {
+    const trackModelUse = vi.fn();
+    const storage = new InMemoryStore();
+    const { session } = await createSession(trackModelUse, storage);
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
+    trackModelUse.mockClear();
+    const memory = (await storage.getStore('memory'))!;
+    const save = vi.spyOn(memory, 'saveThread');
+
+    const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
+    session.thread.set({ threadId: 'newly-bound-thread' });
+    await expect(switching).rejects.toThrow('Model switch canceled');
+
+    expect((await memory.getThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'openai/gpt-4o',
+      thinkingLevel: 'low',
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(trackModelUse).not.toHaveBeenCalled();
+  });
+
+  it('preserves a model-only write to its captured thread after navigation before it starts', async () => {
+    const trackModelUse = vi.fn();
+    const storage = new InMemoryStore();
+    const { session } = await createSession(trackModelUse, storage);
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
+    trackModelUse.mockClear();
+    const listener = vi.fn();
+    session.subscribe(listener);
+
+    const switching = session.model.switch('openai/gpt-5.5');
+    session.thread.set({ threadId: 'newly-bound-thread' });
+    await expect(switching).resolves.toBeUndefined();
+
+    expect((await session.thread.getById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'openai/gpt-5.5',
+      thinkingLevel: 'low',
+    });
+    expect(session.model.get()).toBe('openai/gpt-4o');
+    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(listener).not.toHaveBeenCalled();
+    expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
+  });
+
+  it.each([undefined, { thinkingLevel: 'high' }] as const)(
+    'preserves a captured-thread commit with options %s after navigation during the write',
+    async options => {
+      const trackModelUse = vi.fn();
+      const storage = new InMemoryStore();
+      const { session } = await createSession(trackModelUse, storage);
+      const thread = await session.thread.create();
+      await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
+      trackModelUse.mockClear();
+      const memory = (await storage.getStore('memory'))!;
+      const save = memory.saveThread.bind(memory);
+      let release = () => {};
+      let entered = () => {};
+      const writeStarted = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const writeGate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      vi.spyOn(memory, 'saveThread').mockImplementationOnce(async args => {
+        entered();
+        await writeGate;
+        return save(args);
+      });
+      const listener = vi.fn();
+      session.subscribe(listener);
+
+      const switching = session.model.switch('openai/gpt-5.5', options);
+      await writeStarted;
+      session.thread.set({ threadId: 'newly-bound-thread' });
+      release();
+      await expect(switching).resolves.toBeUndefined();
+
+      expect((await memory.getThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+        currentModelId: 'openai/gpt-5.5',
+        thinkingLevel: options?.thinkingLevel ?? 'low',
+      });
+      expect(session.model.get()).toBe('openai/gpt-4o');
+      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(listener).not.toHaveBeenCalled();
+      expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
+    },
+  );
+
+  it('rejects an unbound switch after a thread is bound during validation', async () => {
     let release = () => {};
     let entered = () => {};
     const validationStarted = new Promise<void>(resolve => {
@@ -334,17 +451,20 @@ describe('session.model.switch', () => {
         await validationGate;
       }
     });
-    const { session } = await createSession(undefined, new InMemoryStore(), schema);
+    const trackModelUse = vi.fn();
+    const { session } = await createSession(trackModelUse, new InMemoryStore(), schema);
+    session.thread.clear();
     const listener = vi.fn();
     session.subscribe(listener);
     const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     await validationStarted;
     session.thread.set({ threadId: 'newly-bound-thread' });
     release();
-    await switching;
+    await expect(switching).rejects.toThrow('Model switch canceled');
     expect(session.model.get()).not.toBe('openai/gpt-5.5');
     expect(session.state.get().thinkingLevel).toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
+    expect(trackModelUse).not.toHaveBeenCalled();
   });
 
   it('does not restore stale thinking over a switch completed during hydration', async () => {

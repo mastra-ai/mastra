@@ -2050,6 +2050,7 @@ export class SessionModel {
    * and emits `model_changed` with the current thinking level. When
    * `thinkingLevel` is provided it is applied and persisted with the model
    * (through the session-state preference, which also survives restarts).
+   * Rejects if a thread change cancels the switch before any selection is committed.
    */
   async switch(
     modelId: string,
@@ -2060,6 +2061,7 @@ export class SessionModel {
     const isActive = () => store?.getThreadId() === threadId;
     const run = this.#switchQueue.then(() =>
       runModelPersistenceOperation(threadId, async () => {
+        let committed = false;
         const commit = async () => {
           if (threadId) {
             await store?.setModelOn(threadId, {
@@ -2067,14 +2069,21 @@ export class SessionModel {
               [MODEL_PERSISTENCE_VERSION_KEY]: MODEL_PERSISTENCE_VERSION,
               ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
             });
+            committed = true;
           }
         };
+        const applyModel = () => {
+          this.set({ modelId });
+          committed = true;
+        };
         if (thinkingLevel !== undefined) {
-          if (!isActive()) return;
-          if (!(await this.#setThinkingLevel(thinkingLevel, commit, isActive, () => this.set({ modelId })))) return;
+          if (isActive()) await this.#setThinkingLevel(thinkingLevel, commit, isActive, applyModel);
         } else {
           await commit();
-          if (isActive()) this.set({ modelId });
+          if (isActive()) applyModel();
+        }
+        if (!committed) {
+          throw new Error('Model switch canceled because the active thread changed');
         }
         if (isActive()) {
           this.#bus.emit({
