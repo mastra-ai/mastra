@@ -495,6 +495,21 @@ export function knowledgeScopeIdsKey(scopeIds: string[]): string {
   return canonicalizeKnowledgeScopeIds(scopeIds).join('\u001f');
 }
 
+/** Canonicalizes a stored `[source, scope]` importer binding key. */
+export function canonicalizeKnowledgeImporterBindingKey(binding: string): string {
+  try {
+    const parsed: unknown = JSON.parse(binding);
+    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some(value => typeof value !== 'string'))
+      throw new Error();
+    const source = (parsed[0] as string).trim();
+    const scope = (parsed[1] as string).trim();
+    if (!source || !scope) throw new Error();
+    return JSON.stringify([source, scope]);
+  } catch {
+    throw new Error('Knowledge importer binding must encode a [source, scope] tuple');
+  }
+}
+
 /** Scope nodes are visible through their own identity as well as their direct parent memberships. */
 export function isKnowledgeNodeVisible(
   node: { id: string; isScope: boolean },
