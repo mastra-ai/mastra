@@ -772,14 +772,24 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         });
       }
 
-      const builtIndex = (await table.listIndices()).find(index => index.columns.includes(columnToIndex));
-      if (builtIndex?.indexUuid) {
+      // Only record the fingerprint for an index this call actually produced. A concurrent writer may replace
+      // the index between the build and the metadata write; if the UUID moves, clear the record so the next
+      // call rebuilds instead of trusting a fingerprint that may describe a different index.
+      const findIndexUuid = async () =>
+        (await table.listIndices()).find(index => index.columns.includes(columnToIndex))?.indexUuid;
+      const builtUuid = await findIndexUuid();
+      if (builtUuid && builtUuid !== existingIndex?.indexUuid) {
         await table.updateFieldMetadata([
           {
             path: columnToIndex,
-            metadata: { [LANCE_INDEX_FINGERPRINT_KEY]: fingerprint, [LANCE_INDEX_UUID_KEY]: builtIndex.indexUuid },
+            metadata: { [LANCE_INDEX_FINGERPRINT_KEY]: fingerprint, [LANCE_INDEX_UUID_KEY]: builtUuid },
           },
         ]);
+        if ((await findIndexUuid()) !== builtUuid) {
+          await table.updateFieldMetadata([
+            { path: columnToIndex, metadata: { [LANCE_INDEX_FINGERPRINT_KEY]: null, [LANCE_INDEX_UUID_KEY]: null } },
+          ]);
+        }
       }
     } catch (error: any) {
       throw new MastraError(
