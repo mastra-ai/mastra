@@ -378,7 +378,6 @@ export class StepExecutor extends MastraBase {
                 retry: error.options?.retry,
                 metadata: error.options?.metadata,
                 processorId: error.processorId,
-                ...(error.options?.persist && { persist: true }),
               }
             : undefined,
       };

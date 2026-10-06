@@ -119,17 +119,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       }),
     };
 
-    // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
-    const resolveOutputProcessors = async () =>
-      capabilities.outputProcessors
-        ? typeof capabilities.outputProcessors === 'function'
-          ? await capabilities.outputProcessors({
-              requestContext: result.requestContext!,
-              overrides: options.outputProcessors,
-            })
-          : options.outputProcessors || capabilities.outputProcessors
-        : options.outputProcessors || [];
-
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
       try {
@@ -151,8 +140,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
           options: options,
           model: agentModel,
           messageList,
-          // A `persist` tripwire runs output processors so memory saves the user message.
-          outputProcessors: memoryData.tripwire!.persist ? await resolveOutputProcessors() : undefined,
         });
 
         // End the whole tree with tripwire information; descendants close
@@ -226,7 +213,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
       logger: capabilities.logger,
     });
 
-    let effectiveOutputProcessors = await resolveOutputProcessors();
+    // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
+    let effectiveOutputProcessors = capabilities.outputProcessors
+      ? typeof capabilities.outputProcessors === 'function'
+        ? await capabilities.outputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.outputProcessors,
+          })
+        : options.outputProcessors || capabilities.outputProcessors
+      : options.outputProcessors || [];
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided

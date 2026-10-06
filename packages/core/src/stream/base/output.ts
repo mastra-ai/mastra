@@ -976,30 +976,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
-
-              // A `persist` tripwire comes from an input-side abort, before the blocked step
-              // produced any content. Run output processors so memory saves the user message
-              // and finished steps; persistence stays processor-owned, as for canceled runs.
-              if (chunk.payload?.persist && self.processorRunner && !self.#options.isLLMExecutionStep) {
-                try {
-                  self.messageList = await self.processorRunner.runOutputProcessors(
-                    self.messageList,
-                    resolveObservabilityContext(options),
-                    self.#options.requestContext,
-                    0,
-                    undefined,
-                    {
-                      text: self.#bufferedText.join(''),
-                      usage: self.#usageCount as LanguageModelUsage,
-                      finishReason: 'other',
-                      steps: [...self.#bufferedSteps] as LLMStepResult[],
-                    },
-                  );
-                } catch (error) {
-                  self.logger.error('Failed to run output processors for a persisted tripwire', { error });
-                }
-              }
-
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 

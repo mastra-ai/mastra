@@ -91,7 +91,6 @@ export interface StepTripwireInfo {
   retry?: boolean;
   metadata?: Record<string, unknown>;
   processorId?: string;
-  persist?: boolean;
 }
 
 export type StepFailure<P, R, S, T> = {
