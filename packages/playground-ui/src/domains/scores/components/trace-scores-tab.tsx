@@ -115,7 +115,9 @@ function TraceScoreReason({ reason }: { reason: string }) {
             onClick={() => setExpanded(value => !value)}
             className={cn(quietTextHover, controlStateColorTransition, 'underline underline-offset-2')}
           >
-            {expanded ? 'Read less' : 'Read more'}
+            <Txt as="span" variant="caption">
+              {expanded ? 'Read less' : 'Read more'}
+            </Txt>
           </button>
         </>
       )}

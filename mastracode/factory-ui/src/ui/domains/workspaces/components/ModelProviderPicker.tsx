@@ -48,7 +48,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
 
           <div className="flex items-center gap-3" aria-hidden="true">
             <div className="bg-border h-px flex-1" />
-            <Txt as="span" variant="caption" className="text-muted-foreground">
+            <Txt tone="muted" as="span" variant="caption">
               OR
             </Txt>
             <div className="bg-border h-px flex-1" />
@@ -79,7 +79,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
           </div>
         )}
         {search.trim() && visibleKeyProviders.length === 0 && (
-          <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+          <Txt tone="muted" as="p" variant="caption" className="m-0">
             {`No providers match “${search.trim()}”.`}
           </Txt>
         )}

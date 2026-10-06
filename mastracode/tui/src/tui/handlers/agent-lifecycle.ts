@@ -10,6 +10,7 @@ import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconci
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { renderStatusAnimationFrame } from '../footer-animation-renderer.js';
+import { switchModeWithPack } from '../model-packs/apply.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 import { flushRender } from '../render-scheduler.js';
@@ -309,7 +310,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
+      switchModeWithPack(ctx, 'plan').catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });

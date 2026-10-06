@@ -41,7 +41,7 @@ export function FactoryDefaultModelForm({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ProviderBrandIcon provider={provider.provider} />
-          <Txt as="span" variant="body" className="text-foreground">
+          <Txt tone="ink" as="span" variant="body">
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
