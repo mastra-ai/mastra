@@ -11,6 +11,7 @@ import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  RETIRED_KNOWLEDGE_TABLE_NAMES,
   createKnowledgeV2CoreLoader,
   KNOWLEDGE_V2_ACTIVITY_SCHEMA,
   KNOWLEDGE_V2_MENTIONS_SCHEMA,
@@ -376,7 +377,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
-        [...KNOWLEDGE_TABLE_NAMES].reverse().map(table => ({ sql: `DROP TABLE IF EXISTS "${table}"`, args: [] })),
+        [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].map(table => ({
+          sql: `DROP TABLE IF EXISTS "${table}"`,
+          args: [],
+        })),
         'write',
       );
     });
