@@ -6,7 +6,6 @@ import { MetricsLineChart } from '../MetricsLineChart';
 import { MetricsShareList } from '../MetricsShareList';
 import type { MetricsShareListColumn, MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
-import { Tab, TabList, Tabs } from '../Tabs';
 import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statusSeries } from './metrics-story-data';
@@ -207,12 +206,10 @@ function RoutesToolbarCard() {
       </MetricsCard.TopBar>
       <MetricsCard.Content className="flex flex-col gap-4 overflow-visible">
         <MetricsCard.Toolbar>
-          <Tabs<Lens> value={lens} onValueChange={setLens} defaultTab="busiest">
-            <TabList variant="pill-ghost" size="sm">
-              <Tab value="busiest">Busiest</Tab>
-              <Tab value="failing">Failing</Tab>
-            </TabList>
-          </Tabs>
+          <MetricsCard.Tabs<Lens> value={lens} onValueChange={setLens}>
+            <MetricsCard.Tab value="busiest">Busiest</MetricsCard.Tab>
+            <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
+          </MetricsCard.Tabs>
           <MetricsShareList.Header columns={columns} valueLabel={spec.valueLabel} valueWidth="w-16" />
         </MetricsCard.Toolbar>
         <MetricsShareList
@@ -233,7 +230,7 @@ function RoutesToolbarCard() {
 
 /**
  * `MetricsCard.Toolbar`: one row under the top bar, first child left, last child right. Here
- * small ghost tabs (`TabList variant="pill-ghost" size="sm"`) pick the question, and the list's
+ * compact tabs (`MetricsCard.Tabs`) pick the question, and the list's
  * column headers (`MetricsShareList.Header`) sit beside them, so the list drops its own header
  * (`showHeader={false}`).
  */

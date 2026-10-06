@@ -8,7 +8,6 @@ import { MetricsLineChart } from '../MetricsLineChart';
 import { MetricsShareList } from '../MetricsShareList';
 import type { MetricsShareListColumn, MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
-import { Tab, TabList, Tabs } from '../Tabs';
 import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import {
@@ -232,13 +231,11 @@ function RoutesCard({ isLoading }: { isLoading: boolean }) {
       isLoading={isLoading}
     >
       <MetricsCard.Toolbar>
-        <Tabs<Lens> value={lens} onValueChange={setLens} defaultTab="busiest">
-          <TabList variant="pill-ghost" size="sm">
-            <Tab value="busiest">Busiest</Tab>
-            <Tab value="slowest">Time spent</Tab>
-            <Tab value="failing">Failing</Tab>
-          </TabList>
-        </Tabs>
+        <MetricsCard.Tabs<Lens> value={lens} onValueChange={setLens}>
+          <MetricsCard.Tab value="busiest">Busiest</MetricsCard.Tab>
+          <MetricsCard.Tab value="slowest">Time spent</MetricsCard.Tab>
+          <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
+        </MetricsCard.Tabs>
         <MetricsShareList.Header columns={spec.columns} valueLabel={spec.valueLabel} valueWidth={spec.valueWidth} />
       </MetricsCard.Toolbar>
       {/* Remount per lens, so paging and hover reset with the question. */}

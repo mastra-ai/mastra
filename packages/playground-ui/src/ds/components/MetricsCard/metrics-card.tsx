@@ -6,6 +6,7 @@ import { MetricsCardLoading } from './metrics-card-loading';
 import { MetricsCardNoData } from './metrics-card-no-data';
 import { MetricsCardRoot } from './metrics-card-root';
 import { MetricsCardSummary } from './metrics-card-summary';
+import { MetricsCardTab, MetricsCardTabs } from './metrics-card-tabs';
 import { MetricsCardTitle } from './metrics-card-title';
 import { MetricsCardTitleAndDescription } from './metrics-card-title-and-description';
 import { MetricsCardToolbar } from './metrics-card-toolbar';
@@ -17,6 +18,8 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   Kpi: MetricsKpiCard,
   TopBar: MetricsCardTopBar,
   Toolbar: MetricsCardToolbar,
+  Tabs: MetricsCardTabs,
+  Tab: MetricsCardTab,
   Actions: MetricsCardActions,
   TitleAndDescription: MetricsCardTitleAndDescription,
   Title: MetricsCardTitle,

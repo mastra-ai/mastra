@@ -9,7 +9,6 @@ import type { MetricsLineChartSeries } from '../MetricsLineChart';
 import { MetricsShareList } from '../MetricsShareList';
 import type { MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
-import { Tab, TabList, Tabs } from '../Tabs';
 import { MetricsCard } from './metrics-card';
 import { agentActivityByHour, count, ms, percent, traceVolume, usageBy, usd } from './metrics-story-data';
 import type { AgentActivityBucket } from './metrics-story-data';
@@ -108,15 +107,13 @@ function CardTabs<T extends string>({
   tabs: Array<[T, string]>;
 }) {
   return (
-    <Tabs<T> value={value} onValueChange={onChange} defaultTab={value}>
-      <TabList variant="pill-ghost" size="sm">
-        {tabs.map(([v, label]) => (
-          <Tab key={v} value={v}>
-            {label}
-          </Tab>
-        ))}
-      </TabList>
-    </Tabs>
+    <MetricsCard.Tabs<T> value={value} onValueChange={onChange}>
+      {tabs.map(([v, label]) => (
+        <MetricsCard.Tab key={v} value={v}>
+          {label}
+        </MetricsCard.Tab>
+      ))}
+    </MetricsCard.Tabs>
   );
 }
 
