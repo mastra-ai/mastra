@@ -5,7 +5,7 @@ import { AgentBuilderSidebar } from './agent-builder-sidebar';
 
 export const AgentBuilderLayout = () => {
   return (
-    <div className="h-screen bg-sidebar font-body">
+    <div className="h-screen bg-sidebar">
       <MainSidebarProvider>
         <div className="grid h-full grid-rows-1 md:grid-cols-[auto_1fr] md:divide-x md:divide-border">
           <div className="hidden md:block">
@@ -25,7 +25,7 @@ export const AgentBuilderLayout = () => {
 
 export const AgentBuilderEditionLayout = () => {
   return (
-    <div className="grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-1 bg-sidebar font-body">
+    <div className="grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-1 bg-sidebar">
       <Outlet />
     </div>
   );

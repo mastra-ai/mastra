@@ -43,7 +43,7 @@ function MobileNavbar() {
         <SidebarNew.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <Txt as="span" className="font-display whitespace-nowrap">
+          <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
             Mastra Studio
           </Txt>
         </span>
@@ -156,7 +156,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <div className="h-screen bg-sidebar font-body">
+    <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

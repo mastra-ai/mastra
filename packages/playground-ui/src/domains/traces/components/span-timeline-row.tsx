@@ -71,7 +71,8 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
         <button
           type="button"
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-caption text-foreground',
+            'text-foreground',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left',
             focusRingInset,
           )}
         >
@@ -79,18 +80,20 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
             <span
               aria-hidden
               title={spanUI.label}
-              className="inline-block size-2 shrink-0 rounded-full"
               style={{ backgroundColor: spanUI.color }}
+              className="inline-block size-2 shrink-0 rounded-full"
             />
           )}
-          <span
+          <Txt
+            as="span"
+            variant="caption"
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
             title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
             className="min-w-0 truncate"
           >
             {span.name}
-          </span>
+          </Txt>
         </button>
 
         {/* Slot is always present so names stay aligned whether or not the span has children. */}
@@ -132,7 +135,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <Txt as="div" variant="meta" tone="muted" font="mono" className="w-12 text-right">
+          <Txt as="p" variant="meta" font="mono" tone="muted" className="w-12 text-right">
             {formatDurationPrecise(span.latency)}
           </Txt>
         </HoverCardTrigger>

@@ -312,3 +312,15 @@ Type {{ to see autocomplete suggestions for available variables.`,
     },
   },
 };
+
+export const Prose: Story = {
+  args: {
+    value: 'You are a helpful assistant.\n\nExplain your decisions clearly and ask for missing context when needed.',
+    language: 'markdown',
+    font: 'body',
+    lineNumbers: false,
+    showCopyButton: false,
+    'aria-label': 'Instructions',
+    className: 'w-80 max-w-full',
+  },
+};

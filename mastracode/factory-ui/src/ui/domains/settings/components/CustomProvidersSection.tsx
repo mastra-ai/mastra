@@ -92,7 +92,7 @@ export function CustomProvidersSection() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="caption" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption">
           OpenAI-compatible endpoints.
         </Txt>
         {!draft && (
@@ -167,7 +167,7 @@ export function CustomProvidersSection() {
             <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Txt as="span" variant="body" className="text-foreground truncate">
+                  <Txt tone="ink" as="span" variant="body" className="truncate">
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
@@ -176,11 +176,11 @@ export function CustomProvidersSection() {
                     </Badge>
                   )}
                 </div>
-                <Txt as="span" variant="meta" className="text-muted-foreground truncate">
+                <Txt tone="muted" as="span" variant="meta" className="truncate">
                   {p.url}
                 </Txt>
                 {p.models.length > 0 && (
-                  <Txt as="span" variant="meta" className="text-muted-foreground">
+                  <Txt tone="muted" as="span" variant="meta">
                     {p.models.length} model{p.models.length === 1 ? '' : 's'}
                   </Txt>
                 )}

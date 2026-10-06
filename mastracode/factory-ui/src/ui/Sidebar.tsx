@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { Settings } from 'lucide-react';
@@ -21,7 +22,11 @@ function useSettingsOpen() {
 
 function BetaBadge() {
   return (
-    <span className="bg-badge-green-subtle text-brand-green-indicator relative m-[0.1875rem] inline-block px-[0.1875rem] align-middle text-[0.625rem]/[0.875rem] font-medium tracking-wide uppercase">
+    <Txt
+      as="span"
+      variant="meta"
+      className="bg-badge-green-subtle text-brand-green-indicator relative m-[0.1875rem] inline-block px-[0.1875rem] align-middle uppercase"
+    >
       Beta
       <span className="text-badge-green-edge absolute inset-x-[-0.1875rem] -top-px block transform-gpu">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
@@ -43,7 +48,7 @@ function BetaBadge() {
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
       </span>
-    </span>
+    </Txt>
   );
 }
 
