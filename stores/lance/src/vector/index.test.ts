@@ -293,12 +293,16 @@ describe('Lance vector store tests', () => {
     });
 
     it('rebuilds once when a build parameter changes', async () => {
+      await create('cosine', 2, 4);
+      createIndexSpy.mockClear();
       await create('cosine', 4, 4);
       await create('cosine', 4, 4);
       expect(createIndexSpy).toHaveBeenCalledTimes(1);
     });
 
     it('rebuilds once when the metric changes', async () => {
+      await create('cosine', 4, 4);
+      createIndexSpy.mockClear();
       await create('euclidean', 4, 4);
       await create('euclidean', 4, 4);
       expect(createIndexSpy).toHaveBeenCalledTimes(1);
