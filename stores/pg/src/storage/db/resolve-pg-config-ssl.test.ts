@@ -1,3 +1,5 @@
+import { Client } from 'pg';
+import type { ClientConfig } from 'pg';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PoolAdapter } from '../client';
 import { resolvePgConfig } from '.';
@@ -18,7 +20,9 @@ describe('resolvePgConfig ssl precedence', () => {
 
   it('lets an explicit ssl object win over sslmode= in the connection string', () => {
     const pool = poolOf({ connectionString: url, ssl: { rejectUnauthorized: false } });
-    expect(pool.options.ssl).toEqual({ rejectUnauthorized: false });
+    // pg.Client re-parses connectionString and overwrites ssl, so assert what a client actually uses.
+    const client = new Client(pool.options as ClientConfig) as unknown as { connectionParameters: { ssl: unknown } };
+    expect(client.connectionParameters.ssl).toEqual({ rejectUnauthorized: false });
   });
 
   it('keeps URL-derived ssl when no explicit ssl is given', () => {
