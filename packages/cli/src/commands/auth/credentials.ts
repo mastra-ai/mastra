@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, stat, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import * as p from '@clack/prompts';
 
@@ -11,6 +13,9 @@ import { MASTRA_PLATFORM_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
+const CREDENTIALS_LOCK_FILE = join(CREDENTIALS_DIR, 'credentials.lock');
+const CREDENTIALS_LOCK_RETRY_MS = 50;
+const CREDENTIALS_LOCK_TIMEOUT_MS = 30_000;
 
 export interface Credentials {
   token: string;
@@ -45,11 +50,87 @@ class LoginTimedOutError extends Error {
   }
 }
 
-export async function saveCredentials(creds: Credentials): Promise<void> {
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+async function acquireCredentialsLock(signal?: AbortSignal): Promise<() => Promise<void>> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
-  await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  const startedAt = Date.now();
+
+  while (true) {
+    signal?.throwIfAborted();
+    try {
+      await writeFile(CREDENTIALS_LOCK_FILE, JSON.stringify({ pid: process.pid }), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+      return async () => {
+        await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+
+    try {
+      const lock = JSON.parse(await readFile(CREDENTIALS_LOCK_FILE, 'utf-8')) as { pid?: unknown };
+      if (typeof lock.pid !== 'number' || !isProcessAlive(lock.pid)) {
+        await unlink(CREDENTIALS_LOCK_FILE);
+        continue;
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') continue;
+      if (error instanceof SyntaxError) {
+        const lockAge = await stat(CREDENTIALS_LOCK_FILE)
+          .then(lockStat => Date.now() - lockStat.mtimeMs)
+          .catch(() => 0);
+        if (lockAge >= CREDENTIALS_LOCK_TIMEOUT_MS) {
+          await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
+          continue;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    if (Date.now() - startedAt >= CREDENTIALS_LOCK_TIMEOUT_MS) {
+      throw new Error('Timed out waiting for another Mastra CLI process to update credentials.');
+    }
+    await delay(CREDENTIALS_LOCK_RETRY_MS, undefined, { signal });
+  }
+}
+
+async function withCredentialsLock<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const releaseLock = await acquireCredentialsLock(signal);
+  try {
+    return await operation();
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function saveCredentialsUnlocked(creds: Credentials): Promise<void> {
+  await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+  const temporaryFile = `${CREDENTIALS_FILE}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryFile, JSON.stringify(creds, null, 2), { mode: 0o600 });
+    await rename(temporaryFile, CREDENTIALS_FILE);
+  } finally {
+    await unlink(temporaryFile).catch(() => {});
+  }
   await chmod(CREDENTIALS_DIR, 0o700).catch(() => {});
   await chmod(CREDENTIALS_FILE, 0o600).catch(() => {});
+}
+
+export async function saveCredentials(creds: Credentials): Promise<void> {
+  await withCredentialsLock(() => saveCredentialsUnlocked(creds));
 }
 
 export async function loadCredentials(): Promise<Credentials | null> {
@@ -62,11 +143,9 @@ export async function loadCredentials(): Promise<Credentials | null> {
 }
 
 export async function clearCredentials(): Promise<void> {
-  try {
-    await unlink(CREDENTIALS_FILE);
-  } catch {
-    // file doesn't exist, that's fine
-  }
+  await withCredentialsLock(async () => {
+    await unlink(CREDENTIALS_FILE).catch(() => {});
+  });
 }
 
 export async function getCurrentOrgId(): Promise<string | null> {
@@ -80,10 +159,12 @@ export async function getCurrentOrgId(): Promise<string | null> {
 }
 
 export async function setCurrentOrgId(orgId: string): Promise<void> {
-  const creds = await loadCredentials();
-  if (!creds) throw new Error('Not logged in');
-  creds.currentOrgId = orgId;
-  await saveCredentials(creds);
+  await withCredentialsLock(async () => {
+    const creds = await loadCredentials();
+    if (!creds) throw new Error('Not logged in');
+    creds.currentOrgId = orgId;
+    await saveCredentialsUnlocked(creds);
+  });
 }
 
 function isWSL(): boolean {
@@ -127,22 +208,39 @@ export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal):
   if (!creds.refreshToken) return null;
 
   try {
-    // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
-    // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
-    // so if this request also 401s we'd infinitely recurse.
-    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: creds.refreshToken }),
-      signal,
-    });
-    if (!res.ok) return null;
+    return await withCredentialsLock(async () => {
+      const storedCredentials = await loadCredentials();
+      if (
+        storedCredentials &&
+        (storedCredentials.token !== creds.token || storedCredentials.refreshToken !== creds.refreshToken)
+      ) {
+        return storedCredentials.token;
+      }
 
-    const data = (await res.json()) as { accessToken: string; refreshToken: string };
-    creds.token = data.accessToken;
-    creds.refreshToken = data.refreshToken;
-    await saveCredentials(creds);
-    return data.accessToken;
+      const currentCredentials = storedCredentials ?? creds;
+      if (!currentCredentials.refreshToken) return null;
+
+      // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
+      // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
+      // so if this request also 401s we'd infinitely recurse.
+      const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: currentCredentials.refreshToken }),
+        signal,
+      });
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as { accessToken: string; refreshToken: string };
+      const refreshedCredentials = {
+        ...currentCredentials,
+        token: data.accessToken,
+        refreshToken: data.refreshToken,
+      };
+      Object.assign(creds, refreshedCredentials);
+      await saveCredentialsUnlocked(refreshedCredentials);
+      return data.accessToken;
+    }, signal);
   } catch {
     return null;
   }

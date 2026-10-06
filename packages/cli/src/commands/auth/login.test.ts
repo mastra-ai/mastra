@@ -21,6 +21,7 @@ vi.mock('node:fs/promises', async importOriginal => {
     chmod: vi.fn().mockResolvedValue(undefined),
     mkdir: vi.fn().mockResolvedValue(undefined),
     writeFile: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
     unlink: vi.fn().mockResolvedValue(undefined),
   };
