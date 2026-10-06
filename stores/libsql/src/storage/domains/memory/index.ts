@@ -947,10 +947,11 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       // Process in batches to avoid SQL parameter limits
       const BATCH_SIZE = 100;
-      const threadIds = new Set<string>();
 
       // Use a transaction to ensure consistency
       await this.#write('deleteMessages', async () => {
+        // Per attempt, so a retry doesn't touch threads collected by a rolled-back attempt.
+        const threadIds = new Set<string>();
         const tx = await this.#client.transaction('write');
 
         try {
