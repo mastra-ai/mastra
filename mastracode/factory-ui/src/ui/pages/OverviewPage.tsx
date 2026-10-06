@@ -103,7 +103,7 @@ export function OverviewContent({
       <section className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <Block
           title="Stalled"
-          action={current.waiting.length > 0 ? <Count value={`${current.waiting.length} waiting`} /> : undefined}
+          action={current.waiting.length > 0 && <Count value={`${current.waiting.length} waiting`} />}
         >
           <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
         </Block>
@@ -111,11 +111,11 @@ export function OverviewContent({
         <Block
           title="Running now"
           action={
-            current.inFlight > 0 ? (
+            current.inFlight > 0 && (
               <Count
                 value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
               />
-            ) : undefined
+            )
           }
         >
           <RunningList running={current.running} factoryProjectId={factoryProjectId} />
