@@ -181,6 +181,7 @@ describe('Subconscious observation curator', () => {
         storage: new InMemoryStore(),
         knowledge: selection === 'key' ? 'selected' : knowledge,
         options: { observationalMemory: { model: 'openai/test', experimental_subconscious: new Subconscious() } },
+        ...semanticInfrastructure,
       });
       memory.__registerMastra(new Mastra({ knowledge: { selected: knowledge }, logger: false }));
       const om = memory.getMergedThreadConfig().observationalMemory;
