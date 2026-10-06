@@ -18,13 +18,13 @@ function nonEmpty(lines: string[]): string[] {
 }
 
 /**
- * Splits a tool-style block into its "● title" row and the rows of the shaded panel between the ▄ and ▀ edges.
+ * Splits a tool-style block into its "• title" row and the rows of the shaded panel between the ▄ and ▀ edges.
  * Asserts the block uses that structure and no box borders.
  */
 function toolBlockParts(lines: string[]): { title: string; panel: string[] } {
   const top = lines.findIndex(l => /^▄+$/.test(l.trim()));
   const bottom = lines.findIndex(l => /^▀+$/.test(l.trim()));
-  expect(lines[0]).toMatch(/^● /);
+  expect(lines[0]).toMatch(/^• /);
   expect(top).toBe(1);
   expect(bottom).toBe(lines.length - 1);
   expect(lines.join('\n')).not.toMatch(/[╭╰│]/);
@@ -80,7 +80,7 @@ describe('SubagentExecutionComponent', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
     const { title, panel } = toolBlockParts(renderPlain(comp));
 
-    expect(title.trimEnd()).toBe('● subagent explore claude-sonnet-4-20250514');
+    expect(title.trimEnd()).toBe('• subagent explore claude-sonnet-4-20250514');
     expect(panel.map(l => l.trimEnd())).toEqual(['  Find all usages of X']);
   });
 
@@ -267,7 +267,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]!.trimEnd()).toBe('● subagent explore claude-sonnet-4-20250514 12.3s');
+      expect(lines[0]!.trimEnd()).toBe('• subagent explore claude-sonnet-4-20250514 12.3s');
     });
 
     it('collapses to the title row on error completion too, keeping the error icon', () => {
@@ -286,7 +286,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]!.trimEnd()).toBe('● subagent execute claude-sonnet-4-20250514 5.0s ✗');
+      expect(lines[0]!.trimEnd()).toBe('• subagent execute claude-sonnet-4-20250514 5.0s ✗');
     });
 
     it('shows full content when expanded after completion', () => {
@@ -352,7 +352,7 @@ describe('SubagentExecutionComponent', () => {
       comp.toggleExpanded();
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatch(/^● subagent explore/);
+      expect(lines[0]).toMatch(/^• subagent explore/);
     });
 
     it('auto-collapses even if user expanded during execution', () => {
@@ -370,7 +370,7 @@ describe('SubagentExecutionComponent', () => {
       comp.finish(false, 5000);
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatch(/^● subagent explore/);
+      expect(lines[0]).toMatch(/^• subagent explore/);
     });
 
     it('shows full content while still running (not yet finished)', () => {

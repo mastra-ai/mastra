@@ -84,14 +84,14 @@ describe('ShellStreamComponent', () => {
 
     const running = renderedLines(component);
     // Running: dot + command, no duration or failure mark yet.
-    expect(running[0]).toBe('● $ pnpm test');
+    expect(running[0]).toBe('• $ pnpm test');
     expect(panelRows(running)).toEqual(['  stdout one', '  stderr partial']);
     expect(running.join('\n')).not.toMatch(/[│╭╰]/);
 
     component.finish(2);
 
     const finished = renderedLines(component);
-    expect(finished[0]).toMatch(/^● \$ pnpm test \d+ms ✗$/);
+    expect(finished[0]).toMatch(/^• \$ pnpm test \d+ms ✗$/);
     // The partial line is flushed and the exit code is the last panel row.
     expect(panelRows(finished)).toEqual(['  stdout one', '  stderr partial', '  Exit code: 2']);
   });
@@ -102,7 +102,7 @@ describe('ShellStreamComponent', () => {
 
     const lines = renderedLines(component);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^● \$ true \d+ms$/);
+    expect(lines[0]).toMatch(/^• \$ true \d+ms$/);
   });
 
   it('keeps only the latest 200 lines and shows the latest 20 while collapsed', () => {

@@ -57,14 +57,14 @@ describe('completed shell/process background status', () => {
     const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'cat CHANGELOG.md' }, {}, ui);
     component.updateResult({ content: [{ type: 'text', text: 'No such file\n\nExit code: 1' }], isError: false });
     const title = component.render(120).find(line => stripAnsi(line).includes('cat CHANGELOG.md'))!;
-    expect(title).toContain(theme.fg('error', '●'));
+    expect(title).toContain(theme.fg('error', '•'));
   });
 
   it('does not treat error-looking output from a successful command as a failure', () => {
     const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
     component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
     const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('●');
+    expect(output).toContain('•');
     expect(output).not.toContain('✗');
   });
 });
@@ -688,7 +688,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Mastra Docs (1 week ago)');
     expect(output).toContain('https://mastra.ai/docs');
     expect(output).toContain('Mastra Reference');
-    expect(output).toContain('● web_search "mastra docs"');
+    expect(output).toContain('• web_search "mastra docs"');
     expect(output).not.toContain('encryptedContent');
     expect(output).not.toContain('do-not-render-this-blob');
   });
@@ -716,7 +716,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Release notes');
     expect(output).toContain('https://mastra.ai/changelog');
     expect(output).toContain('https://github.com/mastra-ai/mastra/releases');
-    expect(output).toContain('● web_search "latest mastra release"');
+    expect(output).toContain('• web_search "latest mastra release"');
     expect(output).not.toContain('sources');
     expect(output).not.toContain('action');
   });
@@ -738,7 +738,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Answer: Mastra is an agent framework.');
     expect(output).toContain('## Mastra');
     expect(output).toContain('https://mastra.ai');
-    expect(output).toContain('● web_search "agent frameworks"');
+    expect(output).toContain('• web_search "agent frameworks"');
     expect(output).not.toContain('"Answer:');
   });
 
@@ -2014,7 +2014,7 @@ Test plan:
     expect(lines.join('\n')).not.toContain('…');
     expect(unwrapped).toContain('--reporter=dot');
     expect(lines.length).toBeGreaterThan(1);
-    expect(lines[0]).toContain('● $ pnpm');
+    expect(lines[0]).toContain('• $ pnpm');
     expect(lines[1]).toMatch(/^    \S/);
   });
 

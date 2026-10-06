@@ -24,7 +24,7 @@ import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
-import { toolBlock } from './surface.js';
+import { statusDot, toolBlock } from './surface.js';
 import type {
   CommandExitRecord,
   CompactToolLabelColor,
@@ -3011,8 +3011,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getStatusDot(isError = this.isErrorResult()): string {
-    if (this.isPartial) return theme.fg('muted', '●');
-    return isError ? theme.fg('error', '●') : theme.fg('success', '●');
+    return statusDot(this.isPartial ? 'running' : isError ? 'error' : 'done');
   }
 
   private getStatusIndicator(isError = this.isErrorResult()): string {

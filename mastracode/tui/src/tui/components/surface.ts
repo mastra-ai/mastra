@@ -125,9 +125,14 @@ export const promptSurface = () => surfaceShade(2);
 /** Background of tool output panels. */
 export const toolSurface = () => surfaceShade(1);
 
+/** Glyph of the dot in front of a tool-style row; the same small bullet as the Working row's pulse. */
+export const TOOL_DOT = '•';
+
 /** Status dot in front of a tool-style row: grey while running, green when done, red on failure. */
 export function statusDot(status: 'running' | 'done' | 'error'): string {
-  return status === 'running' ? theme.fg('muted', '●') : theme.fg(status === 'error' ? 'error' : 'success', '●');
+  return status === 'running'
+    ? theme.fg('muted', TOOL_DOT)
+    : theme.fg(status === 'error' ? 'error' : 'success', TOOL_DOT);
 }
 
 /**

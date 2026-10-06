@@ -9,7 +9,7 @@ import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
-import { toolBlock } from './surface.js';
+import { TOOL_DOT, toolBlock } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
 // Read from proxy at render time so they pick up contrast adaptation
@@ -167,7 +167,7 @@ export class OMOutputComponent extends WidthAwareContainer {
 
     // "● Observed: …" title in the observer / reflector color, the observations on a panel below
     const output = borderedLines.some(line => line.trim()) ? borderedLines : [];
-    this.addChild(new Text(toolBlock(chalk.hex(color)('●'), footerText, output, width).join('\n'), BOX_INDENT, 0));
+    this.addChild(new Text(toolBlock(chalk.hex(color)(TOOL_DOT), footerText, output, width).join('\n'), BOX_INDENT, 0));
   }
 
   private buildFooterText(color: string): string {
