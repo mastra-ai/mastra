@@ -19,7 +19,11 @@ const myAgent = new Agent({
   name: 'My Agent',
   instructions: 'You manage Linear issues.',
   model: 'openai/gpt-5.1',
-  tools: tools({ integrations: ['linear'] }),
+  tools: tools({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+    integrations: ['linear'],
+  }),
 });
 
 const mastra = new Mastra({
