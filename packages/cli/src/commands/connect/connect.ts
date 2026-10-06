@@ -41,10 +41,10 @@ interface ConnectContext {
 
 /**
  * Load `.env` and `.env.local` from the current working directory so the
- * `mastra connect` commands pick up `MASTRA_PROJECT_ID` and
- * `MASTRA_API_TOKEN` without requiring the caller to export them by hand.
- * Already-exported env vars still win (`override: false`), and the loader
- * is a no-op when the files are missing.
+ * `mastra connect` commands pick up `MASTRA_PROJECT_ID` (and any other env
+ * vars those files define) without requiring the caller to export them by
+ * hand. Already-exported env vars still win (`override: false`), and the
+ * loader is a no-op when the files are missing.
  */
 function loadConnectEnv(): void {
   const cwd = process.cwd();
