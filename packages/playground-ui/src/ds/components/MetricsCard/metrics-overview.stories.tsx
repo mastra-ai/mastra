@@ -256,9 +256,7 @@ function TraceVolumeCard({ isLoading }: Loadable) {
     cells: [rate(r.errors, r.runs)],
   }));
   const errorsOf = new Map(traceVolume[tab].map(r => [r.label, r.errors]));
-  const total = Object.values(traceVolume)
-    .flat()
-    .reduce((sum, r) => sum + r.runs, 0);
+  const total = traceVolume[tab].reduce((sum, r) => sum + r.runs, 0);
   const columns = [{ label: 'Error rate' }];
   return (
     <Card

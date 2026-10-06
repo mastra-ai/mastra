@@ -92,7 +92,7 @@ export const OverIncluded: Story = {
 };
 
 /**
- * Status classes over a day with an incident. Thin 3xx/4xx/5xx slices keep a 2px minimum so
+ * Status classes over a day with an incident. Thin 3xx/4xx/5xx slices keep a 3px minimum so
  * a handful of errors stays visible; hover a column to dim the others.
  */
 export const StatusClasses: Story = {
