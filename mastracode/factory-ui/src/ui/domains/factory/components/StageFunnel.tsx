@@ -64,7 +64,9 @@ function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; va
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <span className="flex flex-col gap-2">
-      <span className="text-foreground">{title}</span>
+      <Txt as="span" variant="caption" tone="ink">
+        {title}
+      </Txt>
       <span className="grid grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-1">{children}</span>
     </span>
   );
@@ -139,7 +141,6 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
   return (
     <div
       role="tooltip"
-      className="bg-card shadow-overlay text-caption text-foreground animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -147,6 +148,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
         translate: `${shift(cursor.flipX)} ${shift(cursor.flipY)}`,
         transformOrigin: `${cursor.flipX ? 'right' : 'left'} ${cursor.flipY ? 'bottom' : 'top'}`,
       }}
+      className="text-foreground bg-card shadow-overlay animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
     >
       {children}
     </div>
@@ -242,16 +244,14 @@ export function StageFunnel({
             <div key={step.stage} className={`flex min-w-0 flex-col gap-1 ${down ? 'justify-center' : ''}`}>
               <span className="flex min-w-0 items-center gap-1.5">
                 {stage ? <BoardStageIcon stage={stage} /> : null}
-                <Txt as="span" variant="meta" className="text-foreground truncate font-semibold">
+                <Txt tone="ink" as="span" variant="meta" className="truncate">
                   {rungLabel(step.stage)}
                 </Txt>
               </span>
-              <span
-                className={`text-foreground leading-none font-semibold tracking-tight tabular-nums ${down ? 'text-[1.5rem]' : 'text-[clamp(1.25rem,2.5cqw,2rem)]'}`}
-              >
+              <Txt as="span" variant="lead" tone="ink" className={`tabular-nums ${down ? '' : ''}`}>
                 {step.reached}
-              </span>
-              <Txt as="span" variant="meta" className="text-muted-foreground truncate tabular-nums">
+              </Txt>
+              <Txt tone="muted" as="span" variant="meta" className="truncate tabular-nums">
                 {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
@@ -393,13 +393,13 @@ export function StageFunnel({
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (
-            <Txt as="span" variant="meta" className="text-muted-foreground tabular-nums">
+            <Txt tone="muted" as="span" variant="meta" className="tabular-nums">
               {[`${pullRequests} opened a pull request`, merged > 0 ? `${merged} merged` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </Txt>
           ) : null}
-          <Txt as="span" variant="meta" className="text-muted-foreground">
+          <Txt tone="muted" as="span" variant="meta">
             created in this window, by furthest stage reached
           </Txt>
         </span>
