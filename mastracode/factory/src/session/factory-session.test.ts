@@ -8,7 +8,6 @@ import {
   hydrateFactorySession,
   refreshFactorySessionMemorySettings,
   resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
@@ -149,6 +148,8 @@ describe('ensureFactorySourceSession', () => {
     await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toEqual(
       expect.objectContaining({
         projectRepositoryId: projectRepository.id,
+        // The session row carries its factory directly, so readers no longer walk link -> connection.
+        factoryProjectId: project.id,
         userId: 'user-1',
         branch: 'factory/issue-49',
         baseBranch: 'main',
@@ -650,35 +651,5 @@ describe('resolveFactorySourceRepository', () => {
         firstLinkedRepository: true,
       }),
     ).resolves.toEqual({ found: false, reason: 'repository' });
-  });
-});
-
-/**
- * A repo-backed channel thread is keyed by its Factory session id, and that id
- * is the only handle a session-start hook receives. This is the walk back to
- * the project whose configuration the session should adopt.
- */
-describe('resolveFactoryProjectForSession', () => {
-  it('walks a session id back to its project, org, and owner', async () => {
-    const { sourceControl, project, repository } = await seedLinkedRepository();
-    const created = await ensureFactorySourceSession({
-      sourceControl,
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      repositorySlug: repository.slug,
-      branch: 'slack/1700-42',
-    });
-
-    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: created.sessionId })).resolves.toEqual({
-      factoryProjectId: project.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-    });
-  });
-
-  it('resolves nothing for a session id that does not exist', async () => {
-    const { sourceControl } = await seedLinkedRepository();
-
-    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: 'not-a-session' })).resolves.toBeNull();
   });
 });

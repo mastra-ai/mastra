@@ -456,10 +456,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const githubProvider = sourceControl.github;
 
     const storage = sourceControl.storage;
-    const projectRepository = await storage.projectRepositories.get({
-      orgId: session.orgId,
-      id: session.projectRepositoryId,
-    });
+    const projectRepository = session.projectRepositoryId
+      ? await storage.projectRepositories.get({ orgId: session.orgId, id: session.projectRepositoryId })
+      : null;
     if (!projectRepository) throw new Error(`Repository link ${session.projectRepositoryId} was not found`);
     // The remaining reads only depend on the repository link — issue them in
     // parallel instead of paying four sequential storage round-trips.

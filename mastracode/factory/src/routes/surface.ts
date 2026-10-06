@@ -21,7 +21,6 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../session/factory-session.js';
@@ -199,16 +198,14 @@ async function reuseBoundSession(
   if (!ref) return undefined;
   // At least as strict as the coordinator's resolveSourceSession: a ref it
   // would reject must fall through to minting, not hard-fail the run.
-  const resolved = await resolveFactoryProjectForSession({ sourceControl, sessionId: ref.sessionId });
+  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
   if (
-    !resolved ||
-    resolved.orgId !== input.record.orgId ||
-    resolved.factoryProjectId !== input.record.factoryProjectId
+    !session?.projectRepositoryId ||
+    session.orgId !== input.record.orgId ||
+    session.factoryProjectId !== input.record.factoryProjectId
   ) {
     return undefined;
   }
-  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
-  if (!session) return undefined;
   return {
     sessionId: session.sessionId,
     userId: session.userId,

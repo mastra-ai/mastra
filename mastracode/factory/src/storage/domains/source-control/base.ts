@@ -317,9 +317,9 @@ export interface SourceControlSession {
   /**
    * The position-1 repository link at creation. Still populated for every
    * session until FACT-342 moves the per-repository readers to
-   * `sessionRepositories`.
+   * `sessionRepositories`; nullable now so that deletion is a column change only.
    */
-  projectRepositoryId: string;
+  projectRepositoryId: string | null;
   /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
   factoryProjectId: string | null;
   orgId: string;
@@ -343,11 +343,12 @@ export interface CreateSourceControlSessionInput {
   sessionId: string;
   projectRepositoryId: string;
   /**
-   * The factory the link's connection belongs to. Derived from the link when
-   * omitted; when given it must match, so a caller cannot file a session
-   * under another project.
+   * The factory the link's connection belongs to. It must match the link, so a
+   * caller cannot file a session under another project. The stored value is
+   * always read from the connection, so a fixture that omits it still gets the
+   * right one.
    */
-  factoryProjectId?: string;
+  factoryProjectId: string;
   orgId: string;
   userId: string;
   branch: string;

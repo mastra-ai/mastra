@@ -53,6 +53,7 @@ export interface SourceControlSessionRoutesOptions {
 interface ResolvedProjectRepository {
   sourceControl: SourceControlStorageHandle;
   project: ProjectRepository;
+  factoryProjectId: string;
   defaultBranch: string;
 }
 
@@ -89,9 +90,12 @@ async function resolveProjectRepository(
         if (!project) return null;
         const repository = await sourceControl.repositories.get({ orgId, id: project.repositoryId });
         if (!repository) return null;
+        const connection = await sourceControl.connections.get({ orgId, id: project.connectionId });
+        if (!connection) return null;
         return {
           sourceControl,
           project,
+          factoryProjectId: connection.factoryProjectId,
           defaultBranch: project.branch ?? repository.defaultBranch,
         };
       }),
@@ -296,6 +300,7 @@ function projectSessionRoutes(
           .create({
             sessionId,
             projectRepositoryId: project.project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,

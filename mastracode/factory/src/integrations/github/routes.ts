@@ -1335,6 +1335,7 @@ function buildProjectGitRoutes({
           .create({
             sessionId,
             projectRepositoryId: project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,

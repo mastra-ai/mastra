@@ -64,7 +64,7 @@ async function seedGitLabRepository() {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/factory-gitlab-primary',
   });
-  return { seed, sourceControl, projectRepository };
+  return { seed, sourceControl, projectRepository, project };
 }
 
 describe('source-control session routes', () => {
@@ -119,6 +119,22 @@ describe('source-control session routes', () => {
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       projectRepositoryId: projectRepository.id,
+    });
+  });
+
+  it('stamps the factory of the link on the session it creates', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], seed.memorySettings);
+    const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(200);
+    const { session } = (await response.json()) as { session: { sessionId: string } };
+    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      factoryProjectId: project.id,
     });
   });
 

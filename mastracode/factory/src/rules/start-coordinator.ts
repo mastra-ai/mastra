@@ -69,21 +69,20 @@ type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 async function resolveSourceSession(
   storage: SourceControlStorageHandle,
   request: FactoryStartRequest,
-): Promise<SourceControlSession> {
+): Promise<SourceControlSession & { projectRepositoryId: string }> {
   const session = await storage.sessions.getBySessionId(request.sessionId);
   if (!session || session.orgId !== request.orgId || session.userId !== request.userId) {
     throw new Error('Factory session not found');
   }
-  const projectRepository = await storage.projectRepositories.get({
-    orgId: request.orgId,
-    id: session.projectRepositoryId,
-  });
+  const projectRepositoryId = session.projectRepositoryId;
+  if (!projectRepositoryId) throw new Error('Factory session repository not found');
+  const projectRepository = await storage.projectRepositories.get({ orgId: request.orgId, id: projectRepositoryId });
   if (!projectRepository) throw new Error('Factory session repository not found');
   const connection = await storage.connections.get({ orgId: request.orgId, id: projectRepository.connectionId });
   if (!connection || connection.factoryProjectId !== request.factoryProjectId) {
     throw new Error('Factory session does not belong to this project');
   }
-  return session;
+  return { ...session, projectRepositoryId };
 }
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
