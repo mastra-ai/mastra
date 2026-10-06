@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed composer attachments to use a consistent height across file types and align their remove controls.
+Improved composer attachments with a consistent compact card style across file types, filenames beside previews or file icons, and inline remove controls. Cards share the same height, surface, and corners, with widths that fit their content.

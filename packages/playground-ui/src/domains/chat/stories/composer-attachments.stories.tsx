@@ -24,12 +24,13 @@ type Story = StoryObj<typeof meta>;
 
 const imageSrc = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="320" height="180" fill="#182c25"/><rect x="40" y="40" width="240" height="100" rx="12" fill="#a3e8c0"/><path d="m120 90 25 25 55-55" fill="none" stroke="#182c25" stroke-width="10"/></svg>')}`;
 
-function AttachmentComposer({ imagesOnly = false }: { imagesOnly?: boolean }) {
+function AttachmentComposer({
+  files = ['diagram.png', 'review-notes-with-a-long-filename-é日本語.csv', 'brief.pdf', 'clip.mp4'],
+}: {
+  files?: string[];
+}) {
   const [removed, setRemoved] = useState<string[]>([]);
-  const names = imagesOnly
-    ? ['diagram.png']
-    : ['diagram.png', 'review-notes-with-a-long-filename-é日本語.csv', 'brief.pdf', 'clip.mp4'];
-  const attachments = names.filter(name => !removed.includes(name));
+  const attachments = files.filter(name => !removed.includes(name));
 
   return (
     <Composer onSubmit={event => event.preventDefault()}>
@@ -40,7 +41,7 @@ function AttachmentComposer({ imagesOnly = false }: { imagesOnly?: boolean }) {
               <ComposerAttachment
                 key={name}
                 name={name}
-                variant={name.endsWith('.csv') ? 'inline' : 'thumbnail'}
+                variant={name.endsWith('.csv') || name.endsWith('.txt') ? 'inline' : 'thumbnail'}
                 onRemove={() => setRemoved(current => [...current, name])}
               >
                 <AttachmentPreview name={name} />
@@ -56,13 +57,16 @@ function AttachmentComposer({ imagesOnly = false }: { imagesOnly?: boolean }) {
 
 function AttachmentPreview({ name }: { name: string }) {
   if (name.endsWith('.png')) return <ImageEntry src={imageSrc} name={name} />;
-  if (name.endsWith('.csv')) return <TxtEntry name={name} data={'name,score\nZoë,12\n日本語,20'} />;
+  if (name.endsWith('.csv') || name.endsWith('.txt'))
+    return <TxtEntry name={name} data={'name,score\nZoë,12\n日本語,20'} />;
   if (name.endsWith('.pdf')) return <PdfEntry data="" url="https://example.com/brief.pdf" />;
-  return <FileChipEntry name="gs://attachments/clip.mp4" contentType="video/mp4" />;
+  if (name.endsWith('.mp4')) return <FileChipEntry name={name} contentType="video/mp4" />;
+  if (name.endsWith('.mp3')) return <FileChipEntry name={name} contentType="audio/mpeg" />;
+  return <FileChipEntry name={name} contentType="application/octet-stream" />;
 }
 
 export const Images: Story = {
-  render: () => <AttachmentComposer imagesOnly />,
+  render: () => <AttachmentComposer files={['diagram.png']} />,
 };
 
 export const MixedFiles: Story = {
@@ -70,14 +74,25 @@ export const MixedFiles: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const attachments = canvas.getByRole('region', { name: 'Draft attachments' });
-    const previews = Array.from(attachments.children).map(attachment => attachment.firstElementChild);
+    const previews = Array.from(attachments.children);
     const thumbnailHeight = previews[0]?.getBoundingClientRect().height;
+    const thumbnailStyle = previews[0] && getComputedStyle(previews[0]);
 
     await expect(thumbnailHeight).toBeGreaterThan(0);
     for (const preview of previews) {
       await expect(preview?.getBoundingClientRect().height).toBe(thumbnailHeight);
-      const control = preview?.querySelector('button, a');
-      if (control) await expect(control.getBoundingClientRect().height).toBe(thumbnailHeight);
+      const style = getComputedStyle(preview);
+      await expect(preview).toHaveTextContent(preview.getAttribute('title') ?? '');
+      await expect(style.borderRadius).toBe(thumbnailStyle?.borderRadius);
+      await expect(parseFloat(style.borderRadius)).toBeLessThan((thumbnailHeight ?? 0) / 2);
+      await expect(style.backgroundColor).toBe(thumbnailStyle?.backgroundColor);
+      await expect(style.boxShadow).toBe(thumbnailStyle?.boxShadow);
+      const control = preview.firstElementChild?.querySelector('button, a');
+      if (control) {
+        await expect(control.getBoundingClientRect().height).toBe(thumbnailHeight);
+        await expect(getComputedStyle(control).borderRadius).toBe(style.borderRadius);
+        await expect(getComputedStyle(control).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      }
     }
 
     const removeButtons = canvas.getAllByRole('button', { name: /^Remove / });
@@ -85,7 +100,27 @@ export const MixedFiles: Story = {
     for (const button of removeButtons) {
       await expect(button.getBoundingClientRect().top).toBe(removeTop);
     }
+    const longFilename = canvas.getByText('review-notes-with-a-long-filename-é日本語.csv');
+    await expect(longFilename.scrollWidth).toBeGreaterThan(longFilename.clientWidth);
+    await expect(getComputedStyle(longFilename).textOverflow).toBe('ellipsis');
   },
+};
+
+export const AllFileTypes: Story = {
+  render: () => (
+    <AttachmentComposer
+      files={[
+        'diagram.png',
+        'notes.txt',
+        'review-notes-with-a-long-filename-é日本語.csv',
+        'brief.pdf',
+        'clip.mp4',
+        'recording.mp3',
+        'archive.zip',
+      ]}
+    />
+  ),
+  play: MixedFiles.play,
 };
 
 export const PreviewAndRemove: Story = {
@@ -102,5 +137,17 @@ export const PreviewAndRemove: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Remove diagram.png' }));
     await expect(canvas.queryByRole('button', { name: 'Preview diagram.png' })).not.toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: /Preview review-notes/ })).toBeVisible();
+    const textPreview = canvas.getByRole('button', { name: /Preview review-notes/ });
+    textPreview.focus();
+    await userEvent.keyboard('{Enter}');
+    const textDialog = await within(canvasElement.ownerDocument.body).findByRole('dialog');
+    await expect(textDialog).toHaveTextContent('Zoë,12');
+    await expect(textDialog).toHaveTextContent('日本語,20');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(textPreview).toHaveFocus());
+    await userEvent.click(canvas.getByRole('button', { name: /Remove review-notes/ }));
+    await expect(canvas.queryByRole('button', { name: /Preview review-notes/ })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Remove brief.pdf' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Remove clip.mp4' })).toBeVisible();
   },
 };
