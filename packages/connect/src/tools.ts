@@ -84,6 +84,21 @@ export interface ToolsOptions {
 // bind consumers to the exact @mastra/core type instance used to build Connect.
 type ResolvedToolsRecord = Record<string, { id: string }>;
 
+/** Context Mastra passes when invoking the resolver as a dynamic `tools` argument. */
+export interface ToolsResolverContext {
+  requestContext?: unknown;
+  mastra?: unknown;
+}
+
+/**
+ * Tools accepted by {@link ToolsResolver.with}: a static tool record (e.g.
+ * `createTool()` outputs) or a function — sync or async, optionally reading
+ * the per-request context — returning one.
+ */
+export type ToolsWithInput =
+  | Record<string, { id: string }>
+  | ((ctx?: ToolsResolverContext) => Record<string, { id: string }> | Promise<Record<string, { id: string }>>);
+
 /**
  * Live tool resolver returned by `tools()`. Pass it straight to an agent's
  * dynamic `tools` argument: Mastra calls it per generate/stream, so providers
@@ -92,13 +107,23 @@ type ResolvedToolsRecord = Record<string, { id: string }>;
  * current flat tool record.
  */
 export interface ToolsResolver {
-  (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<ResolvedToolsRecord>;
+  (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord>;
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
   /** Fetches tools from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<ResolvedToolsRecord>;
   /** Closes MCP transports owned by this resolver and clears its cached snapshot. */
   disconnect(): Promise<void>;
+  /**
+   * Returns a new resolver that merges `extra` tools into every resolution,
+   * so an agent can combine its own tools with connect tools in one
+   * expression: `tools: connectTools.with({ weatherTool })`. On a key
+   * collision the extra tools win — connect keys are provider-prefixed, so
+   * collisions only happen deliberately. The cache handles (`invalidate`,
+   * `refresh`, `disconnect`) delegate to the base resolver, and `.with()`
+   * calls chain.
+   */
+  with(extra: ToolsWithInput): ToolsResolver;
 }
 
 interface NormalizedRequest {
@@ -247,7 +272,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     return refresh();
   };
 
-  return Object.assign(resolve, {
+  const resolver: ToolsResolver = Object.assign(resolve, {
     invalidate: (): void => {
       cache = undefined;
     },
@@ -269,7 +294,32 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       })();
       return closing;
     },
+    with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
   });
+  return resolver;
+}
+
+/**
+ * Builds the resolver `.with()` returns: resolutions merge the base
+ * resolver's tools with `extra` (extra wins on key collision), cache handles
+ * delegate to the base, and further `.with()` calls chain.
+ */
+function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolver {
+  const resolveExtra = typeof extra === 'function' ? extra : (): Record<string, { id: string }> => extra;
+  const resolve = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
+    const [baseTools, extraTools] = await Promise.all([base(ctx), resolveExtra(ctx)]);
+    return { ...baseTools, ...extraTools };
+  };
+  const resolver: ToolsResolver = Object.assign(resolve, {
+    invalidate: (): void => base.invalidate(),
+    refresh: async (): Promise<ResolvedToolsRecord> => {
+      const [baseTools, extraTools] = await Promise.all([base.refresh(), resolveExtra()]);
+      return { ...baseTools, ...extraTools };
+    },
+    disconnect: (): Promise<void> => base.disconnect(),
+    with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+  });
+  return resolver;
 }
 
 /** Internal normalization of the `providers` option. */

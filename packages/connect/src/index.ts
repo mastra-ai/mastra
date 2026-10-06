@@ -1,5 +1,11 @@
 export { tools } from './tools.js';
-export type { ToolsOptions, ToolsProviderOptions, ToolsResolver } from './tools.js';
+export type {
+  ToolsOptions,
+  ToolsProviderOptions,
+  ToolsResolver,
+  ToolsResolverContext,
+  ToolsWithInput,
+} from './tools.js';
 export { channels } from './channels.js';
 export type {
   ChannelsOptions,

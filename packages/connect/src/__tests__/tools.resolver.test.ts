@@ -451,6 +451,45 @@ describe('providers option shapes', () => {
     expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
   });
 
+  it('merges static extra tools via .with(), extras winning on collision', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const localTool = { id: 'local_weather' };
+    const override = { id: 'overridden' };
+    const merged = connect(options).with({ weather: localTool, linear_fake_tool: override });
+    const resolved = await merged();
+    expect(resolved.weather).toBe(localTool);
+    expect(resolved.linear_fake_tool).toBe(override);
+  });
+
+  it('passes the resolution context to a .with() function and supports chaining', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const extras = vi.fn().mockResolvedValue({ weather: { id: 'local_weather' } });
+    const merged = connect(options)
+      .with(extras)
+      .with({ second: { id: 'second' } });
+    const ctx = { requestContext: { role: 'viewer' } };
+    const resolved = await merged(ctx);
+    expect(extras).toHaveBeenCalledWith(ctx);
+    expect(Object.keys(resolved).sort()).toEqual(['linear_fake_tool', 'second', 'weather']);
+  });
+
+  it('delegates cache handles from a .with() resolver to the base resolver', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options, fetchMock } = resolverOptions(() => [makeConnection()]);
+    const merged = connect(options).with({ weather: { id: 'local_weather' } });
+    await merged();
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    await merged();
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst); // cached
+    merged.invalidate();
+    const refreshed = await merged.refresh();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    expect(Object.keys(refreshed).sort()).toEqual(['linear_fake_tool', 'weather']);
+    await merged.disconnect();
+  });
+
   it('downgrades unknown-provider validation to warn-and-skip when the catalog is unavailable', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
