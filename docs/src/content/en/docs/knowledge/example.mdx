@@ -27,9 +27,9 @@ Repository: app
 The scopes use these conventions:
 
 - Shared product scopes are readable across the organization.
-- Private facts about shared subjects belong in explicit internal companion scopes.
+- Private facts about shared subjects belong in internal scopes that carry explicit restricted grants. The `internal` name and the nesting are descriptive only; they don't make a scope private, and an internal scope never mirrors a public parent.
 - Issue and pull request scopes are source artifacts. Membership relates them to the product scopes they concern.
-- Session capture is routed to uncurated companions of the resource scopes held by that session.
+- Session observations are curated directly into the session's authorized resource and thread scopes. Provisional staging scopes are an optional host choice, not a required landing zone.
 
 Addresses are stable lookup keys. Scope membership edges define parent and cross-cutting placement.
 
@@ -39,7 +39,7 @@ Use the instance description to tell compilers and agents:
 
 1. Which roots exist and what each root contains.
 1. Who can read, append, edit, suggest, or own each area.
-1. Where private or provisional information belongs.
+1. Where restricted or provisional information belongs, and which grants make it restricted.
 1. Which importers can write each source or product scope.
 1. Which destination is safest when placement is uncertain.
 
@@ -49,14 +49,14 @@ Use a direct `structure` plan when the initial graph must be deterministic. Use 
 
 A static repository importer creates one bound node for each issue and pull request, then writes source records with explicit source references converted into wikilinks. It advances its durable cursor only after mutations commit.
 
-An agentic merged-pull-request importer reads a bounded source delta before integrating current truth into product scopes. It cites the source pull request nodes and writes private-source conclusions to internal companions. Importer state stores the last processed source revision.
+An agentic merged-pull-request importer reads a bounded source delta before integrating current truth into product scopes. It cites the source pull request nodes and writes private-source conclusions to restricted internal scopes it's explicitly granted. Importer state stores the last processed source revision.
 
 ## Access
 
-- Session agents read curated product knowledge and suggest changes. They directly write only to authorized work or uncurated scopes.
-- Curators edit approved product destinations and own the uncurated companions assigned to their host-registered profiles.
+- Session agents read curated product knowledge and suggest changes. They directly write only where the session holds the capability.
+- Observation-time curation acts with the parent session's authority. It has no separate curator grants, so it writes only where the session can write.
 - Static importers own their source bindings and receive only the grants required by their registrations.
 - Agentic importers receive explicit read context and write destinations.
 - Human operators review governed proposals through the Approvals surface.
 
-This structure keeps source evidence replayable, provisional capture visible, and curated product knowledge worth reading without allowing content, wikilinks, or client-supplied IDs to widen authority.
+This structure keeps source evidence replayable, restricted content behind explicit grants, and curated product knowledge worth reading without allowing content, wikilinks, or client-supplied IDs to widen authority.

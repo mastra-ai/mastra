@@ -1,27 +1,27 @@
 ---
 title: 'Knowledge capture'
-description: 'Capture session knowledge at the resource boundary without widening authority.'
+description: 'Capture committed session observations into Knowledge at the resource boundary without widening authority.'
 packages:
   - '@mastra/core'
 ---
 
 # Knowledge capture
 
-Capture converts a session's useful facts into Knowledge at the resource boundary. It's separate from authorization.
+Capture converts a session's committed observations into Knowledge at the resource boundary. The observation-time [curate agent](/docs/knowledge/curation) performs it. Capture is separate from authorization.
 
 ## Choose capture scopes
 
 The host derives capture scopes from the authenticated resource, thread, and application context. Keep resource and thread scopes when clamping the operation. Dropping them can hide valid shared content or leak organization-wide content.
 
-Captured records write to an uncurated companion associated with the curated destination. A companion is an ordinary node with `role: "mirror"` and the same governed read and write paths as other nodes. Treat its content as provisional until curation integrates it.
+Captured records are written directly into scopes the session is authorized to write. A host can optionally configure a provisional staging scope with a mirror from its parent. That scope has the parent's exact effective capabilities, so it's ordinary and non-private, not a quarantine.
 
 ## Resolve mentions inside the frontier
 
 Resolve wikilinks only among uniquely visible targets in the session-clamped scopes. Captured text can't add authority. If a referenced target is hidden or ambiguous, preserve privacy and leave it unresolved.
 
-## Separate capture from promotion
+## Keep capture inside ordinary authority
 
-Capture appends evidence without promoting facts into curated nodes. It leaves grants and structure unchanged. Promotion is a curation action with its own authorization and compare-and-swap checks.
+Capture never changes grants or structure. Writes use the session's current capabilities and numeric compare-and-swap versions. Suggest capability doesn't permit direct writes.
 
 ## Protect semantic indexing
 

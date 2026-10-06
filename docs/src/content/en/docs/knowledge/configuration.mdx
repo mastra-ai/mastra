@@ -56,6 +56,8 @@ export const knowledge = new Knowledge({
 await knowledge.reconcile()
 ```
 
+The `internal` address is a name, not an access rule. This plan gives both children the same visibility. To restrict `org:acme:internal`, give it explicit restricted grants and no mirror from a public scope. See [private placement](/docs/knowledge/access#private-placement).
+
 The persisted cache key includes the normalized description, compilation level, and scope type. An unchanged description reuses its plan after a restart. Concurrent calls to `reconcile()` on one `Knowledge` instance await the same active goal.
 
 The graph-state judge verifies newly created scope memberships and grants after plan application. A compiler or apply failure gets one retry. A later `reconcile()` resumes the persisted compiler or apply checkpoint instead of discarding completed work.
@@ -116,6 +118,8 @@ const plan = {
   ],
 }
 ```
+
+Declared structure scopes whose addresses match a configured scope type receive that type's grants when they're created. Unmatched scopes receive no implicit grants.
 
 Scope-type plans use copy-on-create semantics. Changing the description affects future scope creation only. Mastra doesn't retrofit new child structure or access rules onto an existing concrete scope.
 

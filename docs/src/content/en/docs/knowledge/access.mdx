@@ -30,7 +30,13 @@ From least to most capable:
 - `edit`: Update content.
 - `owner`: Manage access and structure.
 
-For each vouched scope, authorization follows scope memberships toward the target. The nearest grant declaration stops that branch. Multiple branches combine at the greatest role. Traversal uses a visited set, so cycles are safe.
+Vouched scopes seed grant eligibility. They don't make a scope readable on their own. A grant applies when the scope it references is vouched or already reachable, and mirrors propagate effective capabilities. Authorization repeats this until the capability set stops growing, so cycles and traversal order can't change the result. Multiple paths combine at the greatest role.
+
+## Private placement
+
+A scope is private only when every path that reaches it comes from an explicit restricted grant. A suffix such as `:internal`, a parent placement, or a description never establishes privacy. Don't give a private scope a mirror from a public scope. A mirrored provisional scope is exactly as public as its source.
+
+A node with both public and private membership stays visible through the public membership. Copying private prose into a public record has already disclosed it; mention filtering can't redact that text.
 
 ## Privacy rules
 
@@ -41,5 +47,3 @@ Wikilinks carry content without conferring access. A link to a hidden node grant
 ## Mutations
 
 Mutations use numeric versions for compare-and-swap and can also be fenced by the current access epoch. On a conflict, reread through the same authorized API and retry intentionally. Don't bypass governed `Knowledge` methods with raw storage access.
-
-Curator profiles are also host-bound. The host registers the profile and identity scope. Content scopes describe mutation targets. They never vouch for the curator's principal authority.
