@@ -626,16 +626,98 @@ export class Knowledge extends MastraBase {
     if (mutation.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     const nodeId = typeof mutation.node === 'string' ? mutation.node : mutation.node.id;
     await this.#authorizeNodeMutation({ storage, frontier, nodeId, capability: 'append' });
+    await this.#authorizeRecordContent({ storage, frontier, record: mutation });
+    return storage.createRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
+  }
+
+  /** Create a node and its first record atomically, authorized as `createNode` plus `createRecord`. */
+  async createNodeWithRecord(input: {
+    node: CreateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'>;
+    vouchedScopeIds: KnowledgeScopeIds;
+  }) {
+    const storage = await this.#getStorage();
+    await this.#assertImportRun(storage, input.node.importRunId);
+    await this.#assertImportRun(storage, input.record.importRunId);
+    const frontier = await this.evaluateAccess(input.vouchedScopeIds);
+    if (input.node.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     assertKnowledgeScopeCapabilities({
       frontier,
-      scopeIds: mutation.scopeIds,
+      scopeIds: input.node.scopeIds,
+      capability: input.node.isScope ? 'createChildren' : 'append',
+      targetType: 'scope',
+    });
+    await this.#authorizeRecordContent({ storage, frontier, record: input.record });
+    return storage.createNodeWithRecord({
+      node: { ...input.node, expectedAccessEpoch: frontier.accessEpoch },
+      record: input.record,
+    });
+  }
+
+  /**
+   * Update a node and replace its records from one source atomically. Requires `edit` on the node and
+   * `manageAccess` on the node and on every replaced record, matching `updateNode` plus `deleteRecord`.
+   */
+  async replaceNodeRecords(input: {
+    node: UpdateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
+    vouchedScopeIds: KnowledgeScopeIds;
+  }) {
+    const storage = await this.#getStorage();
+    await this.#assertImportRun(storage, input.node.importRunId);
+    await this.#assertImportRun(storage, input.record.importRunId);
+    if (input.node.scopeIds !== undefined || input.node.isScope !== undefined) {
+      throw new Error('replaceNodeRecords cannot change node scopes or scope status.');
+    }
+    const frontier = await this.evaluateAccess(input.vouchedScopeIds);
+    const readableScopeIds = getKnowledgeReadableScopeIds(frontier);
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId: input.node.id, capability: 'edit' });
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId: input.node.id, capability: 'manageAccess' });
+    let cursor: string | undefined;
+    do {
+      const page = await storage.listRecords({
+        node: input.node.id,
+        scopeIds: readableScopeIds,
+        limit: 100,
+        ...(cursor ? { after: cursor } : {}),
+      });
+      for (const record of page.records) {
+        if (record.source !== input.record.source) continue;
+        await this.#authorizeRecordMutation({
+          storage,
+          frontier,
+          recordId: record.id,
+          nodeId: record.nodeId,
+          capability: 'manageAccess',
+        });
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    await this.#authorizeRecordContent({ storage, frontier, record: input.record });
+    return storage.replaceNodeRecords({
+      node: { ...input.node, expectedAccessEpoch: frontier.accessEpoch },
+      record: input.record,
+      visibilityScopeIds: readableScopeIds,
+    });
+  }
+
+  async #authorizeRecordContent(input: {
+    storage: KnowledgeStorage;
+    frontier: KnowledgeAccessFrontier;
+    record: Pick<CreateKnowledgeRecordInput, 'scopeIds' | 'text' | 'resolutionScopeIds'>;
+  }) {
+    const { storage, frontier, record } = input;
+    if (record.scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+    assertKnowledgeScopeCapabilities({
+      frontier,
+      scopeIds: record.scopeIds,
       capability: 'append',
       targetType: 'scope',
     });
-    if (mutation.resolutionScopeIds) {
+    if (record.resolutionScopeIds) {
       assertKnowledgeScopeCapabilities({
         frontier,
-        scopeIds: mutation.resolutionScopeIds,
+        scopeIds: record.resolutionScopeIds,
         capability: 'read',
         targetType: 'scope',
       });
@@ -643,10 +725,9 @@ export class Knowledge extends MastraBase {
     await this.#authorizeMentionTargets({
       storage,
       frontier,
-      text: mutation.text,
-      resolutionScopeIds: mutation.resolutionScopeIds ?? mutation.scopeIds,
+      text: record.text,
+      resolutionScopeIds: record.resolutionScopeIds ?? record.scopeIds,
     });
-    return storage.createRecord({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
   async getRecord(input: { id: string; scopeIds: KnowledgeScopeIds; includeDeleted?: boolean }) {
