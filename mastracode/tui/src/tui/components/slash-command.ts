@@ -1,18 +1,15 @@
 /**
- * SlashCommandComponent - renders a "● /command" block for slash command messages
- * showing the command name as a heading and truncated content that can be
+ * SlashCommandComponent - renders a "• skill /name" or "• command /name" block for slash command messages
+ * showing the command name as a heading; the content stays hidden until
  * expanded with ctrl+e. The full content is still sent to the assistant.
  */
 
 import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, mastra } from '../theme.js';
+import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
-import { toolBlock } from './surface.js';
+import { statusDot, toolBlock } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
-
-const MAX_COLLAPSED_LINES = 3;
-const getBorderColor = () => mastra.green;
 
 export class SlashCommandComponent extends WidthAwareContainer {
   private commandName: string;
@@ -48,13 +45,17 @@ export class SlashCommandComponent extends WidthAwareContainer {
 
     const width = Math.max(1, termWidth - BOX_INDENT * 2);
     const maxLineWidth = Math.max(1, width - 3);
-    // "● /command" with the command's expanded content on a panel below
-    const dot = chalk.hex(getBorderColor())('●');
-    const heading = chalk.hex(mastra.specialGray)(`/${this.commandName}`);
+    // "• skill /name" or "• command /name", styled like a tool header, with the expanded content on a
+    // panel below.
+    const dot = statusDot('done');
+    const isSkill = this.commandName.startsWith('skill/');
+    const name = isSkill ? this.commandName.slice('skill/'.length) : this.commandName;
+    const heading = `${theme.bold(theme.fg('success', isSkill ? 'skill' : 'command'))} ${theme.fg('muted', `/${name}`)}`;
     const block = (output: string[]) =>
       this.addChild(new Text(toolBlock(dot, heading, output, width).join('\n'), BOX_INDENT, 0));
 
-    if (this.contentLines.length === 0) {
+    // Collapsed shows only the header; ctrl+e reveals the expanded prompt.
+    if (this.contentLines.length === 0 || !this.expanded) {
       block([]);
       return;
     }
@@ -76,18 +77,11 @@ export class SlashCommandComponent extends WidthAwareContainer {
       }
     }
 
-    const truncated = !this.expanded && wrappedLines.length > MAX_COLLAPSED_LINES + 1;
-    const displayLines = truncated ? wrappedLines.slice(0, MAX_COLLAPSED_LINES) : wrappedLines;
-
-    const output = displayLines.map(line =>
-      chalk.hex(mastra.mainGray)(line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line),
+    block(
+      wrappedLines.map(line =>
+        chalk.hex(mastra.mainGray)(line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line),
+      ),
     );
-    if (truncated) {
-      output.push(
-        chalk.hex(mastra.darkGray)(`... ${wrappedLines.length - MAX_COLLAPSED_LINES} more lines (ctrl+e to expand)`),
-      );
-    }
-    block(output);
   }
 
   getChatSpacingKind(): ChatSpacingKind {
