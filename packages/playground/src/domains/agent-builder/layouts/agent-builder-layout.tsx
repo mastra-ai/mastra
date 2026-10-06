@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { Outlet } from 'react-router';
 import { AgentBuilderMobileBottomBar } from './agent-builder-mobile-bottom-bar';
 import { AgentBuilderSidebar } from './agent-builder-sidebar';
@@ -6,7 +6,7 @@ import { AgentBuilderSidebar } from './agent-builder-sidebar';
 export const AgentBuilderLayout = () => {
   return (
     <div className="h-screen bg-sidebar">
-      <MainSidebarProvider>
+      <SidebarProvider>
         <div className="grid h-full grid-rows-1 md:grid-cols-[auto_1fr] md:divide-x md:divide-border">
           <div className="hidden md:block">
             <AgentBuilderSidebar />
@@ -18,7 +18,7 @@ export const AgentBuilderLayout = () => {
           </div>
         </div>
         <AgentBuilderMobileBottomBar />
-      </MainSidebarProvider>
+      </SidebarProvider>
     </div>
   );
 };

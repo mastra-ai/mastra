@@ -18,6 +18,30 @@ interface HttpTransportOptions {
   maxBufferSize?: number;
 }
 
+class HttpResponseError extends Error {
+  constructor(
+    readonly status: number,
+    statusText: string,
+    readonly retryAfterMs: number | undefined,
+  ) {
+    super(`HTTP ${status}: ${statusText}`);
+  }
+}
+
+// Other 4xx responses mean the request itself is wrong and will fail the same way on every retry.
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+// Retry-After is either delta-seconds or an HTTP date (RFC 9110). Invalid values are ignored.
+function parseRetryAfter(headers: Headers | undefined): number | undefined {
+  const value = headers?.get('retry-after')?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+}
+
 export class HttpTransport extends LoggerTransport {
   private url: string;
   private method: string;
@@ -89,17 +113,21 @@ export class HttpTransport extends LoggerTransport {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new HttpResponseError(response.status, response.statusText, parseRetryAfter(response.headers));
       }
 
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (retryCount < this.retryOptions.maxRetries) {
-        const delay = this.retryOptions.exponentialBackoff
+      const isPermanent = error instanceof HttpResponseError && !isRetryableStatus(error.status);
+      if (!isPermanent && retryCount < this.retryOptions.maxRetries) {
+        const backoff = this.retryOptions.exponentialBackoff
           ? this.retryOptions.retryDelay * Math.pow(2, retryCount)
           : this.retryOptions.retryDelay;
+        // Honor the server's Retry-After, capped at the request timeout so a large value can't stall shutdown.
+        const retryAfter = error instanceof HttpResponseError ? (error.retryAfterMs ?? 0) : 0;
+        const delay = Math.max(backoff, Math.min(retryAfter, this.timeout));
 
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeHttpRequest(data, retryCount + 1);
@@ -152,15 +180,18 @@ export class HttpTransport extends LoggerTransport {
     });
     this.flushPromise = flush;
     // Flushes requested while this request was in flight only got this promise back, so send their logs now,
-    // and keep draining full batches. On failure, wait for the next interval instead of retrying straight away.
-    flush.then(
-      () => {
-        if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
-          this.requestFlush();
-        }
-      },
-      () => {},
-    );
+    // and keep draining full batches. On a transient failure, wait for the next interval instead of retrying
+    // straight away. A permanently rejected batch was dropped, so the logs behind it can go out now.
+    const continueDraining = () => {
+      if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
+        this.requestFlush();
+      }
+    };
+    flush.then(continueDraining, error => {
+      if (error instanceof HttpResponseError && !isRetryableStatus(error.status)) {
+        continueDraining();
+      }
+    });
     return flush;
   }
 
@@ -172,7 +203,16 @@ export class HttpTransport extends LoggerTransport {
       await this.makeHttpRequest(logs);
       this.lastFlush = now;
     } catch (error) {
-      // On error, put logs back in the buffer
+      // The endpoint rejected this batch outright, so resending it can't succeed and would block the logs behind it.
+      if (error instanceof HttpResponseError && !isRetryableStatus(error.status)) {
+        this.droppedLogCount += logs.length;
+        console.warn(
+          `HttpTransport: endpoint rejected a batch with HTTP ${error.status}; dropping ${logs.length} logs. Use getDroppedLogCount() to track drops.`,
+        );
+        throw error;
+      }
+
+      // On a transient error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
       this.enforceBufferLimit();
       throw error;
