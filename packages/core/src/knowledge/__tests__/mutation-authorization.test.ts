@@ -374,6 +374,79 @@ describe('Knowledge mutation authorization', () => {
     expect(await storage.getRecord({ id: result.id })).toMatchObject({ text: 'Replacement' });
   });
 
+  it('replaceRecord fails without effects on a stale version, an access change, or a node move after authorization', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const vouchedScopeIds = [ids['principal:owner']!];
+    const node = await storage.createNode({ name: 'Pinned', scopeIds: [ids['scope:owner']!] });
+    const original = await storage.createRecord({ node, text: 'Original', scopeIds: [ids['scope:owner']!] });
+    const replacement = { text: 'Replacement', scopeIds: [ids['scope:owner']!] };
+    const records = () => storage.listRecords({ node, scopeIds: [ids['scope:owner']!], includeDeleted: true });
+    const before = await records();
+
+    await expect(
+      knowledge.replaceRecord({
+        id: original.id,
+        version: original.version - 1,
+        deletedBy: 'owner',
+        record: replacement,
+        vouchedScopeIds,
+      }),
+    ).rejects.toThrow();
+    expect(await records()).toEqual(before);
+
+    const getRecordScopeIds = storage.getRecordScopeIds.bind(storage);
+    const spy = vi.spyOn(storage, 'getRecordScopeIds').mockImplementationOnce(async id => {
+      await storage.upsertScopeGrant({
+        scopeNodeId: ids['scope:owner']!,
+        scopeRefId: ids['principal:owner']!,
+        role: 'readonly',
+      });
+      return getRecordScopeIds(id);
+    });
+    await expect(
+      knowledge.replaceRecord({
+        id: original.id,
+        version: original.version,
+        deletedBy: 'owner',
+        record: replacement,
+        vouchedScopeIds,
+      }),
+    ).rejects.toThrow();
+    spy.mockRestore();
+    await storage.upsertScopeGrant({
+      scopeNodeId: ids['scope:owner']!,
+      scopeRefId: ids['principal:owner']!,
+      role: 'owner',
+    });
+    expect(await records()).toEqual(before);
+
+    vi.spyOn(storage, 'getRecordScopeIds').mockImplementationOnce(async id => {
+      const current = (await storage.getNode(node.id))!;
+      await storage.updateNode({ id: node.id, version: current.version, scopeIds: [ids['scope:readonly']!] });
+      return getRecordScopeIds(id);
+    });
+    await expect(
+      knowledge.replaceRecord({
+        id: original.id,
+        version: original.version,
+        deletedBy: 'owner',
+        record: replacement,
+        vouchedScopeIds,
+      }),
+    ).rejects.toThrow();
+    const moved = (await storage.getNode(node.id))!;
+    expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:readonly']!]);
+    expect(
+      (
+        await storage.listRecords({
+          node: moved,
+          scopeIds: [ids['scope:owner']!, ids['scope:readonly']!],
+          includeDeleted: true,
+        })
+      ).records.map(record => [record.id, record.deletedAt ?? null]),
+    ).toEqual([[original.id, null]]);
+  });
+
   it('replaceNodeRecords fails without effects when access changes after authorization', async () => {
     const { knowledge, storage, ids } = await createFixture();
     const node = await storage.createNode({ name: 'Revoked', scopeIds: [ids['scope:owner']!] });

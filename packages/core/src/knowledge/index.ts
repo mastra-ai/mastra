@@ -734,8 +734,19 @@ export class Knowledge extends MastraBase {
       scopeIds: getKnowledgeReadableScopeIds(frontier),
     });
     if (!original) throw new KnowledgeNotFoundError('record', input.id);
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: original.nodeId, capability: 'edit' });
-    await this.#authorizeNodeMutation({ storage, frontier, nodeId: original.nodeId, capability: 'append' });
+    const { node, scopeIds } = await this.#authorizeNodeMutation({
+      storage,
+      frontier,
+      nodeId: original.nodeId,
+      capability: 'edit',
+    });
+    assertKnowledgeTargetCapability({
+      frontier,
+      scopeIds,
+      capability: 'append',
+      targetType: 'node',
+      targetId: node.id,
+    });
     await this.#authorizeRecordMutation({
       storage,
       frontier,
@@ -744,8 +755,6 @@ export class Knowledge extends MastraBase {
       capability: 'manageAccess',
     });
     await this.#authorizeRecordContent({ storage, frontier, record: input.record });
-    const node = await storage.getNode(original.nodeId);
-    if (!node) throw new KnowledgeNotFoundError('node', original.nodeId);
     return storage.replaceNodeRecords({
       node: { id: node.id, version: node.version, expectedAccessEpoch: frontier.accessEpoch },
       replacedRecords: [{ id: original.id, version: input.version }],
