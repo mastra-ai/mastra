@@ -604,7 +604,7 @@ describe('createRepoTemplate with repos', () => {
     }
   });
 
-  it('keeps the family stable across public/private reordering and member swaps, but not member changes', async () => {
+  it('keeps the family stable across public/private reordering and setup changes, but not across member changes', async () => {
     const privateWidgets = async () => ({
       cloneUrl: widgets,
       authorization: { scheme: 'bearer' as const, token: 'ghs_t' },
@@ -667,7 +667,7 @@ describe('createRepoTemplate with repos', () => {
     const guardStep = {
       method: 'runCmd',
       args: [
-        `( cd "widgets" && ( exit 7\n) ) || { mkdir -p ".mastra-sandbox" && printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
+        `( cd "widgets" && ( exit 7\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF 'widgets' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
       ],
     };
     expect(guardedOps[1]).toEqual(guardStep);
