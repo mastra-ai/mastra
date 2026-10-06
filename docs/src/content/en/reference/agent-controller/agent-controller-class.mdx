@@ -184,7 +184,8 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
   {
     name: 'workspace',
     type: 'DynamicArgument<Workspace | undefined>',
-    description: 'Static workspace or per-session workspace factory. A session must resolve a valid workspace.',
+    description:
+      'Static workspace or per-session workspace factory. A workspace is optional. Sessions without one support threads, state, and agent runs, but have no workspace tools.',
     isOptional: true,
   },
   {
