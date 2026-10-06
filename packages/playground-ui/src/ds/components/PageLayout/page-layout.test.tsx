@@ -7,9 +7,9 @@ afterEach(cleanup);
 
 describe('PageLayout', () => {
   describe('when breadcrumbs and header actions are provided', () => {
-    it('renders them inside a header above the main content', () => {
+    it.each(['container', 'wide'] as const)('renders them inside a header above the main content (%s)', variant => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
+        <PageLayout variant={variant} breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -22,9 +22,9 @@ describe('PageLayout', () => {
   });
 
   describe('when an action row is provided', () => {
-    it('pins it between the header and the scrollable body', () => {
+    it.each(['container', 'wide'] as const)('pins it between the header and the scrollable body (%s)', variant => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+        <PageLayout variant={variant} breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -67,7 +67,7 @@ describe('PageLayout', () => {
   });
 
   describe('when a header is provided', () => {
-    it.each(['container', 'narrow', 'fit'] as const)('renders it inside main before the body (%s)', variant => {
+    it.each(['container', 'narrow', 'fit', 'wide'] as const)('renders it inside main before the body (%s)', variant => {
       render(
         <PageLayout variant={variant} header={<h1>Title</h1>}>
           <p>Body</p>

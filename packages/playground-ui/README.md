@@ -21,6 +21,18 @@ export function SaveButton() {
 }
 ```
 
+### Page widths
+
+Use `PageLayout` with `variant="wide"` to align breadcrumbs, header actions, filters, the page header, and the body in a centered column with a maximum width of 80rem (1,280px). The column fills smaller viewports with the usual page gutters; filters stay above the scrollable body.
+
+```tsx
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+
+<PageLayout variant="wide" breadcrumbs={breadcrumbs} actionRow={filters}>
+  {content}
+</PageLayout>;
+```
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.

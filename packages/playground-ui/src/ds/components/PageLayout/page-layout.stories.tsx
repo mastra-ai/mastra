@@ -122,6 +122,31 @@ export const FullPage: Story = {
   ),
 };
 
+export const Wide: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout
+        variant="wide"
+        breadcrumbs={crumbs}
+        headerActions={headerActions}
+        header={pageHeader}
+        actionRow={
+          <ActionRow>
+            <ActionRow.Start>
+              <Input placeholder="Filter resources" className="max-w-120" />
+            </ActionRow.Start>
+            <ActionRow.End>
+              <Button>Sort</Button>
+            </ActionRow.End>
+          </ActionRow>
+        }
+      >
+        <div className="mt-6">{resourceList}</div>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
+
 export const Empty: Story = {
   render: () => (
     <StoryFrame>
