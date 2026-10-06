@@ -1,4 +1,5 @@
-import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { ToolSectionHeader } from '../tool-section-header';
 import { ToolUsedByRows } from './tool-used-by-rows';
 
 export interface ToolUsedBySectionProps {
@@ -9,9 +10,9 @@ export interface ToolUsedBySectionProps {
 export function ToolUsedBySection(props: ToolUsedBySectionProps) {
   return (
     <SettingsGroup>
-      <SettingsHeader>
+      <ToolSectionHeader>
         <SettingsTitle>Used by</SettingsTitle>
-      </SettingsHeader>
+      </ToolSectionHeader>
       <SettingsContainer>
         <ToolUsedByRows {...props} />
       </SettingsContainer>

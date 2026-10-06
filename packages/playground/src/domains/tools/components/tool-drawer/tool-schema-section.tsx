@@ -1,4 +1,5 @@
-import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { ToolSectionHeader } from '../tool-section-header';
 import { ToolSchemaRows } from './tool-schema-rows';
 import type { ToolSchemaRowsProps } from './tool-schema-rows';
 
@@ -10,9 +11,9 @@ export interface ToolSchemaSectionProps extends ToolSchemaRowsProps {
 export function ToolSchemaSection({ title, ...rows }: ToolSchemaSectionProps) {
   return (
     <SettingsGroup>
-      <SettingsHeader>
+      <ToolSectionHeader>
         <SettingsTitle>{title}</SettingsTitle>
-      </SettingsHeader>
+      </ToolSectionHeader>
       <SettingsContainer>
         <ToolSchemaRows {...rows} />
       </SettingsContainer>
