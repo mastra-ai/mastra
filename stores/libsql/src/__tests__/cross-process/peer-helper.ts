@@ -15,7 +15,8 @@
  *   `env.pubsub()` is the test process's own client of that socket.
  * - `env.spawnPeer(fixture, args)`: forks a tsx fixture (see ./peer-runtime.ts)
  *   and returns a handle with `send`, `waitFor`, `result`, `exit`, `pause`
- *   (SIGSTOP), `resume` (SIGCONT) and `kill`.
+ *   (SIGSTOP), `resume` (SIGCONT, which accepts a peer that finished cleanly on
+ *   the way up) and `kill`.
  * - `env.cleanup()`: kills stragglers (resuming paused ones first), closes the
  *   test process's pubsub and removes the temp directory.
  * - Every failure message carries each process's config (role, pid, socket,
@@ -173,6 +174,29 @@ function withHangGuard<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () 
   return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
 }
 
+/** `promise` if it settles within `timeoutMs`, otherwise `undefined`. */
+async function settledWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<undefined>(resolve => {
+        timer = setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * How long a failed state check waits for the exit it implies. `ps` cannot see
+ * a process that has just gone, and its exit event and final message are
+ * already on their way, so this only covers that gap — it is a hang guard, not
+ * a wait for something that might still happen.
+ */
+const PEER_EXIT_GRACE_MS = 5_000;
+
 const execFileAsync = promisify(execFile);
 
 /** Whether the OS reports `pid` as job-control stopped (`ps` state `T`). */
@@ -184,10 +208,28 @@ async function isStopped(pid: number): Promise<boolean> {
 /**
  * Re-check the process state until it matches. Each round is a `ps` call, not
  * a sleep; the hang guard bounds the loop.
+ *
+ * A `ps` that fails has no state to compare, so it is handed to the caller:
+ * only the caller knows whether a process that is gone is the answer it wanted
+ * (resuming a peer that finished on the way up) or a failure to report.
  */
-async function waitForStopState(pid: number, stopped: boolean, timeoutMs: number, onTimeout: () => Error) {
+async function waitForStopState(
+  pid: number,
+  stopped: boolean,
+  timeoutMs: number,
+  onTimeout: () => Error,
+  onStateCheckError: (error: unknown) => Promise<void> | void,
+) {
   const deadline = Date.now() + timeoutMs;
-  while ((await isStopped(pid)) !== stopped) {
+  for (;;) {
+    let actual: boolean;
+    try {
+      actual = await isStopped(pid);
+    } catch (error) {
+      await onStateCheckError(error);
+      return;
+    }
+    if (actual === stopped) return;
     if (Date.now() > deadline) throw onTimeout();
   }
 }
@@ -338,6 +380,8 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
 
     const label = () => `${peerConfig.role} (pid ${peerConfig.pid})`;
     const fail = (what: string) => new Error(`${what}\n${describe()}`);
+    const unreadableState = (signal: 'SIGSTOP' | 'SIGCONT', error: unknown) =>
+      `${label()} could not read process state after ${signal}: ${error instanceof Error ? error.message : String(error)}`;
     const exitedBefore = (what: string) =>
       exited.then(info => {
         throw fail(`${label()} exited (code ${info.code}, signal ${info.signal}) before ${what}`);
@@ -401,14 +445,46 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
       },
       async pause() {
         child.kill('SIGSTOP');
-        await waitForStopState(pid, true, PEER_TIMEOUT_MS, () =>
-          fail(`${label()} not reported stopped after SIGSTOP (hang guard)`),
+        await waitForStopState(
+          pid,
+          true,
+          PEER_TIMEOUT_MS,
+          () => fail(`${label()} not reported stopped after SIGSTOP (hang guard)`),
+          error => {
+            throw fail(unreadableState('SIGSTOP', error));
+          },
         );
       },
       async resume() {
         child.kill('SIGCONT');
-        await waitForStopState(pid, false, PEER_TIMEOUT_MS, () =>
-          fail(`${label()} still reported stopped after SIGCONT (hang guard)`),
+        await waitForStopState(
+          pid,
+          false,
+          PEER_TIMEOUT_MS,
+          () => fail(`${label()} still reported stopped after SIGCONT (hang guard)`),
+          async error => {
+            // `ps` has nothing to report once the peer is gone, and a peer with
+            // work already waiting can finish, report its result and exit before
+            // the first state check — the `heard` fixture in the self-tests does
+            // exactly that. That is a resume that worked, so accept it when the
+            // peer also closed cleanly *and* reported a result. Any other exit,
+            // a peer that never reports, and a state check that cannot be read at
+            // all (no `ps`, no permission) all stay failures.
+            const info = exitInfo ?? (await settledWithin(exited, PEER_EXIT_GRACE_MS));
+            if (info?.code === 0 && info.signal === null) {
+              if (!outcome) await settledWithin(outcomeReceived, PEER_EXIT_GRACE_MS);
+              if (outcome?.kind === 'result') return;
+            }
+            throw fail(
+              `${unreadableState('SIGCONT', error)}; ${
+                info ? `peer exited (code ${info.code}, signal ${info.signal})` : 'peer did not exit'
+              }${
+                outcome
+                  ? ` and reported ${outcome.kind === 'result' ? 'a result' : `an error (${outcome.error.name})`}`
+                  : ' and reported nothing'
+              }`,
+            );
+          },
         );
       },
       async kill({ timeoutMs = PEER_TIMEOUT_MS } = {}) {
