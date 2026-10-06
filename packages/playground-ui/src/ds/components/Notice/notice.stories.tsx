@@ -4,6 +4,8 @@ import { CodeBlock } from '../CodeBlock';
 import { TooltipProvider } from '../Tooltip';
 import { Notice } from './Notice';
 
+const previewClassName = 'mx-auto w-full max-w-200 rounded-lg bg-background p-6';
+
 const meta: Meta<typeof Notice> = {
   title: 'Elements/Notice',
   component: Notice,
@@ -19,7 +21,7 @@ const meta: Meta<typeof Notice> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="mx-auto w-full max-w-200 rounded-lg bg-background p-6">
+        <div className={previewClassName}>
           <Story />
         </div>
       </TooltipProvider>
