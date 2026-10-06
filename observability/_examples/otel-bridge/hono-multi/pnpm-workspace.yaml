@@ -9,7 +9,7 @@ allowBuilds:
   protobufjs: false
 
 catalog:
-  tsx: ^4.21.0
+  tsx: ^4.23.15
   typescript: ^5.9.3
 
 overrides:
