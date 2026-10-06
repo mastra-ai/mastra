@@ -409,6 +409,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row =>
           row.factoryProjectId === factoryProjectId &&
           row.orgId === orgId &&
+          row.projectRepositoryId !== null &&
           linkIds.has(row.projectRepositoryId) &&
           (row.visibility !== 'private' || row.userId === viewerUserId),
       );

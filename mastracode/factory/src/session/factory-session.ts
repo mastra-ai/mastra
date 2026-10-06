@@ -252,34 +252,6 @@ export async function resolveFactorySourceRepository(
 }
 
 /**
- * Walk a Factory user-session id back to the project it belongs to.
- *
- * Repo-backed channel threads are keyed by their Factory session id, which is
- * the only handle a session-start hook gets. This turns that id back into the
- * project whose configuration the session should adopt. Durable by
- * construction — it reads the same rows the session was created from, so it
- * survives restarts without any in-memory mapping.
- */
-export async function resolveFactoryProjectForSession(args: {
-  sourceControl: SourceControlStorageHandle;
-  sessionId: string;
-}): Promise<{ factoryProjectId: string; orgId: string; userId: string } | null> {
-  const { sourceControl, sessionId } = args;
-
-  const session = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!session) return null;
-  const projectRepository = await sourceControl.projectRepositories.get({
-    orgId: session.orgId,
-    id: session.projectRepositoryId,
-  });
-  if (!projectRepository) return null;
-  const connection = await sourceControl.connections.get({ orgId: session.orgId, id: projectRepository.connectionId });
-  if (!connection) return null;
-
-  return { factoryProjectId: connection.factoryProjectId, orgId: session.orgId, userId: session.userId };
-}
-
-/**
  * Create the source-control session a repo-backed factory run needs.
  *
  * `FactoryStartCoordinator.prepare` requires this record to already exist —
@@ -306,6 +278,7 @@ export async function ensureFactorySourceSession(
   const session = await sourceControl.sessions.create({
     sessionId: globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
+    factoryProjectId,
     orgId,
     userId,
     branch,

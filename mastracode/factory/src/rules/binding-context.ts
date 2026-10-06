@@ -21,7 +21,9 @@ type FactorySessionControllerContext = AgentControllerRequestContext<FactorySess
 
 /** Minimal source-control session lookup used to heal recovered session state. */
 export interface FactorySessionSourceLookup {
-  getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string; baseBranch: string } | null>;
+  getBySessionId(
+    sessionId: string,
+  ): Promise<{ orgId: string; projectRepositoryId: string | null; baseBranch: string } | null>;
 }
 
 export function getFactorySessionCoordinates(
@@ -132,7 +134,7 @@ async function healRecoveredSessionState(options: {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     const foundSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
     const sourceSession = foundSession?.orgId === binding.orgId ? foundSession : null;
-    if (sourceSession) {
+    if (sourceSession?.projectRepositoryId) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';

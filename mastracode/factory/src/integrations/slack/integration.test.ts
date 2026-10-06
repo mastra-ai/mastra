@@ -138,10 +138,13 @@ describe('SlackIntegration.channels', () => {
         projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-5' })) },
         sourceControlOwner: {
           sessions: {
-            getBySessionId: vi.fn(async () => ({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' })),
+            getBySessionId: vi.fn(async () => ({
+              orgId: 'org-1',
+              userId: 'user-1',
+              projectRepositoryId: 'pr-1',
+              factoryProjectId: 'fp-1',
+            })),
           },
-          projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
-          connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
         },
       }),
     );
