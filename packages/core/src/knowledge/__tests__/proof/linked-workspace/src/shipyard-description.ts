@@ -1,4 +1,5 @@
-// Full instance description from Shipyard src/mastra/index.ts, inspected 2026-09-08.
+// Instance description from Shipyard src/mastra/index.ts (inspected 2026-09-08), corrected for
+// Knowledge v2.1: privacy comes from explicit grants and there are no automatic capture companions.
 // Kept as input, not as a hand-authored structure plan.
 export const shipyardDescription = `
 Mastra's org-wide knowledge store. Audience: the Mastra team (the
@@ -14,17 +15,12 @@ and company. It is public-readonly and contains:
 - "areas": org, product-surface, market, and team context. Readable
   and writable by team:mastra only.
 
-Two kinds of companion scopes qualify content, and the name is the
-badge:
-- ":internal" = private. Anything private about a public subject
-  belongs in that scope's ":internal" companion (for example,
-  "feature:memory:internal"), never in the public scope. Publishing
-  later is a governed promotion.
-- ":uncurated" = provisional. Session capture lands in the
-  ":uncurated" companion of its suggested scope automatically. Treat
-  uncurated content you read as live-ish and unreviewed; deliberate
-  knowledge should be written to the proper scope explicitly, not left
-  to capture.
+Private companions qualify public subjects:
+- An ":internal" companion (for example, "feature:memory:internal")
+  sits directly beneath its public subject and holds anything private
+  about it. It is private only because it declares team-only grants
+  that stop public readonly inheritance; the name itself confers no
+  privacy. Publishing later is a governed promotion.
 
 A "repo:mastra" root scope holds artifacts of the public OSS repo,
 public-readonly, with children:
@@ -37,9 +33,11 @@ node and any features it concerns. When a PR or issue concerns a
 feature, member its work scope under that feature's scope.
 
 Placement defaults: knowledge about the issue or PR you are working on
-goes to its work scope. Session-local observations not worth sharing go
-to the private thread scope. Durable feature knowledge is suggested on
-the feature scope; only the merged-PR import agent and governed
-promotions write the feature tree directly. When unsure whether
+goes to its work scope. Session capture writes through ordinary
+Knowledge tools under the session's own authority; session-local
+observations not worth sharing go to the private thread scope.
+Durable feature knowledge is suggested on the feature scope; only
+the merged-PR import agent and governed promotions write the feature
+tree directly. When unsure whether
 something is public-safe, use the ":internal" companion.
 `.trim();
