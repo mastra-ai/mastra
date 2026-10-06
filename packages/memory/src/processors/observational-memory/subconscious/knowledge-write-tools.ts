@@ -1,5 +1,6 @@
-import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
-import { isKnowledgeScopeVisible, KnowledgeConflictError } from '@mastra/core/storage';
+import type { Knowledge } from '@mastra/core/knowledge';
+import type { KnowledgeScopeIds } from '@mastra/core/storage';
+import { KnowledgeNotFoundError } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -23,13 +24,7 @@ const dateTimeSchema: JSONSchema7 = {
 };
 
 type KnowledgeWriteToolsMemory = {
-  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
-  getKnowledgeInstance?: () =>
-    | { __getVisibleStructureScopes(heldAddresses: string[]): Array<{ address: string }> }
-    | undefined;
-  storage?: {
-    getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
-  };
+  getKnowledgeInstance?: () => Knowledge | undefined;
 };
 
 export interface KnowledgeWriteToolsOptions {
@@ -39,11 +34,19 @@ export interface KnowledgeWriteToolsOptions {
   sourceThreadId: string;
 }
 
-async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
-  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
-  const store = await memory.storage?.getStore('knowledge');
-  if (!store) throw new Error('Knowledge write tools require a configured knowledge storage domain.');
-  return store;
+function getKnowledge(memory: KnowledgeWriteToolsMemory): Knowledge {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge write tools require a configured Knowledge instance.');
+  return knowledge;
+}
+
+/**
+ * Writes run with the parent session's ordinary authority: the resource and thread rungs are the
+ * vouched principals (the org rung is never vouched, matching the read tools), and every mutation goes
+ * through the Knowledge facade, which authorizes capabilities and fences the access epoch.
+ */
+function vouchedScopeIds(options: KnowledgeWriteToolsOptions): KnowledgeScopeIds {
+  return options.scopeIds.slice(1);
 }
 
 function resolveWriteScopeIds(
@@ -59,43 +62,30 @@ function resolveWriteScopeIds(
  * the writer's held scopes. Structural placement is additive to the default identity rung.
  */
 async function resolveNodePlacement(
-  memory: KnowledgeWriteToolsMemory,
-  store: KnowledgeStorage,
+  knowledge: Knowledge,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
 ): Promise<KnowledgeScopeIds> {
   if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
     return resolveWriteScopeIds(options, placement as Exclude<SubconsciousScopeSelection, 'org'> | undefined);
   }
-  const frontier = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? []) ?? [];
-  const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
+  const frontier = knowledge.__getVisibleStructureScopes(options.scopeAddresses ?? []);
+  const scope = frontier.some(visible => visible.address === placement)
+    ? await (await knowledge.getStorageInternal()).getScopeAddress(placement)
+    : null;
   if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   return [...resolveWriteScopeIds(options), scope.scopeNodeId];
-}
-
-async function requireVisible(
-  store: KnowledgeStorage,
-  type: 'node' | 'record',
-  id: string,
-  options: KnowledgeWriteToolsOptions,
-): Promise<void> {
-  const visibleScopeIds = options.scopeIds.slice(1);
-  const visible =
-    type === 'node'
-      ? isKnowledgeScopeVisible(await store.getNodeScopeIds(id), visibleScopeIds)
-      : Boolean(await store.getVisibleRecord({ id, scopeIds: visibleScopeIds, includeDeleted: true }));
-  if (!visible) throw new Error(`${type === 'node' ? 'Knowledge node' : 'KnowledgeRecord'} not found: ${id}`);
 }
 
 export function createKnowledgeWriteTools(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
-  async function resolveWritableNode(id: string) {
-    const store = await getStore(memory);
-    const node = await store.getNode(id);
-    if (!node) throw new Error(`Knowledge node not found: ${id}`);
-    await requireVisible(store, 'node', node.id, options);
+  const vouched = vouchedScopeIds(options);
+
+  async function getVisibleNode(knowledge: Knowledge, id: string) {
+    const node = await knowledge.getNode({ id, scopeIds: vouched });
+    if (!node) throw new KnowledgeNotFoundError('node', id);
     return node;
   }
 
@@ -126,19 +116,20 @@ export function createKnowledgeWriteTools(
           scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           when?: string;
         };
-        const store = await getStore(memory);
-        const nodeScope = await resolveNodePlacement(memory, store, options, value.nodeScope);
+        const knowledge = getKnowledge(memory);
+        const nodeScope = await resolveNodePlacement(knowledge, options, value.nodeScope);
         const recordScope = resolveWriteScopeIds(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        return store.createNodeWithRecord({
+        return knowledge.createNodeWithRecord({
+          vouchedScopeIds: vouched,
           node: { name: value.name, kind: value.kind, scopeIds: nodeScope },
           record: {
             text: value.text,
             scopeIds: recordScope,
             source: CURATOR_IDENTITY,
             metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
-            resolutionScopeIds: options.scopeIds,
+            resolutionScopeIds: vouched,
           },
         });
       },
@@ -164,17 +155,16 @@ export function createKnowledgeWriteTools(
           scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           when?: string;
         };
-        const store = await getStore(memory);
-        const parent = await store.getNode(value.node);
-        if (!parent) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', parent.id, options);
+        const knowledge = getKnowledge(memory);
+        const parent = await getVisibleNode(knowledge, value.node);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        return store.createRecord({
+        return knowledge.createRecord({
+          vouchedScopeIds: vouched,
           node: parent,
           text: value.text,
           scopeIds: resolveWriteScopeIds(options, value.scope),
-          resolutionScopeIds: options.scopeIds,
+          resolutionScopeIds: vouched,
           source: CURATOR_IDENTITY,
           metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
         });
@@ -190,12 +180,16 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const store = await getStore(memory);
+        const knowledge = getKnowledge(memory);
         const id = (input as { recordId: string }).recordId;
-        const record = await store.getRecord({ id, includeDeleted: true });
-        if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
-        await requireVisible(store, 'record', record.id, options);
-        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: CURATOR_IDENTITY });
+        const record = await knowledge.getRecord({ id, scopeIds: vouched, includeDeleted: true });
+        if (!record) throw new KnowledgeNotFoundError('record', id);
+        return knowledge.deleteRecord({
+          id: record.id,
+          version: record.version,
+          deletedBy: CURATOR_IDENTITY,
+          vouchedScopeIds: vouched,
+        });
       },
     }),
     // Single-field edits use dedicated tools rather than one tool with an optional pair, because
@@ -225,13 +219,14 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; name: string; kind: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({
+        const knowledge = getKnowledge(memory);
+        const node = await getVisibleNode(knowledge, value.node);
+        return knowledge.updateNode({
           id: node.id,
           version: value.expectedVersion,
           name: value.name,
           kind: value.kind,
+          vouchedScopeIds: vouched,
         });
       },
     }),
@@ -250,9 +245,14 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; name: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({ id: node.id, version: value.expectedVersion, name: value.name });
+        const knowledge = getKnowledge(memory);
+        const node = await getVisibleNode(knowledge, value.node);
+        return knowledge.updateNode({
+          id: node.id,
+          version: value.expectedVersion,
+          name: value.name,
+          vouchedScopeIds: vouched,
+        });
       },
     }),
     knowledge_set_node_kind: createTool({
@@ -270,9 +270,14 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; kind: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({ id: node.id, version: value.expectedVersion, kind: value.kind });
+        const knowledge = getKnowledge(memory);
+        const node = await getVisibleNode(knowledge, value.node);
+        return knowledge.updateNode({
+          id: node.id,
+          version: value.expectedVersion,
+          kind: value.kind,
+          vouchedScopeIds: vouched,
+        });
       },
     }),
     knowledge_merge_nodes: createTool({
@@ -290,14 +295,15 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { sourceId: string; targetId: string; sourceVersion: number };
-        const store = await getStore(memory);
-        const source = await store.getNode(value.sourceId);
-        if (!source) throw new Error(`Knowledge node not found: ${value.sourceId}`);
-        await requireVisible(store, 'node', source.id, options);
-        const target = await store.getNode(value.targetId);
-        if (!target) throw new Error(`Knowledge node not found: ${value.targetId}`);
-        await requireVisible(store, 'node', target.id, options);
-        return store.mergeNodes(value);
+        const knowledge = getKnowledge(memory);
+        const source = await getVisibleNode(knowledge, value.sourceId);
+        const target = await getVisibleNode(knowledge, value.targetId);
+        return knowledge.mergeNodes({
+          sourceId: source.id,
+          targetId: target.id,
+          sourceVersion: value.sourceVersion,
+          vouchedScopeIds: vouched,
+        });
       },
     }),
     knowledge_rescope: createTool({
@@ -319,15 +325,12 @@ export function createKnowledgeWriteTools(
           expectedVersion: number;
           scope: Exclude<SubconsciousScopeSelection, 'org'>;
         };
-        const store = await getStore(memory);
-        const record = await store.getRecord({ id: value.recordId });
-        if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        await requireVisible(store, 'record', record.id, options);
-        if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
-        return store.setRecordScopes({
-          id: record.id,
-          version: record.version,
+        const knowledge = getKnowledge(memory);
+        return knowledge.setRecordScopes({
+          id: value.recordId,
+          version: value.expectedVersion,
           scopeIds: resolveWriteScopeIds(options, value.scope),
+          vouchedScopeIds: vouched,
         });
       },
     }),
@@ -357,14 +360,13 @@ export function createKnowledgeWriteTools(
             `Node descriptions are limited to ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units.`,
           );
         }
-        const store = await getStore(memory);
-        const node = await store.getNode(value.node);
-        if (!node) throw new Error(`Knowledge node not found: ${value.node}`);
-        await requireVisible(store, 'node', node.id, options);
-        return store.updateNode({
+        const knowledge = getKnowledge(memory);
+        const node = await getVisibleNode(knowledge, value.node);
+        return knowledge.updateNode({
           id: node.id,
           version: value.expectedVersion,
           metadata: { ...node.metadata, description: value.description },
+          vouchedScopeIds: vouched,
         });
       },
     }),
@@ -392,31 +394,31 @@ export function createKnowledgeWriteTools(
           expectedVersion?: number;
         };
         const name = value.name.trim();
-        const store = await getStore(memory);
+        const knowledge = getKnowledge(memory);
         const scopeIds = resolveWriteScopeIds(options, value.scope);
-        const node = await store.resolveNode({ name, scopeIds: options.scopeIds });
+        const node = await knowledge.resolveNode({ name, scopeIds: vouched });
         const record = {
           text: value.content,
           source: CURATOR_IDENTITY,
           scopeIds,
-          resolutionScopeIds: options.scopeIds,
+          resolutionScopeIds: vouched,
           metadata: { sourceThreadId: options.sourceThreadId, content: true },
         };
         if (!node) {
           if (value.expectedVersion !== undefined)
             throw new Error('expectedVersion is only valid for an existing node.');
-          const created = await store.createNodeWithRecord({
+          const created = await knowledge.createNodeWithRecord({
+            vouchedScopeIds: vouched,
             node: { name, kind: value.kind ?? 'document', scopeIds },
             record,
           });
           return created.record;
         }
-        await requireVisible(store, 'node', node.id, options);
         if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
-        return store.replaceNodeRecords({
+        return knowledge.replaceNodeRecords({
           node: { id: node.id, version: value.expectedVersion, kind: value.kind },
           record,
-          visibilityScopeIds: options.scopeIds,
+          vouchedScopeIds: vouched,
         });
       },
     }),
