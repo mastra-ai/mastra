@@ -706,7 +706,7 @@ export type StorageListAgentsResolvedOutput = PaginationInfo & {
 /** Instruction block discriminated union, stored in agent snapshots */
 export type AgentInstructionBlock =
   | { type: 'text'; content: string }
-  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block_ref'; id: string; rules?: RuleGroup }
   | { type: 'prompt_block'; content: string; rules?: RuleGroup };
 
 /** Condition operators for rule evaluation */

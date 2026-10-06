@@ -1,5 +1,113 @@
 # mastra
 
+## 1.33.0-alpha.7
+
+### Patch Changes
+
+- Fixed the Factory board list layout lighting a card while the pointer was elsewhere: over another stage, the stage heading, "Load more candidates", or the space below the cards. A card now lights only while the pointer is on it. ([#25947](https://github.com/mastra-ai/mastra/pull/25947))
+
+- Improved Studio and Factory loading by starting independent requests in parallel and showing ready data while other sections load. ([#26051](https://github.com/mastra-ai/mastra/pull/26051))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4968d07`](https://github.com/mastra-ai/mastra/commit/4968d0732ccdd38070b6c41d637e23e6e7e464ac), [`fab2daf`](https://github.com/mastra-ai/mastra/commit/fab2daf5e5d8d3d6b209288a9d1e45e3fb38b58f), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+  - @mastra/loggers@1.3.5-alpha.0
+  - @mastra/deployer@1.75.0-alpha.7
+
+## 1.33.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+  - @mastra/deployer@1.75.0-alpha.6
+
+## 1.33.0-alpha.5
+
+### Minor Changes
+
+- Added a `mastra connect` command for wiring Mastra Connect provider integrations into a project straight from the terminal. ([#25865](https://github.com/mastra-ai/mastra/pull/25865))
+
+  `mastra connect list` shows every provider in the integration catalog, highlighting the ones already connected to the linked project:
+
+  ```bash
+  $ mastra connect list
+
+  Providers for My Project:
+
+    ● linear — connected (charlie)
+    ● posthog — connected (Mastra)
+    ○ github
+    ○ notion
+    ○ slack
+  ```
+
+  `mastra connect add <provider>` connects a provider. If the organization already has connections for that provider, the command offers to attach one of them instead of authorizing again. Otherwise OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal:
+
+  ```bash
+  $ mastra connect add linear
+
+  Opening your browser to authorize Linear…
+  ◇ Connection is active
+
+  Your organization's existing Linear connections:
+    • Mastra   connected by Charlie Green  Sep 25, 2026
+    • charlie  connected by Charlie Green  Oct 2, 2026
+
+  ◆ Set a display name so this connection is easy to tell apart (leave blank to skip)
+  │ charlie 2
+
+  ✓ Connected Linear (charlie 2) to My Project.
+  ```
+
+  After a new connection goes active, the command suggests a unique display name so the connection is easy to tell apart later, and warns before saving a name that duplicates another connection's name.
+
+  `mastra connect remove <provider>` unlinks a provider connection from the project (the org-level connection is kept):
+
+  ```bash
+  $ mastra connect remove linear
+
+  ✓ Removed linear (charlie) from My Project.
+  ```
+
+  Connected providers become available to agents through `@mastra/connect`'s toolset resolver:
+
+  ```ts
+  import { tools } from '@mastra/connect';
+
+  const agentTools = tools({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    integrations: ['linear'],
+  });
+  ```
+
+### Patch Changes
+
+- The `--project` flag now takes precedence over the `MASTRA_PROJECT_ID` environment variable in `mastra connect`, `mastra env`, `mastra db`, `mastra server env`, `mastra server pause`/`restart`, and `mastra traces import`. Previously the environment variable silently won, so passing `--project` from a shell that exported `MASTRA_PROJECT_ID` targeted the wrong project. Headless deploys (`mastra deploy` with `MASTRA_API_TOKEN`) are unchanged. ([#25999](https://github.com/mastra-ai/mastra/pull/25999))
+
+- Added display conditions to referenced prompt blocks in the Studio agent instructions editor. Conditions set on a reference apply only to that agent and are kept when the reference is converted to an inline block. ([#25991](https://github.com/mastra-ai/mastra/pull/25991))
+
+- Fixed Studio's channel connect flows opening tabs they shouldn't and missing completions: ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  - Connecting Slack now continues in the current tab (its flow redirects back to Studio), instead of leaving a stale Studio copy behind in a new tab.
+  - Connecting Discord opens the invite in a new tab and no longer dead-ends when the popup blocker intervenes — it falls back to navigating the current tab.
+  - While a Discord invite is in flight, returning to Studio now checks whether it completed and flips the agent to "Connected" without a manual refresh.
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+  - @mastra/deployer@1.75.0-alpha.5
+
+## 1.32.2-alpha.4
+
+### Patch Changes
+
+- Fixed the tints behind Factory board stage icons and the hover on the Studio role preview banner's close button. Both now use the theme's solid status colours. ([#25954](https://github.com/mastra-ai/mastra/pull/25954))
+
+- Fixed invisible dataset progress fills and role preview banner colours in Studio. Replaced retired colour and typography utilities in resource descriptions, agent warnings, MCP headers, and attachment and authentication messages with current semantic tokens. ([#24680](https://github.com/mastra-ai/mastra/pull/24680))
+
+- Updated dependencies [[`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751)]:
+  - @mastra/core@1.75.0-alpha.4
+  - @mastra/deployer@1.75.0-alpha.4
+
 ## 1.32.2-alpha.3
 
 ### Patch Changes

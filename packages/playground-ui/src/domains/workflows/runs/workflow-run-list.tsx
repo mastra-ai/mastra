@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks/workflows';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -159,11 +159,17 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <Txt as="span" variant="caption" className="flex w-full min-w-0 items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
+                              <span className="flex w-full min-w-0 items-center gap-2">
+                                <Txt
+                                  as="span"
+                                  variant="column"
+                                  tone="ink"
+                                  className="min-w-0 flex-1 truncate"
+                                  title={run.runId}
+                                >
                                   {run.runId}
-                                </span>
-                              </Txt>
+                                </Txt>
+                              </span>
                               <WorkflowRunMeta
                                 timestamp={getRunTimestamp(snapshot?.timestamp)}
                                 resourceId={getRunResourceId(run)}

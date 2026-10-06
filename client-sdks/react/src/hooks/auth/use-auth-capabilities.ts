@@ -45,7 +45,7 @@ export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise
  *
  * @example
  * ```tsx
- * import { useAuthCapabilities } from '@mastra/react/hooks';
+ * import { useAuthCapabilities } from '@mastra/react/hooks/auth';
  *
  * function AuthStatus() {
  *   const { data: capabilities, isLoading } = useAuthCapabilities();

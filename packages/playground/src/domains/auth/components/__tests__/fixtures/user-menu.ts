@@ -1,4 +1,4 @@
-import type { AuthenticatedCapabilities } from '@mastra/react/hooks';
+import type { AuthenticatedCapabilities } from '@mastra/react/hooks/auth';
 
 export const userMenuCapabilities: AuthenticatedCapabilities = {
   enabled: true,

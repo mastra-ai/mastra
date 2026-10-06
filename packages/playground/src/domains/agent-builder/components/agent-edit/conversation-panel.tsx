@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { useAgentMessages, useAllProviderTools } from '@mastra/react/hooks';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';

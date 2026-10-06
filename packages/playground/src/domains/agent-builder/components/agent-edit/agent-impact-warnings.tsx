@@ -1,4 +1,5 @@
-import { useStoredAgentDependents } from '@mastra/react/hooks';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useStoredAgentDependents } from '@mastra/react/hooks/agents';
 
 const MAX_DEPENDENTS_SHOWN = 5;
 
@@ -51,28 +52,37 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   const overflow = dependents.length - visible.length;
 
   return (
-    <div data-testid="agent-impact-warnings" className="text-caption text-muted-foreground">
+    <div data-testid="agent-impact-warnings" className="text-muted-foreground">
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
-          <p className="font-medium">{copy.dependents}</p>
+          <Txt as="p" variant="column">
+            {copy.dependents}
+          </Txt>
           <ul className="mt-1 list-disc pl-5">
             {visible.map(dep => (
               <li key={dep.id} data-testid="agent-impact-dependent">
-                {dep.name}
+                <Txt as="span" variant="caption" className="block">
+                  {dep.name}
+                </Txt>
               </li>
             ))}
           </ul>
           {overflow > 0 && (
-            <p data-testid="agent-impact-dependents-more" className="mt-1 text-muted-foreground">
+            <Txt as="p" variant="caption" data-testid="agent-impact-dependents-more" className="mt-1">
               and {overflow} more
-            </p>
+            </Txt>
           )}
         </div>
       )}
       {hiddenCount > 0 && (
-        <p data-testid="agent-impact-hidden-warning" className={dependents.length > 0 ? 'mt-2' : ''}>
+        <Txt
+          as="p"
+          variant="caption"
+          data-testid="agent-impact-hidden-warning"
+          className={dependents.length > 0 ? 'mt-2' : ''}
+        >
           {copy.hidden(hiddenCount)}
-        </p>
+        </Txt>
       )}
     </div>
   );

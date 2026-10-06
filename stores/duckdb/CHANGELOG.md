@@ -1,5 +1,51 @@
 # @mastra/duckdb
 
+## 1.13.0-alpha.3
+
+### Patch Changes
+
+- Added token and cost measures to `aggregateTraces()` in the DuckDB observability store. ([#25971](https://github.com/mastra-ai/mastra/pull/25971))
+
+  - **Token measures:** `tokens.input`, `tokens.output`, `tokens.total`, `tokens.reasoning`, and `tokens.cached`, each as `.sum` or `.avg`.
+  - **Cost measures:** `cost.sum` and `cost.avg`. Rows for cost requests also include `cost: { coverage, unit }`.
+
+  ```ts
+  const plan = planTraceAggregate(
+    parseTraceAggregateRequest({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      measures: ['tokens.total.sum', 'cost.sum'],
+    }),
+  );
+  const { rows } = await observability.aggregateTraces(plan);
+  // rows[0] → { dimensions: { entityName: 'support' }, measures: { 'tokens.total.sum': 7800, 'cost.sum': 3.75 }, cost: { coverage: 0.75, unit: 'usd' } }
+  ```
+
+  Usage comes from the model token metrics of each trace. Retried metric writes count once, and spend recorded after the window ends still counts for traces that started inside it.
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
+## 1.13.0-alpha.2
+
+### Patch Changes
+
+- Fixed trace list pages and trace queries that loaded most of the observability table and could fail with an out-of-memory error ([#25518](https://github.com/mastra-ai/mastra/issues/25518)). ([#25802](https://github.com/mastra-ai/mastra/pull/25802))
+
+  - `listTraces`, `listTracesLight` and `listBranches` now read only the page's own spans. Oldest-first pages, such as the ones a retention job reads, no longer load the whole table.
+  - `queryTraces` reads only traces whose root spans fall in the requested time range, including when it filters on related spans.
+
+  On a 100k-trace store, the oldest `listTraces` page went from loading about 1.9 GB of table data to about 32 MB, and `queryTraces` from about 860 MB to about 25 MB. Results are unchanged.
+
+- Reduced memory use when reading spans that carry large inputs or outputs ([#25518](https://github.com/mastra-ai/mastra/issues/25518)). ([#25932](https://github.com/mastra-ai/mastra/pull/25932))
+
+  DuckDB loads every large value stored near a requested span when those values sit next to empty ones. Fetching one span or one trace page could therefore load hundreds of megabytes. New spans store missing `input`, `output`, `attributes` and `requestContext` values to avoid this. On a store with large agent payloads, reading one span went from about 316 MB to about 1 MB. The oldest trace page went from about 469 MB to about 145 MB.
+
+  Results are unchanged. Spans written by earlier versions read the same as before and keep the old memory use until they are pruned.
+
+- Updated dependencies [[`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751)]:
+  - @mastra/core@1.75.0-alpha.4
+
 ## 1.13.0-alpha.1
 
 ### Minor Changes

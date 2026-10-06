@@ -1,5 +1,5 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
-import { useTraceSpanScores } from '@mastra/react/hooks';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
@@ -115,7 +115,9 @@ function TraceScoreReason({ reason }: { reason: string }) {
             onClick={() => setExpanded(value => !value)}
             className={cn(quietTextHover, controlStateColorTransition, 'underline underline-offset-2')}
           >
-            {expanded ? 'Read less' : 'Read more'}
+            <Txt as="span" variant="caption">
+              {expanded ? 'Read less' : 'Read more'}
+            </Txt>
           </button>
         </>
       )}

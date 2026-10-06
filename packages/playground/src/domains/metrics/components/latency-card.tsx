@@ -5,7 +5,7 @@ import type { LatencyTab } from '@mastra/playground-ui/domains/metrics/component
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useLatencyMetrics } from '@mastra/react/hooks';
+import { useLatencyMetrics } from '@mastra/react/hooks/metrics';
 import { useNavigate } from 'react-router';
 
 const TAB_TO_ROOT_ENTITY: Record<LatencyTab, EntityType> = {

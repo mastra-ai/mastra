@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { ChevronRight, Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';

@@ -656,7 +656,7 @@ export function validateToolOutput<T = unknown>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(redactSensitiveKeys(output))}`,
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
@@ -673,25 +673,34 @@ const SENSITIVE_KEYS = ['password', 'secret', 'token', 'apiKey', 'api_key', 'aut
  * @param obj The object to redact
  * @returns A new object with sensitive values replaced with '[REDACTED]'
  */
-function redactSensitiveKeys(obj: unknown): unknown {
-  if (obj === null || typeof obj !== 'object') {
+function redactSensitiveKeys(obj: unknown, ancestors: WeakSet<object> = new WeakSet()): unknown {
+  // Objects with toJSON (e.g. Date) serialize themselves; walking their own keys would drop them to `{}`.
+  if (obj === null || typeof obj !== 'object' || typeof (obj as { toJSON?: unknown }).toJSON === 'function') {
     return obj;
   }
 
+  // Leave circular references in place so serialization fails the same way it would without redaction.
+  if (ancestors.has(obj)) {
+    return obj;
+  }
+  ancestors.add(obj);
+
+  let result: unknown;
   if (Array.isArray(obj)) {
-    return obj.map(redactSensitiveKeys);
+    result = obj.map(item => redactSensitiveKeys(item, ancestors));
+  } else {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+        redacted[key] = '[REDACTED]';
+      } else {
+        redacted[key] = redactSensitiveKeys(value, ancestors);
+      }
+    }
+    result = redacted;
   }
 
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = redactSensitiveKeys(value);
-    } else {
-      result[key] = value;
-    }
-  }
+  ancestors.delete(obj);
   return result;
 }
 

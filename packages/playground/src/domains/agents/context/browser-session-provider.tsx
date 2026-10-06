@@ -1,4 +1,4 @@
-import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks';
+import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks/agents';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';

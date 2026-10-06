@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
-import type { AuthenticatedCapabilities } from '@mastra/react/hooks';
+import type { AuthenticatedCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

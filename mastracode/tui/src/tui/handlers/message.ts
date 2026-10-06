@@ -9,14 +9,11 @@
  * therefore delegated to `addUserMessage` / `renderSignalMessage`; this file
  * only drives the streaming assistant component and its tool boundaries.
  */
-import { listResolvableModePacks } from '@mastra/code-sdk/agents/model';
-import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
-  resolveModePackModels,
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
@@ -30,6 +27,7 @@ import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { getAssistantRenderParts, isGoalJudgeEvaluationSignal } from '../db-message-parts.js';
 import type { ToolRenderPart } from '../db-message-parts.js';
+import { applyPackToSession, listResolvableModePacks } from '../model-packs/apply.js';
 import { flushRender, requestRender } from '../render-scheduler.js';
 
 import { createStaticSubagentComponent } from './tool.js';
@@ -305,24 +303,16 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
 }
 
 /**
- * Thread stickiness for a pack hop (Q19): the rotation processor writes the
- * landed pack into session state (PACK_FALLBACK_STATE_KEY) when a cascade
- * advances; this handler consumes it on the typed `state_changed` event —
- * data parts never ride controller message events, so this key is the live
- * channel. Applies the landed pack exactly like the manual /models switch
- * (applyPack in models-pack.ts): every mode's thread model, subagent models,
- * thinking-level fixups, thread metadata, and settings, so the thread stays
- * on the landed pack until the user switches manually.
+ * Keep a thread on the pack selected by a generic model-route hop.
  */
 export async function handlePackFallbackState(
   ectx: EventHandlerContext,
   event: { state: Record<string, unknown>; changedKeys: string[] },
 ): Promise<void> {
-  if (!event.changedKeys.includes(PACK_FALLBACK_STATE_KEY)) return;
-  const pending = event.state[PACK_FALLBACK_STATE_KEY] as PendingPackFallback | null | undefined;
-  // Already consumed (or never set): bail BEFORE clearing — clearing a null
-  // key re-emits state_changed with the same changedKey and would loop.
+  if (!event.changedKeys.includes(MODEL_FALLBACK_STATE_KEY)) return;
+  const pending = event.state[MODEL_FALLBACK_STATE_KEY] as PendingModelFallback | null | undefined;
   if (pending === null || pending === undefined) return;
+
   const entryThreadId = ectx.state.session.thread.getId();
   const pendingThreadId = typeof pending.threadId === 'string' ? pending.threadId : entryThreadId;
   const setOriginThreadSetting = async (setting: { key: string; value: unknown }) => {
@@ -332,20 +322,20 @@ export async function handlePackFallbackState(
   };
   const isOriginThreadActive = () => !pendingThreadId || ectx.state.session.thread.getId() === pendingThreadId;
   const clearPending = async () => {
-    await setOriginThreadSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+    await setOriginThreadSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
     if (isOriginThreadActive()) {
-      await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+      await ectx.state.session.state.set({ [MODEL_FALLBACK_STATE_KEY]: null });
     }
   };
+
   if (
-    typeof pending.toPackId !== 'string' ||
+    typeof pending.fromEntryId !== 'string' ||
+    typeof pending.toEntryId !== 'string' ||
     typeof pending.toModelId !== 'string' ||
-    (pending.threadId !== undefined && typeof pending.threadId !== 'string')
+    (pending.threadId !== undefined && typeof pending.threadId !== 'string') ||
+    pending.toEntryId.length === 0 ||
+    pending.toModelId.length === 0
   ) {
-    await clearPending();
-    return;
-  }
-  if (pending.toModelId.length === 0 || pending.toPackId.length === 0) {
     await clearPending();
     return;
   }
@@ -353,99 +343,55 @@ export async function handlePackFallbackState(
 
   const settings = loadSettings();
   const packs = listResolvableModePacks(settings);
-  const pack = packs.find(candidate => candidate.id === pending.toPackId);
+  const pack = packs.find(candidate => candidate.id === pending.toEntryId);
   if (!pack) {
     await clearPending();
     return;
   }
-  const failedPack = packs.find(candidate => candidate.id === pending.fromPackId);
+  const failedPack = packs.find(candidate => candidate.id === pending.fromEntryId);
   const fallbackStatus = {
     usingPack: pack.name,
-    failedPack: failedPack?.name ?? pending.fromPackId,
-  };
-  const packModels = resolveModePackModels(settings, pack) as Record<string, string>;
-
-  // Persist the complete landed-pack identity to the originating thread before
-  // touching live session state. Every write remains bound to that thread even
-  // if the user switches threads while this async handler is running.
-  const modes = ectx.state.controller.listModes();
-  for (const mode of modes) {
-    const modelId = packModels[mode.id];
-    if (modelId) {
-      await setOriginThreadSetting({ key: `modeModelId_${mode.id}`, value: modelId });
-    }
-  }
-  await setOriginThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
-  await setOriginThreadSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
-
-  // If another thread is now active, leave the origin marker intact so opening
-  // that thread resumes live application. Do not mutate the current session UI.
-  if (!isOriginThreadActive()) return;
-
-  // Subagent selections are durable thread metadata too. Persist them before
-  // applying one guarded live-state update.
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  const subagentState: Record<string, string> = {};
-  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const modelId = packModels[modeId];
-    if (!modelId) continue;
-    const key = `subagentModelId_${agentType}`;
-    subagentState[key] = modelId;
-    await setOriginThreadSetting({ key, value: modelId });
-  }
-  if (!isOriginThreadActive()) return;
-
-  const currentModeId = ectx.state.session.mode.get();
-  const currentModeModel = packModels[currentModeId] ?? pending.toModelId;
-
-  // Fallback state is thread-scoped: the landed pack, its mode models, and any
-  // thinking adjustment are persisted to the originating thread (above) and to
-  // session state — never to shared settings. Writing them globally would make
-  // a hop in this thread change the defaults of every other thread, including
-  // ones that never hopped.
-  const runtimeSettings = {
-    ...settings,
-    models: { ...settings.models, activeModelPackId: pending.toPackId },
+    failedPack: failedPack?.name ?? pending.fromEntryId,
   };
 
-  // OpenAI thinking fixups — same rules as applyPack.
-  const hasOpenAI = Object.values(packModels).some(modelId => modelId.startsWith('openai/'));
-  const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
-    | string
-    | undefined;
-  const defaultThinking = resolveDefaultThinkingLevel(runtimeSettings, currentModeId);
-  const effectiveThinking = sessionOverride ?? defaultThinking.level;
-  const stateUpdates: Record<string, unknown> = { activeModelPackId: pending.toPackId, ...subagentState };
-  if (
-    hasOpenAI &&
-    sessionOverride === undefined &&
-    defaultThinking.source === 'global' &&
-    defaultThinking.level === 'off'
-  ) {
-    stateUpdates.thinkingLevel = 'low';
-  } else if (currentModeModel.startsWith('openai/') && effectiveThinking === 'max') {
-    stateUpdates.thinkingLevel = 'xhigh';
-  }
+  try {
+    await applyPackToSession(ectx, pending.toEntryId, {
+      clearPendingFallback: false,
+      afterApply: async selection => {
+        if (!isOriginThreadActive()) return;
+        await setOriginThreadSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
+        if (!isOriginThreadActive()) return;
 
-  const applied = await ectx.state.session.state.setIf!(stateUpdates, isOriginThreadActive);
-  if (!applied) return;
+        const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
+          | string
+          | undefined;
+        const currentModeId = ectx.state.session.mode.get();
+        const runtimeSettings = {
+          ...settings,
+          models: { ...settings.models, activeModelPackId: pending.toEntryId },
+        };
+        const defaultThinking = resolveDefaultThinkingLevel(runtimeSettings, currentModeId);
+        const effectiveThinking = sessionOverride ?? defaultThinking.level;
+        const routeUsesOpenAI = selection.modelRoute.entries.some(entry => entry.modelId.startsWith('openai/'));
+        if (
+          routeUsesOpenAI &&
+          sessionOverride === undefined &&
+          defaultThinking.source === 'global' &&
+          defaultThinking.level === 'off'
+        ) {
+          await ectx.state.session.state.set({ thinkingLevel: 'low' });
+        } else if (selection.modelId.startsWith('openai/') && effectiveThinking === 'max') {
+          await ectx.state.session.state.set({ thinkingLevel: 'xhigh' });
+        }
 
-  // No awaited mutable-session operations after the ownership guard: a thread
-  // switch cannot interleave between the check and these live cache updates.
-  ectx.state.session.model.set({ modelId: currentModeModel });
-  ectx.state.session.emit({ type: 'model_changed', modelId: currentModeModel, scope: 'thread', modeId: currentModeId });
-  for (const [key, modelId] of Object.entries(subagentState)) {
-    ectx.state.session.emit({
-      type: 'subagent_model_changed',
-      modelId,
-      scope: 'thread',
-      agentType: key.slice('subagentModelId_'.length),
+        ectx.state.fallbackStatus = fallbackStatus;
+        ectx.updateStatusLine();
+        await ectx.refreshModelAuthStatus();
+        await clearPending();
+      },
     });
+  } catch (error) {
+    await clearPending();
+    throw error;
   }
-  ectx.state.fallbackStatus = fallbackStatus;
-  ectx.updateStatusLine();
-  await ectx.refreshModelAuthStatus();
-  // Clear only after every durable/session write succeeds. While this remains
-  // pending, getDynamicModel starts any immediate retrigger on the landed pack.
-  await clearPending();
 }

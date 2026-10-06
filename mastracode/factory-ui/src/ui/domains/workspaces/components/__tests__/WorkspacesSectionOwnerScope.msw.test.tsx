@@ -4,6 +4,7 @@
  * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
  * undifferentiated list, and the reader had no way to cut it down to their own work.
  */
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -52,27 +53,29 @@ function stubSessions(sessions: FactoryUserSession[]) {
   );
 }
 
-function renderSection() {
+function renderSection(defaultState: 'default' | 'collapsed' = 'default') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: false,
-          resourceReady: false,
-          sandboxReady: false,
-          sandboxPreparing: false,
-          resourceEnabled: false,
-          factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
-        <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
-        </Routes>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    <Sidebar.Provider defaultState={defaultState} collapsedWidth={0} storageKey="owner-scope-test">
+      <MemoryRouter initialEntries={['/factories/fp-1']}>
+        <ChatSessionContext.Provider
+          value={{
+            resourceId: 'resource-1',
+            sessionEnabled: false,
+            resourceReady: false,
+            sandboxReady: false,
+            sandboxPreparing: false,
+            resourceEnabled: false,
+            factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
+            baseUrl: TEST_BASE_URL,
+            kind: 'factory',
+          }}
+        >
+          <Routes>
+            <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>
+    </Sidebar.Provider>,
   );
 }
 
@@ -93,6 +96,37 @@ describe('Workspaces sidebar owner scope', () => {
 
   afterEach(() => {
     delete window.__MASTRACODE_CONFIG__;
+  });
+
+  describe('when the sidebar is collapsed', () => {
+    it('keeps both owner toggles accessible and scopes their lists independently', async () => {
+      stubSessions([
+        reviewSession(1, viewerUserId),
+        reviewSession(2, 'user-grace'),
+        workSession(3, viewerUserId),
+        workSession(4, 'user-grace'),
+      ]);
+      const user = userEvent.setup();
+      const rendered = renderSection('collapsed');
+      await waitForMutationsIdle(rendered.client);
+
+      const workToggle = screen.getByRole('button', { name: 'Show only my work sessions' });
+      const reviewToggle = screen.getByRole('button', { name: 'Show only my review sessions' });
+      expect(workToggle).toHaveAttribute('aria-pressed', 'true');
+      expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(workToggle);
+
+      expect(await screen.findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
+      expect(workToggle).toHaveAttribute('aria-pressed', 'false');
+      expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(reviewToggle);
+
+      expect(await screen.findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
+      expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
+    });
   });
 
   it('opens each sessions group on the viewer and widens it to everyone and back', async () => {

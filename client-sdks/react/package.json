@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.7.3-alpha.3",
+  "version": "1.8.0-alpha.7",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -36,14 +36,25 @@
         "default": "./dist/ui/index.cjs"
       }
     },
-    "./hooks": {
+    "./chat": {
       "import": {
-        "types": "./dist/hooks/index.d.ts",
-        "default": "./dist/hooks/index.js"
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.js"
       },
       "require": {
-        "types": "./dist/hooks/index.d.ts",
-        "default": "./dist/hooks/index.cjs"
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.cjs"
+      }
+    },
+    "./hooks/shared": null,
+    "./hooks/*": {
+      "import": {
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.js"
+      },
+      "require": {
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.cjs"
       }
     },
     "./styles.css": "./dist/react.css"

@@ -18,7 +18,8 @@ import {
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
-import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans, useLogs } from '@mastra/react/hooks';
+import { useLogs } from '@mastra/react/hooks/logs';
+import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';

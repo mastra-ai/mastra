@@ -501,6 +501,7 @@ export function TraceDataPanelView({
                   expandedSpanIds,
                   setExpandedSpanIds,
                   featuredSpanIds,
+                  revealSpanId: featuredSpanIds?.at(-1),
                   isLoading,
                 };
 

@@ -12,7 +12,7 @@ import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useTraceFeedback } from '@mastra/react/hooks';
+import { useTraceFeedback } from '@mastra/react/hooks/traces';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';

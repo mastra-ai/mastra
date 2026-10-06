@@ -1,11 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReviewItem } from '@mastra/react/hooks';
+import type { ReviewItem } from '@mastra/react/hooks/review';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
@@ -200,18 +201,20 @@ export function ReviewItemCard({
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
-              {formatUnknown(item.input)}
-            </pre>
+            <Code
+              className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
+              code={formatUnknown(item.input)}
+            />
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
-                {formatUnknown(item.output)}
-              </pre>
+              <Code
+                className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
+                code={formatUnknown(item.output)}
+              />
             </div>
           )}
           {Boolean(item.error) && (
@@ -219,9 +222,10 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground">
-                {formatUnknown(item.error)}
-              </pre>
+              <Code
+                className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground"
+                code={formatUnknown(item.error)}
+              />
             </div>
           )}
           {/* Comment */}
@@ -231,6 +235,7 @@ export function ReviewItemCard({
                 Comment
               </Txt>
               <Textarea
+                className="text-caption"
                 value={localComment}
                 onChange={e => {
                   setLocalComment(e.target.value);
@@ -245,7 +250,6 @@ export function ReviewItemCard({
                 }}
                 placeholder="Add a note about this item..."
                 rows={2}
-                className="text-caption"
               />
               {commentSaved && (
                 <Txt variant="meta" className="mt-0.5 text-success-indicator">

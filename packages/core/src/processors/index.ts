@@ -71,15 +71,11 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
-   *
-   * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
    * Add a named state signal to the message list, stream it when possible, and update
    * thread-level state tracking metadata.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   sendStateSignal?: (
     signal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
@@ -738,8 +734,6 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
 
   /**
    * State lane id used for `computeStateSignal` history and tracking. Defaults to the processor id.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   stateId?: string;
 
@@ -749,8 +743,6 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Called after this processor's `processInputStep` hook and before the model request is finalized.
    * The runtime persists version/cache-key tracking on memory thread metadata keyed by state id.
    * Returning `undefined` means the state has not changed for this step.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   computeStateSignal?(
     args: ComputeStateSignalArgs<TTripwireMetadata>,

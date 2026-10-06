@@ -1,5 +1,5 @@
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
-import { useStoredAgentDependents, useStoredAgentMutations } from '@mastra/react/hooks';
+import { useStoredAgentDependents, useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useFormContext } from 'react-hook-form';
 
 import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';

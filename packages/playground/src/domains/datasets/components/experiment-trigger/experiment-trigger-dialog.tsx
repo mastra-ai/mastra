@@ -22,7 +22,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -97,17 +97,18 @@ function PipelineStep({
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center">
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done
-              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
-              : 'border-border text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
           )}
         >
           {index}
-        </span>
+        </Txt>
         {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>

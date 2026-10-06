@@ -1,4 +1,4 @@
-import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks';
+import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks/agents';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
@@ -94,7 +94,7 @@ const BackgroundTaskMetadata = ({
         <DialogBody>
           <div className="space-y-2">
             <Txt tone="muted">Background Task Duration</Txt>
-            <Txt tone="ink" className="text-body">
+            <Txt variant="body" tone="ink">
               {toSigFigs(timeDiff, 3)}ms
             </Txt>
           </div>

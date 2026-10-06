@@ -1,7 +1,7 @@
 import type { CreateStoredScorerParams } from '@mastra/client-js';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useStoredScorerMutations } from '@mastra/react/hooks';
+import { useStoredScorerMutations } from '@mastra/react/hooks/scores';
 import { useRef } from 'react';
 
 import { ScorerEditMain } from './scorer-edit-page/scorer-edit-main';

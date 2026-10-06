@@ -25,13 +25,8 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import {
-  useDatasetMutations,
-  useDataset,
-  useScoresByExperimentId,
-  useReviewItems,
-  useCompletedItems,
-} from '@mastra/react/hooks';
+import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import { useReviewItems, useCompletedItems } from '@mastra/react/hooks/review';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -611,11 +606,11 @@ export function DatasetReview({
             <Field className="gap-1">
               <FieldLabel>Instructions (optional)</FieldLabel>
               <Textarea
+                className="text-caption"
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption"
               />
             </Field>
           </DialogBody>

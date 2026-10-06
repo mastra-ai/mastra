@@ -13,7 +13,7 @@ import {
   useCloneThread,
   useMemoryWithOMStatus,
   useThread,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/memory';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
@@ -208,11 +208,13 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
+                  'inline-flex items-center gap-2 text-info-indicator hover:underline',
                   controlStateColorTransition,
                 )}
               >
-                Learn about semantic recall
+                <Txt as="span" variant="body" className="block">
+                  Learn about semantic recall
+                </Txt>
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>

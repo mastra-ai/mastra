@@ -10,7 +10,7 @@ import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/work
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
@@ -29,14 +29,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       title="Unable to display this workflow"
       description="The workflow data could not be displayed. Try again or open another workflow."
     >
-      {workflowId ? <WorkflowRoute>{children}</WorkflowRoute> : <WorkflowRoute>{children}</WorkflowRoute>}
+      <WorkflowRoute>{children}</WorkflowRoute>
     </ErrorBoundary>
   );
 };
 
-const WORKFLOW_PAGE_TABS: readonly WorkflowPageTab[] = ['graph', 'traces', 'schedules'];
 const isWorkflowPageTab = (segment: string | undefined): segment is WorkflowPageTab =>
-  WORKFLOW_PAGE_TABS.includes(segment as WorkflowPageTab);
+  segment === 'graph' || segment === 'traces' || segment === 'schedules';
 
 /** Shadows the global "go to" sequences with workflow-scoped targets while a workflow page is mounted. */
 const WorkflowShortcuts = ({ workflowId }: { workflowId: string }) => {
@@ -78,7 +77,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading && activeTab === 'graph') {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{workflowId}</h1>

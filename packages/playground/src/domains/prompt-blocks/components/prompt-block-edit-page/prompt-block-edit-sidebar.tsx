@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
@@ -9,7 +10,7 @@ import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { useStoredAgents } from '@mastra/react/hooks';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -142,7 +143,8 @@ export function PromptBlockEditSidebar({
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax in your content.
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
               </>
             }
           />

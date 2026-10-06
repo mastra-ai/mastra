@@ -6,7 +6,8 @@ import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useMemory, useAgent, useAgentVersions } from '@mastra/react/hooks';
+import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
+import { useMemory } from '@mastra/react/hooks/memory';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -100,7 +101,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5',
         'hover:bg-fill-subtle',
         focusRing,
         quietTextHover,
@@ -118,10 +119,16 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
-          <span className="shrink-0 text-muted-foreground tabular-nums">{status}</span>
+          <Txt as="span" variant="meta" tone="ink" className="min-w-0 truncate">
+            {label}
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+            {status}
+          </Txt>
         </span>
-        <span className="mt-0.5 block text-muted-foreground">{description}</span>
+        <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
+          {description}
+        </Txt>
       </span>
       <ExternalLink
         className={cn(

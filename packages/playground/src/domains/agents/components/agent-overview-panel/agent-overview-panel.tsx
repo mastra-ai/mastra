@@ -1,3 +1,4 @@
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -6,7 +7,12 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useAgent, useReorderModelList, useUpdateModelInModelList, useChannelPlatforms } from '@mastra/react/hooks';
+import {
+  useAgent,
+  useReorderModelList,
+  useUpdateModelInModelList,
+  useChannelPlatforms,
+} from '@mastra/react/hooks/agents';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
@@ -217,8 +223,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
             <Notice.Message>
-              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-              project. See the{' '}
+              To edit the system prompt in Studio, add <InlineCode>@mastra/editor</InlineCode> to your project. See the{' '}
               <a
                 href="https://mastra.ai/docs/editor/overview"
                 target="_blank"

@@ -85,7 +85,7 @@ function SwitchThumbIcon({
   const iconClassName = cn(
     'absolute inset-0 flex items-center justify-center text-background',
     'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
-    '[&_svg]:size-2.5 [&_svg]:stroke-[2.5]',
+    '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
 
   if (icon !== undefined) {

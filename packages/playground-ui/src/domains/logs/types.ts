@@ -1,1 +1,1 @@
-export type { LogLevel, LogRecord } from '@mastra/react/hooks';
+export type { LogLevel, LogRecord } from '@mastra/react/hooks/logs';

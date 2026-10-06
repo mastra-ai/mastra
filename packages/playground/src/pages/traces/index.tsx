@@ -46,6 +46,7 @@ import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/trace
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import {
   createTraceQueryValuesResolver,
   useTraceMetadataFilterFields,
@@ -55,8 +56,7 @@ import {
   useTraceFeedback,
   useTraceOrBranchSpans,
   useTraceUsage,
-  useTraceSpanScores,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
