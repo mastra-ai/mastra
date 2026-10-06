@@ -145,6 +145,7 @@ export type ScenarioName =
   | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
+  | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'

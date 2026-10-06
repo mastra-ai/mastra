@@ -41,12 +41,12 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB) },
   });
 
-  const { data: expA } = useDatasetExperiment({
+  const { data: expA, isLoading: isExperimentALoading } = useDatasetExperiment({
     datasetId: datasetId,
     experimentId: experimentIdA,
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
   });
-  const { data: expB } = useDatasetExperiment({
+  const { data: expB, isLoading: isExperimentBLoading } = useDatasetExperiment({
     datasetId: datasetId,
     experimentId: experimentIdB,
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
@@ -125,7 +125,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     return { baseline, contender };
   }, [rows, scorerIds]);
 
-  if (isLoading) {
+  if (isLoading || isExperimentALoading || isExperimentBLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner />

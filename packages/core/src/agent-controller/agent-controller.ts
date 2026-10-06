@@ -377,14 +377,18 @@ export class AgentController<TState = {}> {
     const defaultMode = this.#defaultMode;
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
+      getAllOn: async threadId => (await session.thread.getById({ threadId }))?.metadata ?? {},
       get: key => session.thread.getSetting({ key }),
+      getThreadId: () => session.thread.getId() ?? undefined,
       set: (key, value) => session.thread.setSetting({ key, value }),
+      setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
+      getModeIds: () => this.config.modes.map(mode => mode.id),
       trackModelUse: this.config.modelUseCountTracker,
     });
     session.om.setResolver({
@@ -2002,12 +2006,12 @@ export class AgentController<TState = {}> {
     if (!abortSignal) {
       session.run.clearAbortRequested();
     }
-    // Reconcile the in-memory model selection with the persisted per-mode model
+    // Reconcile the in-memory model selection with the persisted thread model
     // before snapshotting it into the request context. In multiplayer
     // deployments another process (or a freshly-created Session for an existing
     // thread) may have persisted a different model; the per-instance cache would
-    // otherwise run with a stale selection. No-op in the single-player TUI.
-    await session.model.syncFromPersisted({ modeId });
+    // otherwise run with a stale selection. No-op when already in sync.
+    await session.model.syncFromPersisted();
     const requestContext = await this.buildRequestContext(session, requestContextInput, {
       abortSignal,
       resourceId,
