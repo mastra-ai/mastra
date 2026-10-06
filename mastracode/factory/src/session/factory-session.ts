@@ -381,7 +381,7 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   }
   if (args.defaultModelId) {
     try {
-      await session.model.switch({ modelId: args.defaultModelId });
+      await session.model.switch(args.defaultModelId);
     } catch (error) {
       console.warn('[Factory Start] Failed to apply factory default model', {
         modelId: args.defaultModelId,

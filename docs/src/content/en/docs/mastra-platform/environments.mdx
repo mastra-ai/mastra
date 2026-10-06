@@ -43,7 +43,7 @@ mastra env list
 
 The output shows each environment's name, region, active deploy status, and the managed environment variables injected by attached databases. Pass `--json` for machine-readable output in CI.
 
-All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
+All `mastra env` commands resolve their project from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
 
 ## Environment variables
 

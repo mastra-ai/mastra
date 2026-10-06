@@ -232,7 +232,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -293,7 +293,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (

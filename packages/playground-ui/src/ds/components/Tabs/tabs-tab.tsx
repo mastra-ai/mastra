@@ -3,7 +3,6 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -63,6 +62,7 @@ export const Tab = ({
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
+          // A ghost tab is the control itself: the button box at the list's rung.
           buttonVariants({ variant: 'ghost', size }),
           'relative z-10 whitespace-nowrap',
           'data-[active]:text-foreground',
@@ -71,8 +71,7 @@ export const Tab = ({
           className,
         )
       : cn(
-          // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
-          size === 'sm' ? controlSizeClasses.sm : 'text-label',
+          'text-label',
           quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',

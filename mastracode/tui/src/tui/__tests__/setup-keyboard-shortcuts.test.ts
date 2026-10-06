@@ -57,6 +57,10 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
+vi.mock('../model-packs/apply.js', () => ({
+  switchModeWithPack: vi.fn(),
+}));
+
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyHandlers, setupKeyboardShortcuts } from '../setup.js';

@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
@@ -21,6 +22,7 @@ import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ChevronRight, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useThreadsPanel } from '../context/use-threads-panel';
 import { useCollapsedThreadSections } from '../hooks/use-collapsed-thread-sections';
 import { usePinnedThreads } from '../hooks/use-pinned-threads';
 import { RenameThreadDialog } from './rename-thread-dialog';
@@ -34,8 +36,8 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
-  /** When provided, renders a "Hide threads panel" control next to "New Thread". */
-  onHidePanel?: () => void;
+  /** While true, only the header is rendered so it stays in place until the list arrives. */
+  isLoading?: boolean;
 }
 
 export const ChatThreads = ({
@@ -45,7 +47,7 @@ export const ChatThreads = ({
   resourceId,
   resourceType,
   embedded = false,
-  onHidePanel,
+  isLoading = false,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [dialog, setDialog] = useState<{ type: 'rename' | 'delete'; thread: StorageThreadType } | null>(null);
@@ -54,6 +56,10 @@ export const ChatThreads = ({
   const pinnedLabelId = useId();
   const recentLabelId = useId();
   const { isCollapsed, toggle } = useCollapsedThreadSections();
+  const threadsPanel = useThreadsPanel();
+  // The mobile drawer has its own close control, so no hide button there.
+  const isMobile = useIsMobile();
+  const canHidePanel = Boolean(threadsPanel) && !isMobile;
 
   const threadsById = new Map(threads.map(thread => [thread.id, thread]));
   const pinnedThreads = pinnedIds.flatMap(id => threadsById.get(id) ?? []);
@@ -101,14 +107,14 @@ export const ChatThreads = ({
             </Icon>
             New Thread
           </ThreadListNewItem>
-          {onHidePanel && (
+          {canHidePanel && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   aria-label="Hide threads panel"
                   className={cn(panelIconButtonClass, 'shrink-0')}
-                  onClick={onHidePanel}
+                  onClick={() => threadsPanel?.collapse()}
                 >
                   <Icon>
                     <PanelEdgeIcon side="left" />
@@ -127,54 +133,63 @@ export const ChatThreads = ({
 
         <ThreadListSeparator />
 
-        <div className="pt-1">
-          {pinnedThreads.length > 0 && (
-            <CollapsibleSection
-              labelId={pinnedLabelId}
-              label="Pinned"
-              collapsed={isCollapsed('pinned')}
-              onToggle={() => toggle('pinned')}
-            >
-              <ThreadListItems>
-                {pinnedThreads.map(thread => (
-                  <ThreadListItem
-                    key={thread.id}
-                    as={Link}
-                    to={threadLink(thread.id)}
-                    isActive={thread.id === threadId}
-                    actions={
-                      <ThreadActionsMenu
-                        onUnpin={() => unpin(thread.id)}
-                        onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
-                        onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
-                      />
-                    }
-                  >
-                    <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
-                  </ThreadListItem>
-                ))}
-              </ThreadListItems>
-            </CollapsibleSection>
-          )}
-
-          {threads.length === 0 ? (
-            <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
-          ) : (
-            otherThreads.length > 0 &&
-            (pinnedThreads.length > 0 ? (
+        {!isLoading && (
+          <div className="pt-1">
+            {pinnedThreads.length > 0 && (
               <CollapsibleSection
-                labelId={recentLabelId}
-                label="Recent"
-                collapsed={isCollapsed('recent')}
-                onToggle={() => toggle('recent')}
+                labelId={pinnedLabelId}
+                label="Pinned"
+                collapsed={isCollapsed('pinned')}
+                onToggle={() => toggle('pinned')}
               >
-                {recentList}
+                <ThreadListItems>
+                  {pinnedThreads.map(thread => (
+                    <ThreadListItem
+                      key={thread.id}
+                      as={Link}
+                      to={threadLink(thread.id)}
+                      isActive={thread.id === threadId}
+                      actions={
+                        <ThreadActionsMenu
+                          onUnpin={() => unpin(thread.id)}
+                          onRename={canRenameThread ? () => setDialog({ type: 'rename', thread }) : undefined}
+                          onDelete={canDeleteThread ? () => setDialog({ type: 'delete', thread }) : undefined}
+                        />
+                      }
+                    >
+                      <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
+                    </ThreadListItem>
+                  ))}
+                </ThreadListItems>
               </CollapsibleSection>
+            )}
+
+            {threads.length === 0 ? (
+              // A first visit has nothing to list: fold the panel away once so the landing gets the width.
+              <div
+                ref={node => {
+                  if (node) threadsPanel?.collapseOnce();
+                }}
+              >
+                <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
+              </div>
             ) : (
-              recentList
-            ))
-          )}
-        </div>
+              otherThreads.length > 0 &&
+              (pinnedThreads.length > 0 ? (
+                <CollapsibleSection
+                  labelId={recentLabelId}
+                  label="Recent"
+                  collapsed={isCollapsed('recent')}
+                  onToggle={() => toggle('recent')}
+                >
+                  {recentList}
+                </CollapsibleSection>
+              ) : (
+                recentList
+              ))
+            )}
+          </div>
+        )}
       </ThreadList>
 
       <DeleteThreadDialog
@@ -259,12 +274,12 @@ function CollapsibleSection({ labelId, label, collapsed, onToggle, children }: C
       open={!collapsed}
       onOpenChange={onToggle}
     >
-      <Txt as="h2" variant="meta" tone="faint" className="px-3 pt-3 pb-1 group-first-of-type/section:pt-0">
-        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm">
+      <h2 className="flex px-3 pt-3 pb-1 text-placeholder group-first-of-type/section:pt-0">
+        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm text-meta">
           {label}
           <ChevronRight aria-hidden className="size-3" />
         </CollapsibleTrigger>
-      </Txt>
+      </h2>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
   );

@@ -139,6 +139,9 @@ export interface MastraTUIOptions {
   /** Thread ID requested by `mastracode resume`. */
   resumeThreadId?: string;
 
+  /** Preserve an explicitly configured initial model until a thread selects a pack. */
+  initialModelOverride?: boolean;
+
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By

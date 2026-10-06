@@ -1024,8 +1024,8 @@ describe('syncInitialThreadState', () => {
 
   it('restores a durable pending pack hop into session state', async () => {
     const pending = {
-      fromPackId: 'anthropic',
-      toPackId: 'openai',
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
       toModelId: 'openai/gpt-5.6-sol',
       reason: 'pool-exhausted',
       at: '2026-09-14T20:00:00.000Z',
@@ -1044,7 +1044,7 @@ describe('syncInitialThreadState', () => {
               id: 'thread-1',
               title: 'Pending fallback',
               metadata: {
-                mastracodePendingPackFallback: pending,
+                mastracodePendingModelFallback: pending,
                 mastracodeAccountRoutingExhausted: exhaustedRouting,
               },
             },
@@ -1065,7 +1065,7 @@ describe('syncInitialThreadState', () => {
     // A14: the persisted exhausted-route map is no longer restored — a stale
     // mark must not come back as routing state. The durable pending hop is.
     expect(stateSet).toHaveBeenCalledWith({
-      mastracodePendingPackFallback: pending,
+      mastracodePendingModelFallback: pending,
     });
   });
 
@@ -1074,7 +1074,7 @@ describe('syncInitialThreadState', () => {
     const state = {
       session: {
         state: {
-          get: () => ({ mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai' } }),
+          get: () => ({ mastracodePendingModelFallback: { fromEntryId: 'anthropic', toEntryId: 'openai' } }),
           set: stateSet,
         },
         thread: {
@@ -1093,7 +1093,7 @@ describe('syncInitialThreadState', () => {
 
     await syncInitialThreadState(state);
 
-    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingModelFallback: null });
   });
 
   it('does not apply hydration when the active thread changes during the thread lookup', async () => {
