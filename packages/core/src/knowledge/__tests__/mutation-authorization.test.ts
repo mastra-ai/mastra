@@ -293,6 +293,35 @@ describe('Knowledge mutation authorization', () => {
     expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:owner']]);
   });
 
+  it('rejects unreadable resolution scopes before an address wikilink can bind a hidden node', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const hidden = await storage.createNodeWithAddress({
+      source: 'hidden-source',
+      address: 'hidden:item',
+      node: { name: 'Hidden item', scopeIds: [ids['scope:owner']!], contextScopeId: ids['scope:owner']! },
+    });
+    const parent = await knowledge.createNode({
+      name: 'Visible parent',
+      scopeIds: [ids['scope:append']!],
+      vouchedScopeIds: [ids['principal:append']!],
+    });
+
+    await expect(
+      knowledge.createRecord({
+        node: parent.id,
+        text: 'Points at [[hidden:item]]',
+        scopeIds: [ids['scope:append']!],
+        resolutionScopeIds: [ids['scope:append']!, ids['scope:owner']!],
+        vouchedScopeIds: [ids['principal:append']!],
+      }),
+    ).rejects.toThrow(`Knowledge scope not found: ${ids['scope:owner']}`);
+    expect(
+      await storage.listMentioningRecords({ node: hidden.id, scopeIds: [ids['scope:owner']!], limit: 10 }),
+    ).toMatchObject({
+      records: [],
+    });
+  });
+
   it('preserves numeric CAS after authorization succeeds', async () => {
     const { knowledge, storage, ids } = await createFixture();
     const node = await storage.createNode({ name: 'CAS target', scopeIds: [ids['scope:edit']!] });

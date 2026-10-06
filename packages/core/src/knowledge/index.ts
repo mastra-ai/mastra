@@ -632,6 +632,14 @@ export class Knowledge extends MastraBase {
       capability: 'append',
       targetType: 'scope',
     });
+    if (mutation.resolutionScopeIds) {
+      assertKnowledgeScopeCapabilities({
+        frontier,
+        scopeIds: mutation.resolutionScopeIds,
+        capability: 'read',
+        targetType: 'scope',
+      });
+    }
     await this.#authorizeMentionTargets({
       storage,
       frontier,
