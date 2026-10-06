@@ -26,7 +26,6 @@ import {
   parseObserverOutput,
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
-  DegenerateObserverOutputError,
 } from './observer-agent';
 import { withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
@@ -403,9 +402,7 @@ export class ObserverRunner {
         omDebug(
           `[OM:callObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
         );
-        throw new DegenerateObserverOutputError(
-          `Observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`,
-        );
+        throw new Error(`Observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`);
       }
     }
 
@@ -723,7 +720,7 @@ export class ObserverRunner {
         omDebug(
           `[OM:callMultiThreadObserver] degenerate repetition on retry, failing. ${describeDegenerateOutput(result.text, 2000)}`,
         );
-        throw new DegenerateObserverOutputError(
+        throw new Error(
           `Multi-thread observer produced degenerate output after retry. ${describeDegenerateOutput(result.text)}`,
         );
       }

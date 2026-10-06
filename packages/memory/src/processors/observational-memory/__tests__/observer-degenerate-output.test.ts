@@ -1,16 +1,9 @@
 /**
  * Regression tests for https://github.com/mastra-ai/mastra/issues/24354:
  * the Observer's degenerate-output detector must not reject faithful summaries
- * of long or repetitive tool output, and persistent degenerate output must skip
- * the observation cycle instead of failing the agent run.
+ * of long or repetitive tool output while still rejecting genuine loops.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
-
-import { BufferingCoordinator } from '../buffering-coordinator';
-import { ObservationalMemory } from '../observational-memory';
+import { describe, it, expect } from 'vitest';
 import {
   describeDegenerateOutput,
   detectDegenerateRepetition,
@@ -18,13 +11,6 @@ import {
   parseObserverOutput,
 } from '../observer-agent';
 import { parseReflectorOutput } from '../reflector-agent';
-
-beforeEach(() => {
-  BufferingCoordinator.asyncBufferingOps.clear();
-  BufferingCoordinator.lastBufferedBoundary.clear();
-  BufferingCoordinator.lastBufferedAtTime.clear();
-  BufferingCoordinator.reflectionBufferCycleIds.clear();
-});
 
 // A single legitimately-long line, e.g. a summarized progress bar (reporter saw 72k–237k chars).
 const giantLine = `- 🟡 Build output: ${Array.from({ length: 12_000 }, (_, i) => `step${i}`).join(' ')}`;
@@ -35,63 +21,6 @@ const repetitiveToolLines = [
   ...Array.from({ length: 200 }, () => '  * -> pnpm build → ok'),
   '- 🟡 All build steps succeeded',
 ].join('\n');
-
-function textModel(texts: string[] | ((call: number) => string)) {
-  let calls = 0;
-  const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
-  const next = () => {
-    const text = typeof texts === 'function' ? texts(calls) : texts[Math.min(calls, texts.length - 1)]!;
-    calls++;
-    return text;
-  };
-  const model = new MockLanguageModelV2({
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage,
-      warnings: [],
-      content: [{ type: 'text', text: next() }],
-    }),
-    doStream: async () => {
-      const text = next();
-      return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: text },
-          { type: 'text-end', id: 'text-1' },
-          { type: 'finish', finishReason: 'stop', usage },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
-    },
-  });
-  return {
-    model,
-    get calls() {
-      return calls;
-    },
-  };
-}
-
-async function seedMessages(storage: InMemoryMemory, threadId: string, count = 8) {
-  const messages: MastraDBMessage[] = Array.from({ length: count }, (_, i) => ({
-    id: `${threadId}-msg-${i}`,
-    role: i % 2 === 0 ? 'user' : 'assistant',
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: `Message ${i}: `.padEnd(200, 'x') }],
-    } as MastraMessageContentV2,
-    type: 'text',
-    createdAt: new Date(Date.now() - (count - i) * 1000),
-    threadId,
-  }));
-  await storage.saveMessages({ messages });
-  return messages.map(m => m.id);
-}
-
-const degenerateLoop = `<observations>\n${'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, '.repeat(100)}\n</observations>`;
 
 describe('Observer degenerate detection (#24354)', () => {
   it('truncates a giant single line instead of flagging it as degenerate', () => {
@@ -191,133 +120,6 @@ describe('Observer degenerate detection (#24354)', () => {
     expect(result.degenerate).toBe(true);
   });
 
-  it("skips the observation cycle under failurePolicy 'continue' when output stays degenerate after retry", async () => {
-    const threadId = 'degenerate-thread';
-    const observer = textModel([degenerateLoop]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
-      reflection: { model: observer.model, observationTokens: 50_000 },
-    });
-    await seedMessages(storage, threadId);
-
-    const result = await om.observe({ threadId });
-
-    expect(observer.calls).toBe(2);
-    expect(result.observed).toBe(false);
-    expect(result.record.activeObservations ?? '').toBe('');
-    expect(result.record.observedMessageIds ?? []).toHaveLength(0);
-  });
-
-  it('reports the skipped degenerate cycle to onObservationEnd as an error', async () => {
-    const threadId = 'degenerate-hook-thread';
-    const observer = textModel([degenerateLoop]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
-      reflection: { model: observer.model, observationTokens: 50_000 },
-    });
-    await seedMessages(storage, threadId);
-    const ends: Array<{ error?: Error }> = [];
-
-    const result = await om.observe({ threadId, hooks: { onObservationEnd: r => void ends.push(r) } });
-
-    expect(result.observed).toBe(false);
-    expect(ends).toHaveLength(1);
-    expect(ends[0]!.error?.name).toBe('DegenerateObserverOutputError');
-  });
-
-  it('observes the same messages on the next cycle after a degenerate skip', async () => {
-    const threadId = 'degenerate-then-ok-thread';
-    const good = '<observations>\n- 🔴 User sent eight padded test messages\n</observations>';
-    const observer = textModel([degenerateLoop, degenerateLoop, good]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
-      reflection: { model: observer.model, observationTokens: 50_000 },
-    });
-    const ids = await seedMessages(storage, threadId);
-
-    const first = await om.observe({ threadId });
-    expect(first.observed).toBe(false);
-    expect(first.record.observedMessageIds ?? []).toHaveLength(0);
-
-    const second = await om.observe({ threadId });
-    expect(observer.calls).toBe(3);
-    expect(second.observed).toBe(true);
-    expect(second.record.activeObservations).toContain('eight padded test messages');
-    expect([...(second.record.observedMessageIds ?? [])].sort()).toEqual([...ids].sort());
-  });
-
-  it("does not fail the run under failurePolicy 'continue' when every reflection attempt is degenerate", async () => {
-    const threadId = 'degenerate-reflection-thread';
-    const facts = Array.from({ length: 40 }, (_, i) => `- 🔴 Distinct fact number ${i} about the project setup`).join(
-      '\n',
-    );
-    const observer = textModel([`<observations>\n${facts}\n</observations>`]);
-    const reflector = textModel([degenerateLoop]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false, failurePolicy: 'continue' },
-      reflection: {
-        model: reflector.model,
-        observationTokens: 100,
-        bufferActivation: undefined,
-        failurePolicy: 'continue',
-      },
-    });
-    await seedMessages(storage, threadId);
-
-    const result = await om.observe({ threadId });
-
-    expect(reflector.calls).toBeGreaterThan(0);
-    expect(result.observed).toBe(true);
-    expect(result.record.activeObservations).toContain('Distinct fact number 39');
-  });
-
-  it("fails the turn under the default failurePolicy 'abort' when observer output stays degenerate", async () => {
-    const threadId = 'degenerate-abort-thread';
-    const observer = textModel([degenerateLoop]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
-      reflection: { model: observer.model, observationTokens: 50_000 },
-    });
-    await seedMessages(storage, threadId);
-
-    await expect(om.observe({ threadId })).rejects.toThrow(/degenerate output after retry/);
-    const record = await om.getRecord(threadId);
-    expect(record?.observedMessageIds ?? []).toHaveLength(0);
-  });
-
-  it("fails the turn under the default failurePolicy 'abort' when every reflection attempt is degenerate", async () => {
-    const threadId = 'degenerate-reflection-abort-thread';
-    const facts = Array.from({ length: 40 }, (_, i) => `- 🔴 Distinct fact number ${i} about the project setup`).join(
-      '\n',
-    );
-    const observer = textModel([`<observations>\n${facts}\n</observations>`]);
-    const reflector = textModel([degenerateLoop]);
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observer.model, messageTokens: 100, bufferTokens: false },
-      reflection: { model: reflector.model, observationTokens: 100, bufferActivation: undefined },
-    });
-    await seedMessages(storage, threadId);
-
-    await expect(om.observe({ threadId })).rejects.toThrow(/degenerate repetition/);
-  });
 });
 
 describe('detectDegenerateRepetition short-line loops', () => {

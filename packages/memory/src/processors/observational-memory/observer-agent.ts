@@ -5,7 +5,6 @@ import type { CoreMessage } from '@mastra/core/llm';
 import { isSystemReminderMessage } from '../../system-reminders';
 import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker, resolveTimeZone } from './date-utils';
-import { OmModelExecutionError } from './error';
 import type { Extractor } from './extractor';
 import {
   buildExtractorOutputSections,
@@ -1879,30 +1878,6 @@ export function sanitizeObservationLines(observations: string): string {
     }
   }
   return changed ? lines.join('\n') : observations;
-}
-
-/**
- * Thrown when the Observer keeps producing degenerate output after a retry.
- * It is an observer-model execution failure, so `observation.failurePolicy`
- * decides the outcome: 'continue' skips the cycle, 'abort' fails the turn.
- */
-export class DegenerateObserverOutputError extends OmModelExecutionError {
-  constructor(message: string) {
-    super('observer-model', new Error(message));
-    this.name = 'DegenerateObserverOutputError';
-  }
-}
-
-/**
- * Thrown when every Reflector compression attempt produced degenerate output.
- * It is a reflector-model execution failure, so `reflection.failurePolicy`
- * decides the outcome: 'continue' keeps observations unreflected, 'abort' fails the turn.
- */
-export class DegenerateReflectorOutputError extends OmModelExecutionError {
-  constructor(message: string) {
-    super('reflector-model', new Error(message));
-    this.name = 'DegenerateReflectorOutputError';
-  }
 }
 
 /**
