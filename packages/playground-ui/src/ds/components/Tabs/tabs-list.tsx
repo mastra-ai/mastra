@@ -7,7 +7,6 @@ import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
-import { controlHeight } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +26,6 @@ type TabListVariantsProps = VariantProps<typeof tabListVariants>;
 
 export type TabListVariant = NonNullable<TabListVariantsProps['variant']>;
 
-/** The shared control rung: a list of a size lines up with a Button or Input of that size. */
 export type TabListSize = 'sm' | 'md';
 
 export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
@@ -38,12 +36,6 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   variant?: TabListVariant | null;
   style?: React.CSSProperties;
 };
-
-/** The active pill sits inside the track's inset: 2px on the rung-sized track, 4px when contained. */
-function indicatorHeightClass(variant: TabListVariant, contained: boolean) {
-  if (variant !== 'pill') return 'h-full';
-  return contained ? 'h-[calc(100%-0.5rem)]' : 'h-[calc(100%-0.25rem)]';
-}
 
 export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
   const resolvedVariant = variant ?? 'pill';
@@ -79,8 +71,6 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     [],
   );
   const contained = tabs?.appearance === 'contained';
-  const pillTrack = resolvedVariant === 'pill' && !contained;
-  const indicatorHeight = indicatorHeightClass(resolvedVariant, contained);
   useLayoutEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport || !contained) return;
@@ -181,21 +171,14 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
             data-overflow={hiddenTabs.length > 0 || undefined}
             data-variant={resolvedVariant}
             data-size={size}
-            className={cn(
-              'group/tabs-list',
-              tabListVariants({ variant: resolvedVariant }),
-              // A filled pill track is the control: its outer box takes the rung (like SegmentedControl),
-              // and the tabs fill it inside the 2px inset.
-              pillTrack && cn(controlHeight[size], 'items-stretch p-0.5'),
-              className,
-            )}
+            className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
             style={style}
           >
             {children}
             <BaseTabs.Indicator
               className={cn(
                 'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
-                indicatorHeight,
+                resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
                 'w-[var(--active-tab-width)]',
                 'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
               )}
