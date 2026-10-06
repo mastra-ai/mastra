@@ -253,7 +253,18 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       // the prompt and the model's replies must be there.
       const stored = JSON.stringify(recalled.messages);
       expect(stored).toContain('Give a one-sentence reply containing the word ALPHA');
-      expect(recalled.messages.some(m => m.role === 'assistant')).toBe(true);
+      const storedReplies = recalled.messages
+        .filter(m => m.role === 'assistant')
+        .map(m => String((m.content as { content?: string } | undefined)?.content ?? ''))
+        .filter(text => text.length > 0);
+      // The post-feedback reply must be persisted too, not just the first reply: the streamed text is
+      // the pre-repair reply followed by the post-repair one, so the last stored assistant message
+      // must be the tail of it. Otherwise the absence check below could pass on a history that stops
+      // before the repair ever ran.
+      expect(storedReplies.length).toBeGreaterThanOrEqual(2);
+      const lastStoredReply = storedReplies.at(-1) ?? '';
+      expect(lastStoredReply.length).toBeGreaterThan(0);
+      expect(finalText.trimEnd().endsWith(lastStoredReply.trimEnd())).toBe(true);
       expect(stored).not.toContain('Continue.');
       // The repair's own signal is stored (role 'signal', text 'continue'), but T78 makes no claim
       // about it, so it is deliberately not asserted here.

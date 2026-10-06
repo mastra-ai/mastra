@@ -377,7 +377,8 @@ describe('recording file format', () => {
     expect(headers['anthropic-workspace-id']).toBeUndefined();
     expect(headers['openai-organization']).toBeUndefined();
     expect(headers['openai-project']).toBeUndefined();
-    expect(Object.keys(headers).map(key => key.toLowerCase())).not.toContain('x-api-key');
+    // The request's credentials are not written anywhere in the file, request headers included.
+    expect(JSON.stringify(recorded)).not.toContain('sk-ant-not-recorded');
     // Non-account headers are still recorded: replay rebuilds the response from them.
     expect(headers['request-id']).toBe('req_recorded_verbatim');
     expect(headers['content-type']).toContain('application/json');
