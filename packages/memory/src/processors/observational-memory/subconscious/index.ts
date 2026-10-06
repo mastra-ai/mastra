@@ -166,7 +166,11 @@ export class Subconscious {
   #validateObservationEntry(entry: SubconsciousObservationEntry): void {
     const name = entryName(entry);
     if (typeof entry === 'string') {
-      if (!BUILT_IN_OBSERVATION.has(name)) throw new Error(`Unknown Subconscious observation agent: ${name}`);
+      if (!BUILT_IN_OBSERVATION.has(name)) {
+        throw new Error(
+          `Unknown Subconscious observation agent: ${name}. Use "curate" for observation-time ingestion or "remind" for retrieval.`,
+        );
+      }
       return;
     }
     if (BUILT_IN_OBSERVATION.has(name)) return;
