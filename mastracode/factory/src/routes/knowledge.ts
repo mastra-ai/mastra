@@ -347,6 +347,8 @@ function importRunBelongsToView(run: KnowledgeImportRun, projectId: string, thre
   return importScopeBelongsToView(importBinding(run.binding).scopeAddress, projectId, threadId);
 }
 
+const KNOWLEDGE_APPROVALS_COUNT_CAP = 99;
+
 async function proposalPayload(
   knowledge: Knowledge,
   store: KnowledgeStorage,
@@ -1273,6 +1275,51 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               visible.length > 100
                 ? this.#mintHandle(view.projectId, view.perspectiveKey, 'proposal-cursor', visible[99]!.cursor)
                 : undefined,
+          });
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/proposals/count', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const tenant = this.deps.auth.tenant(c);
+          const allowActions =
+            !this.deps.auth.enabled() ||
+            (tenant?.orgId !== undefined && (await this.deps.auth.isOrganizationAdmin(c, tenant.orgId)));
+          if (!allowActions) return c.json({ pending: 0, capped: false });
+          // Passive attention count: only pending proposals this viewer can see AND act on. Hidden
+          // proposals are filtered before counting, so the badge cannot reveal their existence.
+          let pending = 0;
+          let scanCursor: string | undefined;
+          do {
+            const page = await view.knowledge.listProposals({
+              vouchedScopeIds: view.scopeIds,
+              status: 'pending',
+              cursor: scanCursor,
+              limit: 100,
+            });
+            const payloads = await Promise.all(
+              page.proposals.map(proposal =>
+                proposalPayload(
+                  view.knowledge,
+                  view.store,
+                  proposal,
+                  view.scopeIds,
+                  () => '',
+                  () => '',
+                  true,
+                ),
+              ),
+            );
+            pending += payloads.filter(payload => payload?.actions.includes('approve')).length;
+            scanCursor = page.nextCursor;
+          } while (pending <= KNOWLEDGE_APPROVALS_COUNT_CAP && scanCursor);
+          return c.json({
+            pending: Math.min(pending, KNOWLEDGE_APPROVALS_COUNT_CAP),
+            capped: pending > KNOWLEDGE_APPROVALS_COUNT_CAP,
           });
         },
       }),

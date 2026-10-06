@@ -1288,6 +1288,52 @@ describe('KnowledgeRoutes', () => {
     expect(approved.status, await approved.text()).toBe(200);
   });
 
+  it('counts only visible, actionable pending proposals for the passive Approvals badge', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: projectScopeId,
+      scopeRefId: projectScopeId,
+      role: 'owner',
+      canSuggest: true,
+    });
+    const hiddenRoot = await h.runtime.createRootScope({
+      address: 'scope:hidden-approvals',
+      contextualScopeAddress: 'scope:hidden-approvals',
+    });
+    const hiddenScopeId = hiddenRoot.scopes['scope:hidden-approvals']!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: hiddenScopeId,
+      scopeRefId: hiddenScopeId,
+      role: 'owner',
+      canSuggest: true,
+    });
+    for (const name of ['First visible target', 'Second visible target']) {
+      const target = await node(h.knowledge, name, h.projectScope);
+      await h.runtime.proposeNodeUpdate({
+        mutation: { id: target.id, version: target.version, name: `${name} reviewed` },
+        proposerContextScopeId: projectScopeId,
+        vouchedScopeIds: [projectScopeId],
+      });
+    }
+    const hiddenTarget = await node(h.knowledge, 'Hidden target', [hiddenScopeId]);
+    await h.runtime.proposeNodeUpdate({
+      mutation: { id: hiddenTarget.id, version: hiddenTarget.version, name: 'Hidden reviewed' },
+      proposerContextScopeId: hiddenScopeId,
+      vouchedScopeIds: [hiddenScopeId],
+    });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/proposals/count`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ pending: 2, capped: false });
+
+    const nonAdmin = await createHarness({ isOrganizationAdmin: async () => false });
+    const nonAdminResponse = await nonAdmin.app.request(
+      `/web/factory/projects/${nonAdmin.projectId}/knowledge/proposals/count`,
+    );
+    expect(await nonAdminResponse.json()).toEqual({ pending: 0, capped: false });
+  });
+
   it('does not advertise proposal review actions to non-admin callers', async () => {
     const h = await createHarness({ isOrganizationAdmin: async () => false });
     const projectScopeId = h.projectScope.at(-1)!;
