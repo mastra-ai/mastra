@@ -15,7 +15,6 @@ export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: Pick<DatasetExperiment, 'datasetId' | 'status'>[];
   isLoading: boolean;
-  isExperimentsLoading?: boolean;
   search?: string;
   experimentFilter?: string;
   tagFilter?: string;
@@ -128,16 +127,16 @@ function SelectableDatasetRow({
 function DatasetRow({
   dataset: ds,
   rowProps,
-  isExperimentsLoading,
+  trailingCell,
 }: {
   dataset: EnrichedDataset;
   rowProps: RowProps;
-  isExperimentsLoading?: boolean;
+  trailingCell: ReactNode | null;
 }) {
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
-  const hasExperimentsAction = !isExperimentsLoading && ds.experimentCount > 0;
-  const hasTrailingCell = hasExperimentsAction || Boolean(isExperimentsLoading);
+  const hasExperimentsAction = trailingCell === null && ds.experimentCount > 0;
+  const hasTrailingCell = hasExperimentsAction || trailingCell !== null;
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
@@ -157,13 +156,7 @@ function DatasetRow({
         {hasTrailingCell ? null : <DataList.Cell className="justify-center" />}
       </DataList.RowLink>
 
-      {isExperimentsLoading ? (
-        <DataList.Cell>
-          <span role="status" aria-label="Loading experiment summary">
-            …
-          </span>
-        </DataList.Cell>
-      ) : null}
+      {trailingCell !== null && <DataList.Cell>{trailingCell}</DataList.Cell>}
       {hasExperimentsAction && (
         <Button
           render={<Link href={`/experiments?dataset=${ds.id}`} />}
@@ -184,7 +177,6 @@ export function DatasetsList({
   datasets,
   experiments,
   isLoading,
-  isExperimentsLoading,
   search = '',
   experimentFilter = 'all',
   tagFilter = 'all',
@@ -273,7 +265,7 @@ export function DatasetsList({
             key={ds.id}
             dataset={ds}
             rowProps={getRowProps(index)}
-            isExperimentsLoading={isExperimentsLoading}
+            trailingCell={renderTrailingCell?.(ds) ?? null}
           />
         ),
       )}

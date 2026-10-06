@@ -75,6 +75,16 @@ describe('DatasetsList', () => {
     });
   });
 
+  describe('when the caller supplies a trailing cell for a navigable row', () => {
+    it('shows that cell instead of the experiments action and keeps dataset navigation', () => {
+      renderList({ renderTrailingCell: ds => (ds.id === 'ds-a' ? <span>Summary unavailable</span> : null) });
+
+      expect(screen.getByText('Summary unavailable')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: '2 (100%)' })).toBeNull();
+      expect(screen.getByRole('link', { name: /Dataset A/ }).getAttribute('href')).toBe('/datasets/ds-a');
+    });
+  });
+
   describe('when searching for a dataset with different capitalization', () => {
     it('shows only matching dataset names', () => {
       renderList({ search: 'DATASET b' });

@@ -7,7 +7,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import DatasetsPage from '..';
 import { emptyScorers } from './fixtures/query-loading';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  buildListExperimentsResponse,
+  experiments,
+} from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { Link } from '@/lib/link';
 import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -137,6 +140,42 @@ describe('Datasets page query loading', () => {
       } finally {
         release();
       }
+    });
+
+    it('replaces a dataset-specific loading label with its summary when experiments resolve', async () => {
+      useDatasets([buildDataset({ name: 'Alpha' })]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, async () => {
+          await held;
+          return HttpResponse.json(buildListExperimentsResponse(experiments));
+        }),
+      );
+      try {
+        renderPage();
+        expect(await screen.findByLabelText('Loading experiment summary for Alpha')).not.toBeNull();
+        release();
+        expect(await screen.findByRole('link', { name: '4 (100%)' })).not.toBeNull();
+        expect(screen.queryByLabelText('Loading experiment summary for Alpha')).toBeNull();
+      } finally {
+        release();
+      }
+    });
+  });
+
+  describe('when experiment summaries fail to load', () => {
+    it('keeps successfully loaded datasets available with an unavailable summary', async () => {
+      useDatasets([buildDataset({ name: 'Alpha' })]);
+      server.use(http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json({}, { status: 500 })));
+
+      renderPage();
+
+      expect(await screen.findByLabelText('Experiment summary unavailable for Alpha')).not.toBeNull();
+      expect(screen.getByRole('link', { name: /Alpha/ }).getAttribute('href')).toBe('/datasets/dataset-1');
+      expect(screen.queryByText('Failed to load datasets')).toBeNull();
     });
   });
 });

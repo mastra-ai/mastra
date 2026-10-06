@@ -1,5 +1,6 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -50,8 +51,9 @@ export default function Datasets() {
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
   const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
 
-  const isLoading = isLoadingDatasets || (experimentFilter !== 'all' && isLoadingExperiments);
-  const error = errorDatasets || errorExperiments;
+  const needsExperimentsForFilter = experimentFilter !== 'all';
+  const isLoading = isLoadingDatasets || (needsExperimentsForFilter && isLoadingExperiments);
+  const error = errorDatasets || (needsExperimentsForFilter ? errorExperiments : undefined);
 
   const navigate = useNavigate();
   const openCreatePage = () => void navigate('/datasets/new');
@@ -135,7 +137,33 @@ export default function Datasets() {
         datasets={datasets}
         experiments={experiments}
         isLoading={isLoading}
-        isExperimentsLoading={isLoadingExperiments}
+        renderTrailingCell={dataset => {
+          if (isLoadingExperiments) {
+            return (
+              <Txt
+                as="span"
+                variant="caption"
+                tone="muted"
+                aria-label={`Loading experiment summary for ${dataset.name}`}
+              >
+                …
+              </Txt>
+            );
+          }
+          if (errorExperiments) {
+            return (
+              <Txt
+                as="span"
+                variant="caption"
+                tone="muted"
+                aria-label={`Experiment summary unavailable for ${dataset.name}`}
+              >
+                Unavailable
+              </Txt>
+            );
+          }
+          return null;
+        }}
         search={search}
         experimentFilter={experimentFilter}
         tagFilter={tagFilter}
