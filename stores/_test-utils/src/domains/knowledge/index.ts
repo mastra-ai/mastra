@@ -149,9 +149,14 @@ export function createKnowledgeStorageTests(
         source: 'curator',
         scopeIds: [OTHER_SCOPE_ID],
       });
-      const replacedRecords = (await store.listRecords({ node, scopeIds, limit: 300 })).records
-        .filter(record => record.source === 'curator')
-        .map(({ id, version }) => ({ id, version }));
+      const replacedRecords: Array<{ id: string; version: number }> = [];
+      let cursor: string | undefined;
+      do {
+        const page = await store.listRecords({ node, scopeIds, limit: 100, ...(cursor ? { after: cursor } : {}) });
+        for (const record of page.records)
+          if (record.source === 'curator') replacedRecords.push({ id: record.id, version: record.version });
+        cursor = page.nextCursor;
+      } while (cursor);
       expect(replacedRecords).toHaveLength(205);
       const result = await store.replaceNodeRecords({
         node: { id: node.id, version: node.version },
@@ -1120,7 +1125,11 @@ export function createKnowledgeStorageTests(
       });
       await store.setNodeAddress({ source: 'github', address: 'source-address', nodeId: source.id });
 
-      const merged = await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
+      const merged = await store.mergeNodes({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: source.version,
+      });
       expect(merged.version).toBe(target.version);
       expect(
         (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
