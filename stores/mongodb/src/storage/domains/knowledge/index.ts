@@ -1,39 +1,40 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  createKnowledgeCoreLoader,
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
-  assertKnowledgeProposalMutationSemantics,
-  createKnowledgeUlid,
   isKnowledgeNodeVisible,
-  isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  TABLE_KNOWLEDGE_SCHEMA,
+} from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import {
+  createKnowledgeUlid,
+  isKnowledgeScopeVisible,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
-  KnowledgeSchemaError,
   KnowledgeStorage,
-  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
-  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
-  sanitizeKnowledgeImportError,
-  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_IMPORT_RUNS,
-  TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_NODE_ADDRESSES,
-  TABLE_KNOWLEDGE_NODE_SCOPES,
   TABLE_KNOWLEDGE_NODES,
-  TABLE_KNOWLEDGE_PROPOSALS,
-  TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_RECORDS,
-  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-  TABLE_KNOWLEDGE_SCOPE_GRANTS,
-  TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
@@ -90,6 +91,8 @@ import type { ClientSession, Collection, Document, Filter } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
 const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
 const canonicalName = (name: string) => name.trim().toLowerCase();
@@ -248,6 +251,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
     if (!(await this.#connector.supportsTransactions())) {
       throw new KnowledgeSchemaError(
         'MongoDB Knowledge requires a replica set or sharded cluster with multi-document transaction support.',
@@ -331,6 +335,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async #transaction<T>(operation: (session: ClientSession) => Promise<T>): Promise<T> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
     if (!(await this.#connector.supportsTransactions())) {
       throw new KnowledgeSchemaError('MongoDB Knowledge mutations require replica-set transaction support.');
     }
@@ -479,6 +484,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     plan: KnowledgeStructurePlan,
     options: { expectedAccessEpoch?: number; expectedAbsentScopeAddresses?: string[] } = {},
   ): Promise<KnowledgeStructureReconcileResult> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, options.expectedAccessEpoch);
       const addresses = await this.#collection(TABLE_KNOWLEDGE_SCOPE_ADDRESSES);
@@ -2275,6 +2281,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       reviewReason?: string;
     },
   ): Promise<KnowledgeProposal> {
+    const { assertKnowledgeProposalMutationSemantics } = await loadKnowledgeCore();
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
       const proposals = await this.#collection(TABLE_KNOWLEDGE_PROPOSALS);
@@ -2566,6 +2573,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const { sanitizeKnowledgeImportError } = await loadKnowledgeCore();
     const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     return this.#transaction(async session => {
       const runs = await this.#collection(TABLE_KNOWLEDGE_IMPORT_RUNS);
@@ -2715,6 +2723,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const { sanitizeKnowledgeImportError } = await loadKnowledgeCore();
     return this.#transaction(async session => {
       const runs = await this.#collection(TABLE_KNOWLEDGE_IMPORT_RUNS);
       const existing = await runs.findOne({ id: input.id }, sessionOptions(session));

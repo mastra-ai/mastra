@@ -1,13 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import type { KnowledgeCore } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeCoreLoader,
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
-  assertKnowledgeProposalMutationSemantics,
-  createKnowledgeUlid,
   isKnowledgeNodeVisible,
-  isKnowledgeScopeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -18,40 +17,42 @@ import {
   KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
   KNOWLEDGE_SCHEMA_SCHEMA,
-  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KNOWLEDGE_TABLE_NAMES,
+  knowledgeScopeIdsKey,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  TABLE_KNOWLEDGE_SCHEMA,
+} from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import {
+  createKnowledgeUlid,
+  isKnowledgeScopeVisible,
+  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
   KNOWLEDGE_MENTIONS_SCHEMA,
   KNOWLEDGE_NODES_SCHEMA,
   KNOWLEDGE_RECORDS_SCHEMA,
-  KNOWLEDGE_TABLE_NAMES,
-  knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
-  KnowledgeSchemaError,
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
-  sanitizeKnowledgeImportError,
-  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_IMPORT_RUNS,
-  TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_NODE_ADDRESSES,
-  TABLE_KNOWLEDGE_NODE_SCOPES,
   TABLE_KNOWLEDGE_NODES,
-  TABLE_KNOWLEDGE_PROPOSALS,
-  TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_RECORDS,
-  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-  TABLE_KNOWLEDGE_SCOPE_GRANTS,
-  TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   ApplyKnowledgeProposalInput,
@@ -109,6 +110,14 @@ import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql
 import { generateTableSQL } from '../operations';
 import type { StoreOperationsMySQL } from '../operations';
 import { parseDateTime } from '../utils';
+
+const loadCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
+let loadedKnowledgeCore: KnowledgeCore | undefined;
+
+async function loadKnowledgeCore(): Promise<KnowledgeCore> {
+  loadedKnowledgeCore = await loadCore();
+  return loadedKnowledgeCore;
+}
 
 interface QueryResult {
   rows: Record<string, unknown>[];
@@ -185,7 +194,10 @@ function parseJson<T>(value: unknown): T {
 
 function toDate(value: unknown): Date {
   const date = parseDateTime(value as Date | string | number | null | undefined);
-  if (!date) throw new KnowledgeSchemaError('Knowledge timestamp is missing or invalid.');
+  if (!date) {
+    // Rows are only read after init() has loaded the installed core.
+    throw new (loadedKnowledgeCore?.KnowledgeSchemaError ?? Error)('Knowledge timestamp is missing or invalid.');
+  }
   return date;
 }
 
@@ -384,6 +396,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
     const tables = [
       [TABLE_KNOWLEDGE_NODES, KNOWLEDGE_NODES_SCHEMA],
       [TABLE_KNOWLEDGE_RECORDS, KNOWLEDGE_RECORDS_SCHEMA],
@@ -1678,6 +1691,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const { sanitizeKnowledgeImportError } = await loadKnowledgeCore();
     const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
     return this.#transaction(async tx => {
       const current = await tx.execute({
@@ -1830,6 +1844,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const { sanitizeKnowledgeImportError } = await loadKnowledgeCore();
     return this.#transaction(async tx => {
       const existing = await tx.execute({
         sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
@@ -2227,6 +2242,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       reviewReason?: string;
     },
   ): Promise<KnowledgeProposal> {
+    const { assertKnowledgeProposalMutationSemantics } = await loadKnowledgeCore();
     return this.#transaction(async tx => {
       const existing = await tx.execute({
         sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
