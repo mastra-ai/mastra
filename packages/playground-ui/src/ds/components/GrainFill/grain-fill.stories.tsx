@@ -18,9 +18,11 @@ export const Tones: Story = {
       {tones.map(tone => (
         <div
           key={tone}
-          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim bg-card shadow-(--elevation-raised)"
+          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim shadow-(--elevation-raised)"
         >
-          <GrainFill tone={tone} width={464} height={200} className="absolute inset-0 -z-10" />
+          <div className="absolute inset-0 -z-10 bg-card">
+            <GrainFill tone={tone} width={464} height={200} className="absolute inset-0" />
+          </div>
         </div>
       ))}
     </div>
@@ -35,9 +37,11 @@ export const AnyColorToken: Story = {
       {colorTokens.map(tone => (
         <div
           key={tone}
-          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim bg-card shadow-(--elevation-raised)"
+          className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim shadow-(--elevation-raised)"
         >
-          <GrainFill tone={tone} width={464} height={200} className="absolute inset-0 -z-10" />
+          <div className="absolute inset-0 -z-10 bg-card">
+            <GrainFill tone={tone} width={464} height={200} className="absolute inset-0" />
+          </div>
         </div>
       ))}
     </div>
