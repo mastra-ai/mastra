@@ -19,6 +19,7 @@ import { writeFileSync } from 'node:fs';
 import { afterAll, afterEach, describe, it } from 'vitest';
 import { z } from 'zod';
 import { DurableStepIds } from '../constants';
+import { createAgreementMemory } from './agreement-memory';
 import {
   buildAgreementGraph,
   createScriptModel,
@@ -152,6 +153,8 @@ async function freshRecover(opts: {
   recover?: (gen2: Gen) => Promise<any>;
   /** Extra `Mastra` config per generation (e.g. `{ workflows }`); see `buildAgreementGraph`. */
   mastraExtra?: (ctx: { core: any; storage: any; memory: any; generation: number }) => Record<string, unknown>;
+  /** Overrides the default bare `MockMemory`; see the `memory` hook on `buildAgreementGraph`. */
+  memory?: (ctx: { MockMemory: any; core: any; storage: any; generation: number }) => any;
 }) {
   const storage = await newStorage();
   const gen1 = await buildAgreementGraph({
@@ -161,6 +164,7 @@ async function freshRecover(opts: {
     build: opts.build,
     generation: 1,
     mastraExtra: opts.mastraExtra,
+    memory: opts.memory,
   });
   liveGraphs.push(gen1);
   const parked = Promise.resolve()
@@ -181,6 +185,7 @@ async function freshRecover(opts: {
     build: opts.build,
     generation: 2,
     mastraExtra: opts.mastraExtra,
+    memory: opts.memory,
   });
   liveGraphs.push(gen2);
   const result = await (opts.recover ? opts.recover(gen2) : gen2.runner.recover(opts.runId, {}));
@@ -210,16 +215,6 @@ async function drain(result: any, opts: { stopOn?: (chunk: any) => boolean } = {
 
 const count = (list: any[], type: string) => list.filter(c => c.type === type).length;
 
-/**
- * Checks the harness asserts against `@mastra/memory`'s persisted messages cannot be
- * measured here: `@mastra/memory` is not a dependency of `packages/core`, and the only
- * in-core memory (`MockMemory`) persisted nothing on the suspend/resume path (it did on
- * the `recover()` path in T1). Recorded as unmeasured rather than passed or failed.
- */
-const PERSISTENCE_UNMEASURED =
-  'not measured: core test vehicle has no message-persisting memory (@mastra/memory is not a packages/core dependency; MockMemory persists nothing on the suspend/resume path)';
-const unmeasured = (rec: { observe: (name: string, value: unknown) => void }, name: string) =>
-  rec.observe(`unmeasured: ${name}`, PERSISTENCE_UNMEASURED);
 const errorChunks = (list: any[]) => list.filter(c => ['error', 'abort', 'tripwire'].includes(c.type));
 const textOf = (list: any[]) =>
   list
@@ -1175,7 +1170,6 @@ function confirmTool(core: any, log: any[], generation: number) {
 }
 
 async function t13Run(engine: 'durable' | 'evented') {
-  const storage = await newStorage();
   const log: any[] = [];
   const memory = { thread: 't13-thread-agreement', resource: 't13-resource-agreement' };
   const runId = 't13-run-agreement';
@@ -1213,15 +1207,17 @@ async function t13Run(engine: 'durable' | 'evented') {
     },
     ready: (_gen1, s) => waitForStatus(s, runId, 'suspended'),
     drive: async gen2 => drain(await gen2.runner.resume(runId, { confirmed: true }, { toolCallId, memory })),
+    memory: createAgreementMemory,
   });
 
   const resumed = handoff.result as any;
-  const messages = await persisted(storage, memory.thread, memory.resource);
+  const messages = await persisted(handoff.storage, memory.thread, memory.resource);
   return {
     engine,
     startError,
     persistedCount: messages.length,
     persistedRoles: messages.map((m: any) => m.role),
+    confirmStates: (await toolParts(messages)).filter((p: any) => p.toolName === 'confirm').map((p: any) => p.state),
     parkedStatus: handoff.parkedRow?.status ?? null,
     mainTypes: main.chunks.map((c: any) => c.type),
     resumedTypes: resumed.chunks.map((c: any) => c.type),
@@ -1261,7 +1257,11 @@ function t13Test(engine: 'durable' | 'evented') {
     );
     rec.check('side effect committed exactly once', state.commits === 1, state.commits);
     rec.check('resumed by the restarted process', state.parkedStatus === 'suspended', state.parkedStatus);
-    unmeasured(rec, 'one persisted confirm result, none left suspended');
+    rec.check(
+      'one persisted confirm result, none left suspended',
+      state.confirmStates.length === 1 && state.confirmStates[0] === 'result',
+      state.confirmStates,
+    );
   });
 }
 
@@ -1289,7 +1289,6 @@ function transferTool(core: any, log: any[], generation: number) {
 }
 
 async function t6Run(engine: 'durable' | 'evented') {
-  const storage = await newStorage();
   const log: any[] = [];
   const memory = { thread: 't6-thread-agreement', resource: 't6-resource-agreement' };
   const runId = 't6-run-agreement';
@@ -1329,10 +1328,11 @@ async function t6Run(engine: 'durable' | 'evented') {
     },
     ready: (_gen1, s) => waitForStatus(s, runId, 'suspended'),
     drive: async gen2 => drain(await gen2.runner.approveToolCall({ runId, toolCallId, memory })),
+    memory: createAgreementMemory,
   });
 
   const resumed = handoff.result as any;
-  const messages = await persisted(storage, memory.thread, memory.resource);
+  const messages = await persisted(handoff.storage, memory.thread, memory.resource);
   const parts = (await toolParts(messages)).filter((p: any) => p.toolName === 'transfer');
   const commits = log.filter(e => e.event === 'commit');
   return {
@@ -1380,14 +1380,18 @@ function t6Test(engine: 'durable' | 'evented') {
     );
     rec.check('executed by the restarted process', state.commits[0]?.generation === 2, state.commits);
     rec.check('public tool-result for the approved call', state.publicResults === 1, state.publicResults);
-    unmeasured(rec, 'one persisted result, none orphaned');
+    rec.check(
+      'one persisted result, none orphaned',
+      state.parts.length === 1 && state.parts[0] === 'result',
+      state.parts,
+    );
     rec.check('final text confirms', /TX-42|42/.test(state.text), state.text.slice(-200));
     rec.check(
       'restart happened while suspended on the approval',
       state.parkedStatus === 'suspended',
       state.parkedStatus,
     );
-    unmeasured(rec, 'exactly one persisted user message');
+    rec.check('exactly one persisted user message', state.userMessages === 1, state.userMessages);
   });
 }
 
@@ -1439,6 +1443,7 @@ async function t12Run(engine: 'durable' | 'evented') {
     gate,
     build: ({ core, memory: mem, generation }: any) => build({ core, memory: mem, generation }).supervisor,
     start: gen1 => gen1.runner.stream('Get the steps done.', { memory, runId, maxSteps: 4 }),
+    memory: createAgreementMemory,
   });
   const list = await drain(result);
 
@@ -1494,7 +1499,7 @@ function t12Test(engine: 'durable' | 'evented') {
     );
     rec.check('supervisor answered after delegating', state.text.startsWith('delegated'), state.text);
     rec.check('interrupted step finished in the restarted process', state.step2Generation === 2, state.steps);
-    unmeasured(rec, 'one persisted delegation result');
+    rec.check('one persisted delegation result', state.parts.length === 1 && state.parts[0] === 'result', state.parts);
   });
 }
 
@@ -1529,11 +1534,14 @@ async function t41Run(engine: 'durable' | 'evented') {
   // so thread-scope injection can never be exercised here. Resource scope makes both
   // sides use the same row, so read-back-in-the-restarted-process stays measurable.
   const memory = ({ MockMemory, storage: s }: any) =>
-    new MockMemory({
+    createAgreementMemory({
+      MockMemory,
       storage: s,
-      enableWorkingMemory: true,
-      workingMemoryTemplate: '# Profile\n- name:\n- pref:',
-      options: { workingMemory: { scope: 'resource' } },
+      options: {
+        enableWorkingMemory: true,
+        workingMemoryTemplate: '# Profile\n- name:\n- pref:',
+        options: { workingMemory: { scope: 'resource' } },
+      },
     });
   const build = ({ core, memory: mem, generation }: any) =>
     new core.Agent({
@@ -1580,6 +1588,10 @@ async function t41Run(engine: 'durable' | 'evented') {
     .filter(r => r.generation === 2)
     .map(r => systemTextOf(r.prompt))
     .join('\n');
+  const persistedToolParts = (await toolParts(messages)).map((p: any) => ({
+    toolName: p.toolName,
+    state: p.state,
+  }));
 
   return {
     engine,
@@ -1589,7 +1601,8 @@ async function t41Run(engine: 'durable' | 'evented') {
     gen2System,
     modelCalls: requests.length,
     persistedRoles: messages.map((m: any) => m.role),
-    toolParts: (await toolParts(messages)).map((p: any) => p.toolName),
+    toolParts: persistedToolParts.map((p: any) => p.toolName),
+    toolPartDetails: persistedToolParts,
   };
 }
 
@@ -1624,7 +1637,11 @@ function t41Test(engine: 'durable' | 'evented') {
       'scopeSubstitution',
       "harness template cell uses scope:'thread'; core MockMemory cannot inject thread-scoped working memory (resource-row storage vs thread-metadata read), so this cell runs scope:'resource'",
     );
-    unmeasured(rec, 'updateWorkingMemory not persisted as a visible tool part');
+    rec.check(
+      'updateWorkingMemory not persisted as a visible tool part',
+      !state.toolPartDetails.some((p: any) => p.toolName === 'updateWorkingMemory'),
+      state.toolPartDetails,
+    );
     rec.observe('toolPartsSeenInStream', state.toolParts);
   });
 }
@@ -1641,7 +1658,6 @@ describe('T41 working-memory', () => {
 const T51_WORKER_TEXT = 'worker done';
 
 async function t51Run(engine: 'durable' | 'evented') {
-  const storage = await newStorage();
   const log: any[] = [];
   const memory = { thread: 't51-thread-agreement', resource: 't51-resource-agreement' };
   const runId = 't51-run-agreement';
@@ -1689,10 +1705,11 @@ async function t51Run(engine: 'durable' | 'evented') {
     },
     ready: (_gen1, s) => waitForStatus(s, runId, 'suspended'),
     drive: async gen2 => drain(await gen2.runner.resume(runId, { confirmed: true }, { toolCallId, memory })),
+    memory: createAgreementMemory,
   });
 
   const resumed = handoff.result as any;
-  const parts = (await toolParts(await persisted(storage, memory.thread, memory.resource))).filter(
+  const parts = (await toolParts(await persisted(handoff.storage, memory.thread, memory.resource))).filter(
     (p: any) => p.toolName === 'agent-worker',
   );
   const delegation = resumed.chunks.find((c: any) => c.type === 'tool-result' && c.payload?.toolName === 'agent-worker')
@@ -1751,7 +1768,11 @@ function t51Test(engine: 'durable' | 'evented') {
       state.delegationText.slice(0, 300),
     );
     rec.check('resumed by the restarted process', state.resumedGeneration === 2, state.resumedGeneration);
-    unmeasured(rec, 'one persisted delegation result, none left suspended');
+    rec.check(
+      'one persisted delegation result, none left suspended',
+      state.parts.length === 1 && state.parts[0] === 'result',
+      state.parts,
+    );
   });
 }
 
