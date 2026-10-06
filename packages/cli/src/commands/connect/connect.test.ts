@@ -569,4 +569,45 @@ describe('dotenv loading', () => {
 
     expect(seenAtCall).toBe('proj_from_shell');
   });
+
+  it('only promotes the Mastra Connect allowlist keys from .env into process.env', async () => {
+    const originalDatabaseUrl = process.env.DATABASE_URL;
+    const originalOpenAI = process.env.OPENAI_API_KEY;
+    const originalAccessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    const originalSecretKey = process.env.MASTRA_PLATFORM_SECRET_KEY;
+    delete process.env.DATABASE_URL;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+
+    writeFileSync(
+      join(dir, '.env'),
+      [
+        'MASTRA_PROJECT_ID=proj_from_dotenv',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=mp_token_from_dotenv',
+        'MASTRA_PLATFORM_SECRET_KEY=ms_secret_from_dotenv',
+        'DATABASE_URL=postgres://nope',
+        'OPENAI_API_KEY=sk-should-not-leak',
+      ].join('\n') + '\n',
+    );
+
+    try {
+      await listProvidersAction();
+
+      expect(process.env.MASTRA_PROJECT_ID).toBe('proj_from_dotenv');
+      expect(process.env.MASTRA_PLATFORM_ACCESS_TOKEN).toBe('mp_token_from_dotenv');
+      expect(process.env.MASTRA_PLATFORM_SECRET_KEY).toBe('ms_secret_from_dotenv');
+      expect(process.env.DATABASE_URL).toBeUndefined();
+      expect(process.env.OPENAI_API_KEY).toBeUndefined();
+    } finally {
+      if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = originalDatabaseUrl;
+      if (originalOpenAI === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = originalOpenAI;
+      if (originalAccessToken === undefined) delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+      else process.env.MASTRA_PLATFORM_ACCESS_TOKEN = originalAccessToken;
+      if (originalSecretKey === undefined) delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+      else process.env.MASTRA_PLATFORM_SECRET_KEY = originalSecretKey;
+    }
+  });
 });

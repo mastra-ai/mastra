@@ -40,19 +40,36 @@ interface ConnectContext {
 }
 
 /**
- * Load `.env` and `.env.local` from the current working directory so the
- * `mastra connect` commands pick up `MASTRA_PROJECT_ID` (and any other env
- * vars those files define) without requiring the caller to export them by
- * hand. Already-exported env vars still win (`override: false`), and the
- * loader is a no-op when the files are missing.
+ * Env vars the `mastra connect` commands look at. We intentionally keep this
+ * list narrow so loading `.env` can't quietly inject unrelated env into the
+ * CLI's process.
+ */
+const CONNECT_ENV_KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
+
+/**
+ * Load `.env` and `.env.local` from the current working directory, but only
+ * promote the specific keys in `CONNECT_ENV_KEYS` into `process.env`. The
+ * dotenv file may hold anything (database URLs, third-party keys, …); only
+ * the three Mastra Connect vars are copied over.
+ *
+ * Already-exported env vars still win: if the caller already set
+ * `MASTRA_PROJECT_ID` in their shell, the value in `.env` is ignored.
+ * The loader is a no-op when the files are missing.
  */
 function loadConnectEnv(): void {
   const cwd = process.cwd();
+  const parsed: Record<string, string> = {};
   loadDotenv({
     path: [join(cwd, '.env'), join(cwd, '.env.local')],
     override: false,
     quiet: true,
+    processEnv: parsed,
   });
+  for (const key of CONNECT_ENV_KEYS) {
+    if (process.env[key] === undefined && parsed[key] !== undefined) {
+      process.env[key] = parsed[key];
+    }
+  }
 }
 
 async function resolveConnectContext(projectArg?: string): Promise<ConnectContext> {
