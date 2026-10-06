@@ -2396,6 +2396,11 @@ export class KnowledgePG extends KnowledgeStorage {
         SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visible_node_scope
         WHERE visible_node_scope."nodeId"=${nodeAlias}.id AND ${inScope('visible_node_scope."scopeNodeId"', ids)}
       )))`;
+    // A tombstoned scope no longer reads as itself; like InMemory, its parent memberships decide visibility.
+    const membershipVisible = (nodeAlias: string, ids: string[]) => `EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" deleted_scope_membership
+        WHERE deleted_scope_membership."nodeId"=${nodeAlias}.id AND ${inScope('deleted_scope_membership."scopeNodeId"', ids)}
+      )`;
     const targetValue = (field: string) => `target->>'${field}'`;
     const currentTargetVisible = (ids: string[], includeMentionClosure: boolean) => `(
       (${targetValue('type')}='node' AND EXISTS (
@@ -2403,7 +2408,7 @@ export class KnowledgePG extends KnowledgeStorage {
         WHERE target_node.id=${targetValue('id')}
           AND (((target->>'expectedDeleted')::boolean IS TRUE AND target_node."deletedAt" IS NOT NULL)
             OR (COALESCE((target->>'expectedDeleted')::boolean,FALSE) IS FALSE AND target_node."deletedAt" IS NULL))
-          AND ${nodeVisible('target_node', ids)}
+          AND (CASE WHEN (target->>'expectedDeleted')::boolean IS TRUE THEN ${membershipVisible('target_node', ids)} ELSE ${nodeVisible('target_node', ids)} END)
       )) OR
       (${targetValue('type')}='record' AND EXISTS (
         SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" target_record

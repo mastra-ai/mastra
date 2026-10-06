@@ -1725,6 +1725,70 @@ export function createKnowledgeStorageTests(
       });
     });
 
+    it('shows a deleted scope restoration to approvers who can read its parent memberships', async () => {
+      const scopeId = '10000000-0000-4000-8000-000000000077';
+      const scope = await store.createNode({
+        id: scopeId,
+        name: 'Restorable',
+        isScope: true,
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const propose = async (id: string, mutation: KnowledgeProposalMutation, expectedDeleted: boolean) => {
+        const node = await store.getNodeIncludingDeleted(scopeId);
+        const expectedAccessEpoch = await store.getAccessEpoch();
+        await store.createProposal({
+          id,
+          targets: [
+            {
+              type: 'node',
+              id: scopeId,
+              expectedVersion: node!.version,
+              expectedDeleted: expectedDeleted || undefined,
+              scopeIds: await store.getNodeScopeIds(scopeId),
+              approvalCapability: 'manageAccess',
+            },
+          ],
+          operation: mutation.kind,
+          payload: mutation,
+          proposerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch,
+        });
+        return expectedAccessEpoch;
+      };
+      const deleteEpoch = await propose(
+        'delete-restorable',
+        { kind: 'delete-scope', mutation: { id: scopeId, version: scope.version, deletedBy: PROJECT_SCOPE_ID } },
+        false,
+      );
+      await store.applyProposal({
+        id: 'delete-restorable',
+        reviewerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: deleteEpoch,
+      });
+      const deleted = await store.getNodeIncludingDeleted(scopeId);
+      expect(deleted?.deletedAt).toBeDefined();
+      await propose(
+        'restore-restorable',
+        { kind: 'restore-scope', mutation: { id: scopeId, version: deleted!.version } },
+        true,
+      );
+
+      // The tombstoned scope is never in a live read frontier; its parent membership is.
+      const approver = { scopeIds: [PROJECT_SCOPE_ID], approvalScopeIds: { manageAccess: [scopeId] } };
+      await expect(store.getVisibleProposal({ id: 'restore-restorable', ...approver })).resolves.toMatchObject({
+        id: 'restore-restorable',
+      });
+      await expect(store.listProposals({ ...approver, status: 'pending', limit: 10 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: 'restore-restorable' })],
+        nextCursor: undefined,
+      });
+      const outsider = { scopeIds: [OTHER_SCOPE_ID], approvalScopeIds: { manageAccess: [scopeId] } };
+      await expect(store.getVisibleProposal({ id: 'restore-restorable', ...outsider })).resolves.toBeNull();
+      await expect(store.listProposals({ ...outsider, status: 'pending', limit: 10 })).resolves.toEqual({
+        proposals: [],
+      });
+    });
+
     it('withholds proposals whose embedded record mentions a node the caller cannot read', async () => {
       const owner = await store.createNode({ name: 'Public proposal owner', scopeIds: [PROJECT_SCOPE_ID] });
       const secret = await store.createNode({ name: 'Private proposal mention', scopeIds: [OTHER_SCOPE_ID] });
