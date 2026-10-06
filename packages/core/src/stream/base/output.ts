@@ -487,20 +487,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
       processedStream = processedStream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-          async transform(chunk, rawController) {
-            if (modelAttempt?.discarded) return;
-            const controller = modelAttempt
-              ? {
-                  enqueue(part: ChunkType<OUTPUT>) {
-                    if (modelAttempt.observeWriter(part)) rawController.enqueue(part);
-                  },
-                  error: (reason: unknown) => rawController.error(reason),
-                  terminate: () => rawController.terminate(),
-                  get desiredSize() {
-                    return rawController.desiredSize;
-                  },
-                }
-              : rawController;
+          async transform(chunk, controller) {
             // Filter out intermediate finish chunks with 'tool-calls' reason
             // These are internal signals that shouldn't reach output processors
             //
@@ -560,7 +547,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   data: { type: string; data?: unknown; transient?: boolean },
                   writerOptions?: { messageId?: string },
                 ) => {
-                  if (modelAttempt && !modelAttempt.observeWriter(data)) return;
                   persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
                   controller.enqueue(data as ChunkType<OUTPUT>);
                 },
@@ -583,7 +569,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 tripwireOptions,
                 processorId,
               } = await (modelAttempt ? modelAttempt.trackProcessing(processing) : processing);
-              if (modelAttempt?.discarded) return;
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
                   type: 'tripwire',
@@ -619,7 +604,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 options.abortSignal,
               );
               const reprocessed = await (modelAttempt ? modelAttempt.trackProcessing(reprocessing) : reprocessing);
-              if (modelAttempt?.discarded) return;
               for (const r of reprocessed) {
                 if (r.blocked) {
                   enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);

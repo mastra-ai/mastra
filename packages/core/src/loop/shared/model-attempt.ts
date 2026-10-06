@@ -96,16 +96,6 @@ export class ModelAttempt {
     if (this.discarded) throw this.controller.signal.reason;
   }
 
-  /** A processor writer is committing output, not merely reporting provider diagnostics. */
-  observeWriter(chunk: { type: string; transient?: boolean }): boolean {
-    // Signal echoes are input, not assistant output. In particular, processor
-    // sendSignal writes directly to history and must not protect its model call.
-    if (chunk.type === 'data-signal' || chunk.type === 'data-user-message') return true;
-    if (!this.observe(chunk)) return false;
-    if (chunk.type.startsWith('data-') && !chunk.transient) this.accept();
-    return true;
-  }
-
   trackParts(parts: unknown[]): void {
     if (!this.#parts.has(parts)) this.#parts.set(parts, parts.length);
     bindModelAttempt(parts, this);

@@ -1294,20 +1294,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const transcriptSteps = readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps');
 
       const outputWriter: typeof runOutputWriter = async (chunk, writerOptions) => {
-        if (modelAttempt) {
-          if (!modelAttempt.observeWriter(chunk)) return;
-          if (chunk.type !== 'data-signal' && chunk.type !== 'data-user-message') {
-            bindModelAttempt(chunk, modelAttempt);
-          }
-          await modelAttempt.trackProcessing(runOutputWriter(chunk, writerOptions));
-        } else {
-          await runOutputWriter(chunk, writerOptions);
-        }
+        const writing = runOutputWriter(chunk, writerOptions);
+        await (modelAttempt ? modelAttempt.trackProcessing(writing) : writing);
       };
       const controller = modelAttempt
         ? {
             enqueue(chunk: ChunkType<OUTPUT>) {
-              if (!modelAttempt.observeWriter(chunk)) return;
               runController.enqueue(chunk);
               modelAttempt.recordEmitted(chunk);
             },

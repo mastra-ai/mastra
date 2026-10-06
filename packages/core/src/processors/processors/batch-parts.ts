@@ -54,16 +54,14 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     abort: (reason?: string) => never;
     writer?: { custom: (data: ChunkType) => Promise<void> };
   }): Promise<ChunkType | null> {
-    const { part, state, writer, streamParts } = args;
-    const modelAttempt = getModelAttempt(streamParts);
+    const { part, state, writer } = args;
+    // A queued signal can discard the model call this part came from; drop what that call left buffered.
+    const modelAttempt = getModelAttempt(part);
     modelAttempt?.addDiscardCleanup(state, () => {
-      state.batch = state.batch?.filter((buffered: ChunkType) => getModelAttempt(buffered) !== modelAttempt) ?? [];
-      if (state.pendingNonText && getModelAttempt(state.pendingNonText) === modelAttempt) {
-        delete state.pendingNonText;
-      }
-      if (state[REPROCESS_PART_KEY] && getModelAttempt(state[REPROCESS_PART_KEY]) === modelAttempt) {
-        delete state[REPROCESS_PART_KEY];
-      }
+      const isDiscarded = (buffered: unknown) => !!buffered && getModelAttempt(buffered) === modelAttempt;
+      state.batch = state.batch?.filter((buffered: ChunkType) => !isDiscarded(buffered)) ?? [];
+      if (isDiscarded(state.pendingNonText)) delete state.pendingNonText;
+      if (isDiscarded(state[REPROCESS_PART_KEY])) delete state[REPROCESS_PART_KEY];
       if (!state.batch.length) {
         clearTimeout(state.timeoutId);
         state.timeoutId = undefined;

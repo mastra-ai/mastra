@@ -68,38 +68,15 @@ describe('private model attempt cancellation', () => {
     attempt.dispose();
   });
 
-  it('rejects buffered provider output, writer output and acceptance after discard', () => {
+  it('rejects buffered provider output and acceptance after discard', () => {
     const { attempt, notify } = createAttempt();
     attempt.arm();
     notify();
     expect(attempt.observe({ type: 'text-start' })).toBe(false);
-    expect(attempt.observeWriter({ type: 'data-custom' })).toBe(false);
     attempt.accept();
     expect(attempt.discarded).toBe(true);
     attempt.dispose();
   });
-
-  it('protects processor-written data without treating raw data diagnostics as acceptance', () => {
-    const { attempt, notify } = createAttempt();
-    attempt.arm();
-    expect(attempt.observe({ type: 'data-custom' })).toBe(true);
-    expect(attempt.observeWriter({ type: 'data-custom' })).toBe(true);
-    notify();
-    expect(attempt.discarded).toBe(false);
-    attempt.dispose();
-  });
-
-  it.each(['data-signal', 'data-user-message', 'data-custom'])(
-    'does not let input echoes or transient %s diagnostics protect a model call',
-    type => {
-      const { attempt, notify } = createAttempt();
-      attempt.arm();
-      expect(attempt.observeWriter({ type, transient: true })).toBe(true);
-      notify();
-      expect(attempt.discarded).toBe(true);
-      attempt.dispose();
-    },
-  );
 
   it('accepts natural reasoning-only completion before response hooks', () => {
     const { attempt, notify, unsubscribe } = createAttempt();

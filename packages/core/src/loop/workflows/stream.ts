@@ -14,7 +14,6 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { bindModelAttempt, getModelAttempt } from '../shared/model-attempt';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -73,18 +72,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         : undefined;
 
       const outputWriter = async (chunk: ChunkType<OUTPUT>, options?: { messageId?: string }) => {
-        const modelAttempt = getModelAttempt(chunk);
-        if (modelAttempt && !modelAttempt.observeWriter(chunk)) return;
         const responseMessageId = options?.messageId ?? messageId;
         const dataChunkStreamWriter = {
           custom: async (
             data: { type: string; data?: unknown; transient?: boolean },
             writerOptions?: { messageId?: string },
           ) => {
-            if (modelAttempt) {
-              if (!modelAttempt.observeWriter(data)) return;
-              bindModelAttempt(data, modelAttempt);
-            }
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
             if (isDataChunk(data) && emittedMessageId && !data.transient) {
               // Persistence failures must not drop the frame from the stream —
@@ -112,7 +105,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               }
             }
             safeEnqueue(controller, data as ChunkType<OUTPUT>);
-            modelAttempt?.recordEmitted(data as ChunkType<OUTPUT>);
           },
         };
 
@@ -121,7 +113,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           tripwireOptions: { retry?: unknown; metadata?: unknown } | undefined,
           processorId: string | undefined,
         ) => {
-          if (modelAttempt?.discarded) return;
           safeEnqueue(controller, {
             type: 'tripwire',
             runId,
@@ -140,7 +131,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // them leak into the next step — after a retried mid-stream error that
         // surfaces a stray step-finish on an already-consumed step output.
         const drainReprocessed = async () => {
-          if (modelAttempt?.discarded) return;
           const reprocessed = await dataChunkProcessorRunner!.drainReprocessParts(
             dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
             undefined,
@@ -149,7 +139,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             0,
             dataChunkStreamWriter,
           );
-          if (modelAttempt?.discarded) return;
           for (const r of reprocessed) {
             if (r.blocked) {
               enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
@@ -157,15 +146,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             if (r.part == null) continue;
             const part = r.part as ChunkType<OUTPUT>;
-            if (modelAttempt) {
-              if (!modelAttempt.observeWriter(part)) return;
-              bindModelAttempt(part, modelAttempt);
-            }
             if (isDataChunk(part)) {
               await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
             } else {
               safeEnqueue(controller, part);
-              modelAttempt?.recordEmitted(part);
             }
           }
         };
@@ -193,7 +177,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               dataChunkStreamWriter,
             );
 
-            if (modelAttempt?.discarded) return;
             if (blocked) {
               enqueueTripwire(reason, tripwireOptions, processorId);
               return;
@@ -206,8 +189,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               return;
             }
           }
-
-          if (modelAttempt && !modelAttempt.observeWriter(processedChunk)) return;
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
           if (
@@ -243,7 +224,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           safeEnqueue(controller, processedChunk);
-          modelAttempt?.recordEmitted(processedChunk);
           if (dataChunkProcessorRunner) await drainReprocessed();
           return;
         }
@@ -270,23 +250,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             dataChunkStreamWriter,
           );
 
-          if (modelAttempt?.discarded) return;
           if (blocked) {
             enqueueTripwire(reason, tripwireOptions, processorId);
             return;
           }
 
-          if (processed) {
-            if (modelAttempt && !modelAttempt.observeWriter(processed)) return;
-            safeEnqueue(controller, processed as ChunkType<OUTPUT>);
-            modelAttempt?.recordEmitted(processed as ChunkType<OUTPUT>);
-          }
+          if (processed) safeEnqueue(controller, processed as ChunkType<OUTPUT>);
           await drainReprocessed();
           return;
         }
 
         safeEnqueue(controller, chunk);
-        modelAttempt?.recordEmitted(chunk);
       };
 
       // Bound the whole run (every loop iteration, tool call and retry) by composing the
