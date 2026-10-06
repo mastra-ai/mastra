@@ -39,7 +39,12 @@
  *
  * Coordination is explicit: IPC signals and gate promises, never sleeps. Every
  * wait takes a bounded `timeoutMs` that only exists as a hang guard and fails
- * the test when it fires.
+ * the test when it fires. Two budgets, both taken from the validation harness
+ * so a ported cell waits as long as the case it was ported from:
+ * `DEFAULT_HANG_GUARD_MS` (20s, the harness's `GUARD_MS`) for waiting on the
+ * run under test, and `PEER_TIMEOUT_MS` (45s, the harness's `PEER_MS`) for
+ * waiting on a peer process — startup, result, exit, pause/resume. The peer
+ * handle defaults to the peer budget; callers override per wait.
  *
  * Peers must flush before exit. `runPeer` (peer-runtime.ts) awaits the shared
  * pubsub's `flush()` before reporting a result and exiting; without it a
@@ -69,10 +74,10 @@ import { promisify } from 'node:util';
 
 import { UnixSocketPubSub } from '@mastra/core/events';
 
-import { DEFAULT_HANG_GUARD_MS, XPROC_PEER_ENV, XPROC_SELFCHECK_TOPIC } from './peer-runtime';
+import { DEFAULT_HANG_GUARD_MS, PEER_TIMEOUT_MS, XPROC_PEER_ENV, XPROC_SELFCHECK_TOPIC } from './peer-runtime';
 import type { MainToPeer, PeerEnv, PeerToMain, SerializedError, XprocConfig } from './peer-runtime';
 
-export { DEFAULT_HANG_GUARD_MS };
+export { DEFAULT_HANG_GUARD_MS, PEER_TIMEOUT_MS };
 export { bootWorkers } from './process-workers';
 export type { WorkerHost } from './process-workers';
 export type { XprocConfig };
@@ -359,7 +364,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
           if (error) errors.push(`send("${name}") failed: ${error.message}`);
         });
       },
-      waitFor<T>(name: string, { timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) {
+      waitFor<T>(name: string, { timeoutMs = PEER_TIMEOUT_MS } = {}) {
         const queued = inbox.get(name);
         if (queued?.length) return Promise.resolve(queued.shift() as T);
         let deliver!: (data: unknown) => void;
@@ -374,7 +379,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
           fail(`signal "${name}" from ${label()} not received within ${timeoutMs}ms (hang guard)`),
         ).finally(withdraw);
       },
-      result<T>({ timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) {
+      result<T>({ timeoutMs = PEER_TIMEOUT_MS } = {}) {
         return withHangGuard(Promise.race([outcomeReceived, exited]), timeoutMs, () =>
           fail(`${label()} did not report a result within ${timeoutMs}ms (hang guard)`),
         ).then(() => {
@@ -385,20 +390,20 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
           );
         });
       },
-      exit({ timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) {
+      exit({ timeoutMs = PEER_TIMEOUT_MS } = {}) {
         return withHangGuard(exited, timeoutMs, () =>
           fail(`${label()} did not exit within ${timeoutMs}ms (hang guard)`),
         );
       },
       async pause() {
         child.kill('SIGSTOP');
-        await waitForStopState(pid, true, DEFAULT_HANG_GUARD_MS, () =>
+        await waitForStopState(pid, true, PEER_TIMEOUT_MS, () =>
           fail(`${label()} not reported stopped after SIGSTOP (hang guard)`),
         );
       },
       async resume() {
         child.kill('SIGCONT');
-        await waitForStopState(pid, false, DEFAULT_HANG_GUARD_MS, () =>
+        await waitForStopState(pid, false, PEER_TIMEOUT_MS, () =>
           fail(`${label()} still reported stopped after SIGCONT (hang guard)`),
         );
       },
@@ -420,17 +425,15 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     // starts work as soon as its own config send is queued.
     let receipt: { at: number; remoteClientCount: number };
     try {
-      await withHangGuard(
-        Promise.race([configReceived, exitedBefore('reporting its config')]),
-        DEFAULT_HANG_GUARD_MS,
-        () => fail(`${label()} did not start within ${DEFAULT_HANG_GUARD_MS}ms (hang guard)`),
+      await withHangGuard(Promise.race([configReceived, exitedBefore('reporting its config')]), PEER_TIMEOUT_MS, () =>
+        fail(`${label()} did not start within ${PEER_TIMEOUT_MS}ms (hang guard)`),
       );
       receipt = await withHangGuard(
         Promise.race([selfCheckReceived, exitedBefore('reaching the shared transport')]),
-        DEFAULT_HANG_GUARD_MS,
+        PEER_TIMEOUT_MS,
         () =>
           fail(
-            `${label()} did not reach the shared transport within ${DEFAULT_HANG_GUARD_MS}ms (hang guard): its first publish never arrived here. Check the socket path and that the test process is the broker`,
+            `${label()} did not reach the shared transport within ${PEER_TIMEOUT_MS}ms (hang guard): its first publish never arrived here. Check the socket path and that the test process is the broker`,
           ),
       );
     } finally {

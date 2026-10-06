@@ -62,7 +62,20 @@ export interface PeerEnv {
   args: unknown;
 }
 
-export const DEFAULT_HANG_GUARD_MS = 15_000;
+/**
+ * Budget for waiting on the *run* under test (a gate the run has to reach, a
+ * stream that has to settle, a teardown drain). Same number as the validation
+ * harness's `GUARD_MS`.
+ */
+export const DEFAULT_HANG_GUARD_MS = 20_000;
+
+/**
+ * Budget for waiting on a *peer process* (its startup, its result, its exit).
+ * Same number as the validation harness's `PEER_MS`: it is the harness's
+ * allowance for one child process's whole lifetime, which is a different
+ * question from how long the run may take.
+ */
+export const PEER_TIMEOUT_MS = 45_000;
 
 /**
  * Topic the peer runtime pings on at startup. The test process subscribes to it
@@ -145,7 +158,7 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
     workers: env.workers,
     pubsub: () => (pubsub ??= new UnixSocketPubSub(env.socketPath)),
     signal: (name, data) => send({ kind: 'signal', name, data }),
-    waitFor: <T>(name: string, { timeoutMs = DEFAULT_HANG_GUARD_MS } = {}) =>
+    waitFor: <T>(name: string, { timeoutMs = PEER_TIMEOUT_MS } = {}) =>
       new Promise<T>((resolve, reject) => {
         const queued = inbox.get(name);
         if (queued?.length) {

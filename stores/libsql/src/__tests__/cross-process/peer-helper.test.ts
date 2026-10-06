@@ -11,12 +11,21 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLStore } from '../../storage';
 import { createMarkerWorkflow } from './fixtures/marker-workflow';
 import type { SelfTestArgs } from './fixtures/self-test-peer';
-import { createXprocEnv, DEFAULT_HANG_GUARD_MS } from './peer-helper';
+import { createXprocEnv, DEFAULT_HANG_GUARD_MS, PEER_TIMEOUT_MS } from './peer-helper';
 import type { XprocEnv } from './peer-helper';
 import { bootWorkers } from './process-workers';
 import { gate } from './step-agent';
 
 const FIXTURE = new URL('./fixtures/self-test-peer.ts', import.meta.url);
+
+/**
+ * Vitest budget for a self-test that spawns a peer. `spawnPeer` waits up to
+ * `PEER_TIMEOUT_MS` (45s) for the peer to report its config and reach the
+ * transport, and the handle's own waits do too, so a test that would report its
+ * own hang-guard error needs headroom above that: without it the runner's bare
+ * "Test timed out" replaces the diagnostic.
+ */
+const PEER_TEST_TIMEOUT_MS = PEER_TIMEOUT_MS + 15_000;
 
 function hangGuard<T>(promise: Promise<T>, what: string, describeEnv: () => string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -68,7 +77,7 @@ describe('cross-process peer helper', () => {
       expect(peer.pid).not.toBe(process.pid);
       expect(await peer.exit()).toEqual({ code: 0, signal: null });
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -92,7 +101,7 @@ describe('cross-process peer helper', () => {
         expect(peer.pid).not.toBe(process.pid);
       }
     },
-    DEFAULT_HANG_GUARD_MS * 2 + 10_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -112,7 +121,7 @@ describe('cross-process peer helper', () => {
         await store.close();
       }
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it('fails waitFor within its hang guard when the peer never signals', async () => {
@@ -154,7 +163,7 @@ describe('cross-process peer helper', () => {
       expect(await heardSignal).toEqual({ seq: 1 });
       expect(await peer.exit()).toEqual({ code: 0, signal: null });
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -173,7 +182,7 @@ describe('cross-process peer helper', () => {
       expect(await peer.result<{ text: string }>()).toEqual({ text: 'finished 1 steps' });
       expect(await peer.exit()).toEqual({ code: 0, signal: null });
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -228,7 +237,7 @@ describe('cross-process peer helper', () => {
         await storage.close();
       }
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -241,7 +250,7 @@ describe('cross-process peer helper', () => {
       );
       expect(await peer.exit()).toEqual({ code: 1, signal: null });
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -261,6 +270,6 @@ describe('cross-process peer helper', () => {
       ).rejects.toThrow(/declares workers: true but never called bootWorkers/);
       expect(await peer.exit()).toEqual({ code: 1, signal: null });
     },
-    DEFAULT_HANG_GUARD_MS + 5_000,
+    PEER_TEST_TIMEOUT_MS,
   );
 });

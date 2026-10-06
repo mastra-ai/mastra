@@ -6,6 +6,7 @@
  * signal fires, so tests coordinate on events, not on timing.
  */
 import { Agent } from '@mastra/core/agent';
+import type { MastraMemory } from '@mastra/core/memory';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 
@@ -18,6 +19,15 @@ export type StepToolEvent =
 export interface StepAgentOptions {
   id: string;
   steps: number;
+  /**
+   * Configure memory on the agent, as the harness's script agent does. It is
+   * not inert: a run issued from an agent that has memory is wrapped by the
+   * until-idle stream wrapper, and that wrapper is the run slot
+   * `abortRunStream(runId)` closes. Without memory there is no wrapper to close
+   * and the abort has nothing to act on (see the plain cell in
+   * xproc-abort.test.ts).
+   */
+  memory?: MastraMemory;
   /** Park the tool at this step until `release` resolves or the run is aborted. */
   blockAt?: number;
   release?: Promise<void>;
@@ -46,7 +56,7 @@ function chunks(parts: unknown[]): ReadableStream<any> {
   });
 }
 
-export function createStepAgent({ id, steps, blockAt, release, onToolEvent, onModelCall }: StepAgentOptions) {
+export function createStepAgent({ id, steps, blockAt, release, memory, onToolEvent, onModelCall }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
     doStream: async () => {
@@ -119,6 +129,7 @@ export function createStepAgent({ id, steps, blockAt, release, onToolEvent, onMo
     instructions: 'Follow the script.',
     model,
     tools: { step },
+    ...(memory ? { memory } : {}),
   });
   return { agent, model, modelCalls: () => calls };
 }

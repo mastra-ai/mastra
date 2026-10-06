@@ -17,6 +17,7 @@ import {
   createEventedAgent,
 } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 
 import { LibSQLStore } from '../../../storage';
 import { DEFAULT_HANG_GUARD_MS, runPeer } from '../peer-runtime';
@@ -28,9 +29,20 @@ export interface T79PeerArgs {
   runId: string;
 }
 
+export interface T79PeerResult {
+  /** What `abortRunStream` returned in the peer: false for a run it does not own. */
+  accepted: boolean;
+  runId: string;
+  /** Control-topic frames this peer received (the harness's `control-receive`). */
+  receivedByPeer: number;
+}
+
 runPeer<T79PeerArgs>(async peer => {
   const { engine, agentId, runId } = peer.args;
-  const { agent } = createStepAgent({ id: agentId, steps: 0 });
+  // Memory-configured like the harness's peer agent (`@mastra/memory`'s real
+  // `Memory` there, core's `MockMemory` here — see xproc-abort.test.ts). Inert
+  // in this process: the peer streams no run of its own, it only aborts one.
+  const { agent } = createStepAgent({ id: agentId, steps: 0, memory: new MockMemory() });
   const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new LibSQLStore({ id: `t79-peer-${process.pid}`, url: peer.dbUrl });
   // `workers` matches this peer's declared setting (see ../process-workers.ts).
@@ -44,13 +56,21 @@ runPeer<T79PeerArgs>(async peer => {
   });
   if ((mastra.getAgent('t79') as unknown) !== runner) throw new Error('Mastra replaced the registered agent');
 
+  // Its own reception count is the harness's `control-receive` by this role:
+  // recorded by the test, so a delivery failure is distinguishable from a run
+  // that ignored the abort.
+  let receivedByPeer = 0;
   const echoed = gate<void>();
   await peer.pubsub().subscribe(AGENT_CONTROL_TOPIC(runId), async (event, ack) => {
+    receivedByPeer++;
     if (event.type === AgentControlEventTypes.ABORT_REQUEST) echoed.resolve();
     await ack?.();
   });
 
-  await peer.waitFor('abort-now');
+  // The harness waits up to 60s for this signal (its `waitFor` default), which
+  // is longer than the peer-process budget: the run's own hang guard is what
+  // fires when the test never reaches the signal.
+  await peer.waitFor('abort-now', { timeoutMs: 60_000 });
   // Tri-state on purpose: a process owning no local run may report false while the run stops anyway.
   const accepted = runner.abortRunStream(runId);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -70,5 +90,5 @@ runPeer<T79PeerArgs>(async peer => {
   // No `mastra.shutdown()` here on purpose: aborting a run this process does not
   // own leaves a phantom entry in `globalRunRegistry`, and shutdown throws on it
   // (COR-1391). The test process shuts down its own instance instead.
-  return { accepted, runId };
+  return { accepted, runId, receivedByPeer } satisfies T79PeerResult;
 });
