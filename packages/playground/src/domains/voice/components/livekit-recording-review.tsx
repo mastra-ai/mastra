@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { useMastraPackages } from '@mastra/react/hooks';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 import { AudioLinesIcon } from 'lucide-react';
 import { useState } from 'react';
 import { LiveKitRecordingContent } from './livekit-recording-content';
