@@ -48,7 +48,7 @@ export function ExperimentTraceTimelineTimingCol({
         <div className={cn('w-full min-w-40 rounded-lg bg-muted p-2.5', surfaceGroupStateLayerStyle)}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
+              className="absolute top-0 h-1.5 rounded-sm bg-placeholder"
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -58,28 +58,30 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-caption text-muted-foreground')}>
-          <Txt as="span" variant="caption" font="mono">
-            {formatDurationPrecise(span.latency)}
-          </Txt>
-        </div>
+        <Txt as="span" variant="caption" tone="muted" font="mono" className="block text-right">
+          {formatDurationPrecise(span.latency)}
+        </Txt>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-50 w-auto max-w-[25rem] rounded-md border border-border bg-muted p-2 px-4 pr-6 text-center text-caption text-foreground"
+          className="z-50 w-auto max-w-[25rem] rounded-md border border-border bg-muted p-2 px-4 pr-6 text-center text-foreground"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'mb-4 flex items-center gap-2 text-body',
+              'mb-4 flex items-center gap-2',
               '[&>svg]:h-[1.25em] [&>svg]:w-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
-            <TimerIcon /> Span Timing
+            <TimerIcon />
+            <Txt as="span" variant="body" className="block">
+              {' '}
+              Span Timing
+            </Txt>
           </div>
           <KeyValueList
-            className="[&>dd]:min-h-0 [&>dd]:text-body [&>dt]:min-h-0 [&>dt]:text-body"
+            className="[&>dd]:min-h-0 [&>dt]:min-h-0"
             data={[
               {
                 key: 'Latency',

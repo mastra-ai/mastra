@@ -274,12 +274,12 @@ function CollapsibleSection({ labelId, label, collapsed, onToggle, children }: C
       open={!collapsed}
       onOpenChange={onToggle}
     >
-      <Txt as="h2" variant="meta" tone="faint" className="px-3 pt-3 pb-1 group-first-of-type/section:pt-0">
-        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm">
+      <h2 className="flex px-3 pt-3 pb-1 text-placeholder group-first-of-type/section:pt-0">
+        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm text-meta">
           {label}
           <ChevronRight aria-hidden className="size-3" />
         </CollapsibleTrigger>
-      </Txt>
+      </h2>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
   );

@@ -139,6 +139,9 @@ export interface MastraTUIOptions {
   /** Thread ID requested by `mastracode resume`. */
   resumeThreadId?: string;
 
+  /** Preserve an explicitly configured initial model until a thread selects a pack. */
+  initialModelOverride?: boolean;
+
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By
@@ -354,8 +357,6 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
-  /** Track a goal started from plan approval — return to plan mode when it completes */
-  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -498,7 +499,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Goal loop
     goalManager: new GoalManager(),
-    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],

@@ -1,5 +1,21 @@
 # @mastra/redis-streams
 
+## 0.5.4-alpha.0
+
+### Patch Changes
+
+- Fan-out subscribers to the same topic in one `RedisStreamsPubSub` or `ValkeyStreamsPubSub` instance now share one reader connection and one consumer group. Before this change, each subscriber opened its own. ([#25963](https://github.com/mastra-ai/mastra/pull/25963))
+
+  - **Connection use:** Each extra subscriber is dispatched locally, so extra `subscribeToThread()` callers, `AgentController` sessions, or open tabs on a thread no longer add Redis/Valkey connections.
+  - **Replay:** A subscriber that joins later with the default `startFrom: 'earliest'` still receives existing entries first, with no duplicates.
+  - **Acknowledgement and retry:** A live entry is acknowledged once every subscriber that received it has handled it. If any of them asks for a retry below `maxDeliveryAttempts`, the entry is republished once with `deliveryAttempt` incremented, and every fan-out subscriber on the topic receives the retry, as they did when each had its own group. A retry request at the limit drops the entry instead. With `inFlightTimeoutMs` set, a subscriber that runs past the timeout counts as a retry request.
+  - **Grouped subscriptions:** Grouped (worker) subscriptions are unaffected.
+
+  Fixes [#25952](https://github.com/mastra-ai/mastra/issues/25952).
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 0.5.3
 
 ### Patch Changes

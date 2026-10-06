@@ -92,29 +92,33 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1 text-xs">
+    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
-        org
+        <Txt as="span" variant="caption" className="block">
+          org
+        </Txt>
       </button>
       <ChevronRight size={11} />
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
-        project
+        <Txt as="span" variant="caption" className="block">
+          project
+        </Txt>
       </button>
       {threadId ? (
         <>
           <ChevronRight size={11} />
-          <span className="text-badge-purple-indicator max-w-52 truncate" title={threadId}>
+          <Txt as="span" variant="caption" title={threadId} className="text-badge-purple-indicator max-w-52 truncate">
             session {threadId.slice(0, 8)}
-          </span>
+          </Txt>
         </>
       ) : null}
       {trail.map((entry, index) => (
         <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
-            <span className="text-foreground max-w-44 truncate" title={entry.name}>
+            <Txt as="span" variant="caption" tone="ink" title={entry.name} className="max-w-44 truncate">
               {entry.name}
-            </span>
+            </Txt>
           ) : (
             <button
               type="button"
@@ -122,7 +126,9 @@ function Breadcrumb({
               title={entry.name}
               onClick={() => onTrailClick(index)}
             >
-              {entry.name}
+              <Txt as="span" variant="caption" className="block">
+                {entry.name}
+              </Txt>
             </button>
           )}
         </span>
@@ -612,11 +618,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     // calm state with a way back, never an error toast.
     body = (
       <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-        <Txt as="p" variant="body" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="body">
           This session's knowledge is no longer available.
         </Txt>
-        <button type="button" className="text-badge-purple-indicator text-sm hover:underline" onClick={backToProject}>
-          Back to the project view
+        <button type="button" className="text-badge-purple-indicator hover:underline" onClick={backToProject}>
+          <Txt as="span" variant="body" className="block">
+            Back to the project view
+          </Txt>
         </button>
       </div>
     );
@@ -627,7 +635,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     body = <SkeletonRows label="Loading knowledge scopes" rows={3} />;
   } else if (!selection) {
     body = (
-      <Txt as="p" variant="body" className="text-muted-foreground">
+      <Txt tone="muted" as="p" variant="body">
         Select a scope to explore its knowledge.
       </Txt>
     );
@@ -649,7 +657,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           ? 'No knowledge captured at project scope yet — knowledge captured in sessions does not roll up here.'
           : 'No knowledge captured in this session yet — the graph fills in as factory sessions work.';
     body = (
-      <Txt as="p" variant="body" className="text-muted-foreground">
+      <Txt tone="muted" as="p" variant="body">
         {emptyMessage}
       </Txt>
     );
@@ -787,10 +795,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
-        <Txt as="h1" variant="heading" className="text-foreground font-semibold">
+        <Txt tone="ink" as="h1" variant="heading">
           Knowledge
         </Txt>
-        <Txt as="p" variant="body" className="text-muted-foreground mt-1">
+        <Txt tone="muted" as="p" variant="body" className="mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
         <div className="mt-3 flex items-start justify-between gap-3">

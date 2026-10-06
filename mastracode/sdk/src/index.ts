@@ -5,7 +5,7 @@ import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
 import type { Agent } from '@mastra/core/agent';
-import { AgentController } from '@mastra/core/agent-controller';
+import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
   AgentControllerConfig,
@@ -78,7 +78,7 @@ import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
-  PACK_FALLBACK_STATE_KEY,
+  MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
@@ -91,15 +91,13 @@ import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
 import type { ProviderAccess } from './onboarding/packs.js';
-import { getAvailableModePacks, getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
+import { getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
   OBSERVABILITY_AUTH_PREFIX,
-  resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
@@ -243,12 +241,12 @@ function shortHash(input: string): string {
   return createHash('sha256').update(input).digest('hex').slice(0, 12);
 }
 
-function applyEffectiveDefaultsToModes(
+function applyModeDefaultsToModes(
   modes: AgentControllerMode[],
-  effectiveDefaults: Record<string, string>,
+  modeDefaults: Record<string, string>,
 ): AgentControllerMode[] {
   return modes.map(mode => {
-    const savedModel = effectiveDefaults[mode.id];
+    const savedModel = modeDefaults[mode.id];
     if (!savedModel) {
       return mode;
     }
@@ -796,7 +794,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const memory =
     config?.memory === false
       ? undefined
-      : (config?.memory ?? getDynamicMemory(storage, vector, config?.settingsPath, knowledge));
+      : (config?.memory ??
+        getDynamicMemory(
+          storage,
+          vector,
+          config?.settingsPath,
+          {
+            disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          },
+          knowledge,
+        ));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
@@ -887,10 +894,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // No session here owns the resource. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;
-    // A long-running system must be able to drive work unattended, so a
-    // target thread without an explicit model selection falls back to a
-    // real model rather than failing the run: the mode's default, then the
-    // session's live selection.
+    // A long-running system must be able to drive work unattended, so migrate
+    // and restore the thread's persisted model before falling back to a real
+    // mode or live-session default rather than failing the run.
     const targetThread = await session.thread.getById({ threadId });
     const metadata =
       targetThread?.resourceId === resourceId
@@ -903,29 +909,27 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       typeof savedModeId === 'string' && modes.some(mode => mode.id === savedModeId)
         ? savedModeId
         : (defaultMode?.id ?? session.mode.get());
-    const savedModeModelId = metadata?.[`modeModelId_${modeId}`];
-    const legacyModelId = metadata?.currentModelId;
+    const persistedModelId = metadata
+      ? await migratePersistedModelSelection({
+          getMetadata: async () =>
+            ((await session.thread.getById({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
+          modeId,
+          set: (key: string, value: unknown) => session.thread.setSettingOn({ threadId, key, value }),
+          threadId,
+          validModeIds: modes.map(mode => mode.id),
+        })
+      : undefined;
     const defaultModeModelId = modes.find(mode => mode.id === modeId)?.defaultModelId;
-    const modelId =
-      (typeof savedModeModelId === 'string' ? savedModeModelId : undefined) ??
-      (typeof legacyModelId === 'string' ? legacyModelId : undefined) ??
-      defaultModeModelId ??
-      session.model.get() ??
-      '';
+    const modelId = persistedModelId ?? defaultModeModelId ?? session.model.get() ?? '';
     const baseState = { ...session.state.get() } as MastraCodeState;
-    delete baseState.activeModelPackId;
-    delete baseState.mastracodePendingPackFallback;
+    delete baseState.modelRoute;
+    delete baseState.mastracodePendingModelFallback;
     const persistedSandboxPaths = metadata?.sandboxAllowedPaths;
     baseState.sandboxAllowedPaths =
       Array.isArray(persistedSandboxPaths) && persistedSandboxPaths.every(path => typeof path === 'string')
         ? persistedSandboxPaths
         : [];
-    const persistedStateKeys = [
-      'thinkingLevel',
-      'notifications',
-      THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-      PACK_FALLBACK_STATE_KEY,
-    ] as const;
+    const persistedStateKeys = ['thinkingLevel', 'notifications', 'modelRoute', MODEL_FALLBACK_STATE_KEY] as const;
     for (const key of persistedStateKeys) {
       const value = metadata?.[key];
       if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
@@ -1259,7 +1263,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Input-lane notice ONLY (no processAPIError — see the class doc): the
       // runner walks input processors first in runProcessAPIError, so an
       // input-lane processAPIError would rotate before transient retries run.
-      new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
+      new AccountStartNoticeProcessor({ credentialStore: authStorage }),
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
@@ -1316,8 +1320,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Same budget core enforces (maxProcessorRetries below): past it, core
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
-        // Same settings file getDynamicModel reads (model: above) so the pack
-        // cascade the processor announces matches the chain core will walk.
         settingsPath: config?.settingsPath,
       }),
     ],
@@ -1396,7 +1398,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ? 'apikey'
           : false,
   };
-  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  // Gateway covers all providers — include Anthropic/OpenAI in OM default selection.
   if (mgApiKey) {
     if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
     if (!startupAccess.openai) startupAccess.openai = 'apikey';
@@ -1416,10 +1418,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   } catch {
     // Registry may not be loaded yet; the 5 hardcoded providers are sufficient fallback
   }
-  const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
-  const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
-  const activeProviderId = effectiveDefaults.build?.split('/')[0];
+  const effectiveDefaults = globalSettings.models.modeDefaults;
+  const activeProviderId = (effectiveDefaults.build ?? buildMode.defaultModelId)?.split('/')[0];
   const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
     ? undefined
     : selectPreferredOMPack(startupAccess, activeProviderId)?.modelId;
@@ -1431,7 +1432,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   const modes = addPluginToolsToModeAllowlists(
-    applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    applyModeDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
     Object.keys(pluginTools),
   );
   const defaultModeId =
@@ -1674,7 +1675,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     resolveModel,
     storageWarning,
     observabilityWarning,
-    builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,

@@ -76,6 +76,29 @@ export const myProviderScenario: Scenario = {
 
 Every scenario receives a `runId` like `mastra-smoke-k7fx3`. Embed it in every record title so a concurrent run never collides and any leaked record is visibly tagged.
 
+## Channels suite
+
+`smoke-test:channels` is a sibling suite for the `channels()` resolver — the channel-provider path (Discord, Microsoft Teams, Slack, Telegram) that the tools suite doesn't touch. Channels are addressed by platform integrationId: `discord`, `microsoft-teams`, `slack-channels`, `telegram`. The `microsoft-teams` channel additionally needs `MASTRA_ENCRYPTION_KEY` (32-byte, base64) — its install store persists per-agent bot secrets at rest, and `channels()` warn-and-skips the provider without one.
+
+```bash
+# every channel (channels without an active connection are skipped)
+pnpm --filter @mastra/connect smoke-test:channels
+
+# one channel
+pnpm --filter @mastra/connect smoke-test:channels --channel discord
+```
+
+It checks six layers:
+
+- **Resolver contract** — construction guards, route mounting before any connection exists, TTL cache + `refresh()`/`disconnect()`, concurrent resolutions deduped through one inflight build, stale-TTL resolution serving the cached snapshot while a background revalidation lands, `false` exclusion and bogus `connectionId` overrides.
+- **Server mount** — the resolver is handed to a real `Mastra` instance; the suite asserts the channel routes land in the merged `server.apiRoutes` with correct `requiresAuth` flags, mounts them the way the production server adapter does (`handler` / `createHandler({ mastra })` onto Hono), and drives every platform's webhook endpoint with real HTTP requests (unknown webhook ids answer 404).
+- **Credential flow** — for each connected channel: presence in the resolved map (which proves credential late-binding, e.g. Discord's `sync()` → `configure()`), provider `id`/routes/`getInfo()`, a platform credential fetch, and a vendor whoami call (Discord `GET /users/@me` + `/applications/@me`, Slack `auth.test` with the App Configuration token, Teams Microsoft Graph `GET /me` + a Dev Portal secondary-token presence check, Telegram `getMe`). The whoami calls deliberately bypass the proxy — channel providers call vendor APIs directly with the resolved token, so that direct path is what gets smoked. Each connected channel also fetches its connection context (the platform metadata backing `ChannelRuntime.getConnectionContext()`).
+- **Discord full webhook flow** — the one platform where the whole loop is testable without external listeners. The suite overrides the provider's Ed25519 public key with a locally generated pair (`providerOptions.publicKey`), `connect()`s an agent to a guild the bot is already in (`commands: []`, so nothing on the guild is mutated), POSTs a **signed PING interaction** to the mounted route and expects a PONG, POSTs a forged signature and expects 401, POSTs with no signature headers and expects 401, then `disconnect()`s and verifies the installation is gone — the previously valid signed PING now 404s against the dead webhook, and a second `disconnect()` rejects with a clean "no installation" error (the provider contract). The installation lives in in-process channel storage, so nothing persists after the run.
+- **Slack manifest lifecycle** — `connect()` runs a real `apps.manifest.create` mint with the App Configuration token the platform's `slack-channels` integration serves ([#25332](https://github.com/mastra-ai/mastra/pull/25332)), expecting a pending OAuth install with an authorization URL, then `disconnect()` deletes the minted app via `apps.manifest.delete` — nothing is left behind in the workspace, and a second `disconnect()` rejects with a clean "no installation" error. The public `/slack/oauth/callback` and `/slack/commands/:webhookId` routes are probed with garbage and must answer controlled 4xx responses. Completing the OAuth install needs a human browser step, so activation — and therefore signed event delivery / `url_verification`, which require an **active** install — stays out of scope.
+- **Teams provisioning lifecycle** — `connect()` provisions a real Entra application + client secret (Microsoft Graph) and a Teams Dev Portal bot registration with the scope-aware token resolver, records an **active** installation, and returns a Dev Portal deep link (packaging the bot into a Teams app is a human step, out of scope). `disconnect()` deletes both again; because the provider's remote deletes are best-effort, the suite then proves the Entra application is actually gone (`GET /applications/{id}` → 404). The provisioned bot's messaging endpoint points at a local placeholder URL and is never called.
+
+Telegram's equivalent flow needs `setWebhook` against the live bot and a reachable public URL — out of scope here; its webhook route is still exercised via the mounted server (unknown-webhook path). Slack event delivery needs a completed OAuth install (pending installations are invisible to the events route by design). The suite sends no messages; everything it registers with a vendor (the Slack app, the Teams Entra app + bot) is deleted in the same run.
+
 ## Cross-provider cleanup
 
 Scenarios see their own provider's tools in `tools` and the full project toolset in `allTools`. Use `allTools` when another provider owns the delete endpoint (e.g. `google_drive_delete_file` cleans up a sheet created by `google-sheet`). Prefer `tools` for everything else.

@@ -39,7 +39,7 @@ import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
-import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
@@ -110,7 +110,7 @@ export interface FactoryApiRoutesDeps {
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
     filesystem: FilesystemStorage;
-    modelPacks: ModelPacksStorage;
+    modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
@@ -436,7 +436,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelPacks'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -468,7 +468,7 @@ export function buildIntegrationContext(
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
-      modelPacks: deps.domains.modelPacks,
+      modelDefaults: deps.domains.modelDefaults,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
@@ -578,7 +578,7 @@ function absentSlackChannelAccountsRoutes(): ApiRoute[] {
 /**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
- *   - config routes (provider/API-key/model-pack/OM management)
+ *   - config routes (provider/API-key/default-model/OM management)
  *   - every registered integration's `routes()` surface (full set when ready,
  *     disabled-status stub otherwise), plus stubs for absent known ids
  */
@@ -714,7 +714,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       controller: deps.controller,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
-      modelPacks: deps.domains.modelPacks,
+      modelDefaults: deps.domains.modelDefaults,
       sourceControlSessions,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,

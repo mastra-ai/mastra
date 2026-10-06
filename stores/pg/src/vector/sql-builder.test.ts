@@ -136,3 +136,33 @@ describe('buildFilterQuery - multi-key branches inside logical operators', () =>
     expect(del.sql).toBe(`WHERE (((metadata->>'a' = $1) AND metadata->>'c' = $2) OR metadata->>'d' = $3)`);
   });
 });
+
+describe('buildFilterQuery - $exists on nested metadata keys', () => {
+  it('checks the nested path with #> instead of a literal top-level key', () => {
+    const { sql } = buildFilterQuery({ 'doc.lang': { $exists: true } }, 0, 10);
+    expect(sql).toContain(`WHERE metadata#>'{doc,lang}' IS NOT NULL`);
+    expect(sql).not.toContain('?');
+  });
+
+  it('negates the nested path check for $exists: false in delete filters', () => {
+    const { sql, values } = buildDeleteFilterQuery({ 'doc.lang': { $exists: false } });
+    expect(values).toEqual([]);
+    expect(sql).toBe(`WHERE NOT (metadata#>'{doc,lang}' IS NOT NULL)`);
+  });
+
+  it('handles deeply nested keys', () => {
+    const { sql } = buildDeleteFilterQuery({ 'a.b.c': { $exists: true } });
+    expect(sql).toBe(`WHERE metadata#>'{a,b,c}' IS NOT NULL`);
+  });
+
+  it('keeps the ? operator for top-level keys', () => {
+    expect(buildDeleteFilterQuery({ tags: { $exists: true } }).sql).toBe(`WHERE metadata ? 'tags'`);
+    expect(buildDeleteFilterQuery({ tags: { $exists: false } }).sql).toBe(`WHERE NOT (metadata ? 'tags')`);
+  });
+
+  it('rewrites nested $exists to the element alias inside $elemMatch', () => {
+    const { sql } = buildFilterQuery({ items: { $elemMatch: { 'meta.lang': { $exists: true } } } }, 0, 10);
+    expect(sql).toContain(`elem#>'{meta,lang}' IS NOT NULL`);
+    expect(sql).not.toContain(`metadata#>'{meta,lang}'`);
+  });
+});

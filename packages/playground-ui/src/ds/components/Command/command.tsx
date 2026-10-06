@@ -266,7 +266,8 @@ const CommandGroup = React.forwardRef<
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-muted-foreground',
-      '[&_[cmdk-group-heading]]:text-meta **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase',
+      '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-muted-foreground',
+      '[&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:uppercase',
       'in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:tracking-normal in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:normal-case',
       className,
     )}

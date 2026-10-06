@@ -12,11 +12,12 @@ import { WORKFLOW_ID, noSchedules, packagesWithObservability, weatherWorkflow } 
 import { WorkflowLayout } from '@/domains/workflows/workflow-layout';
 import { paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
+import WorkflowSchedules from '@/pages/workflows/workflow-schedules';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-const renderAt = (initialEntry: string) => {
+const renderAt = (initialEntry: string, schedules = <div data-testid="workflow-child" />) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
@@ -36,7 +37,7 @@ const renderAt = (initialEntry: string) => {
                 >
                   <Route path="graph" element={<div data-testid="workflow-child" />} />
                   <Route path="traces" element={<div data-testid="workflow-child" />} />
-                  <Route path="schedules" element={<div data-testid="workflow-child" />} />
+                  <Route path="schedules" element={schedules} />
                 </Route>
               </Routes>
             </MemoryRouter>
@@ -106,6 +107,55 @@ describe('WorkflowLayout routes', () => {
       expect(screen.getByRole('link', { name: /API endpoints/ })).not.toBeNull();
       expect(screen.queryByRole('link', { name: 'Traces' })).toBeNull();
       expect(screen.queryByRole('link', { name: /Schedules/ })).toBeNull();
+    });
+  });
+});
+
+describe('WorkflowLayout query loading', () => {
+  describe('when workflow details are still loading', () => {
+    it('starts the schedules request before workflow details resolve', async () => {
+      installHandlers();
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let schedulesRequested = false;
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, async () => {
+          await held;
+          return HttpResponse.json(weatherWorkflow);
+        }),
+        http.get(`${BASE_URL}/api/schedules`, () => {
+          schedulesRequested = true;
+          return HttpResponse.json(noSchedules);
+        }),
+      );
+      try {
+        renderAt(`/workflows/${WORKFLOW_ID}/schedules`, <WorkflowSchedules />);
+        await waitFor(() => expect(schedulesRequested).toBe(true));
+      } finally {
+        release();
+      }
+    });
+
+    it('renders the traces child before workflow details resolve', async () => {
+      installHandlers();
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, async () => {
+          await held;
+          return HttpResponse.json(weatherWorkflow);
+        }),
+      );
+      try {
+        renderAt(`/workflows/${WORKFLOW_ID}/traces`);
+        expect(await screen.findByTestId('workflow-child')).not.toBeNull();
+      } finally {
+        release();
+      }
     });
   });
 });

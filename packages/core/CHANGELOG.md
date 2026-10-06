@@ -1,5 +1,122 @@
 # @mastra/core
 
+## 1.75.0-alpha.7
+
+### Minor Changes
+
+- Changed AgentController sessions to keep one active model instead of a separate model for each mode. Switching modes no longer changes the model automatically, and `session.model.switch` no longer accepts `modeId` or `scope`. The `model_changed` event no longer includes `modeId` or `scope`; consumers should read its `modelId` and current `thinkingLevel` fields. When an existing thread is first reopened, its active legacy per-mode selection is copied to `currentModelId`, a migration marker is stored, and obsolete `modeModelId_*` keys are removed. Later model selections persist as the thread's authoritative `currentModelId`. Use `session.model.set` for an in-memory selection that should not be persisted or emit a model-change event. ([#25997](https://github.com/mastra-ai/mastra/pull/25997))
+
+  **Before**
+
+  ```ts
+  await session.model.switch({ modelId: 'openai/gpt-5.6', modeId: 'build' });
+  await session.mode.switch({ modeId: 'plan' }); // Restored the plan mode model.
+  ```
+
+  **After**
+
+  ```ts
+  await session.model.switch('openai/gpt-5.6');
+  await session.mode.switch({ modeId: 'plan' }); // Keeps openai/gpt-5.6 active.
+  ```
+
+- Changed `session.model.switch` to accept a model ID followed by an optional options object. Pass `{ thinkingLevel }` to apply and persist model and thinking level together. Every `model_changed` event includes the current thinking level, even when it is unchanged. Sessions synchronize both preferences from persisted thread settings before the next request, including thinking-only changes and removed overrides. Switches canceled by a thread change before any selection is committed reject without counting model use; writes already committed to the captured thread remain successful. ([#26069](https://github.com/mastra-ai/mastra/pull/26069))
+
+  ```ts
+  // Before
+  await session.model.switch({ modelId: 'openai/gpt-5.5' });
+  await session.state.set({ thinkingLevel: 'high' });
+
+  // After
+  await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
+  ```
+
+### Patch Changes
+
+- Fixed MCP resource reads dropping `mimeType` and `_meta`. Reading a resource from a server registered through `MCPClient` (`MCPClientServerProxy.readResource()`) and reading an app resource from a local `MCPServer` (`MCPServer.readResource()`, used by Studio) now return the same metadata as `listResources()` and the MCP `resources/read` request, so MCP App `ui://` resources keep their content type and UI settings such as CSP. Fixes #23068. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Fixed workspace search reporting the wrong `lineRange` when a custom tokenizer preserves case. Highlighting now uses the same tokens as retrieval, so searching `Python` points at the line containing `Python` rather than a line containing `python`. ([#26014](https://github.com/mastra-ai/mastra/pull/26014))
+
+- Fixed directly resumed nested workflows so successful children continue suspended parent runs. Fixes #24588. ([#25817](https://github.com/mastra-ai/mastra/pull/25817))
+
+- Resource read results from MCP servers now include the optional `mimeType` and `_meta` fields, both in the `MCPServerBase.readResource()` type and in the `POST /mcp/:serverId/resources/read` response returned to `readMcpServerResource()`. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Fixed streamed `PIIDetector` output with the `block` and `filter` strategies. When a Social Security number, email address or similar value arrived split across several stream chunks, the first part of it reached the user before the rest was recognized. Now `block` stops the response before any part of the value is shown, and `filter` removes the text up to and including the value while keeping the text after it. Very long email addresses are now also held until they are complete, including with `redact`. As with `redact`, the end of a response may arrive slightly later. ([#26082](https://github.com/mastra-ai/mastra/pull/26082))
+
+- Fixed thread streams treating a run as finished while it was still waiting for a tool approval or a suspended tool. When thread updates were delivered with a delay (for example with `@mastra/redis-streams`), the thread could unblock and subscribers on other servers could lose the pending approval. The run now stays waiting until the approval or tool resumes it. ([#25962](https://github.com/mastra-ai/mastra/pull/25962))
+
+## 1.75.0-alpha.6
+
+### Patch Changes
+
+- Fixed agents sending an invented `.` user message before a conversation that starts with an assistant message, such as a voice agent that greets first. Mastra now adds it only for Amazon Bedrock and Google Gemini, which reject assistant-first conversations. OpenAI, Anthropic, Groq and other providers get the conversation unchanged. The message is added by the default `ProviderHistoryCompat` processor, after your input processors run, and is still not saved to memory. Fixes [#22874](https://github.com/mastra-ai/mastra/issues/22874). ([#25074](https://github.com/mastra-ai/mastra/pull/25074))
+
+  `MessageList` prompt getters (such as `messageList.get.all.aiV5.prompt()`) no longer add the `.` message, and the `ensureGeminiCompatibleMessages` helper is removed. If you build prompts from a `MessageList` yourself and send them to Bedrock or Gemini, add the user turn before a leading assistant message:
+
+  ```ts
+  const prompt = messageList.get.all.aiV5.prompt();
+  const first = prompt.findIndex(message => message.role !== 'system');
+  if (prompt[first]?.role === 'assistant') {
+    prompt.splice(first, 0, { role: 'user', content: '.' });
+  }
+  ```
+
+## 1.75.0-alpha.5
+
+### Minor Changes
+
+- Added an explicit reconcile step for channel installations whose connect flow finishes outside the app (for example Discord's bot invite, which never redirects back). Channel providers can implement the new optional `reconcileInstallation(agentId)` method, exposed over `POST /api/channels/:platform/:agentId/reconcile` and `client.channels.reconcileInstallation(platform, agentId)`. The route requires the same write access as connecting, and returns the agent's fresh installation — or `null` when the platform doesn't support reconciliation. Listing installations is now a pure read and never changes state. ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  ```ts
+  const installation = await client.channels.reconcileInstallation('discord', 'my-agent');
+  // { id, platform, agentId, status: 'active', ... } once the invite completed
+  ```
+
+- Added optional `title`, `websiteUrl`, and `icons` options to `MCPServerConfig`, exposed on `MCPServerBase`, so MCP server implementations can announce a display title, website, and icons to clients. ([#25985](https://github.com/mastra-ai/mastra/pull/25985))
+
+- Added an `outputValidation` option to `createTool` ([#23799](https://github.com/mastra-ai/mastra/issues/23799)). When a tool's result fails `outputSchema` validation, Mastra replaces the result with a validation error, so the model is told the call failed. That happens even when the tool's side effect (an order placed, a message sent) has already happened, which invites a retry. Set `outputValidation: 'warn'` to return the tool's actual result unchanged instead. `'strict'` is the default and keeps the existing behavior. ([#26001](https://github.com/mastra-ai/mastra/pull/26001))
+
+  ```ts
+  export const placeOrderTool = createTool({
+    id: 'place-order',
+    description: 'Places an order',
+    inputSchema: z.object({ sku: z.string(), quantity: z.number() }),
+    outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+    outputValidation: 'warn',
+    execute: async ({ sku, quantity }) => orders.create({ sku, quantity }),
+  });
+  ```
+
+  Also improved how output validation failures are reported:
+
+  - Every output validation failure now writes a warning to the Mastra logger. Previously, a failure from a `createTool` tool left no trace in the logs.
+  - The tool call trace span is now marked as failed when a `createTool` tool returns a validation error. Previously it was recorded as successful.
+  - Sensitive fields such as `apiKey`, `token`, and `password` are now redacted from the tool output shown in the validation error message.
+
+### Patch Changes
+
+- Added an optional `scope` field to `AuthorizeOpts` so tool providers know whether a new connection is shared, per-author, or caller-supplied. ([#26002](https://github.com/mastra-ai/mastra/pull/26002))
+
+- Fixed DurableAgent traces after a resume or crash recovery. The resumed or recovered agent run is now nested under the original agent run, so the trace stays a single tree instead of splitting into two root spans. ([#25862](https://github.com/mastra-ai/mastra/pull/25862))
+
+  Crash recovery traces are also complete now: the agent run left open by the stopped process is ended with an `interrupted` status, and the recovered agent run is ended when the run finishes. Previously a recovered trace could be missing from the trace list or show only the part before the crash.
+
+- Fixed a thread failing on every turn when one of its attachments can't be used: a file that now returns 404, a relative path such as `/api/images/foo.png`, or inline content that isn't valid file data. If error processors and fallback models don't recover a failed download, the agent now answers with an `[Attachment unavailable: <name>]` placeholder and logs a warning. The attachment is recorded on its stored message, so later turns reuse the placeholder without downloading it again. See #23705. ([#25051](https://github.com/mastra-ai/mastra/pull/25051))
+
+- Added optional `rules` to `prompt_block_ref` instruction blocks so stored agents can save and preview per-usage display conditions on prompt block references. ([#25991](https://github.com/mastra-ai/mastra/pull/25991))
+
+  ```ts
+  await client.getStoredAgent('support-agent').update({
+    instructions: [
+      {
+        type: 'prompt_block_ref',
+        id: 'default-user-prompt',
+        rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+      },
+    ],
+  });
+  ```
+
 ## 1.75.0-alpha.4
 
 ### Minor Changes

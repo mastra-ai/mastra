@@ -1,5 +1,29 @@
 # @mastra/loggers
 
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- `HttpTransport` no longer buffers logs without limit while its endpoint is unavailable. The buffer is now capped by `maxBufferSize` (default 10,000 entries); when it is full, the oldest logs are dropped first. Use `getDroppedLogCount()` to see how many logs were dropped. Only one flush request is sent at a time, so an outage no longer triggers a new failing request for every log written. Destroying the transport now sends every buffered batch before it finishes, not just the first one. `batchSize` and `maxBufferSize` must be positive integers; the constructor now throws for values such as `0`, `Infinity`, or `2.5` (leave `batchSize` unset to use the default of 100). ([#25958](https://github.com/mastra-ai/mastra/pull/25958))
+
+  ```ts
+  import { HttpTransport } from '@mastra/loggers/http';
+
+  const transport = new HttpTransport({
+    url: 'https://logs.example.com/ingest',
+    maxBufferSize: 5_000,
+  });
+
+  transport.getDroppedLogCount(); // number of logs dropped because the buffer exceeded maxBufferSize
+  ```
+
+- Fixed `HttpTransport` retrying logs that the endpoint will never accept. When the endpoint rejects a batch as invalid, such as with a 400 or 413 response, the transport stops retrying right away. It drops that batch and counts it in `getDroppedLogCount()`, so newer logs are no longer stuck behind it. ([#26079](https://github.com/mastra-ai/mastra/pull/26079))
+
+  Temporary failures are still retried, including network errors, timeouts, rate limits and server errors. If the server sends a `Retry-After` header, the transport waits that long before retrying, up to the request `timeout`.
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 1.3.4
 
 ### Patch Changes

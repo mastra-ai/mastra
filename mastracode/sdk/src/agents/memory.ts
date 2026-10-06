@@ -6,59 +6,67 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import {
+  DEFAULT_OM_MODEL_ID,
+  DEFAULT_OBS_THRESHOLD,
+  DEFAULT_REF_THRESHOLD,
+  MODEL_ROUTE_MAX_ENTRIES,
+} from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel, resolvePackMemoryModelChain } from './model.js';
-import type { PackMemoryModelChainEntry } from './model.js';
+import { resolveModel } from './model.js';
 
-/**
- * Resolve one OM role's model for this invocation. Lookup order:
- *   1. The explicit role override (`observerModelOverride` / `reflectorModelOverride`).
- *   2. The active mode pack's optional `models.memory`, walking the pack's fallback
- *      chain so OM fails over alongside (and independently of) the main agent.
- *      The pending pack-hop marker wins over the settled pack id so an immediate
- *      retrigger observes on the landed pack.
- *   3. The standalone OM configuration seeded into controller state
- *      (`observerModelId` / `reflectorModelId`), then the default OM model.
- */
+/** Route-backed OM fallback entry. */
+type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
+
+/** Resolve one OM role's model for this invocation. */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
   settingsPath?: string,
-): GatewayLanguageModel | PackMemoryModelChainEntry[] {
+  options?: { disableSettingsOmSeed?: boolean },
+): GatewayLanguageModel | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
-  // OM calls send different content every time, so only their shared instructions are worth caching.
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
 
-  // The configured settings file, not the default one: a caller that points the
-  // agent at another settings path must get the same pack/override resolution
-  // for observational memory as it does for the main model.
-  const settings = loadSettings(settingsPath);
-  const roleOverride =
-    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
-  if (roleOverride) return resolveModel(roleOverride, resolveOptions);
-
-  const pendingState = state?.mastracodePendingPackFallback as
-    | { toPackId?: unknown; threadId?: unknown }
-    | null
-    | undefined;
-  const pendingPackId =
-    pendingState &&
-    (pendingState.threadId === undefined || pendingState.threadId === controller?.threadId) &&
-    typeof pendingState.toPackId === 'string' &&
-    pendingState.toPackId.length > 0
-      ? pendingState.toPackId
-      : undefined;
-  const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
-  if (typeof packId === 'string' && packId.length > 0) {
-    const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
-    if (chained) return chained;
+  if (!options?.disableSettingsOmSeed) {
+    const settings = loadSettings(settingsPath);
+    const roleOverride =
+      role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+    if (roleOverride) return resolveModel(roleOverride, resolveOptions);
   }
+
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === controller?.threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  const memoryRoute = pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+  const seenModelIds = new Set<string>();
+  const appearances = new Map<string, number>();
+  const entries: MemoryModelRouteEntry[] = [];
+  for (const entry of memoryRoute) {
+    if (!entry.memoryModelId || seenModelIds.has(entry.memoryModelId)) continue;
+    seenModelIds.add(entry.memoryModelId);
+    const occurrence = (appearances.get(entry.id) ?? 0) + 1;
+    appearances.set(entry.id, occurrence);
+    try {
+      entries.push({
+        id: `${entry.id}:memory${occurrence === 1 ? '' : `#${occurrence}`}`,
+        model: resolveModel(entry.memoryModelId, resolveOptions),
+      });
+    } catch {
+      break;
+    }
+  }
+  if (entries.length === 1) return entries[0]!.model;
+  if (entries.length > 1) return entries;
 
   const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
   return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
@@ -150,6 +158,7 @@ export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,
   settingsPath?: string,
+  options?: { disableSettingsOmSeed?: boolean },
   knowledge?: Knowledge,
 ) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
@@ -162,9 +171,9 @@ export function getDynamicMemory(
   // Bound here so the configured settings path reaches role overrides and pack
   // memory-model resolution.
   const getObserverModel = ({ requestContext }: { requestContext: RequestContext }) =>
-    resolveOmRoleModelForRequest('observer', requestContext, settingsPath);
+    resolveOmRoleModelForRequest('observer', requestContext, settingsPath, options);
   const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
-    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath);
+    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath, options);
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
