@@ -349,6 +349,9 @@ function ScopeTree({
           </button>
         ))}
         {scopePage.isError ? <span className="px-2 text-red-400">Unable to load more scopes.</span> : null}
+        {scopes?.truncated ? (
+          <span className="px-2">This org has more scopes than can be listed; some are not shown.</span>
+        ) : null}
       </div>
     </aside>
   );
