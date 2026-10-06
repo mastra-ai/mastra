@@ -337,8 +337,10 @@ describe('static Knowledge importer operations', () => {
     it('does not resurrect an imported record someone deleted', async () => {
       const { knowledge, operations } = await createFixture();
       const node = await operations.upsertNode('event:42', { name: 'Planning' });
-      await node.appendRecord({ id: 'event-42-time', text: '10:00-11:00' });
-      await (await knowledge.getStorageInternal()).deleteRecord({ id: 'event-42-time', deletedBy: 'reviewer' });
+      const imported = await node.appendRecord({ id: 'event-42-time', text: '10:00-11:00' });
+      await (
+        await knowledge.getStorageInternal()
+      ).deleteRecord({ id: imported.id, version: imported.version, deletedBy: 'reviewer' });
 
       await node.appendRecord({ id: 'event-42-time', text: '10:00-11:00' });
 

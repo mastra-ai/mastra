@@ -312,6 +312,14 @@ export class Knowledge extends MastraBase {
       targetType: 'record',
       targetId: input.recordId,
     });
+    // Retiring or restoring a record changes what every stamped scope can see, so it needs that
+    // authority on each of the record's own scopes, not only on its node's. Stamp edits keep their
+    // per-stamp rules in setRecordScopes.
+    if (input.capability !== 'manageAccess') return;
+    for (const scopeId of await input.storage.getRecordScopeIds(input.recordId)) {
+      if (!input.frontier.scopes[scopeId]?.[input.capability])
+        throw new KnowledgeNotFoundError('record', input.recordId);
+    }
   }
 
   async #authorizeMentionTargets(input: {
@@ -714,7 +722,6 @@ export class Knowledge extends MastraBase {
   async replaceRecord(input: {
     id: string;
     version: number;
-    nodeVersion: number;
     deletedBy: string;
     record: Omit<CreateKnowledgeRecordInput, 'node'>;
     vouchedScopeIds: KnowledgeScopeIds;
@@ -737,8 +744,10 @@ export class Knowledge extends MastraBase {
       capability: 'manageAccess',
     });
     await this.#authorizeRecordContent({ storage, frontier, record: input.record });
+    const node = await storage.getNode(original.nodeId);
+    if (!node) throw new KnowledgeNotFoundError('node', original.nodeId);
     return storage.replaceNodeRecords({
-      node: { id: original.nodeId, version: input.nodeVersion, expectedAccessEpoch: frontier.accessEpoch },
+      node: { id: node.id, version: node.version, expectedAccessEpoch: frontier.accessEpoch },
       replacedRecords: [{ id: original.id, version: input.version }],
       deletedBy: input.deletedBy,
       record: input.record,

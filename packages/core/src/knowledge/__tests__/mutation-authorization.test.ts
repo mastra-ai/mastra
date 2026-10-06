@@ -322,6 +322,21 @@ describe('Knowledge mutation authorization', () => {
     });
   });
 
+  it('requires manageAccess on every scope stamped on a record to retire it', async () => {
+    const { knowledge, storage, ids } = await createFixture();
+    const vouchedScopeIds = [ids['principal:owner']!, ids['principal:readonly']!];
+    const node = await storage.createNode({ name: 'Owned node', scopeIds: [ids['scope:owner']!] });
+    const record = await storage.createRecord({
+      node,
+      text: 'Readonly-stamped evidence',
+      scopeIds: [ids['scope:readonly']!],
+    });
+    await expect(
+      knowledge.deleteRecord({ id: record.id, version: record.version, deletedBy: 'owner', vouchedScopeIds }),
+    ).rejects.toThrow(`Knowledge record not found: ${record.id}`);
+    expect(await storage.getRecord({ id: record.id })).toMatchObject({ text: 'Readonly-stamped evidence' });
+  });
+
   it('replaceNodeRecords never retires a same-source record that appears after authorization', async () => {
     const { knowledge, storage, ids } = await createFixture();
     const vouchedScopeIds = [ids['principal:owner']!, ids['principal:readonly']!];
