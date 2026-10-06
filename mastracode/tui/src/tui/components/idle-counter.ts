@@ -2,7 +2,7 @@
  * Live work/idle-time indicator shown above the user input.
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Container, Text, truncateToWidth } from '@earendil-works/pi-tui';
 import type { TUIState } from '../state.js';
 import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme } from '../theme.js';
@@ -15,6 +15,7 @@ export class IdleCounterComponent extends Container {
   private timingState?: Pick<TUIState, 'lastAgentRunDurationMs' | 'lastAgentRunEndedAt' | 'lastAgentRunEndReason'>;
   private textChild: Text;
   private thinking = false;
+  private activity = '';
 
   constructor() {
     super();
@@ -39,6 +40,11 @@ export class IdleCounterComponent extends Container {
     return this.thinking;
   }
 
+  /** The Working row (built in status-line.ts) shares this slot; empty when idle. */
+  setActivity(text: string): void {
+    this.activity = text;
+  }
+
   update(now = Date.now()): void {
     const segments = this.timingState ? formatIdleStatusTimingSegments(this.timingState, now) : null;
     if (!segments) {
@@ -51,8 +57,10 @@ export class IdleCounterComponent extends Container {
   }
 
   render(width: number): string[] {
-    const rendered = super.render(width);
-    return rendered.length > 0 ? rendered : [''];
+    // Always exactly two rows (a gap, then Working / "5m idle" / blank) so the prompt never shifts when a
+    // run starts or ends.
+    if (this.activity) return ['', truncateToWidth(this.activity, width)];
+    return ['', super.render(width)[0] ?? ''];
   }
 }
 

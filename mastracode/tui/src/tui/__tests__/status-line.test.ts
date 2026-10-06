@@ -192,7 +192,7 @@ describe('updateStatusLine', () => {
     vi.useFakeTimers();
     vi.setSystemTime(62_000);
     const state = createState();
-    state.activityLine = { setText: vi.fn() };
+    state.idleCounter = { setActivity: vi.fn(), isThinking: () => false };
     state.agentRunStartedAt = 1_000;
     state.tokensPerSec = 48;
     state.controller.session.model.get.mockReturnValue('openai/gpt-5');
@@ -200,7 +200,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    const activity = state.activityLine.setText.mock.calls[0]?.[0];
+    const activity = state.idleCounter.setActivity.mock.calls[0]?.[0];
     expect(rendered).toContain('openai/gpt-5');
     expect(rendered).not.toContain('1m1s');
     expect(activity).toContain('1m1s · 48 tok/s · esc to interrupt');
@@ -209,11 +209,11 @@ describe('updateStatusLine', () => {
 
   it('clears the Working row when the agent is idle', () => {
     const state = createState();
-    state.activityLine = { setText: vi.fn() };
+    state.idleCounter = { setActivity: vi.fn(), isThinking: () => false };
 
     updateStatusLine(state);
 
-    expect(state.activityLine.setText).toHaveBeenCalledWith('');
+    expect(state.idleCounter.setActivity).toHaveBeenCalledWith('');
   });
 
   it('keeps successful completed run timing beside the model with a checkmark', () => {
@@ -491,7 +491,7 @@ describe('updateStatusLine', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:30.000Z'));
     const state = createState();
-    state.activityLine = { setText: vi.fn() };
+    state.idleCounter = { setActivity: vi.fn(), isThinking: () => false };
     state.agentRunStartedAt = Date.parse('2026-05-15T12:00:00.000Z');
     state.tokensPerSec = 80;
     state.goalManager = {
@@ -507,7 +507,7 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain(' · goal · ');
     expect(rendered).not.toContain('goal <1m');
     expect(rendered).not.toContain('t/s');
-    expect(state.activityLine.setText.mock.calls[0]?.[0]).toContain('30s · 80 tok/s');
+    expect(state.idleCounter.setActivity.mock.calls[0]?.[0]).toContain('30s · 80 tok/s');
   });
 
   it('freezes active goal duration while waiting for user input', () => {

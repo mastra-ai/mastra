@@ -316,8 +316,6 @@ export interface TUIState {
   projectInfo: ProjectInfo;
   statusLine?: Text;
   memoryStatusLine?: Text;
-  /** Working row above the prompt while the agent runs (empty when idle). */
-  activityLine?: Text;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;

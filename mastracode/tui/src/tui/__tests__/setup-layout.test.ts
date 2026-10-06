@@ -153,7 +153,7 @@ describe('buildLayout startup header', () => {
     expect(uiChildren[8]).toBe(state.editorContainer);
     expect(uiChildren[9]).toBe(state.footer);
     expect(state.taskProgress.quietMode).toBe(true);
-    expect(editorChildren).toEqual([state.idleCounter, state.activityLine, editor]);
+    expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
     expect(updateStatusLine).toHaveBeenCalledWith(state);
     expect(refreshModelAuthStatus).toHaveBeenCalledTimes(1);

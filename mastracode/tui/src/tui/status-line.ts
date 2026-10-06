@@ -108,6 +108,9 @@ function truncateLastSegment(path: string, maxWidth: number): string {
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+/** Terminal width at which the footer last needed two rows (see updateStatusLine). */
+const twoRowFooterWidth = new WeakMap<TUIState, number>();
+
 type Part = { plain: string; styled: string };
 
 /**
@@ -326,11 +329,16 @@ export function updateStatusLine(state: TUIState): void {
     return location ? fitsRow([...present, location]) : null;
   };
   const transient = [fallbackPart, goalPart, queuedPart];
-  const oneRow =
-    withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'full') ??
-    withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'full') ??
-    withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'compact') ??
-    withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'compact');
+  // Once the footer has needed two rows at this width, keep the location on the second row
+  // even when it would fit on one again. Dropping back to one row shrinks the UI, which leaves a blank
+  // line at the bottom of the terminal until new output pushes the prompt back down.
+  const stickyTwoRows = twoRowFooterWidth.get(state) === termWidth;
+  const oneRow = stickyTwoRows
+    ? null
+    : (withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'full') ??
+      withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'full') ??
+      withLocation([modePart, modelPart(fullModelId), ...transient, contextPart], 'compact') ??
+      withLocation([modePart, modelPart(shortModelId), ...transient, contextPart], 'compact'));
   const row =
     oneRow ??
     fitsRow([modePart, modelPart(fullModelId), ...transient, contextPart]) ??
@@ -343,6 +351,8 @@ export function updateStatusLine(state: TUIState): void {
     fitsRow([modePart]) ??
     [];
   const secondRow = oneRow ? null : locationPart(termWidth - PAD - 1, 'any');
+  if (secondRow) twoRowFooterWidth.set(state, termWidth);
+  else twoRowFooterWidth.delete(state);
   state.statusLine.setText(' '.repeat(PAD) + row.map(p => p.styled).join(SEP));
   if (state.memoryStatusLine) state.memoryStatusLine.setText(secondRow ? ' '.repeat(PAD) + secondRow.styled : '');
 
@@ -355,9 +365,9 @@ export function updateStatusLine(state: TUIState): void {
  * Empty (renders nothing) when idle.
  */
 function updateActivityLine(state: TUIState, modeColor: string | undefined, now: number): void {
-  if (!state.activityLine) return;
+  if (!state.idleCounter) return;
   if (state.agentRunStartedAt === undefined) {
-    state.activityLine.setText('');
+    state.idleCounter.setActivity('');
     return;
   }
   const color = modeColor ?? theme.getTheme().accent;
@@ -373,8 +383,8 @@ function updateActivityLine(state: TUIState, modeColor: string | undefined, now:
   parts.push(`${theme.fg('muted', 'esc')}${theme.fg('dim', ' to interrupt')}`);
   // The label reads "thinking" while quiet mode hides reasoning; "working" gets a trailing space so the
   // details after it don't shift by a column when the label swaps.
-  const label = state.idleCounter?.isThinking() ? 'thinking' : 'working ';
-  state.activityLine.setText(
+  const label = state.idleCounter.isThinking() ? 'thinking' : 'working ';
+  state.idleCounter.setActivity(
     ` ${spinner} ${theme.bold(theme.fg('secondary', label))} ${parts.join(theme.fg('dim', ' · '))}`,
   );
 }

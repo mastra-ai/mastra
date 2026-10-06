@@ -326,9 +326,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();
   state.editorContainer.addChild(state.idleCounter);
-  // Working row: sits directly on the prompt's top edge while the agent runs.
-  state.activityLine = new Text('', 0, 0);
-  state.editorContainer.addChild(state.activityLine);
   state.editorContainer.addChild(state.editor);
 
   // Add footer with two-line status
