@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.36.0-alpha.4
+
+### Patch Changes
+
+- Fixed Observational Memory saving a cut-off or empty observation when the observer or reflector model call failed partway through. This covered streams that ended early (for example Gemini reporting a finish reason of `other`) and transient provider errors such as a 429 or 500. These calls now retry the whole request from the original prompt instead of continuing from the partial reply, so only complete replies are saved. Fixes [#24810](https://github.com/mastra-ai/mastra/issues/24810). ([#25058](https://github.com/mastra-ai/mastra/pull/25058))
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+
 ## 1.36.0-alpha.3
 
 ### Patch Changes

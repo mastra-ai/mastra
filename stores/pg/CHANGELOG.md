@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.30.0-alpha.4
+
+### Patch Changes
+
+- Fixed `$exists` filters on nested metadata keys in `PgVector`. A filter like `{ 'doc.lang': { $exists: false } }` used to match every vector, and `$exists: true` matched none. Running `deleteVectors` with such a filter could delete every vector in the selected namespace. Now `$exists: true` matches vectors where the nested key is present, and `$exists: false` matches vectors where it is missing. ([#25976](https://github.com/mastra-ai/mastra/pull/25976))
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+
 ## 1.30.0-alpha.3
 
 ### Patch Changes

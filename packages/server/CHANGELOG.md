@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 1.75.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+
 ## 1.75.0-alpha.5
 
 ### Minor Changes
