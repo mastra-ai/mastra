@@ -389,8 +389,8 @@ function demoGithubUserName(login: string): string {
 async function configureDemoKnowledgeProject(input: {
   knowledge: Knowledge;
   projectId: string;
-  orgScopeAddress: string;
-  resourceScopeAddress: string;
+  orgScope: MaterializeKnowledgeScopeInput;
+  resourceScope: MaterializeKnowledgeScopeInput;
   repositoryScope: MaterializeKnowledgeScopeInput;
 }): Promise<void> {
   const [, owner, repository] = demoRepositoryMatch!;
@@ -405,8 +405,8 @@ async function configureDemoKnowledgeProject(input: {
     input.knowledge.registerImporter({
       id: importerId,
       access: {
-        [input.orgScopeAddress]: 'owner',
-        [input.resourceScopeAddress]: 'owner',
+        [input.orgScope.address]: 'owner',
+        [input.resourceScope.address]: 'owner',
         [repositoryScopeAddress]: 'owner',
       },
       triggers: {
@@ -610,17 +610,19 @@ async function configureDemoKnowledgeProject(input: {
   }
 
   if (!demoImportRuns.has(input.projectId)) {
-    // The destination scope must exist before the importer binds to it.
-    // Materialization is idempotent and coalesces with Factory's own pass
-    // over the access profile, so this never races the profile hook.
-    const run = input.knowledge
-      .materializeScope(input.repositoryScope)
-      .then(async () => {
-        await input.knowledge.getImporter(importerId)!.run({ source, scope: repositoryScopeAddress }, undefined);
-      })
-      .catch((error: unknown) => {
-        console.error(`[demo-knowledge] GitHub import for ${input.projectId} failed`, error);
-      });
+    // The destination scope must exist before the importer binds to it, and a
+    // child scope cannot attach to a parent that does not exist yet. On a fresh
+    // store this hook runs before Factory materializes the profile, so create
+    // the ancestors first. Forget a failed run so the next request retries.
+    const run = (async () => {
+      for (const scope of [input.orgScope, input.resourceScope, input.repositoryScope]) {
+        await input.knowledge.materializeScope(scope);
+      }
+      await input.knowledge.getImporter(importerId)!.run({ source, scope: repositoryScopeAddress }, undefined);
+    })().catch((error: unknown) => {
+      demoImportRuns.delete(input.projectId);
+      console.error(`[demo-knowledge] GitHub import for ${input.projectId} failed`, error);
+    });
     demoImportRuns.set(input.projectId, run);
   }
 }
@@ -730,8 +732,8 @@ export const factory = new MastraFactory({
           await configureDemoKnowledgeProject({
             knowledge,
             projectId,
-            orgScopeAddress: builtInScopes.org.address,
-            resourceScopeAddress: builtInScopes.resource.address,
+            orgScope: builtInScopes.org,
+            resourceScope: builtInScopes.resource,
             repositoryScope,
           });
           return {
