@@ -444,7 +444,7 @@ Subscriptions are isolated by Session. Events from another Session on the same c
 
 ### Client-side sessions
 
-[`client.getAgentController(id).session(resourceId, scope?)`](/reference/client-js/agent-controller) returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
+[`client.getAgentController(key).session(resourceId, scope?)`](/reference/client-js/agent-controller) returns a session client bound to one resource. Pass the key the controller is registered under in `new Mastra({ agentControllers })`, which can differ from the controller's `id`. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
 
 ```typescript title="src/components/agent-session.ts"
 import { MastraClient } from '@mastra/client-js'
