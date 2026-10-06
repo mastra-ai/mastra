@@ -19,7 +19,7 @@ const agent = new Agent({
   inputProcessors: [
     new FileUploadProcessor({
       workspace,
-      filter: ({ mimeType, extension }) => mimeType === 'application/pdf' || extension === 'csv',
+      filter: ({ mimeType, extension }) => mimeType === 'application/pdf' || extension === 'xlsx',
       maxFileSize: () => 25 * 1024 * 1024,
     }),
   ],
