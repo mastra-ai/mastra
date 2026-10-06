@@ -550,7 +550,7 @@ jobs:
 
       - name: Version playground UI snapshot packages
         run: |
-          pnpm --filter '@mastra/playground-ui...' list --depth -1 --json > "$RUNNER_TEMP/playground-snapshot-packages.json"
+          pnpm --filter-prod '@mastra/playground-ui...' list --depth -1 --json > "$RUNNER_TEMP/playground-snapshot-packages.json"
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
