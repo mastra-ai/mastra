@@ -36,23 +36,23 @@ The providers come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discor
 
 ## Configure a channel
 
-Pass provider options under `integrations`. Credentials always come from the connection, so options like `botToken` are ignored:
+Pass provider options under `providers`. `true` enables a channel with defaults, `false` leaves one out, and an options object configures it. Credentials always come from the connection, so options like `botToken` are ignored:
 
 ```typescript
 channels({
-  integrations: {
+  providers: {
     discord: {
       providerOptions: { applicationId: process.env.DISCORD_APPLICATION_ID },
     },
-    telegram: { disabled: true },
-    'slack-channels': { connectionId: 'sla_01ABC...' },
+    telegram: false,
+    slack: { connectionId: 'sla_01ABC...' },
   },
 })
 ```
 
-The Slack key is `'slack-channels'`, matching the connection's provider ID. `slack` is the tools provider and isn't a valid key here.
+An array also works as an allowlist: `channels({ providers: ['discord', 'telegram'] })` exposes only those channels. `slack` is accepted as an alias for the connection's `slack-channels` provider ID, and using both spellings in one config throws. A provider ID that matches no channel throws when you call `channels()`.
 
-See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `disabled` to leave one out.
+See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `false` to leave one out.
 
 ## Vary tools by channel
 

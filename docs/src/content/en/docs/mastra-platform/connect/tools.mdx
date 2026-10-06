@@ -27,33 +27,66 @@ export const opsAgent = new Agent({
 
 With no options, the agent gets the tools for every connected provider. `tools()` checks the platform for changed connections every 30 seconds. A provider you connect while the app runs shows up without a restart, and one you unlink disappears.
 
-## Limit what an agent can use
+## Combine with your own tools
 
-The `integrations` option lists the providers an agent gets. Pass an array of provider IDs:
+To give an agent connect tools alongside tools you define yourself, spread the resolver's result in a `tools` function. Your tools win when a key collides:
 
-```typescript
-tools({
-  integrations: ['linear', 'github'],
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+import { weatherTool } from '../tools/weather'
+
+const connected = tools()
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: async ctx => ({ ...(await connected(ctx)), weatherTool }),
 })
 ```
 
-Pass an object to filter tools per provider. Each provider takes either `allowTools` or `disallowTools`, not both:
+## Limit what an agent can use
+
+The `providers` option lists the providers an agent gets. Pass an array of provider IDs to allow only those:
 
 ```typescript
 tools({
-  integrations: {
+  providers: ['linear', 'github'],
+})
+```
+
+Pass an object to configure providers individually. `true` enables a provider with defaults, `false` excludes it even when connected, and an options object filters its tools. Each provider takes either `allowTools` or `disallowTools`, not both:
+
+```typescript
+tools({
+  providers: {
     linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
-    github: { disallowTools: ['github_delete_file', 'github_merge_pull_request'] },
-    slack: { disabled: true },
+    github: { disallowTools: ['github_delete_*', 'github_merge_pull_request'] },
+    slack: false,
   },
 })
 ```
 
-Check tool keys against the [provider toolsets reference](/reference/connect/providers). A misspelled tool key doesn't throw. When the provider's tools load, `tools()` logs a warning and skips that provider entirely. The agent gets none of its tools. A misspelled provider ID logs a warning and is ignored.
+Tool entries accept `*` globs, so `github_delete_*` covers every delete tool. Check tool keys against the [provider toolsets reference](/reference/connect/providers). A misspelled tool key, or a glob that matches nothing, fails resolution with an error instead of being ignored. The same goes for a misspelled provider ID: an enabled ID that matches no provider fails resolution, so a typo can't silently drop a provider.
+
+To apply one policy across providers, set `allowTools`, `disallowTools`, or `requireApproval` at the top level. Per-provider options win:
+
+```typescript
+tools({
+  allowTools: ['*_list_*', '*_get_*', '*_search_*'],
+  providers: {
+    // Its own filter opts linear out of the top-level allowlist.
+    linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
+  },
+})
+```
+
+Top-level entries apply leniently per provider. An entry that matches nothing on one provider doesn't apply there, and only an entry that matches nothing anywhere logs a warning.
 
 ## Filter tools per request
 
-`integrations` fixes the toolset when the agent is built. To decide per request, pass a function as the agent's `tools` option. Mastra calls it on every `generate()` and `stream()` with the [request context](/docs/server/request-context), so you can call the resolver inside and filter what it returns:
+`providers` fixes the toolset when the agent is built. To decide per request, pass a function as the agent's `tools` option. Mastra calls it on every `generate()` and `stream()` with the [request context](/docs/server/request-context), so you can call the resolver inside and filter what it returns:
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
@@ -89,7 +122,7 @@ To always use one connection, pin it:
 
 ```typescript
 tools({
-  integrations: {
+  providers: {
     slack: { connectionId: 'c_yourconnectionid' },
   },
 })
@@ -103,7 +136,7 @@ Tools run without [tool approval](/docs/agents/human-in-the-loop) unless you ask
 
 ```typescript
 tools({
-  integrations: {
+  providers: {
     'neon-mcp': { requireApproval: ['neon-mcp_run_sql'] },
     'robinhood-mcp': { requireApproval: true },
   },

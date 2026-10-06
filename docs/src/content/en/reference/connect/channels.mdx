@@ -43,10 +43,10 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
             isOptional: true,
           },
           {
-            name: 'integrations',
-            type: 'ChannelsIntegrationOverrides',
+            name: 'providers',
+            type: 'string[] | ChannelsProviders',
             description:
-              'Per-provider overrides keyed by provider ID (slack-channels, telegram, discord). See Per-provider options below.',
+              'Channels to expose, keyed by provider ID (slack-channels, telegram, discord). slack is accepted as an alias for slack-channels; using both spellings throws. The array form is an allowlist: only the listed channels are constructed. The record form configures channels individually: true (or {}) enables one with defaults, false excludes it, and an options object configures it. An ID that matches no channel provider throws at call time. See Per-provider options below.',
             isOptional: true,
           },
           {
@@ -72,7 +72,7 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
 
 ### Per-provider options
 
-Each value in `integrations` is a `ChannelsIntegrationOptions`:
+Each value in the `providers` record form is `true`, `false`, or a `ChannelsProviderOptions`. `false` excludes the channel entirely: no instance is constructed and no routes are mounted.
 
 <PropertiesTable
   content={[
@@ -80,12 +80,6 @@ Each value in `integrations` is a `ChannelsIntegrationOptions`:
     name: 'connectionId',
     type: 'string',
     description: 'Pin a specific connection ID, bypassing single-active-connection resolution.',
-    isOptional: true,
-  },
-  {
-    name: 'disabled',
-    type: 'boolean',
-    description: 'Exclude this channel entirely. No instance is constructed and no routes are mounted.',
     isOptional: true,
   },
   {
@@ -103,14 +97,13 @@ Each value in `integrations` is a `ChannelsIntegrationOptions`:
 The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
 
 - **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
-- `getRoutes()`: the union of API routes for every non-disabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
-- `invalidate()`: drops the cached snapshot; the next resolution fetches fresh.
+- `getRoutes()`: the union of API routes for every enabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
-- `disconnect()`: clears the cached snapshot, with the same effect as `invalidate()`. It doesn't tear down providers, sessions, or credentials.
+- `disconnect()`: clears the cached snapshot so the next resolution fetches fresh. It doesn't tear down providers, sessions, or credentials.
 
 Providers without an active connection don't appear in the resolved map. Their routes stay mounted and begin working once a connection is attached.
 
-Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed provider ID) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `integrations.<id>.connectionId` pins the choice. A failed background refresh also warns and keeps serving the cached snapshot; only an explicit `refresh()` rejects.
+Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, an unknown or malformed provider ID, both spellings of the Slack key) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `providers.<id>.connectionId` pins the choice. A failed background refresh also warns and keeps serving the cached snapshot; only an explicit `refresh()` rejects.
 
 ## Errors
 
@@ -120,7 +113,7 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_project_id` | No project ID configured |
 | `missing_access_token` | No platform token configured |
-| `invalid_options` | Malformed provider ID or invalid `ttlMs` |
+| `invalid_options` | Unknown or malformed provider ID, both `slack` and `slack-channels` in one config, a malformed provider entry, or invalid `ttlMs` |
 | `no_active_connection` | A channel needed its credential while its provider has no active connection |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `platform_error` | Any other platform request failure |
