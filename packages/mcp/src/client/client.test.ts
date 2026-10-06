@@ -3654,7 +3654,7 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
       expect.objectContaining({
         serverName: 'schema-test-server',
         toolName: 'get_l2_book',
-        reason: '/properties/required: must be a JSON Schema object or boolean',
+        reason: '#/properties/required: Instance type "array" is invalid. Expected "object", "boolean".',
       }),
     );
   });
@@ -3671,6 +3671,9 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
     ['enum that is not an array', { type: 'object', properties: { a: { enum: 'x' } } }],
     ['empty anyOf', { type: 'object', properties: { a: { anyOf: [] } } }],
     ['properties that is not an object', { type: 'object', properties: [] }],
+    ['string minimum', { type: 'object', properties: { a: { type: 'number', minimum: '5' } } }],
+    ['non-schema $defs entry', { type: 'object', $defs: { A: ['not-a-schema'] } }],
+    ['non-array prefixItems', { type: 'object', properties: { a: { prefixItems: 'x' } } }],
     ['non-schema behind a jsonSchema wrapper', { jsonSchema: { type: 'object', properties: { a: 1 } } }],
   ])('skips a tool with a %s input schema', async (_, inputSchema) => {
     const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
@@ -3686,6 +3689,7 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
     ['nullable type arrays', { type: 'object', properties: { a: { type: ['string', 'null'] } } }],
     ['refs into $defs', { type: 'object', properties: { a: { $ref: '#/$defs/A' } }, $defs: { A: { type: 'string' } } }],
     ['unknown extension keywords', { type: 'object', 'x-vendor': ['anything'], properties: {} }],
+    ['a declared 2020-12 dialect', { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object' }],
   ])('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
     const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
 
@@ -3696,9 +3700,10 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
   it('terminates on self-referencing schema objects', async () => {
     const node: Record<string, unknown> = { type: 'object' };
     node.properties = { self: node };
-    const { client } = createClientWithTools([{ name: 'cyclic', inputSchema: node }]);
+    const { client, warn } = createClientWithTools([{ name: 'cyclic', inputSchema: node }]);
 
     expect(Object.keys(await client.tools())).toEqual(['cyclic']);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('rejects explicit hydration of an invalid definition with a dedicated error', () => {

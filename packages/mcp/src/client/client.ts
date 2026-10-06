@@ -28,8 +28,10 @@ import type {
   SubscriptionFilter,
   VersionNegotiationMode,
   jsonSchemaValidator,
+  JsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
@@ -39,6 +41,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { INPUT_SCHEMA_META_SCHEMA } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -77,35 +80,6 @@ type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
-const SCHEMA_MAP_KEYWORDS = [
-  '$defs',
-  'definitions',
-  'properties',
-  'patternProperties',
-  'dependentSchemas',
-  'dependencies',
-] as const;
-const SCHEMA_ARRAY_KEYWORDS = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'] as const;
-const SCHEMA_KEYWORDS = [
-  'additionalProperties',
-  'unevaluatedProperties',
-  'additionalItems',
-  'unevaluatedItems',
-  'items',
-  'contains',
-  'propertyNames',
-  'not',
-  'if',
-  'then',
-  'else',
-  'contentSchema',
-] as const;
-const JSON_SCHEMA_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 /**
  * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
  * Only schema-bearing keywords are walked, so deeply nested annotation data such as
@@ -115,6 +89,29 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   const seen = new Set<object>();
   let nodes = 0;
   const stack = [{ value: schema, depth: 0 }];
+  const schemaMapKeywords = [
+    '$defs',
+    'definitions',
+    'properties',
+    'patternProperties',
+    'dependentSchemas',
+    'dependencies',
+  ];
+  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
+  const schemaKeywords = [
+    'additionalProperties',
+    'unevaluatedProperties',
+    'additionalItems',
+    'unevaluatedItems',
+    'items',
+    'contains',
+    'propertyNames',
+    'not',
+    'if',
+    'then',
+    'else',
+    'contentSchema',
+  ];
 
   while (stack.length > 0) {
     const { value, depth } = stack.pop()!;
@@ -130,19 +127,19 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
     }
 
     const record = value as Record<string, unknown>;
-    for (const keyword of SCHEMA_MAP_KEYWORDS) {
+    for (const keyword of schemaMapKeywords) {
       const schemas = record[keyword];
       if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
         for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
       }
     }
-    for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
+    for (const keyword of schemaArrayKeywords) {
       const schemas = record[keyword];
       if (Array.isArray(schemas)) {
         for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
       }
     }
-    for (const keyword of SCHEMA_KEYWORDS) {
+    for (const keyword of schemaKeywords) {
       if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
     }
   }
@@ -150,80 +147,27 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   return undefined;
 }
 
+let inputSchemaMetaValidator: JsonSchemaValidator<unknown> | undefined;
+
 /**
- * Finds structural errors in a server-supplied input schema that strict model providers
- * reject for the whole request, e.g. a misplaced `required` array under `properties`.
- * Checks the shape of schema-bearing and structural keywords rather than the full
- * meta-schema, because Ajv-compiled validators need code generation, which Cloudflare
- * Workers forbid. Schemas beyond the complexity bounds are left to
- * getJsonSchemaComplexityError.
+ * Checks a server-supplied input schema against the JSON Schema meta-schema. Uses the SDK's
+ * cf-worker validator because it interprets schemas instead of compiling them with
+ * `new Function`, so it also runs on Cloudflare Workers. Callers must rule out oversized
+ * schemas with getJsonSchemaComplexityError first.
  */
-function getJsonSchemaShapeError(schema: unknown): string | undefined {
-  if (!isPlainObject(schema)) return '/: input schema must be a JSON object';
-
-  const seen = new Set<object>();
-  let nodes = 0;
-  const stack: { value: unknown; path: string; depth: number }[] = [{ value: schema, path: '', depth: 0 }];
-
-  while (stack.length > 0) {
-    const { value, path, depth } = stack.pop()!;
-    if (typeof value === 'boolean') continue;
-    if (!isPlainObject(value)) return `${path || '/'}: must be a JSON Schema object or boolean`;
-    if (seen.has(value)) continue;
-    seen.add(value);
-
-    nodes += 1;
-    if (depth > MAX_JSON_SCHEMA_DEPTH || nodes > MAX_JSON_SCHEMA_NODES) return undefined;
-
-    const push = (child: unknown, childPath: string) => stack.push({ value: child, path: childPath, depth: depth + 1 });
-
-    if (value.type !== undefined) {
-      const types = Array.isArray(value.type) ? value.type : [value.type];
-      if (types.length === 0 || types.some(type => typeof type !== 'string' || !JSON_SCHEMA_TYPES.has(type))) {
-        return `${path}/type: must be a JSON Schema type name or an array of them`;
-      }
-    }
-    if (
-      value.required !== undefined &&
-      (!Array.isArray(value.required) || value.required.some(name => typeof name !== 'string'))
-    ) {
-      return `${path}/required: must be an array of strings`;
-    }
-    if (value.enum !== undefined && !Array.isArray(value.enum)) {
-      return `${path}/enum: must be an array`;
-    }
-
-    for (const keyword of SCHEMA_MAP_KEYWORDS) {
-      const schemas = value[keyword];
-      if (schemas === undefined) continue;
-      if (!isPlainObject(schemas)) return `${path}/${keyword}: must be an object`;
-      for (const [key, child] of Object.entries(schemas)) {
-        // draft-07 `dependencies` entries may also be arrays of property names.
-        if (keyword === 'dependencies' && Array.isArray(child)) {
-          if (child.some(name => typeof name !== 'string')) {
-            return `${path}/${keyword}/${key}: must be a schema or an array of strings`;
-          }
-          continue;
-        }
-        push(child, `${path}/${keyword}/${key}`);
-      }
-    }
-    for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
-      const schemas = value[keyword];
-      if (schemas === undefined || (keyword === 'items' && !Array.isArray(schemas))) continue;
-      const nonEmpty = keyword === 'allOf' || keyword === 'anyOf' || keyword === 'oneOf';
-      if (!Array.isArray(schemas) || (nonEmpty && schemas.length === 0)) {
-        return `${path}/${keyword}: must be a ${nonEmpty ? 'non-empty ' : ''}array of schemas`;
-      }
-      schemas.forEach((child, index) => push(child, `${path}/${keyword}/${index}`));
-    }
-    for (const keyword of SCHEMA_KEYWORDS) {
-      if (value[keyword] === undefined || (keyword === 'items' && Array.isArray(value[keyword]))) continue;
-      push(value[keyword], `${path}/${keyword}`);
-    }
+function getInputSchemaError(schema: unknown): string | undefined {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return '#: input schema must be a JSON object';
+  inputSchemaMetaValidator ??= new CfWorkerJsonSchemaValidator({ draft: '7' }).getValidator(INPUT_SCHEMA_META_SCHEMA);
+  let result: ReturnType<typeof inputSchemaMetaValidator>;
+  try {
+    result = inputSchemaMetaValidator(schema);
+  } catch {
+    // Only in-process schema objects can be cyclic (wire JSON never is) and the validator recurses
+    // until the stack overflows on them. Leave those to the usual call-time validation.
+    return undefined;
   }
-
-  return undefined;
+  // Errors run from the outermost schema to the offending keyword; the last one is the most specific.
+  return result.valid ? undefined : result.errorMessage.split('; ').at(-1);
 }
 
 const SUPPORTED_DIALECTS = new Set([
@@ -1480,10 +1424,12 @@ export class InternalMastraMCPClient extends MastraBase {
   ): Tool<any, any, any, any> | undefined {
     // A malformed input schema makes strict providers reject the whole tools array, so the
     // tool is dropped here instead of breaking every request that includes its siblings.
-    const inputSchema: unknown = tool.inputSchema;
-    const inputSchemaError = getJsonSchemaShapeError(
-      isPlainObject(inputSchema) && 'jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema,
-    );
+    const rawInputSchema: unknown = tool.inputSchema;
+    const inputSchema =
+      rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
+        ? rawInputSchema.jsonSchema
+        : rawInputSchema;
+    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ? undefined : getInputSchemaError(inputSchema);
     if (inputSchemaError) {
       const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
       this.log(
