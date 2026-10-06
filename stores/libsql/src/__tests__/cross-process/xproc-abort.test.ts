@@ -25,19 +25,21 @@ import type { Gate, StepToolEvent } from './step-agent';
 const PEER_FIXTURE = new URL('./fixtures/t79-peer.ts', import.meta.url);
 
 /**
- * A failing cell can wait out two hang guards before it reports: one in the
- * body (at most one can expire — the first guard to time out throws, so the
- * guards after it are never awaited) and one in teardown, which releases the
- * parked tool and gives the run a bounded chance to settle so a failure can say
- * whether the run was still live. A passing cell waits for neither.
+ * Budget for one cell. A failing cell can wait out several hang guards before
+ * it reports — five in the body (step 2 reached, the peer's result, the peer's
+ * exit, this process processing the abort, the stream settling) plus the
+ * teardown drain, which releases the parked tool and gives the run a bounded
+ * chance to settle so a failure can say whether the run was still live. A
+ * passing cell waits for none of them.
  *
- * The budget is three guards: the two a failure can burn plus the setup before
- * the first guard (fork, peer startup, the run reaching step 2, the peer
- * aborting and exiting) and the margin a loaded runner needs on top. Measured
- * against the widest failure path (see the mutation proofs in the plan's proof
- * directory, where a cell reports its own hang-guard error at ~36s): if the
- * runner's timeout wins instead, the cell reports a bare "Test timed out" and
- * loses exactly the diagnostics the guards exist to produce.
+ * Three guards is measured headroom for the failure paths this cell actually
+ * produces, not a proof of an upper bound: guards that nearly expire before
+ * succeeding accumulate, and no finite budget covers every allowed schedule.
+ * The budget is not what makes a cell correct (a green cell never approaches
+ * it); it is what lets a red cell report its own hang-guard error and teardown
+ * note instead of the runner's bare "Test timed out". Widest measured path: a
+ * peer that never asks for the abort plus a teardown that releases nothing, at
+ * ~36s — see t79-unsettled-red.txt in the plan's proof directory.
  */
 const CELL_TIMEOUT_MS = DEFAULT_HANG_GUARD_MS * 3;
 

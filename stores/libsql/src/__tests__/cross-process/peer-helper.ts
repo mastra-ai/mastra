@@ -411,17 +411,20 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     };
     peers.push({ handle, child, errors });
 
-    await withHangGuard(
-      Promise.race([configReceived, exitedBefore('reporting its config')]),
-      DEFAULT_HANG_GUARD_MS,
-      () => fail(`${label()} did not start within ${DEFAULT_HANG_GUARD_MS}ms (hang guard)`),
-    );
-    // Prove the peer reached the shared transport before the fixture runs: a
-    // peer whose first publish never arrives (wrong socket path, a second
-    // broker) would otherwise surface later as a mystery hang in whatever the
-    // test happened to wait for.
+    // Prove the peer reached the shared transport: a peer whose first publish
+    // never arrives (wrong socket path, a second broker) would otherwise
+    // surface later as a mystery hang in whatever the test happened to wait
+    // for. The ping is one-way — the peer sends, this process receives — so
+    // receiving it proves the peer's socket is bound to this process's broker.
+    // It does not mean the fixture waited for this acknowledgment: the child
+    // starts work as soon as its own config send is queued.
     let receipt: { at: number; remoteClientCount: number };
     try {
+      await withHangGuard(
+        Promise.race([configReceived, exitedBefore('reporting its config')]),
+        DEFAULT_HANG_GUARD_MS,
+        () => fail(`${label()} did not start within ${DEFAULT_HANG_GUARD_MS}ms (hang guard)`),
+      );
       receipt = await withHangGuard(
         Promise.race([selfCheckReceived, exitedBefore('reaching the shared transport')]),
         DEFAULT_HANG_GUARD_MS,

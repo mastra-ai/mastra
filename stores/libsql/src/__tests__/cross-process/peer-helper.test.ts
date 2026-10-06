@@ -77,7 +77,10 @@ describe('cross-process peer helper', () => {
       // One peer at a time on purpose: what is under test is this peer's own
       // receipt. A peer that returns as soon as its ping lands can be gone
       // before the spawn wait resumes, which a check that read the broker's
-      // client count afterwards could get wrong.
+      // client count afterwards could get wrong. This pins the contract — an
+      // immediately exiting peer must pass the self-check — rather than
+      // reproducing that race, which was not reachable locally under the old
+      // sampling (see round3-followup.txt in the plan's proof directory).
       for (let attempt = 0; attempt < 5; attempt++) {
         const peer = await spawn({ mode: 'instant' });
         const selfCheck = peer.selfCheck;
