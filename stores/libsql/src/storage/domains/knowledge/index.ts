@@ -2335,14 +2335,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
-      if (
-        !input.verifiedMutation &&
-        proposal.operation !== mutation.kind &&
-        !(proposal.operation === 'promote-node' && mutation.kind === 'curate-node')
-      ) {
+      if (proposal.operation !== mutation.kind) {
         throw new KnowledgeConflictError('Proposal operation does not match its payload');
       }
-      assertKnowledgeProposalMutationSemantics(mutation, targets);
+      assertKnowledgeProposalMutationSemantics(mutation, proposal.targets);
       try {
         await this.#applyProposalMutation(tx, mutation, input.reviewerContextScopeId, input.expectedAccessEpoch);
       } catch (error) {

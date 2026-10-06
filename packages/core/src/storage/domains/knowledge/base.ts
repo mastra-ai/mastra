@@ -911,6 +911,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async deleteRecordBySource(_input: {
     id: string;
     source: string;
+    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
