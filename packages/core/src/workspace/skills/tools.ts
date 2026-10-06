@@ -100,10 +100,11 @@ async function resolveSkill(
 
   // Listing every skill would put the whole catalog into the conversation, so suggest
   // the closest matches instead and point the model at skill_search.
-  const matches = await skills.search(identifier.replace(/[-_/.]+/g, ' '), {
-    topK: MAX_SUGGESTED_SKILLS,
-    includeReferences: false,
-  });
+  // Search by the last path segment: earlier segments ("skills/") match every skill.
+  const name = identifier.split('/').filter(Boolean).pop() ?? identifier;
+  const matches = await skills
+    .search(name.replace(/[-_.]+/g, ' '), { topK: MAX_SUGGESTED_SKILLS, includeReferences: false })
+    .catch(() => []);
   const suggestions = [...new Set(matches.map(m => `${m.skillName} (${m.skillPath})`))];
   const closest = suggestions.length > 0 ? ` Closest matches: ${suggestions.join(', ')}.` : '';
   return { notFound: `${notFound}${closest} Use the \`skill_search\` tool to find other skills.` };

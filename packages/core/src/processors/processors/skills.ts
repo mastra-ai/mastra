@@ -78,7 +78,11 @@ interface SkillsProcessorBaseOptions {
    * instead of listing every skill. Use this when there are enough skills that
    * the catalog costs too many tokens. The hint is injected whenever the
    * `skill_search` tool is available, so it also covers skills configured on
-   * the agent; `skills` and `workspace` become optional.
+   * the agent; `skills` and `workspace` become optional. Without them, the
+   * `skillCount` span attribute is 0.
+   *
+   * The model finds skills only through `skill_search`, so configure BM25 or
+   * vector search on the workspace. Agent-level skills are always indexed.
    *
    * @default true
    */
@@ -96,13 +100,22 @@ export type SkillsProcessorOptions =
   | ({ injectCatalog: false; skills?: never; workspace?: never } & Omit<SkillsProcessorBaseOptions, 'injectCatalog'>);
 
 /**
- * Injected instead of the catalog when `injectCatalog` is false.
+ * Injected instead of the catalog when `injectCatalog` is false. Without a list,
+ * the model can't tell which tasks a skill covers, so the hint says what skills
+ * contain and when a search pays off, and lets the model skip it for questions
+ * it can answer on its own.
+ *
+ * The wording matters. In testing, a generic "search when a skill may cover the
+ * topic" hint left gpt-5-mini skipping the search on about a third of requests a
+ * skill covered; this version brought it level with the catalog, without the
+ * needless searches on general questions that "search before every task" caused.
+ * Re-test before changing it.
  */
-const SKILL_SEARCH_HINT =
-  'Skills are available but not listed. Skills are NOT tools: do not call skill names directly as tool names. ' +
-  'Use the `skill_search` tool to find a relevant skill, then call the `skill` tool with its name to load its instructions. ' +
-  'Read skill files with `skill_read` rather than with filesystem tools. ' +
-  'When a user asks about a topic a skill may cover, search for it immediately without asking for permission first.';
+const SKILL_SEARCH_HINT = [
+  'You have a library of skills that are not listed here. A skill holds task-specific instructions written for this environment: workflows, conventions, project tools, and checklists. Skills are NOT tools: do not call skill names directly as tool names.',
+  'Before you start a task that involves a specific workflow, tool, project, or process, call the `skill_search` tool with a few keywords describing the task. Many tasks have a matching skill, and its instructions replace guesswork. Skip the search for small talk or general questions you can fully answer on your own.',
+  'If a result fits, call the `skill` tool with its name to load the instructions, then follow them. Read skill files with `skill_read` rather than with filesystem tools.',
+].join('\n');
 
 // =============================================================================
 // Catalog formatting

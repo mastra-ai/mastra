@@ -102,7 +102,9 @@ export const supportAgent = new Agent({
 })
 ```
 
-The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both filesystem-backed and [agent skills](/docs/skills). Because the agent now finds skills by searching, configure [BM25 or vector search](#search-skill-content) for larger collections.
+The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both filesystem-backed and [agent skills](/docs/skills). Because the agent finds skills only by searching, configure [BM25 or vector search](#search-skill-content) on the workspace. Agent skills are always indexed.
+
+Keep the default list when you have a few dozen skills: the agent sees every option at once, and the list is a stable prefix that providers can cache. Turn it off when you have around a hundred skills or more, or when the size of the system message matters. The search instruction stays the same size however many skills you add.
 
 [`SkillSearchProcessor`](/reference/processors/skill-search-processor) also hides the list, but replaces the standard tools with its own `search_skills` and `load_skill` tools and only covers workspace skills.
 
@@ -142,7 +144,7 @@ Direct [agent skills](/docs/skills) are resolved before filesystem-backed skills
 
 When [BM25 or vector search](/docs/sandbox/search) is configured alongside skills, Mastra automatically indexes each skill's name, description, `SKILL.md` instructions, and reference files. Scripts and assets aren't indexed.
 
-Without BM25 or vector search, `skill_search` falls back to case-insensitive text matching across the name, description, instructions, and references. A result matches when every word in the query appears in it. This keeps skill search available without a separate search configuration, while indexed search provides ranking and semantic retrieval for larger collections.
+Without BM25 or vector search, `skill_search` falls back to case-insensitive text matching across the name, description, instructions, and references. Results are ranked by how many query words they contain, and words found in a skill's name or description count more. This keeps skill search available without a separate search configuration, while indexed search provides ranking and semantic retrieval for larger collections.
 
 A result from a reference file includes the file path, such as `references/style-guide.md`, so the agent can pass it to `skill_read`.
 

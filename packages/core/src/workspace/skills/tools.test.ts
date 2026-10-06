@@ -355,6 +355,28 @@ describe('skill tool', () => {
       expect(result).toBe('Skill "nonexistent" not found. Use the `skill_search` tool to find other skills.');
     });
 
+    it('still reports not found when the suggestion search fails', async () => {
+      const search = vi.fn(async () => {
+        throw new Error('vector store down');
+      });
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills), search });
+      const { skill: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { name: 'nonexistent' });
+
+      expect(result).toBe('Skill "nonexistent" not found. Use the `skill_search` tool to find other skills.');
+    });
+
+    it('searches by the last segment of a path-style name', async () => {
+      const search = vi.fn(async () => []);
+      const skills = createMockWorkspaceSkills({ list: vi.fn(async () => manySkills), search });
+      const { skill: tool } = createSkillTools(skills);
+
+      await exec(tool, { name: 'skills/release-notes/' });
+
+      expect(search).toHaveBeenCalledWith('release notes', { topK: 5, includeReferences: false });
+    });
+
     it('suggests a real skill matched by its description', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-suggest-'));
       try {

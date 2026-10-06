@@ -405,7 +405,7 @@ describe('SkillsProcessor', () => {
       it('injects the catalog by default', async () => {
         await processor.processInputStep({ messageList: mockMessageList as any, tools: skillTools } as any);
         expect(systemContents().join('\n')).toContain('<available_skills>');
-        expect(systemContents().join('\n')).not.toContain('Skills are available but not listed');
+        expect(systemContents().join('\n')).not.toContain('You have a library of skills that are not listed here');
       });
     });
 

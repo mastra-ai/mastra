@@ -79,11 +79,13 @@ describeForAllEngines('AIMock scenario: search-first skills (no catalog)', engin
 
     expect(requests.length).toBe(3);
 
-    const firstRequest = JSON.stringify(requests[0]?.body?.messages ?? []);
-    expect(firstRequest).not.toContain('<available_skills>');
-    expect(firstRequest).not.toContain('Drafts changelogs');
-    expect(firstRequest).toContain('Skills are available but not listed');
-    expect(firstRequest.split('Skills are available but not listed')).toHaveLength(2);
+    // Every step carries the hint exactly once: it's re-added per step, never accumulated
+    for (const request of requests) {
+      const messages = JSON.stringify(request?.body?.messages ?? []);
+      expect(messages).not.toContain('<available_skills>');
+      expect(messages.split('You have a library of skills that are not listed here')).toHaveLength(2);
+    }
+    expect(JSON.stringify(requests[0]?.body?.messages ?? [])).not.toContain('Drafts changelogs');
 
     const toolNames = (requests[0]?.body?.tools ?? []).map((t: any) => t.function?.name);
     expect(toolNames).toEqual(expect.arrayContaining(['skill', 'skill_search', 'skill_read']));

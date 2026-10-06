@@ -595,7 +595,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
   });
 
   describe('SkillsProcessor with injectCatalog: false', () => {
-    const HINT = 'Skills are available but not listed';
+    const HINT = 'You have a library of skills that are not listed here';
 
     it('replaces the catalog with the skill_search hint and keeps all skill tools', async () => {
       const agent = new Agent({

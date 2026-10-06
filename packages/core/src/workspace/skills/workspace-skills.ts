@@ -785,13 +785,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
       seenCanonicalSources.add(canonicalSourceKey);
 
+      // The name + description document isn't part of SKILL.md, so its line
+      // numbers would point at the wrong lines of the file.
+      const isMetadataHit = result.id === this.#searchDocumentId(skillPath, SKILL_METADATA_SOURCE);
+
       results.push({
         skillName: skill.name,
         skillPath: skill.path,
         source,
         content: result.content,
         score: result.score,
-        lineRange: result.lineRange,
+        lineRange: isMetadataHit ? undefined : result.lineRange,
         scoreDetails: result.scoreDetails,
       });
 
@@ -1554,12 +1558,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #simpleSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const { topK = 5, skillNames, includeReferences = true } = options;
-    // Match when every query word appears (case-insensitive), so multi-word
-    // queries don't need to appear verbatim.
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const matchesAll = (text: string) => {
+    // Score by the share of query words found (case-insensitive), so keyword
+    // queries rank skills instead of needing every word or the exact phrase.
+    // Words found in the name or description count double: they say what the
+    // skill is for. An empty query matches everything.
+    const terms = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+    const countMatches = (text: string) => {
       const lower = text.toLowerCase();
-      return terms.every(term => lower.includes(term));
+      return terms.filter(term => lower.includes(term)).length;
     };
     const results: SkillSearchResult[] = [];
 
@@ -1573,39 +1579,61 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         continue;
       }
 
-      // Search in name, description, and instructions. When the instructions
-      // alone don't match, preview the description since that's what matched.
-      if (matchesAll(`${skill.name}\n${skill.description}\n${skill.instructions}`)) {
+      if (terms.length === 0) {
         results.push({
           skillName: skill.name,
           skillPath: skill.path,
           source: 'SKILL.md',
-          content: matchesAll(skill.instructions) ? skill.instructions.substring(0, 200) : skill.description,
+          content: skill.instructions.substring(0, 200),
           score: 1,
+        });
+        if (results.length >= topK) break;
+        continue;
+      }
+
+      const lowerAbout = `${skill.name}\n${skill.description}`.toLowerCase();
+      const lowerBody = skill.instructions.toLowerCase();
+      let aboutMatches = 0;
+      let weighted = 0;
+      for (const term of terms) {
+        if (lowerAbout.includes(term)) {
+          aboutMatches++;
+          weighted += 1;
+        } else if (lowerBody.includes(term)) {
+          weighted += 0.5;
+        }
+      }
+      if (weighted > 0) {
+        results.push({
+          skillName: skill.name,
+          skillPath: skill.path,
+          source: 'SKILL.md',
+          // Preview the description when it matched: it says what the skill is for
+          content: aboutMatches > 0 ? skill.description : skill.instructions.substring(0, 200),
+          score: weighted / terms.length,
         });
       }
 
-      // Search in references if included
       if (includeReferences) {
         for (const refPath of skill.references) {
-          if (results.length >= topK) break;
           const content = await this.getReference(skill.name, `references/${refPath}`);
-          if (content && matchesAll(content)) {
+          const matched = content ? countMatches(content) : 0;
+          if (content && matched > 0) {
             results.push({
               skillName: skill.name,
               skillPath: skill.path,
               source: `references/${refPath}`,
               content: content.substring(0, 200),
-              score: 0.8,
+              score: (0.5 * matched) / terms.length,
             });
           }
         }
       }
-
-      if (results.length >= topK) break;
     }
 
-    return results.slice(0, topK);
+    if (terms.length === 0) return results.slice(0, topK);
+    // Stable sort keeps discovery order for equal scores
+    return results.sort((a, b) => b.score - a.score).slice(0, topK);
   }
 
   /**

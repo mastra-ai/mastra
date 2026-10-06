@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { SearchEngine } from '../search';
 import type { SearchResult, IndexDocument } from '../search';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
@@ -781,8 +782,29 @@ Read the diff carefully.
         expect(results.map(r => r.skillName)).toEqual(['pr-review']);
       });
 
-      it('simple search returns nothing when any query word is missing', async () => {
-        expect(await createSkills().search('review kubernetes')).toEqual([]);
+      it('simple search returns nothing when no query word matches', async () => {
+        expect(await createSkills().search('kubernetes helm')).toEqual([]);
+      });
+
+      it('simple search ranks skills by how many query words match', async () => {
+        // Long keyword queries rarely match every word; the best partial match still wins
+        const results = await createSkills().search('review pull requests correctness kubernetes deploy');
+        expect(results[0]).toMatchObject({
+          skillName: 'pr-review',
+          content: 'Review pull requests for correctness and style',
+        });
+        expect(results[0]!.score).toBeCloseTo(4 / 6);
+      });
+
+      it('simple search ranks name and description matches above body-only matches', async () => {
+        const results = await new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/diff-tool/SKILL.md': `---\nname: diff-tool\ndescription: Compares files\n---\n\nUse it to review changes.\n`,
+          }),
+          skills: ['skills'],
+        }).search('review');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review', 'diff-tool']);
       });
 
       it('indexes name and description as a SKILL.md document', async () => {
@@ -810,6 +832,24 @@ Read the diff carefully.
           includeReferences: false,
         });
         expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('with BM25, finds a skill by description without reporting SKILL.md line numbers', async () => {
+        const skills = new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+          }),
+          skills: ['skills'],
+          searchEngine: new SearchEngine({ bm25: {} }),
+        });
+
+        const [first] = await skills.search('correctness');
+        expect(first).toMatchObject({ skillName: 'pr-review', source: 'SKILL.md' });
+        expect(first?.lineRange).toBeUndefined();
+
+        const [bodyHit] = await skills.search('diff carefully');
+        expect(bodyHit).toMatchObject({ skillName: 'pr-review', lineRange: { start: 3, end: 3 } });
       });
     });
 
