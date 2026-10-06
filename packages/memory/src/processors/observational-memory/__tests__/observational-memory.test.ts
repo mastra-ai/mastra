@@ -2955,7 +2955,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
       expect(textParts[1].text).toBe(
-        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search (10:31 AM): {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
       );
       expect(historyMessage.content).toContainEqual(
         expect.objectContaining({
