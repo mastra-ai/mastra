@@ -393,7 +393,7 @@ const AgentComposer = ({
     const currentLifetime = lifetime.current;
     const submittedAttachments = attachments;
     const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
-    // A message the server never received goes back in the composer, before anything typed since.
+    // A message the server can't have stored goes back in the composer, before anything typed since.
     const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
     const restoreSubmission = () => {
       if (lifetime.current !== currentLifetime) return;

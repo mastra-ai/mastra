@@ -6,7 +6,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -106,6 +106,7 @@ const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; thr
 };
 
 interface RenderThreadOptions {
+  modelSettings?: NonNullable<ComponentProps<typeof ChatProvider>['settings']>['modelSettings'];
   hasModelList?: boolean;
   threadId?: string;
   suggestedPrompts?: string[];
@@ -116,6 +117,7 @@ interface RenderThreadOptions {
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
   const {
+    modelSettings,
     hasModelList = true,
     threadId = 'thread-1',
     suggestedPrompts,
@@ -133,7 +135,7 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           threadId={threadId}
           initialMessages={initialMessages}
           supportsMemory={true}
-          settings={{ modelSettings: { chatWithLegacyStream: false } }}
+          settings={{ modelSettings: { chatWithLegacyStream: false, ...modelSettings } }}
         >
           <Thread
             agentId="agent-1"
@@ -1003,6 +1005,56 @@ describe('Thread', () => {
       expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
       expect(textarea.value).toBe('Read my spreadsheet\n\nAnd the second tab?');
     }, 10_000);
+
+    it('puts the text back in the composer in generate mode too', async () => {
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/generate`, () =>
+          HttpResponse.json({ error: 'Request body too large' }, { status: 413 }),
+        ),
+      );
+      await act(async () => {
+        renderThread([], { modelSettings: { chatWithGenerate: true } });
+      });
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+      expect(textarea.value).toBe('Read my spreadsheet');
+    }, 10_000);
+  });
+
+  // A server error can come after the agent ran and stored the turn: sending the draft again would duplicate it.
+  describe('when the server fails while handling the message', () => {
+    it.each([
+      ['stream', {}],
+      ['generate', { chatWithGenerate: true }],
+    ])(
+      'keeps the composer empty and shows the error (%s)',
+      async (endpoint, modelSettings) => {
+        server.use(
+          ...baseHandlers(),
+          http.post(`${BASE_URL}/api/agents/agent-1/${endpoint}`, () =>
+            HttpResponse.json({ error: 'The model provider failed' }, { status: 500 }),
+          ),
+        );
+        await act(async () => {
+          renderThread([], { modelSettings });
+        });
+        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+        fireEvent.change(textarea, { target: { value: 'Summarize my notes' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        expect(await screen.findByText(/The model provider failed/, undefined, { timeout: 5000 })).toBeTruthy();
+        await act(async () => {}); // lets a pending restore land before checking it didn't happen
+        expect(screen.queryByText(/could not be sent/i)).toBeNull();
+        expect(textarea.value).toBe('');
+      },
+      10_000,
+    );
   });
 
   describe('when a text attachment is added by URL', () => {

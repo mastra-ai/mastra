@@ -109,6 +109,17 @@ const buildRequestContext = (deps: SendDeps) => {
   return requestContextInstance;
 };
 
+/**
+ * A server error (5xx) can come after the agent ran and stored the turn, as in generate mode where no
+ * chunk arrives first: putting the message back in the composer would invite sending it twice. A
+ * request that got no response, or that the server refused (4xx, such as a body too large), left
+ * nothing behind.
+ */
+const mayHaveBeenStored = (error: unknown) => {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && status >= 500;
+};
+
 const didUpdateWorkingMemory = (chunk: any) =>
   (chunk.type === 'tool-result' || chunk.type === 'tool-execution-end') &&
   chunk.payload?.toolName === 'updateWorkingMemory' &&
@@ -342,7 +353,7 @@ export const useChatSendHandler = ({
         }
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
-        return delivered;
+        return delivered || mayHaveBeenStored(error);
       } finally {
         abortControllerRef.current = null;
       }
