@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -601,37 +602,13 @@ export class KnowledgePG extends KnowledgeStorage {
     );
   }
 
-  /**
-   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
-   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers, extra indexes)
-   * needs an explicit reset.
-   */
-  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
-    const schema = this.#schemaName ?? null;
-    const relations = await executor.execute({
-      sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
-      args: [schema],
-    });
-    const tables: string[] = [];
-    for (const row of relations.rows) {
-      const name = String(row.table_name);
-      if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) return false;
-      tables.push(name);
-    }
-    const indexes = await executor.execute({
-      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
-      args: [schema, tables],
-    });
-    for (const row of indexes.rows) {
-      const name = String(row.indexname);
-      if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return false;
-    }
-    const dependents = await executor.execute({
-      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
-      args: [schema, tables, schema, tables],
-    });
-    if (dependents.rows.length > 0) return false;
-    return true;
+  override async dangerouslyReset(): Promise<void> {
+    const schema = this.#schemaName ? `"${parseSchemaName(this.#schemaName)}".` : '';
+    const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
+      .map(table => `${schema}"${table}"`)
+      .join(', ');
+    await this.#client.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {

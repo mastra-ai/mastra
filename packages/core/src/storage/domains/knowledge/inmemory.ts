@@ -104,6 +104,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     } as const;
   }
 
+  override async dangerouslyReset(): Promise<void> {
+    await this.dangerouslyClearAll();
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.#db.knowledgeNodes.clear();
     this.#db.knowledgeNodeKeys.clear();
