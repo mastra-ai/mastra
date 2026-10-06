@@ -1,5 +1,23 @@
 # @mastra/pg
 
+## 1.30.0-alpha.5
+
+### Patch Changes
+
+- Fixed `PgVector.query()` on HNSW indexes for pgvector versions before 0.8.0. On Postgres 15 or later, these queries failed with `invalid configuration parameter name "hnsw.iterative_scan"`. The query now sets `hnsw.iterative_scan` only on pgvector 0.8.0 or later. ([#26013](https://github.com/mastra-ai/mastra/pull/26013))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
+## 1.30.0-alpha.4
+
+### Patch Changes
+
+- Fixed `$exists` filters on nested metadata keys in `PgVector`. A filter like `{ 'doc.lang': { $exists: false } }` used to match every vector, and `$exists: true` matched none. Running `deleteVectors` with such a filter could delete every vector in the selected namespace. Now `$exists: true` matches vectors where the nested key is present, and `$exists: false` matches vectors where it is missing. ([#25976](https://github.com/mastra-ai/mastra/pull/25976))
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+
 ## 1.30.0-alpha.3
 
 ### Patch Changes

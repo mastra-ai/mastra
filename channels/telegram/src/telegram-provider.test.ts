@@ -304,6 +304,42 @@ describe('TelegramProvider.connect', () => {
     stubGetMe(BOT_TOKEN);
     await expect(provider.connect('agent-1', { botToken: BOT_TOKEN })).rejects.toThrow(/baseUrl/i);
   });
+
+  it('registers the webhook against MASTRA_SERVER_URL when no baseUrl or server override is set', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://my-app.server.example.com/';
+    try {
+      const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
+      stubGetMe(BOT_TOKEN);
+      const webhookBody = stubMethod(BOT_TOKEN, 'setWebhook');
+      stubMethod(BOT_TOKEN, 'setMyCommands');
+
+      await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+      expect(String(webhookBody()?.url)).toMatch(/^https:\/\/my-app\.server\.example\.com\/telegram\/events\//);
+    } finally {
+      delete process.env.MASTRA_SERVER_URL;
+    }
+  });
+
+  it('explicit server.studio* config beats MASTRA_SERVER_URL', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://env-var.example.com';
+    try {
+      const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
+      new Mastra({
+        server: { studioProtocol: 'https', studioHost: 'config-override.example.com', studioPort: 443 },
+        channels: { telegram: provider },
+      });
+      stubGetMe(BOT_TOKEN);
+      const webhookBody = stubMethod(BOT_TOKEN, 'setWebhook');
+      stubMethod(BOT_TOKEN, 'setMyCommands');
+
+      await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+      expect(String(webhookBody()?.url)).toMatch(/^https:\/\/config-override\.example\.com\/telegram\/events\//);
+    } finally {
+      delete process.env.MASTRA_SERVER_URL;
+    }
+  });
 });
 
 describe('TelegramProvider — setMyCommands', () => {

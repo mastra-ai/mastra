@@ -15,6 +15,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
+import { PipelineEmptyState } from '../domains/factory/components/PipelineEmptyState';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
 import type { LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -28,8 +29,6 @@ const RANGE_PRESETS = [
 ];
 
 const DEFAULT_RANGE_DAYS = 30;
-
-const BLOCK_TITLE = 'text-column text-muted-foreground m-0 font-semibold';
 
 export function OverviewPage() {
   const factory = useActiveFactory();
@@ -80,40 +79,69 @@ export function OverviewContent({
     const message = itemsQuery.error instanceof Error ? itemsQuery.error.message : 'Failed to load the board';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  if (!items) return <OverviewLoading />;
 
   return (
     <div className="mt-6 flex flex-col gap-14 pb-16">
       <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
-        <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
+        {items ? (
+          <StageFunnel
+            funnel={current.funnel}
+            pullRequests={current.pullRequests}
+            merged={current.merged}
+            emptyState={
+              <PipelineEmptyState
+                hasWorkItems={items.length > 0}
+                rangeDays={rangeDays}
+                factoryProjectId={factoryProjectId}
+              />
+            }
+          />
+        ) : (
+          <OverviewLoading />
+        )}
       </Block>
 
       <section className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <Block
           title="Stalled"
-          action={current.waiting.length > 0 ? <Count value={`${current.waiting.length} waiting`} /> : undefined}
+          action={current.waiting.length > 0 && <Count value={`${current.waiting.length} waiting`} />}
         >
-          <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
 
         <Block
           title="Running now"
           action={
-            <Count
-              value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
-            />
+            items &&
+            current.inFlight > 0 && (
+              <Count
+                value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
+              />
+            )
           }
         >
-          <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
       </section>
 
       <Block title="Latest commits" action={repository ? <ViewOnGithub slug={repository.slug} /> : undefined}>
-        <CommitRail projectRepositoryId={repository?.projectRepositoryId} />
+        <CommitRail projectRepositoryId={repository?.projectRepositoryId} factoryProjectId={factoryProjectId} />
       </Block>
 
       <Block title="Activity" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/activity`} />}>
-        <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        {items ? (
+          <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        ) : (
+          <Skeleton className="h-24 w-full rounded-xl" />
+        )}
       </Block>
 
       <Block
@@ -122,11 +150,13 @@ export function OverviewContent({
           <div className="flex items-center gap-3">
             {supervisorHealth.data?.findings.length ? (
               <Link
-                className="text-meta text-badge-green-indicator hover:text-badge-red-indicator"
                 to={`/factories/${factoryProjectId ?? ''}/supervisor`}
+                className="text-badge-green-indicator hover:text-badge-red-indicator"
               >
-                {supervisorHealth.data.findings.length} supervisor{' '}
-                {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+                <Txt as="span" variant="meta" className="block">
+                  {supervisorHealth.data.findings.length} supervisor{' '}
+                  {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+                </Txt>
               </Link>
             ) : null}
             <ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />
@@ -141,8 +171,10 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="text-muted-foreground hover:text-foreground text-meta">
-      View all
+    <Link to={to} className="text-muted-foreground hover:text-foreground">
+      <Txt as="span" variant="meta" className="block">
+        View all
+      </Txt>
     </Link>
   );
 }
@@ -153,16 +185,18 @@ function ViewOnGithub({ slug }: { slug: string }) {
       href={`https://github.com/${slug}/commits`}
       target="_blank"
       rel="noreferrer"
-      className="text-muted-foreground hover:text-foreground text-meta"
+      className="text-muted-foreground hover:text-foreground"
     >
-      {slug}
+      <Txt as="span" variant="meta">
+        {slug}
+      </Txt>
     </a>
   );
 }
 
 function Count({ value }: { value: string }) {
   return (
-    <Txt as="span" variant="meta" className="text-muted-foreground">
+    <Txt tone="muted" as="span" variant="meta">
       {value}
     </Txt>
   );
@@ -172,7 +206,9 @@ function Block({ title, action, children }: { title: string; action?: ReactNode;
   return (
     <section className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-        <h3 className={BLOCK_TITLE}>{title}</h3>
+        <Txt as="h3" variant="column" tone="muted" className="m-0">
+          {title}
+        </Txt>
         {action}
       </div>
       {children}
@@ -204,10 +240,8 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
 
 function OverviewLoading() {
   return (
-    <div role="status" aria-label="Loading factory overview" className="mt-6 flex flex-col gap-10">
+    <div role="status" aria-label="Loading factory overview" className="flex flex-col">
       <Skeleton className="h-52 w-full rounded-xl" />
-      <Skeleton className="h-48 w-full rounded-xl" />
-      <Skeleton className="h-24 w-full rounded-xl" />
     </div>
   );
 }

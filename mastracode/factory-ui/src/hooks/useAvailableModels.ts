@@ -12,8 +12,8 @@ export interface AvailableModelOption {
 }
 
 /**
- * Session-independent model catalog for settings pickers (Factory default
- * model, pack editors, OM models). Server-filtered to providers with a
+ * Session-independent model catalog for settings pickers (Factory default,
+ * personal default, OM models). Server-filtered to providers with a
  * credential, so pickers never offer models that cannot run.
  */
 export function useAvailableModelsQuery() {

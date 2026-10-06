@@ -23,12 +23,13 @@ import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
+type CodeEditorFont = 'body' | 'mono';
 
 /** Original dark theme — draculaInit + custom overrides. Unchanged from before light mode work. */
-function buildDarkTheme(): Extension {
+function buildDarkTheme(font: CodeEditorFont): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--font-mono)',
+      fontFamily: `var(--font-${font})`,
       fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -115,7 +116,7 @@ function buildDarkTheme(): Extension {
   return [baseTheme, customLineNumberTheme];
 }
 
-function buildLightTheme(): Extension {
+function buildLightTheme(font: CodeEditorFont): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
@@ -123,7 +124,7 @@ function buildLightTheme(): Extension {
       fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
+      fontFamily: `var(--font-${font})`,
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -221,9 +222,9 @@ function buildLightTheme(): Extension {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
-export const useCodemirrorTheme = (): Extension => {
+export const useCodemirrorTheme = (font: CodeEditorFont = 'mono'): Extension => {
   const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
+  return useMemo(() => (isDark ? buildDarkTheme(font) : buildLightTheme(font)), [isDark, font]);
 };
 
 const codeEditorVariants = cva(
@@ -281,6 +282,8 @@ type CodeEditorContentAttributes = {
 };
 
 export type CodeEditorProps = {
+  /** Prose editors can opt into the body face; code stays monospace by default. */
+  font?: CodeEditorFont;
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
   onChange?: (value: string) => void;
@@ -310,6 +313,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       showCopyButton = true,
       className,
       language = 'json',
+      font = 'mono',
       highlightVariables = false,
       placeholder,
       schema,
@@ -333,7 +337,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
     const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
     const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
-    const theme = useCodemirrorTheme();
+    const theme = useCodemirrorTheme(font);
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
