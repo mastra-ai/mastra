@@ -5,9 +5,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { BUCKETS } from '../shared/profile';
+import type { Bucket } from '../shared/profile';
+import { BUDGET, fmtBytes, fmtMem, fmtMs, fmtRows, groupBy, logLogSlope, median } from '../shared/report-kit';
 import { CASES } from './cases';
-import { BUCKETS } from './profile';
-import type { Bucket } from './profile';
 import { PREFLIGHT_FILE, PROFILE_FILE, readRecords } from './run';
 import type { RunRecord } from './run';
 
@@ -15,7 +16,7 @@ export const FINDINGS_FILE = join(import.meta.dirname, 'FINDINGS.md');
 const START = '<!-- report:start -->';
 const END = '<!-- report:end -->';
 
-export const BUDGET = { timeoutMs: 15_000, hardTimeoutMs: 30_000, comfortableMemory: 2 ** 30, hardMemory: 4 * 2 ** 30 };
+export { BUDGET, logLogSlope, median };
 
 const GROUP_TITLES: Record<string, string> = {
   canonical: 'Canonical decision-doc examples',
@@ -26,32 +27,6 @@ const GROUP_TITLES: Record<string, string> = {
   percentile: 'Percentiles',
   baseline: '`queryTraces()` baseline (same selection)',
 };
-
-export function median(values: number[]): number {
-  if (!values.length) return Number.NaN;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
-}
-
-/** Least-squares slope of log(y) against log(x). */
-export function logLogSlope(points: Array<[number, number]>): number | null {
-  const usable = points.filter(([x, y]) => x > 0 && y > 0).map(([x, y]) => [Math.log(x), Math.log(y)] as const);
-  if (new Set(usable.map(([x]) => x)).size < 3) return null;
-  const mx = usable.reduce((s, [x]) => s + x, 0) / usable.length;
-  const my = usable.reduce((s, [, y]) => s + y, 0) / usable.length;
-  const num = usable.reduce((s, [x, y]) => s + (x - mx) * (y - my), 0);
-  const den = usable.reduce((s, [x]) => s + (x - mx) ** 2, 0);
-  return den === 0 ? null : num / den;
-}
-
-const fmtMs = (ms: number) =>
-  ms >= 10_000 ? `${(ms / 1000).toFixed(1)} s` : ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
-const fmtBytes = (b: number) =>
-  b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(0)} MB` : `${(b / 1e3).toFixed(0)} kB`;
-const fmtMem = (b: number) => (b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(2)} GiB` : `${(b / 2 ** 20).toFixed(0)} MiB`);
-const fmtRows = (n: number) =>
-  n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(0)} k` : `${n}`;
 
 export interface Cell {
   warmMedianMs: number;
@@ -91,12 +66,6 @@ function cellText(cell: Cell | null): string {
 
 export function rowLabel(r: Pick<RunRecord, 'caseId' | 'variant' | 'stage'>): string {
   return `${r.caseId}${r.variant === 'base' ? '' : `-${r.variant}`}${r.stage === 'main' ? '' : ` ${r.stage}`}`;
-}
-
-function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const item of items) map.set(key(item), [...(map.get(key(item)) ?? []), item]);
-  return map;
 }
 
 function caseOrder(id: string): number {

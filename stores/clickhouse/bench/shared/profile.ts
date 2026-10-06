@@ -6,10 +6,28 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
-import { DOC_LITERALS } from './cases';
-import type { Literals, ProjectScope } from './cases';
 import type { BenchClient, Tier } from './client';
 import { CACHE_DIR, registerSensitive, SELECTION_FILE } from './env';
+
+export interface ProjectScope {
+  organizationId: string;
+  projectId: string;
+}
+
+/** Literals that drive selectivity. Discovered per project (kept out of all output), or the doc's values. */
+export interface Literals {
+  environment: string;
+  tool: string;
+  metadataKey: string;
+  entityType: string;
+}
+
+export const DOC_LITERALS: Literals = {
+  environment: 'production',
+  tool: 'medication_lookup',
+  metadataKey: 'tenant',
+  entityType: 'agent',
+};
 
 export const BUCKETS = ['small', 'mid', 'p90', 'p99', 'largest'] as const;
 export type Bucket = (typeof BUCKETS)[number];

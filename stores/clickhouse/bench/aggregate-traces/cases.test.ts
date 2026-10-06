@@ -2,8 +2,8 @@ import { parseTraceAggregateRequest, planTraceAggregate } from '@mastra/core/sto
 import { describe, expect, it } from 'vitest';
 
 import { compileClickHouseTraceAggregate } from '../../src/storage/domains/observability/v-next/trace-aggregate';
+import { applyVariant, injectProjectScope, PROJECT_PARAM, RewriteError } from '../shared/scope';
 import { anchorTo, CASES, compileCase, compilePayloadStage, DOC_LITERALS, timeRangeFor } from './cases';
-import { applyVariant, injectProjectScope, PROJECT_PARAM, RewriteError } from './scope';
 
 const SCOPE = { organizationId: 'org-test', projectId: 'proj-test' };
 const LITERALS = { environment: 'env-x', tool: 'tool-x', metadataKey: 'key-x', entityType: 'agent' };

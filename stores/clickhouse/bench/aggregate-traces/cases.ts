@@ -1,7 +1,7 @@
 /**
  * Case catalogue. Every case is a public request built here, validated and planned by the real
  * core planner, compiled by the merged ClickHouse compiler, then project-scoped and optionally
- * rewritten into a labelled variant (see scope.ts). Nothing here changes compiler behaviour.
+ * rewritten into a labelled variant (see ../shared/scope.ts). Nothing here changes compiler behaviour.
  */
 import {
   parseTraceAggregateRequest,
@@ -16,8 +16,13 @@ import {
   compileClickHouseTraceRootPayloads,
 } from '../../src/storage/domains/observability/v-next/trace-query';
 import type { CompiledClickHouseTraceQuery } from '../../src/storage/domains/observability/v-next/trace-query';
-import { applyVariant, injectProjectScope, scopePayloadQuery } from './scope';
-import type { Relation, Variant } from './scope';
+import { DOC_LITERALS } from '../shared/profile';
+import type { Literals, ProjectScope } from '../shared/profile';
+import { applyVariant, injectProjectScope, scopePayloadQuery } from '../shared/scope';
+import type { Relation, Variant } from '../shared/scope';
+
+export { DOC_LITERALS };
+export type { Literals, ProjectScope };
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -35,21 +40,6 @@ export const STANDARD_WINDOWS = {
 } satisfies Record<string, WindowDef>;
 
 const W = STANDARD_WINDOWS;
-
-/** Literals that drive selectivity. Discovered per project (kept out of all output), or the doc's values. */
-export interface Literals {
-  environment: string;
-  tool: string;
-  metadataKey: string;
-  entityType: string;
-}
-
-export const DOC_LITERALS: Literals = {
-  environment: 'production',
-  tool: 'medication_lookup',
-  metadataKey: 'tenant',
-  entityType: 'agent',
-};
 
 export type CaseGroup = 'canonical' | 'highcard' | 'interval' | 'pushdown' | 'distinct' | 'percentile' | 'baseline';
 
@@ -468,11 +458,6 @@ export const CASES: CaseDef[] = [
     request: () => ({ groupBy: ['threadId'], interval: '1h', measures: ['count', 'errorRate'], limit: 50 }),
   },
 ];
-
-export interface ProjectScope {
-  organizationId: string;
-  projectId: string;
-}
 
 /** `to` is the start of the UTC hour, so every interval window starts on a bucket boundary. */
 export function anchorTo(now: Date): Date {

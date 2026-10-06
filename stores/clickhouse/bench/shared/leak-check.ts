@@ -3,18 +3,34 @@
  * credential values, real org/project ids, the hash salt and discovered literals.
  * Prints only `clean` or per-file match counts — never the matched values.
  *
- *   tsx bench/aggregate-traces/leak-check.ts [--no-staged] [extra files…]
+ *   tsx bench/shared/leak-check.ts [--no-staged] [extra files…]
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { DOC_LITERALS } from './cases';
-import type { Literals } from './cases';
-import { ALLOWED_HOST, ENV_FILE, installOutputRedaction, readEnvFileValues, registerSensitive } from './env';
-import { loadSelection } from './profile';
-import type { Selection } from './profile';
+import { ALLOWED_HOST, CACHE_DIR, ENV_FILE, installOutputRedaction, readEnvFileValues, registerSensitive } from './env';
+import { DOC_LITERALS, loadSelection } from './profile';
+import type { Literals, Selection } from './profile';
+
+/**
+ * Extra discovered literals kept next to the selection (`~/.cache/aqa-bench/<suite>-literals.json`,
+ * mode 0600), keyed by project hash. Every value is sensitive.
+ */
+export interface LiteralSidecar {
+  version: 1;
+  projects: Record<string, Record<string, string | null | undefined>>;
+}
+
+export const SIDECAR_SUFFIX = '-literals.json';
+
+export function loadLiteralSidecars(dir = CACHE_DIR): LiteralSidecar[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter(name => name.endsWith(SIDECAR_SUFFIX))
+    .map(name => JSON.parse(readFileSync(join(dir, name), 'utf8')) as LiteralSidecar);
+}
 
 export type NeedleKind = 'credential' | 'id' | 'salt' | 'literal';
 
@@ -41,7 +57,11 @@ const STANDARD_ENVIRONMENTS = new Set([
   'uat',
 ]);
 
-export function needlesFrom(env: Record<string, string> | undefined, selection: Selection | undefined): Needle[] {
+export function needlesFrom(
+  env: Record<string, string> | undefined,
+  selection: Selection | undefined,
+  sidecars: LiteralSidecar[] = [],
+): Needle[] {
   const needles: Needle[] = [];
   const add = (kind: NeedleKind, value: string | undefined) => {
     if (value && value.length >= 4) needles.push({ kind, value });
@@ -64,6 +84,14 @@ export function needlesFrom(env: Record<string, string> | undefined, selection: 
         if (project.literalSource[key] !== 'discovered' || PUBLIC_LITERAL_KEYS.includes(key)) continue;
         if (Object.values(DOC_LITERALS).includes(value)) continue;
         if (key === 'environment' && STANDARD_ENVIRONMENTS.has(value)) continue;
+        add('literal', value);
+      }
+    }
+  }
+  for (const sidecar of sidecars) {
+    for (const literals of Object.values(sidecar.projects)) {
+      for (const value of Object.values(literals)) {
+        if (!value || Object.values(DOC_LITERALS).includes(value) || STANDARD_ENVIRONMENTS.has(value)) continue;
         add('literal', value);
       }
     }
@@ -97,20 +125,23 @@ function main(): number {
   });
   const env = existsSync(ENV_FILE) ? readEnvFileValues() : undefined;
   if (env) registerSensitive(Object.values(env));
-  const needles = needlesFrom(env, loadSelection());
+  const needles = needlesFrom(env, loadSelection(), loadLiteralSidecars());
   if (!needles.length) {
     process.stdout.write('No credentials or selection found; nothing to check against.\n');
     return 1;
   }
 
-  const here = import.meta.dirname;
+  // Every suite under bench/: its write-ups, README and results.
+  const benchDir = join(import.meta.dirname, '..');
+  const suiteFiles = readdirSync(benchDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .flatMap(entry => {
+      const dir = join(benchDir, entry.name);
+      const docs = readdirSync(dir).filter(name => /^(FINDINGS.*|README)\.md$/.test(name));
+      return [...docs.map(name => join(dir, name)), ...filesUnder(join(dir, 'results'))];
+    });
   const sources: Array<{ name: string; text: string }> = [];
-  for (const file of [
-    join(here, 'FINDINGS.md'),
-    join(here, 'README.md'),
-    ...filesUnder(join(here, 'results')),
-    ...positionals,
-  ]) {
+  for (const file of [...suiteFiles, ...positionals]) {
     if (existsSync(file)) sources.push({ name: relative(process.cwd(), file), text: readFileSync(file, 'utf8') });
   }
   if (!values['no-staged']) {

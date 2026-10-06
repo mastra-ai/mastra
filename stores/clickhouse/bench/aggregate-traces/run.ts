@@ -10,18 +10,14 @@
  * Safety: see README.md. Credentials are loaded in-process and guarded before any network I/O.
  */
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { anchorTo, CASES, compileCase, compilePayloadStage, timeRangeFor } from './cases';
-import type { CaseDef, PageKey, WindowDef } from './cases';
-import { BenchClient, isLimitCategory, TIERS } from './client';
-import type { ErrorCategory, QueryOutcome, Tier } from './client';
-import { installOutputRedaction, loadCredentials } from './env';
-import type { BenchCredentials } from './env';
-import { collectMetrics } from './metrics';
-import type { QueryLogSource, QueryMetrics } from './metrics';
+import { isLimitCategory, TIERS } from '../shared/client';
+import type { ErrorCategory, QueryOutcome } from '../shared/client';
+import { installOutputRedaction, loadCredentials } from '../shared/env';
+import type { QueryMetrics } from '../shared/metrics';
 import {
   BUCKETS,
   candidates,
@@ -35,25 +31,41 @@ import {
   projectStats,
   publicProfile,
   saveSelection,
-} from './profile';
-import type { Bucket, ProfileContext, Selection, SelectedProject, TableColumns } from './profile';
-import type { Variant } from './scope';
+} from '../shared/profile';
+import type { Bucket, ProfileContext, Selection, SelectedProject, TableColumns } from '../shared/profile';
+import {
+  connect,
+  DEFAULT_TABLES as TABLES,
+  list,
+  log,
+  logComment,
+  logPreflight,
+  measure,
+  PAUSE_MS,
+  MAX_CONSECUTIVE_ERRORS,
+  parseSkipIndexes,
+  pause,
+  preflight,
+  preflightReadonly,
+  readJson,
+  readRecords as readRecordsFrom,
+  skippedByEscalation,
+  WINDOW_ORDER,
+  windowStage,
+  writeJson,
+} from '../shared/runner';
+import type { Context, LimitHit, Preflight } from '../shared/runner';
+import type { Variant } from '../shared/scope';
+import { anchorTo, CASES, compileCase, compilePayloadStage, timeRangeFor } from './cases';
+import type { CaseDef, PageKey, WindowDef } from './cases';
+
+export { parseSkipIndexes, preflight, preflightReadonly, skippedByEscalation, windowStage };
+export type { Context, LimitHit, Preflight };
 
 export const RESULTS_DIR = join(import.meta.dirname, 'results');
 export const RESULTS_FILE = join(RESULTS_DIR, 'runs.jsonl');
 export const PREFLIGHT_FILE = join(RESULTS_DIR, 'preflight.json');
 export const PROFILE_FILE = join(RESULTS_DIR, 'profile.json');
-
-const TABLES = [
-  'mastra_trace_roots',
-  'mastra_span_events',
-  'mastra_metric_events',
-  'mastra_score_events_current',
-  'mastra_feedback_events',
-] as const;
-
-const PAUSE_MS = 2_000;
-const MAX_CONSECUTIVE_ERRORS = 3;
 
 // ---------------------------------------------------------------------------
 // Records
@@ -91,21 +103,8 @@ export function recordKey(caseId: string, variant: string, stage: Stage, window:
 }
 
 export function readRecords(file = RESULTS_FILE): RunRecord[] {
-  if (!existsSync(file)) return [];
-  return readFileSync(file, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map(line => JSON.parse(line) as RunRecord);
+  return readRecordsFrom<RunRecord>(file);
 }
-
-/** Stage of the run order a window belongs to (interval windows have custom lengths). */
-export function windowStage(window: WindowDef): '1d' | '7d' | '30d' {
-  if (window.ms <= 86_400_000) return '1d';
-  if (window.ms <= 7 * 86_400_000) return '7d';
-  return '30d';
-}
-
-const WINDOW_ORDER = ['1d', '7d', '30d'] as const;
 
 /** Gate B: these need explicit approval (`--gate-b-approved`). */
 export function needsGateB(def: CaseDef, window: WindowDef, bucket: Bucket): boolean {
@@ -114,241 +113,6 @@ export function needsGateB(def: CaseDef, window: WindowDef, bucket: Bucket): boo
   if (bucket === 'largest' && stage !== '1d') return true;
   if ((bucket === 'p99' || bucket === 'largest') && (def.group === 'highcard' || def.id === 'I4')) return true;
   return false;
-}
-
-export interface LimitHit {
-  bucket: Bucket;
-  windowMs: number;
-}
-
-/**
- * Escalation rule: after a limit hit, skip the case's larger windows in that bucket, and run only
- * its 1-day window in larger buckets.
- */
-export function skippedByEscalation(hits: LimitHit[], bucket: Bucket, window: WindowDef): boolean {
-  const index = BUCKETS.indexOf(bucket);
-  return hits.some(hit => {
-    const hitIndex = BUCKETS.indexOf(hit.bucket);
-    if (hitIndex === index) return window.ms > hit.windowMs;
-    if (index > hitIndex) return windowStage(window) !== '1d';
-    return false;
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Context
-// ---------------------------------------------------------------------------
-
-export interface Context {
-  client: BenchClient;
-  queryLog: QueryLogSource;
-  runId: string;
-  tier: Tier;
-  lastQueryEnd: number;
-  resultsFile: string;
-  pauseMs: number;
-  /** Overrides the per-bucket repetition count (local smoke run only). */
-  reps?: number;
-  /** Print redacted error messages (local smoke run only). */
-  verbose?: boolean;
-}
-
-async function pause(ctx: Context): Promise<void> {
-  const wait = ctx.lastQueryEnd + ctx.pauseMs - Date.now();
-  if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
-}
-
-function logComment(ctx: Context, ...parts: Array<string | number>): string {
-  return ['aqa-bench', ctx.runId, ...parts].join(':');
-}
-
-function log(message: string): void {
-  process.stdout.write(`${new Date().toISOString().slice(11, 19)} ${message}\n`);
-}
-
-function readJson<T>(file: string): T {
-  return JSON.parse(readFileSync(file, 'utf8')) as T;
-}
-
-function writeJson(file: string, value: unknown): void {
-  mkdirSync(RESULTS_DIR, { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function connect(credentials: BenchCredentials, database?: string): BenchClient {
-  return new BenchClient({ ...credentials, database: database ?? credentials.database });
-}
-
-// ---------------------------------------------------------------------------
-// preflight
-// ---------------------------------------------------------------------------
-
-export interface Preflight {
-  checkedAt: string;
-  readonly: number;
-  version: string;
-  queryLog: QueryLogSource;
-  database: string;
-  tables: Array<{ name: string; sortingKey: string; partitionKey: string; totalRows: number; totalBytes: number }>;
-  missingTables: string[];
-  missingColumns: Record<string, string[]>;
-  skipIndexes: Array<{ table: string; name: string; type: string; expr: string }>;
-  skipIndexSource: 'data_skipping_indices' | 'create_table_query';
-  columns: Record<string, string[]>;
-}
-
-const REQUIRED_COLUMNS: Record<string, string[]> = {
-  mastra_trace_roots: [
-    'organizationId',
-    'projectId',
-    'traceId',
-    'spanId',
-    'dedupeKey',
-    'startedAt',
-    'endedAt',
-    'environment',
-    'entityType',
-    'entityName',
-    'threadId',
-    'userId',
-    'metadataSearch',
-    'metadataRaw',
-    'parentSpanId',
-  ],
-  mastra_span_events: ['organizationId', 'projectId', 'traceId', 'spanId', 'spanType', 'name', 'endedAt', 'dedupeKey'],
-};
-
-/** Extracts `INDEX name expr TYPE type GRANULARITY n` clauses from a CREATE TABLE statement. */
-export function parseSkipIndexes(table: string, ddl: string) {
-  return [...ddl.matchAll(/\bINDEX\s+(\S+)\s+(.+?)\s+TYPE\s+(.+?)\s+GRANULARITY\s+\d+/g)].map(m => ({
-    table,
-    name: m[1]!.replace(/`/g, ''),
-    expr: m[2]!,
-    type: m[3]!,
-  }));
-}
-
-/**
- * `readonly=2` is required unless `acceptReadonly0` is set. That opt-in exists for a service that is
- * read-only compute at the service level: the session itself may write, so the only statement guard
- * left in the harness is the client allowlist. `readonly=1` is always refused (it rejects the limits).
- */
-export async function preflight(
-  client: BenchClient,
-  ctx: Pick<Context, 'runId'> & { acceptReadonly0?: boolean },
-): Promise<Preflight> {
-  const tier = TIERS[1];
-  const comment = (step: string) => `aqa-bench:${ctx.runId}:preflight:${step}`;
-
-  // 1. Read-only check. readonly=1 rejects the per-query limits, which surfaces as code 164.
-  const ro = await client.rows<{ ro: string; v: string }>(
-    "SELECT getSetting('readonly') AS ro, version() AS v",
-    {},
-    { tier, logComment: comment('readonly') },
-  );
-  if (!ro.ok) {
-    if (ro.errorCode === '164') throw new Error('Session is readonly=1: per-query limits are rejected. Aborting.');
-    throw new Error(`Read-only check failed (code ${ro.errorCode ?? '?'}). Aborting.`);
-  }
-  const readonly = Number(ro.rows![0]!.ro);
-  if (readonly === 0 && ctx.acceptReadonly0) {
-    log(
-      'WARNING: session readonly=0 accepted (--accept-readonly-0); relying on the read-only service and the client allowlist',
-    );
-  } else if (readonly !== 2) {
-    throw new Error(
-      `Session readonly=${readonly}; the harness requires readonly=2 (or readonly=0 with --accept-readonly-0). Aborting.`,
-    );
-  }
-  log(`readonly=${readonly}, ClickHouse ${ro.rows![0]!.v}`);
-
-  // 2. query_log access (metric columns only).
-  let queryLog: QueryLogSource = 'none';
-  for (const source of ['cluster', 'local'] as const) {
-    const metrics = await collectMetrics(
-      client,
-      source,
-      ro as QueryOutcome<unknown>,
-      tier,
-      comment('query_log'),
-      30_000,
-    );
-    if (metrics.source === 'query_log') {
-      queryLog = source;
-      break;
-    }
-  }
-  log(`query_log source: ${queryLog}`);
-
-  // 3. Database detection by table name.
-  const located = await client.rows<{ database: string; name: string }>(
-    'SELECT database, name FROM system.tables WHERE name = {t:String}',
-    { t: 'mastra_trace_roots' },
-    { tier, logComment: comment('databases') },
-  );
-  const databases = [...new Set((located.rows ?? []).map(r => r.database))];
-  if (databases.length !== 1)
-    throw new Error(`Expected exactly one database with mastra_trace_roots, found ${databases.length}`);
-  const database = databases[0]!;
-
-  // 4. Schema metadata: tables, columns, skip indexes. No row data.
-  const tables = await client.rows<{
-    name: string;
-    sorting_key: string;
-    partition_key: string;
-    total_rows: string;
-    total_bytes: string;
-    create_table_query: string;
-  }>(
-    'SELECT name, sorting_key, partition_key, total_rows, total_bytes, create_table_query FROM system.tables WHERE database = {db:String} AND name IN {t:Array(String)}',
-    { db: database, t: [...TABLES] },
-    { tier, logComment: comment('tables') },
-  );
-  const columnRows = await client.rows<{ table: string; name: string }>(
-    'SELECT table, name FROM system.columns WHERE database = {db:String} AND table IN {t:Array(String)}',
-    { db: database, t: [...TABLES] },
-    { tier, logComment: comment('columns') },
-  );
-  const indexes = await client.rows<{ table: string; name: string; type: string; expr: string }>(
-    'SELECT table, name, type, expr FROM system.data_skipping_indices WHERE database = {db:String} AND table IN {t:Array(String)}',
-    { db: database, t: [...TABLES] },
-    { tier, logComment: comment('indexes') },
-  );
-  for (const outcome of [tables, columnRows]) {
-    if (!outcome.ok) throw new Error(`Schema metadata query failed (code ${outcome.errorCode ?? '?'})`);
-  }
-  // Without access to system.data_skipping_indices, read the INDEX clauses from the table DDL.
-  const skipIndexes = indexes.ok
-    ? indexes.rows!
-    : tables.rows!.flatMap(t => parseSkipIndexes(t.name, t.create_table_query));
-  const skipIndexSource: Preflight['skipIndexSource'] = indexes.ok ? 'data_skipping_indices' : 'create_table_query';
-  const columns: Record<string, string[]> = {};
-  for (const row of columnRows.rows!) (columns[row.table] ??= []).push(row.name);
-  const missingColumns: Record<string, string[]> = {};
-  for (const [table, required] of Object.entries(REQUIRED_COLUMNS)) {
-    const missing = required.filter(column => !columns[table]?.includes(column));
-    if (missing.length) missingColumns[table] = missing;
-  }
-  const present = new Set(tables.rows!.map(t => t.name));
-  return {
-    checkedAt: new Date().toISOString(),
-    readonly,
-    version: ro.rows![0]!.v,
-    queryLog,
-    database,
-    tables: tables.rows!.map(t => ({
-      name: t.name,
-      sortingKey: t.sorting_key,
-      partitionKey: t.partition_key,
-      totalRows: Number(t.total_rows),
-      totalBytes: Number(t.total_bytes),
-    })),
-    missingTables: TABLES.filter(t => !present.has(t)),
-    missingColumns,
-    skipIndexes,
-    skipIndexSource,
-    columns,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -446,20 +210,6 @@ export function planRuns(selection: Pick<Selection, 'projects'>, filter: RunFilt
 
 function repsFor(bucket: Bucket): number {
   return bucket === 'p99' || bucket === 'largest' ? 4 : 6;
-}
-
-async function measure(
-  ctx: Context,
-  sql: string,
-  params: Record<string, unknown>,
-  comment: string,
-  cold: boolean,
-): Promise<{ outcome: QueryOutcome; metrics: QueryMetrics }> {
-  await pause(ctx);
-  const outcome = await ctx.client.discard(sql, params, { tier: ctx.tier, logComment: comment, cold });
-  ctx.lastQueryEnd = Date.now();
-  const metrics = await collectMetrics(ctx.client, ctx.queryLog, outcome, ctx.tier, `${comment}:metrics`);
-  return { outcome, metrics };
 }
 
 /** Page keys for the payload stage: the exact list query wrapped to project only key columns. */
@@ -589,13 +339,6 @@ export async function runCases(ctx: Context, selection: Selection, filter: RunFi
 // CLI
 // ---------------------------------------------------------------------------
 
-function list<T extends string>(value: string | undefined, allowed: readonly T[], fallback: T[]): T[] {
-  if (!value) return fallback;
-  const items = value.split(',').map(s => s.trim()) as T[];
-  for (const item of items) if (!allowed.includes(item)) throw new Error(`Unknown value ${item}`);
-  return items;
-}
-
 async function main(): Promise<void> {
   installOutputRedaction();
   const { positionals, values } = parseArgs({
@@ -640,15 +383,7 @@ async function main(): Promise<void> {
     try {
       const result = await preflight(client, { runId, acceptReadonly0: values['accept-readonly-0'] });
       writeJson(PREFLIGHT_FILE, result);
-      log(
-        `database detected; ${result.tables.length}/${TABLES.length} tables present, missing: ${result.missingTables.join(', ') || 'none'}`,
-      );
-      log(`missing required columns: ${JSON.stringify(result.missingColumns)}`);
-      log(`skip indexes: ${result.skipIndexes.map(i => `${i.table}.${i.name}(${i.type})`).join(', ') || 'none'}`);
-      for (const t of result.tables)
-        log(
-          `  ${t.name}: ORDER BY (${t.sortingKey}) PARTITION BY ${t.partitionKey}; ~${Number(t.totalRows.toPrecision(2))} rows`,
-        );
+      logPreflight(result, TABLES.length);
     } finally {
       await client.close();
     }
@@ -686,21 +421,6 @@ async function main(): Promise<void> {
     }
   } finally {
     await client.close();
-  }
-}
-
-export async function preflightReadonly(client: BenchClient, runId: string, expected: number): Promise<void> {
-  const ro = await client.rows<{ ro: string }>(
-    "SELECT getSetting('readonly') AS ro",
-    {},
-    {
-      tier: TIERS[1],
-      logComment: `aqa-bench:${runId}:readonly`,
-    },
-  );
-  if (expected !== 0 && expected !== 2) throw new Error('Preflight recorded an unsupported readonly level. Aborting.');
-  if (!ro.ok || Number(ro.rows?.[0]?.ro) !== expected) {
-    throw new Error(`Session readonly level differs from preflight (expected ${expected}). Aborting.`);
   }
 }
 

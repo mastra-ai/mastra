@@ -71,7 +71,7 @@ export function assertReadOnlyStatement(sql: string): void {
   if (keyword) throw new StatementRejected(`contains ${keyword[1]!.toUpperCase()}`);
 }
 
-export type ErrorCategory = 'timeout' | 'memory' | 'too_many_bytes' | 'result_rows' | 'other';
+export type ErrorCategory = 'timeout' | 'memory' | 'too_many_bytes' | 'result_rows' | 'overload' | 'other';
 
 const LIMIT_CODES: Record<string, ErrorCategory> = {
   '159': 'timeout', // TIMEOUT_EXCEEDED
@@ -84,8 +84,32 @@ export function categorize(code: string | undefined): ErrorCategory {
   return (code && LIMIT_CODES[code]) || 'other';
 }
 
+/** Per-query limit hits. `overload` (server busy) and `other` are not limits and never escalate. */
 export function isLimitCategory(category: ErrorCategory): boolean {
-  return category !== 'other';
+  return category !== 'other' && category !== 'overload';
+}
+
+/** Server-side codes meaning "the replica is busy", not "this query is too big". */
+const OVERLOAD_CODES = new Set([
+  '202', // TOO_MANY_SIMULTANEOUS_QUERIES
+  '203', // NO_FREE_CONNECTION
+  '209', // SOCKET_TIMEOUT
+  '210', // NETWORK_ERROR
+]);
+const OVERLOAD_MESSAGE =
+  /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|Timeout error|\b(429|503)\b|Too Many Requests|Service Unavailable/i;
+
+/**
+ * True when a failure says the server (not the query) ran out of capacity: the codes above, a
+ * transport-level failure, or a memory limit hit on the server total rather than on this query.
+ * Uses the in-memory redacted message only; nothing here is persisted.
+ */
+export function isOverload(outcome: Pick<QueryOutcome<unknown>, 'ok' | 'errorCode' | 'errorMessage'>): boolean {
+  if (outcome.ok) return false;
+  if (outcome.errorCode && OVERLOAD_CODES.has(outcome.errorCode)) return true;
+  const message = outcome.errorMessage ?? '';
+  if (outcome.errorCode === '241') return /\(total\)|total memory limit|OvercommitTracker/i.test(message);
+  return !outcome.errorCode && OVERLOAD_MESSAGE.test(message);
 }
 
 export interface ClickHouseSummary {
@@ -119,6 +143,8 @@ export interface RunOptions {
   cold?: boolean;
   /** Override for the harness's own metadata queries (profile, query_log). */
   settings?: ClickHouseSettings;
+  /** Mirrors the store: compiled queries flagged `sharedSnapshot` run with one storage snapshot. */
+  sharedSnapshot?: boolean;
 }
 
 export function settingsFor(options: RunOptions): ClickHouseSettings {
@@ -138,6 +164,7 @@ export function settingsFor(options: RunOptions): ClickHouseSettings {
     wait_end_of_query: 1,
     log_comment: options.logComment,
     ...(options.cold ? { enable_filesystem_cache: 0 } : {}),
+    ...(options.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
     ...options.settings,
   };
 }
@@ -151,14 +178,14 @@ function errorCode(error: unknown): string | undefined {
 export class BenchClient {
   readonly #client: ClickHouseClient;
 
-  constructor(credentials: BenchCredentials) {
+  constructor(credentials: BenchCredentials, maxOpenConnections = 1) {
     this.#client = createClient({
       url: credentials.origin,
       username: credentials.username,
       password: credentials.password,
       database: credentials.database,
       request_timeout: 180_000,
-      max_open_connections: 1,
+      max_open_connections: maxOpenConnections,
       compression: { response: true, request: false },
       // The client's own logger could print request details; keep it silent.
       log: { level: ClickHouseLogLevel.OFF },

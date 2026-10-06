@@ -8,7 +8,7 @@ This directory is not part of the package: it isn't in `tsconfig` `include`, the
 
 Each case is a public request built in [cases.ts](./cases.ts), validated and planned by the real core planner (`parseTraceAggregateRequest` + `planTraceAggregate`, or `planTraceQuery` for the baseline), and compiled by the merged compiler (`compileClickHouseTraceAggregate` / `compileClickHouseTraceQuery`). The harness then:
 
-1. **Scopes to one project** ([scope.ts](./scope.ts)). Every compiled tenant fragment `AND organizationId = {p:String}` becomes `AND organizationId = {p:String} AND projectId = {bench_project_id:String}`. That is exactly where Platform would add `projectId` (inside `compileTenantScope`), it sits on the sort-key prefix, and it stays a bound parameter. The rewrite asserts the number of scoped scans (roots seed + root scope + one per related collection) and fails closed otherwise.
+1. **Scopes to one project** ([scope.ts](../shared/scope.ts)). Every compiled tenant fragment `AND organizationId = {p:String}` becomes `AND organizationId = {p:String} AND projectId = {bench_project_id:String}`. That is exactly where Platform would add `projectId` (inside `compileTenantScope`), it sits on the sort-key prefix, and it stays a bound parameter. The rewrite asserts the number of scoped scans (roots seed + root scope + one per related collection) and fails closed otherwise.
 2. **Optionally applies a labelled variant**, a string rewrite of the compiled SQL that must match its pattern:
    - `w1`: also tenant- and project-scope the outer `current_roots` re-read (unscoped as compiled).
    - `uniq`: `uniqExact` → `uniq`.
@@ -36,16 +36,16 @@ npx tsx bench/aggregate-traces/run.ts run --buckets small,mid,p90
 npx tsx bench/aggregate-traces/run.ts run --buckets p99 --windows 1d,7d
 npx tsx bench/aggregate-traces/run.ts run --buckets p99,largest --gate-b-approved   # only after review
 npx tsx bench/aggregate-traces/run.ts report
-npx tsx bench/aggregate-traces/leak-check.ts [pr-body.md]
+npx tsx bench/shared/leak-check.ts [pr-body.md]
 ```
 
 `run` is resumable: it skips case keys already in `results/runs.jsonl`. `--dry-run` lists what would run.
 
 ## Safety model
 
-- **Host guard** ([env.ts](./env.ts)), before any network I/O: `https`, host `gyiixsk9we.us-central1.gcp.clickhouse.cloud`, port `8443`, no path. Any URL mentioning the production primary is refused. The client is built from the bare origin plus separate credentials.
+- **Host guard** ([env.ts](../shared/env.ts)), before any network I/O: `https`, host `gyiixsk9we.us-central1.gcp.clickhouse.cloud`, port `8443`, no path. Any URL mentioning the production primary is refused. The client is built from the bare origin plus separate credentials.
 - **Read-only session**: every session starts with `getSetting('readonly')` and aborts unless it is `2` (read-only, per-query settings allowed). A client-side allowlist only sends single `SELECT` / `WITH` / `EXPLAIN` statements.
-- **Limits on every query** ([client.ts](./client.ts)):
+- **Limits on every query** ([client.ts](../shared/client.ts)):
 
   | setting              | Tier 1 (default) | Tier 2 | Tier 3 (explicit approval) |
   | -------------------- | ---------------- | ------ | -------------------------- |
@@ -58,4 +58,4 @@ npx tsx bench/aggregate-traces/leak-check.ts [pr-body.md]
   Overflow modes are `throw`; `use_query_cache = 0`. Cold runs add `enable_filesystem_cache = 0`.
 
 - **Pacing**: one query at a time, 2 s apart; abort after 3 consecutive non-limit errors. After a limit hit, a case skips its larger windows in that bucket and runs only 1-day windows in larger buckets. Gate B cases (p99 at 30 days, largest beyond 1 day, high-cardinality and `I4` on p99/largest) need `--gate-b-approved`.
-- **No secrets or customer content in output**: all stdout/stderr is redacted (credentials, URL userinfo, real ids, discovered literals); error messages are never persisted, only the error code and category. Projects appear only as bucket + salted 8-hex HMAC. Real ids, the salt and the per-project "top value" literals live only in `~/.cache/aqa-bench/selection.json` (mode 0600). `results/` is gitignored. `leak-check.ts` scans the write-up, results, staged diff and PR body for any of those values and prints only counts.
+- **No secrets or customer content in output**: all stdout/stderr is redacted (credentials, URL userinfo, real ids, discovered literals); error messages are never persisted, only the error code and category. Projects appear only as bucket + salted 8-hex HMAC. Real ids, the salt and the per-project "top value" literals live only in `~/.cache/aqa-bench/selection.json` (mode 0600). `results/` is gitignored. `../shared/leak-check.ts` scans the write-up, results, staged diff and PR body for any of those values and prints only counts.

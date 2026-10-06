@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { anchorTo, CASES, compileCase, compilePayloadStage, timeRangeFor } from './cases';
-import { assertReadOnlyStatement, categorize, settingsFor, StatementRejected, TIERS } from './client';
-import { countMatches, needlesFrom } from './leak-check';
+import { assertReadOnlyStatement, categorize, settingsFor, StatementRejected, TIERS } from '../shared/client';
+import { countMatches, needlesFrom } from '../shared/leak-check';
 import {
   DISCOVERY_SQL,
   CANDIDATES_SQL,
@@ -11,8 +10,9 @@ import {
   pickProjects,
   projectHash,
   STATS_SQL,
-} from './profile';
-import type { Candidate, SelectedProject, Selection } from './profile';
+} from '../shared/profile';
+import type { Candidate, SelectedProject, Selection } from '../shared/profile';
+import { anchorTo, CASES, compileCase, compilePayloadStage, timeRangeFor } from './cases';
 import { logLogSlope, median, renderReport } from './report';
 import { needsGateB, parseSkipIndexes, planRuns, skippedByEscalation } from './run';
 import type { RunRecord } from './run';
