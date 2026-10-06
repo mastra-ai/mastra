@@ -236,7 +236,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const liveRecord = await getLineageHead(this.storage, record);
     if (!liveRecord) {
       omDebug(`[OM:sync-obs] skipping persist for thread ${threadId}: observational memory record is gone`);
-      return;
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
     }
 
     // Commit first. The thread cursor and the completion marker below are what remove the
