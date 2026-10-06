@@ -250,4 +250,51 @@ describe('Memory.copyThread / cloneThread', () => {
       .mock.calls.filter(([a]) => a.threadId === thread.id && a.perPage !== false);
     expect(reads).toHaveLength(0);
   });
+
+  it('copies observational memory as a live record when a reflection replaces the source generation mid-copy', async () => {
+    await seedThread('src-om-rollover', 2);
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    const source = await memoryStore.initializeObservationalMemory({
+      threadId: 'src-om-rollover',
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+    await memoryStore.updateActiveObservations({
+      id: source.id,
+      observations: '- source fact',
+      tokenCount: 3,
+      lastObservedAt: new Date('2024-01-01T10:00:01Z'),
+    });
+
+    // A reflection replaces the generation the copy just read.
+    const read = memoryStore.getObservationalMemory.bind(memoryStore);
+    vi.spyOn(memoryStore, 'getObservationalMemory').mockImplementation(async (threadId, resourceIdArg) => {
+      const record = await read(threadId, resourceIdArg);
+      if (threadId === 'src-om-rollover' && record && !record.supersededBy) {
+        await memoryStore.createReflectionGeneration({
+          currentRecord: structuredClone(record),
+          reflection: '- reflected source fact',
+          tokenCount: 3,
+        });
+      }
+      return record;
+    });
+
+    const { thread } = await memory.copyThread({ sourceThreadId: 'src-om-rollover' });
+    vi.mocked(memoryStore.getObservationalMemory).mockRestore();
+
+    const copied = (await memoryStore.getObservationalMemory(thread.id, resourceId))!;
+    expect(copied.supersededBy ?? null).toBeNull();
+    const write = await memoryStore.updateActiveObservations({
+      id: copied.id,
+      observations: '- destination fact',
+      tokenCount: 3,
+      lastObservedAt: new Date(),
+    });
+    expect(write?.applied ?? true).toBe(true);
+    expect((await memoryStore.getObservationalMemory(thread.id, resourceId))!.activeObservations).toBe(
+      '- destination fact',
+    );
+  });
 });
