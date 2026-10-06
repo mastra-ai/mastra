@@ -140,6 +140,22 @@ export interface KnowledgeScopeTreeNode {
   childScopeCount: number;
 }
 
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: 'org' | 'resource' | 'thread' | null;
+  /** Present when a thread-scoped content result needs to restore its owning session lens. */
+  threadId?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
+}
+
 export interface KnowledgeScopeTreePayload {
   scope: KnowledgeScopeTreeNode;
   children: KnowledgeScopeTreeNode[];
