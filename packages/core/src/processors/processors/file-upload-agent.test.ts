@@ -11,7 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
+import { globalRunRegistry } from '../../agent/durable/run-registry';
 import { MessageList } from '../../agent/message-list';
+import { createSignal } from '../../agent/signals';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
@@ -1171,6 +1173,48 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(prompts).toHaveLength(1);
     });
 
+    // The durable loop adds the signals queued before its first model call after the input hooks ran,
+    // so only the check before the model call sees their files.
+    it('stops a durable run with FILE_NOT_UPLOADED when a signal queued before the first model call holds a file', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts } = createHarness(sandbox);
+      void new Mastra({ agents: { 'file-upload-agent': agent }, storage: new InMemoryStore() });
+      const pubsub = new EventEmitterPubSub();
+      const earlySignal = createSignal({
+        type: 'user',
+        contents: [text('And this'), file(Buffer.from('%PDF early'), 'early.pdf', 'application/pdf')],
+      });
+      const getEntry = globalRunRegistry.get.bind(globalRunRegistry);
+      let queued = false;
+      const registry = vi.spyOn(globalRunRegistry, 'get').mockImplementation(runId => {
+        const entry = getEntry(runId);
+        if (entry && !queued) {
+          queued = true;
+          const drain = entry.drainPendingSignals;
+          entry.drainPendingSignals = scope => (scope === 'pre-run' ? [earlySignal] : (drain?.(scope) ?? []));
+        }
+        return entry;
+      });
+
+      const chunks: Array<{ type: string; payload?: { metadata?: unknown } }> = [];
+      try {
+        const result = await createDurableAgent({ agent, pubsub }).stream('Hello', { memory: MEMORY, maxSteps: 1 });
+        for await (const chunk of result.fullStream) chunks.push(chunk);
+      } finally {
+        registry.mockRestore();
+        await pubsub.close();
+      }
+
+      expect(prompts).toEqual([]);
+      expect(chunks.find(chunk => chunk.type === 'tripwire')?.payload?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
+        fileName: 'early.pdf',
+        mimeType: 'application/pdf',
+      });
+      expect(writes).toEqual([]);
+    });
+
     it('lets a file produced by the assistant through', async () => {
       const { sandbox } = createFakeSandbox();
       const { agent, prompts, memory } = createHarness(sandbox, {
@@ -1272,25 +1316,6 @@ describe('FileUploadProcessor.processLLMRequest', () => {
     });
   const callArgs = (args: Record<string, unknown>) =>
     args as unknown as Parameters<FileUploadProcessor['processLLMRequest']>[0];
-
-  it('stops the call with FILE_NOT_UPLOADED when a new message still holds a raw file the filter accepts', async () => {
-    const { sandbox } = createFakeSandbox();
-    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
-    const messageList = new MessageList({ threadId: MEMORY.thread, resourceId: MEMORY.resource });
-    messageList.add(userMessage(file(Buffer.from('%PDF'), 'late.pdf', 'application/pdf')), 'input');
-    const abort = createAbort();
-
-    await expect(processor.processLLMRequest(callArgs({ prompt: [], messageList, abort }))).rejects.toThrow('late.pdf');
-
-    expect(abort).toHaveBeenCalledWith(expect.any(String), {
-      metadata: {
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
-        fileName: 'late.pdf',
-        mimeType: 'application/pdf',
-      },
-    });
-  });
 
   it('checks nothing without a message list, since it cannot tell new files from the history', async () => {
     const { sandbox } = createFakeSandbox();

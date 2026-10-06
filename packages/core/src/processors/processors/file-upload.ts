@@ -112,7 +112,8 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
   }
 
   // Last line of defense: a file of this request that the filter accepts but that is still in a
-  // message (a signal the hooks above never saw, for instance) stops the call here. Files of the
+  // message stops the call here. On a durable agent, the signals queued before the first model
+  // call are added after the hooks above ran, so this is the only place that sees them. Files of the
   // thread history are left alone, so threads from before the processor keep working. Without a
   // message list, new files can't be told from the history, so nothing is checked.
   async processLLMRequest({ messageList, abort }: ProcessLLMRequestArgs<FileUploadTripwireMetadata>): Promise<void> {
