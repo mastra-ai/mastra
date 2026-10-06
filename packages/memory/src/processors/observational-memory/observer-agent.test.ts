@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { optimizeObservationsForContext } from './observer-agent';
+import { buildObserverSystemPrompt, formatMessagesForObserver, optimizeObservationsForContext } from './observer-agent';
 
 describe('optimizeObservationsForContext', () => {
   it('should strip yellow and green emojis', () => {
@@ -85,5 +85,50 @@ Line 2`;
     const observations = '- 🔴 History trimmed [72 items collapsed - ID: b1fa]';
     const optimized = optimizeObservationsForContext(observations);
     expect(optimized).toContain('[72 items collapsed - ID: b1fa]');
+  });
+});
+
+describe('Observer event order', () => {
+  it('asks the Observer to list observations in the order events happened', () => {
+    expect(buildObserverSystemPrompt(false)).toContain('in the order the events happened (not by importance)');
+    expect(buildObserverSystemPrompt(true)).toContain('in the order the events happened (not by importance)');
+  });
+
+  it('shows the time on every tool line, even within the same minute, so tool events can be ordered against user messages', () => {
+    const at = (minute: number, second = 0) => new Date(Date.UTC(2026, 7, 31, 17, minute, second));
+    const toolPart = (toolCallId: string, toolName: string, result: string) => ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result },
+    });
+    const input = formatMessagesForObserver(
+      [
+        {
+          id: 'a1',
+          role: 'assistant',
+          createdAt: at(29, 50),
+          threadId: 't',
+          content: {
+            format: 2,
+            parts: [
+              toolPart('c1', 'task_update', 'ok'),
+              toolPart('c2', 'submit_plan', 'Plan was not approved. The user will send revision instructions next.'),
+            ],
+          },
+        },
+        {
+          id: 'u1',
+          role: 'user',
+          createdAt: at(35),
+          threadId: 't',
+          content: { format: 2, parts: [{ type: 'text', text: 'Add a validation step that clusters real traces.' }] },
+        },
+      ] as any,
+      { timeZone: 'UTC' },
+    );
+
+    const toolLines = input.split('\n').filter(line => line.startsWith('Tool '));
+    expect(toolLines.length).toBeGreaterThanOrEqual(3);
+    for (const line of toolLines) expect(line).toMatch(/^Tool (Call|Result) \S+ \(5:29 PM\):/);
+    expect(input).toMatch(/User \(5:35 PM\):/);
   });
 });
