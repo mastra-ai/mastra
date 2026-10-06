@@ -54,6 +54,31 @@ describe('applyAllowTools', () => {
   it('throws at build time on unknown names', () => {
     expect(() => applyAllowTools(tools, ['a', 'typo'])).toThrow(/typo/);
   });
+
+  it('expands * globs against the toolset keys', () => {
+    const globTools = {
+      linear_get_issue: { id: 'linear_get_issue' },
+      linear_get_team: { id: 'linear_get_team' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+    } as never;
+    expect(Object.keys(applyAllowTools(globTools, ['linear_get_*']))).toEqual(['linear_get_issue', 'linear_get_team']);
+  });
+
+  it('treats glob metacharacters other than * literally', () => {
+    const dotTools = { 'a.b': { id: 'a.b' }, axb: { id: 'axb' } } as never;
+    expect(Object.keys(applyAllowTools(dotTools, ['a.*']))).toEqual(['a.b']);
+  });
+
+  it('throws invalid_options on a glob that matches nothing', () => {
+    try {
+      applyAllowTools(tools, ['nope_*']);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(MastraConnectError);
+      expect((error as MastraConnectError).code).toBe('invalid_options');
+      expect((error as Error).message).toMatch(/Pattern 'nope_\*' in allowTools matched no tools/);
+    }
+  });
 });
 
 describe('applyDisallowTools', () => {
@@ -77,6 +102,19 @@ describe('applyDisallowTools', () => {
 
   it('throws at build time on unknown names', () => {
     expect(() => applyDisallowTools(tools, ['a', 'typo'])).toThrow(/typo/);
+  });
+
+  it('removes keys matched by a * glob', () => {
+    const globTools = {
+      linear_get_issue: { id: 'linear_get_issue' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+      linear_delete_team: { id: 'linear_delete_team' },
+    } as never;
+    expect(Object.keys(applyDisallowTools(globTools, ['linear_delete_*']))).toEqual(['linear_get_issue']);
+  });
+
+  it('throws on a glob that matches nothing', () => {
+    expect(() => applyDisallowTools(tools, ['nope_*'])).toThrow(/matched no tools/);
   });
 });
 

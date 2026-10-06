@@ -4,7 +4,7 @@ import type { z } from 'zod';
 
 import type { ConnectClientOptions, ProxyRequestOptions } from './client.js';
 import { proxyRequest, resolveClient } from './client.js';
-import { MastraConnectError } from './errors.js';
+import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 
 interface ProviderToolsOptionsBase {
   /**
@@ -25,13 +25,21 @@ interface ProviderToolsOptionsBase {
 export type ProviderToolsOptions = ProviderToolsOptionsBase &
   (
     | {
-        /** Restrict the returned toolset to these tool keys. Unknown names throw immediately. */
+        /**
+         * Restrict the returned toolset to these tool keys. Entries containing
+         * `*` are globs (e.g. `'linear_get_*'`). Unknown names and globs that
+         * match nothing throw immediately.
+         */
         allowTools?: string[];
         disallowTools?: never;
       }
     | {
         allowTools?: never;
-        /** Remove these tool keys from the returned toolset. Unknown names throw immediately. */
+        /**
+         * Remove these tool keys from the returned toolset. Entries containing
+         * `*` are globs (e.g. `'linear_delete_*'`). Unknown names and globs
+         * that match nothing throw immediately.
+         */
         disallowTools?: string[];
       }
   );
@@ -82,12 +90,75 @@ export function defineProxyTool<TIn, TOut>(context: ProxyToolContext, config: Pr
 }
 
 /**
- * Filters a toolset by tool key. Throws at build time on unknown names so
- * typos in access-limiting config surface immediately.
+ * Compiles a tool-filter entry containing `*` wildcards into an anchored
+ * regex; every other character matches literally.
  */
-export function applyAllowTools<T extends ToolsInput>(tools: T, allowTools?: string[]): ToolsInput {
-  if (!allowTools) return tools;
+function compileToolPattern(pattern: string): RegExp {
+  const escaped = pattern
+    .split('*')
+    .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+/**
+ * Returns a predicate testing tool keys against filter `entries`, where an
+ * entry containing `*` is a glob and anything else matches literally. Used
+ * where keys are only known later (MCP approval predicates); list-shaped
+ * call sites expand eagerly with {@link expandToolPatterns} instead.
+ */
+export function compileToolMatcher(entries: string[]): (toolKey: string) => boolean {
+  const literals = new Set<string>();
+  const patterns: RegExp[] = [];
+  for (const entry of entries) {
+    if (entry.includes('*')) patterns.push(compileToolPattern(entry));
+    else literals.add(entry);
+  }
+  return toolKey => literals.has(toolKey) || patterns.some(pattern => pattern.test(toolKey));
+}
+
+/**
+ * Expands `*` glob entries against the known tool keys, preserving order and
+ * de-duplicating. Literal entries pass through untouched (callers validate
+ * those against their own key sets). A glob that matches nothing throws:
+ * like an unknown literal name, a dead pattern in access-limiting config is
+ * a typo that must surface instead of silently filtering nothing.
+ */
+export function expandToolPatterns(entries: string[], knownKeys: string[], label: string): string[] {
+  const expanded: string[] = [];
+  const seen = new Set<string>();
+  const push = (key: string): void => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    expanded.push(key);
+  };
+  for (const entry of entries) {
+    if (!entry.includes('*')) {
+      push(entry);
+      continue;
+    }
+    const pattern = compileToolPattern(entry);
+    const matches = knownKeys.filter(key => pattern.test(key));
+    if (matches.length === 0) {
+      throw new MastraConnectConfigError(
+        `Pattern '${entry}' in ${label} matched no tools. Known tools: ${knownKeys.join(', ')}.`,
+      );
+    }
+    for (const match of matches) push(match);
+  }
+  return expanded;
+}
+
+/**
+ * Filters a toolset by tool key. Entries containing `*` are globs expanded
+ * against the toolset's keys. Throws at build time on unknown names and on
+ * globs that match nothing, so typos in access-limiting config surface
+ * immediately.
+ */
+export function applyAllowTools<T extends ToolsInput>(tools: T, allowToolsInput?: string[]): ToolsInput {
+  if (!allowToolsInput) return tools;
   const known = Object.keys(tools);
+  const allowTools = expandToolPatterns(allowToolsInput, known, 'allowTools');
   const unknown = allowTools.filter(name => !known.includes(name));
   if (unknown.length > 0) {
     throw new Error(`Unknown tool name(s) in allowTools: ${unknown.join(', ')}. Known tools: ${known.join(', ')}.`);
@@ -100,13 +171,15 @@ export function applyAllowTools<T extends ToolsInput>(tools: T, allowTools?: str
 }
 
 /**
- * Removes tool keys from a toolset. Throws at build time on unknown names so
- * typos in access-limiting config surface immediately instead of silently
- * removing nothing.
+ * Removes tool keys from a toolset. Entries containing `*` are globs
+ * expanded against the toolset's keys. Throws at build time on unknown names
+ * and on globs that match nothing, so typos in access-limiting config
+ * surface immediately instead of silently removing nothing.
  */
-export function applyDisallowTools<T extends ToolsInput>(tools: T, disallowTools?: string[]): ToolsInput {
-  if (!disallowTools || disallowTools.length === 0) return tools;
+export function applyDisallowTools<T extends ToolsInput>(tools: T, disallowToolsInput?: string[]): ToolsInput {
+  if (!disallowToolsInput || disallowToolsInput.length === 0) return tools;
   const known = Object.keys(tools);
+  const disallowTools = expandToolPatterns(disallowToolsInput, known, 'disallowTools');
   const unknown = disallowTools.filter(name => !known.includes(name));
   if (unknown.length > 0) {
     throw new Error(`Unknown tool name(s) in disallowTools: ${unknown.join(', ')}. Known tools: ${known.join(', ')}.`);

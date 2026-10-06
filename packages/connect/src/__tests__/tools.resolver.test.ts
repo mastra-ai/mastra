@@ -594,6 +594,46 @@ describe('HTTP provider tool approval', () => {
     expect(result['linear_delete_issue']!.requireApproval).toBe(true);
   });
 
+  it('expands * globs in requireApproval against the generated tools', async () => {
+    const linear = installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    linear.createToolsSpy.mockReturnValue({
+      linear_list_issues: { id: 'linear_list_issues' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+      linear_delete_team: { id: 'linear_delete_team' },
+    } as never);
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_*'] } } });
+
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_list_issues']!.requireApproval).toBeFalsy();
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['linear_delete_team']!.requireApproval).toBe(true);
+  });
+
+  it('fails resolution when a requireApproval glob matches nothing', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope_*'] } } });
+
+    await expect(tools()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining("Pattern 'linear_nope_*'"),
+    });
+  });
+
+  it('never gates list_connections through a broad requireApproval glob', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
+    ]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear*'] } } });
+
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_fake_tool']!.requireApproval).toBe(true);
+    expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
+  });
+
   it('fails resolution when requireApproval names an unknown generated tool', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);

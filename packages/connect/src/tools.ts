@@ -17,7 +17,7 @@ import {
   resolveProviderConnection,
   validateProviderIds,
 } from './resolution.js';
-import { applyToolFilter } from './toolset.js';
+import { applyToolFilter, compileToolMatcher, expandToolPatterns } from './toolset.js';
 
 interface ToolsProviderOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
@@ -27,9 +27,11 @@ interface ToolsProviderOptionsBase {
    * and checked-in HTTP tools alike. Tools do not require approval by
    * default, matching `@mastra/mcp`'s own default. Pass `true` to require
    * approval for every tool on this provider, or an array of tool keys to
-   * require approval only for those tools. Unknown names in the array fail
-   * resolution with an `invalid_options` error so a typo never silently
-   * widens access. (Explicit `false` is equivalent to omitting the option.)
+   * require approval only for those tools; entries containing `*` are globs
+   * (e.g. `'linear_delete_*'`). Unknown names and globs that match nothing
+   * fail resolution with an `invalid_options` error so a typo never
+   * silently widens access. (Explicit `false` is equivalent to omitting the
+   * option.)
    */
   requireApproval?: boolean | string[];
   /** Exclude this provider entirely, even if a connection exists. */
@@ -45,13 +47,21 @@ interface ToolsProviderOptionsBase {
 export type ToolsProviderOptions = ToolsProviderOptionsBase &
   (
     | {
-        /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
+        /**
+         * Restrict the returned toolset to these tool keys. Entries containing
+         * `*` are globs (e.g. `'linear_get_*'`). Unknown names and globs that
+         * match nothing throw at build time.
+         */
         allowTools?: string[];
         disallowTools?: never;
       }
     | {
         allowTools?: never;
-        /** Remove these tool keys from the returned toolset. Unknown names throw at build time. */
+        /**
+         * Remove these tool keys from the returned toolset. Entries containing
+         * `*` are globs (e.g. `'linear_delete_*'`). Unknown names and globs
+         * that match nothing throw at build time.
+         */
         disallowTools?: string[];
       }
   );
@@ -610,9 +620,11 @@ function providerFilterOptions(options: ToolsProviderOptions): {
  * toolset by marking the selected tools. `true` gates every provider tool
  * (but never the synthetic `<provider>__list_connections` wrapper tool,
  * matching the MCP paths, where only server-discovered tools are gated);
- * an array gates the listed keys and rejects unknown names with the same
- * `invalid_options` error MCP discovery raises, so a typo never silently
- * widens access.
+ * an array gates the listed keys — entries containing `*` are globs,
+ * expanded against the provider tools minus the synthetic wrapper so a
+ * broad glob behaves like `true` — and rejects unknown names and dead
+ * globs with the same `invalid_options` error MCP discovery raises, so a
+ * typo never silently widens access.
  */
 function applyProxyRequireApproval(
   providerTools: ToolsInput,
@@ -621,8 +633,8 @@ function applyProxyRequireApproval(
   excludeKeys: string[] = [],
 ): void {
   if (!requireApproval) return;
+  const excluded = new Set(excludeKeys);
   if (requireApproval === true) {
-    const excluded = new Set(excludeKeys);
     for (const [toolKey, tool] of Object.entries(providerTools)) {
       if (excluded.has(toolKey)) continue;
       (tool as { requireApproval?: boolean }).requireApproval = true;
@@ -630,13 +642,18 @@ function applyProxyRequireApproval(
     return;
   }
   const known = Object.keys(providerTools);
-  const unknown = requireApproval.filter(name => !known.includes(name));
+  const expanded = expandToolPatterns(
+    requireApproval,
+    known.filter(key => !excluded.has(key)),
+    `requireApproval for '${integrationId}'`,
+  );
+  const unknown = expanded.filter(name => !known.includes(name));
   if (unknown.length > 0) {
     throw new MastraConnectConfigError(
       `Unknown tool name(s) in requireApproval for '${integrationId}': ${unknown.join(', ')}. Known tools: ${known.join(', ')}.`,
     );
   }
-  for (const name of requireApproval) {
+  for (const name of expanded) {
     (providerTools[name] as { requireApproval?: boolean }).requireApproval = true;
   }
 }
@@ -653,7 +670,7 @@ async function discoverMcpTools(input: {
 }): Promise<ResolvedToolsRecord> {
   const { registration, connectionId, allowTools, disallowTools, requireApproval, client, mcpClients, resolverId } =
     input;
-  const requireApprovalFor = Array.isArray(requireApproval) ? new Set(requireApproval) : undefined;
+  const requireApprovalFor = Array.isArray(requireApproval) ? compileToolMatcher(requireApproval) : undefined;
   const cacheKey = `${registration.integrationId}::${connectionId}`;
   let entry = mcpClients.get(cacheKey);
   if (!entry) {
@@ -668,13 +685,14 @@ async function discoverMcpTools(input: {
             ...transport,
             // Default: no approval required, matching @mastra/mcp's own
             // default. Opt in with `requireApproval: true` to gate every tool
-            // on this provider, or with an array to gate only listed keys.
+            // on this provider, or with an array of keys/globs to gate a
+            // selection.
             ...(requireApproval === true
               ? { requireToolApproval: true as const }
               : requireApprovalFor
                 ? {
                     requireToolApproval: ({ toolName }: { toolName: string }) =>
-                      requireApprovalFor.has(`${registration.integrationId}_${String(toolName)}`),
+                      requireApprovalFor(`${registration.integrationId}_${String(toolName)}`),
                   }
                 : {}),
           },
@@ -687,8 +705,15 @@ async function discoverMcpTools(input: {
   const discovery = await entry.client.listToolsWithErrors();
   const error = discovery.errors[registration.integrationId];
   if (error) throw new Error(`MCP tool discovery failed: ${error}`);
-  if (requireApprovalFor) {
-    const unknown = [...requireApprovalFor].filter(name => !(name in discovery.tools));
+  if (Array.isArray(requireApproval)) {
+    // Globs that match nothing throw inside the expansion; literal names are
+    // validated here against the discovered catalog.
+    const expanded = expandToolPatterns(
+      requireApproval,
+      Object.keys(discovery.tools),
+      `requireApproval for '${registration.integrationId}'`,
+    );
+    const unknown = expanded.filter(name => !(name in discovery.tools));
     if (unknown.length > 0) {
       throw new MastraConnectConfigError(
         `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,

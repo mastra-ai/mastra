@@ -355,6 +355,19 @@ describe('MCP tool approval', () => {
     });
   });
 
+  it('matches * globs in the requireApproval list against discovered tools', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_update_*'] } });
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({}, {})).toBe(false);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
+  });
+
+  it('fails resolution when a requireApproval glob matches no discovered tool', async () => {
+    await expect(discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_nope_*'] } })).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining("Pattern 'catalog-mcp_nope_*'"),
+    });
+  });
+
   it('rejects the removed autoApproveTools option by name', () => {
     expect(() =>
       connect({
