@@ -345,7 +345,7 @@ Group related observations (like tool sequences) by indenting:
   * -> applied fix, tests now pass
   * ✅ Tests passing, auth issue resolved
 
-Group observations by date, then list each with 24-hour time.
+Group observations by date. Within a date, list observations in the order the events happened (not by importance), each with 24-hour time.
 
 <observations>
 Date: Dec 4, 2025
@@ -625,6 +625,8 @@ interface ObserverFormattedLine {
   time: string;
   title: string;
   body: string;
+  /** Show the time even when it matches the previous line, so tool events can be ordered against user messages. */
+  alwaysShowTime?: boolean;
 }
 
 interface ObserverFormattedMessage {
@@ -908,8 +910,14 @@ function extractToolResultAttachments(
   return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
 }
 
-function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+function formatObserverPartLine(
+  title: string,
+  body: string,
+  time: string,
+  previousTime?: string,
+  alwaysShowTime?: boolean,
+): string {
+  const timeLabel = time && (alwaysShowTime || time !== previousTime) ? `(${time})` : '';
 
   if (!title) {
     return timeLabel ? `${timeLabel}: ${body}` : body;
@@ -953,7 +961,7 @@ function formatObserverLines(
       previousTime = undefined;
     }
 
-    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime, line.alwaysShowTime));
     previousTime = line.time || previousTime;
   }
 
@@ -1141,6 +1149,7 @@ function formatObserverMessage(
       time: formatObserverTime(normalizedCreatedAt, timeZone),
       title,
       body,
+      alwaysShowTime: title.startsWith('Tool '),
     });
   };
 
