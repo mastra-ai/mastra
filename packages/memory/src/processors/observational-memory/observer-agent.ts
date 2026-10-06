@@ -1957,8 +1957,8 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   const lineFired = totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5;
 
   // Strategy 3: short lines are exempt above only while their repetition is
-  // bounded. Short lines that occur more than once share one budget: when all
-  // their occurrences together add up to more than one maximum-size
+  // bounded. Short lines that occur more than once within a run share one
+  // budget: when all their occurrences in that run add up to more than one maximum-size
   // observation line, it is a loop, not a faithful summary. A shared budget
   // keeps a loop of many distinct short lines from multiplying the bound.
   // Grouping ignores indentation but the budget counts it, plus one newline
@@ -1966,22 +1966,35 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   // Format scaffolding (lines that are only an XML tag, and `Date:` headers)
   // is required once per thread block, so it grows with the number of threads
   // rather than with any loop and is left out of the budget.
-  const shortLineCounts = new Map<string, { count: number; chars: number }>();
+  // The budget applies to each contiguous run of short lines and resets at
+  // every substantive line: a looping model emits short lines back to back,
+  // while short status lines that legitimately recur across groups are
+  // separated by substantive observations.
+  let shortLineFired = false;
+  let shortLineCounts = new Map<string, { count: number; chars: number }>();
+  const runExceedsBudget = () => {
+    let repeatedShortChars = 0;
+    for (const { count, chars } of shortLineCounts.values()) {
+      if (count > 1) repeatedShortChars += chars;
+    }
+    // The trailing newline of the last occurrence is not part of the output.
+    return repeatedShortChars - 1 > MAX_OBSERVATION_LINE_CHARS;
+  };
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
+    if (!trimmed) continue;
+    if (trimmed.length >= MIN_DUPLICATE_LINE_CHARS) {
+      if (runExceedsBudget()) shortLineFired = true;
+      shortLineCounts = new Map();
+      continue;
+    }
     if (/^<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?>$/.test(trimmed) || trimmed.startsWith('Date:')) continue;
     const entry = shortLineCounts.get(trimmed) ?? { count: 0, chars: 0 };
     entry.count++;
     entry.chars += line.length + 1;
     shortLineCounts.set(trimmed, entry);
   }
-  let repeatedShortChars = 0;
-  for (const { count, chars } of shortLineCounts.values()) {
-    if (count > 1) repeatedShortChars += chars;
-  }
-  // The trailing newline of the last occurrence is not part of the output.
-  const shortLineFired = repeatedShortChars - 1 > MAX_OBSERVATION_LINE_CHARS;
+  if (runExceedsBudget()) shortLineFired = true;
 
   // The detector ignores anything under 2,000 characters; keep the fired flags
   // consistent with that so diagnostics never name a strategy it would not use.

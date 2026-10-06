@@ -290,8 +290,29 @@ describe('detectDegenerateRepetition short-line loops', () => {
     expect(detectDegenerateRepetition(splitRuns(5))).toBe(false);
   });
 
-  it('flags a short line whose occurrences total one character more', () => {
-    expect(detectDegenerateRepetition(splitRuns(6))).toBe(true);
+  it('gives runs separated by a substantive line separate budgets', () => {
+    expect(detectDegenerateRepetition(splitRuns(6))).toBe(false);
+  });
+});
+
+describe('short status lines recurring across groups', () => {
+  it('accepts large thread-scope Reflector output whose groups repeat short status sub-bullets', () => {
+    const statuses = ['  * ✅ build ok', '  * ✅ tests ok', '  * ✅ lint ok', '  * 🟡 retry', '  * ✅ deployed', '  * ✅ synced'];
+    const groups = Array.from({ length: 300 }, (_, g) =>
+      [
+        `## Group g${g}`,
+        `_range: m${g}a:m${g}b_`,
+        'Date: Jan 1, 2026',
+        `- 🔴 Group ${g} user asked to ship the release candidate`,
+        statuses[g % 6],
+        statuses[(g + 1) % 6],
+        statuses[(g + 2) % 6],
+        `- 🟡 Group ${g} assistant verified the release candidate`,
+      ].join('\n'),
+    );
+    const text = groups.join('\n');
+    expect(text.length).toBeGreaterThan(50_000);
+    expect(detectDegenerateRepetition(text)).toBe(false);
   });
 });
 
