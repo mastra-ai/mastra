@@ -1,5 +1,22 @@
+import type { MessageList } from '../../agent/message-list';
+import { aiV5UIMessagesToAIV5ModelMessages } from '../../agent/message-list/conversion/output-converter';
 import type { ChunkType } from '../../stream/types';
 import { STEP_CONTENT_CHUNK_TYPES } from './step-content-chunk-types';
+
+export interface TranscriptStep {
+  messageId: string;
+  start: number;
+  end: number;
+}
+
+export function getTranscriptStepContent(messageList: MessageList, step: TranscriptStep) {
+  const message = messageList.get.response.aiV5.ui().find(message => message.id === step.messageId);
+  if (!message) return [];
+  return aiV5UIMessagesToAIV5ModelMessages(
+    [{ ...message, parts: message.parts.slice(step.start, step.end) }],
+    messageList.get.all.db(),
+  ).flatMap(messageList.get.response.aiV5.stepContent);
+}
 
 // A stream retains its own attempt, even after the run scope points at a replacement.
 const attemptsByStream = new WeakMap<object, ModelAttempt>();
@@ -16,6 +33,7 @@ export function getModelAttempt(stream: object): ModelAttempt | undefined {
 export class ModelAttempt {
   readonly controller = new AbortController();
   messageId?: string;
+  transcriptStep?: TranscriptStep;
   fallbackModelIndex?: number;
   #state: 'waiting' | 'armed' | 'accepted' | 'discarded' = 'waiting';
   #unsubscribe?: () => void;

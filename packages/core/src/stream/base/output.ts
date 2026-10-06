@@ -8,7 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { bindModelAttempt, getModelAttempt } from '../../loop/shared/model-attempt';
+import { bindModelAttempt, getModelAttempt, getTranscriptStepContent } from '../../loop/shared/model-attempt';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -940,6 +940,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const payloadSteps = chunk.payload.output?.steps || [];
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
+              const attempt = currentPayloadStep && getModelAttempt(currentPayloadStep);
 
               // If step has tripwire, text should be empty (rejected response)
               const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
@@ -956,7 +957,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // may be a stale reference (each workflow step deserializes
                 // a fresh instance).  Fall back to the live messageList for
                 // non-durable agents.
-                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
+                content: attempt?.transcriptStep
+                  ? getTranscriptStepContent(messageList, attempt.transcriptStep)
+                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
