@@ -255,6 +255,8 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       expect(stored).toContain('Give a one-sentence reply containing the word ALPHA');
       expect(recalled.messages.some(m => m.role === 'assistant')).toBe(true);
       expect(stored).not.toContain('Continue.');
+      // The repair's own signal is stored (role 'signal', text 'continue'), but T78 makes no claim
+      // about it, so it is deliberately not asserted here.
 
       // Anthropic must actually take the rejection -> repair path. OpenAI never rejects: an OpenAI
       // request ending on an assistant turn is accepted as-is (the control), so it must stay
