@@ -4033,7 +4033,8 @@ User asked about </current-task> parsing and how it works
       // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100); // ~11k chars of the same block
+      // A loop of lines; one giant line would be truncated and accepted instead.
+      const text = Array(100).fill(block).join('\n');
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
@@ -4120,9 +4121,10 @@ User asked about </current-task> parsing and how it works
 
   describe('describeDegenerateOutput', () => {
     it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      // Under the 10,000-char line limit, so the line is sampled rather than skipped.
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100);
+      const text = block.repeat(50);
       const description = describeDegenerateOutput(text);
       expect(description).toContain(`length=${text.length}`);
       expect(description).toMatch(/duplicateRatio=0\.\d+/);
@@ -4138,7 +4140,7 @@ User asked about </current-task> parsing and how it works
     it('names the strategy that fired, matching the detector', () => {
       const windowLoop =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, '.repeat(
-          100,
+          50,
         );
       expect(detectDegenerateRepetition(windowLoop)).toBe(true);
       expect(describeDegenerateOutput(windowLoop)).toMatch(/strategy=window/);

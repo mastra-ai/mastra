@@ -1909,7 +1909,11 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   // Short lines are ignored: faithful summaries of repetitive tool output
   // (e.g. many "→ ok" lines) are legitimately repetitive and would otherwise
   // produce colliding windows. Loops of substantial lines are still sampled.
-  const windowText = lines.filter(line => line.trim().length >= MIN_DUPLICATE_LINE_CHARS).join('\n');
+  // Truncated giant lines are skipped too: they are already bounded, and one
+  // periodic line (e.g. a progress bar) would otherwise fill the sample alone.
+  const windowText = lines
+    .filter(line => line.trim().length >= MIN_DUPLICATE_LINE_CHARS && line.length <= MAX_OBSERVATION_LINE_CHARS)
+    .join('\n');
   const windowSize = 200;
   const step = Math.max(1, Math.floor(windowText.length / 50)); // sample ~50 windows
   const seen = new Map<string, number>();
@@ -1953,24 +1957,27 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
   const lineFired = totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5;
 
   // Strategy 3: short lines are exempt above only while their repetition is
-  // bounded. A short line whose occurrences add up to more than one maximum-size
-  // observation line is a loop, not a faithful summary. Grouping ignores
-  // indentation but the budget counts it. Newlines are counted only between
-  // occurrences, so a run that serializes to exactly one maximum-size line is
-  // not flagged. A single occurrence never counts as a loop, however padded.
-  const shortLineChars = new Map<string, number>();
-  let shortLineFired = false;
+  // bounded. Short lines that occur more than once share one budget: when all
+  // their occurrences together add up to more than one maximum-size
+  // observation line, it is a loop, not a faithful summary. A shared budget
+  // keeps a loop of many distinct short lines from multiplying the bound.
+  // Grouping ignores indentation but the budget counts it, plus one newline
+  // per occurrence. A line that occurs once never counts, however padded.
+  const shortLineCounts = new Map<string, { count: number; chars: number }>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.length >= MIN_DUPLICATE_LINE_CHARS) continue;
-    const prev = shortLineChars.get(trimmed);
-    const total = prev === undefined ? line.length : prev + 1 + line.length;
-    if (prev !== undefined && total > MAX_OBSERVATION_LINE_CHARS) {
-      shortLineFired = true;
-      break;
-    }
-    shortLineChars.set(trimmed, total);
+    const entry = shortLineCounts.get(trimmed) ?? { count: 0, chars: 0 };
+    entry.count++;
+    entry.chars += line.length + 1;
+    shortLineCounts.set(trimmed, entry);
   }
+  let repeatedShortChars = 0;
+  for (const { count, chars } of shortLineCounts.values()) {
+    if (count > 1) repeatedShortChars += chars;
+  }
+  // The trailing newline of the last occurrence is not part of the output.
+  const shortLineFired = repeatedShortChars - 1 > MAX_OBSERVATION_LINE_CHARS;
 
   // The detector ignores anything under 2,000 characters; keep the fired flags
   // consistent with that so diagnostics never name a strategy it would not use.

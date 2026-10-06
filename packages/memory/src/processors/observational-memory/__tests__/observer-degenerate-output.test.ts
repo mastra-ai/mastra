@@ -120,6 +120,131 @@ describe('Observer degenerate detection (#24354)', () => {
     expect(result.degenerate).toBe(true);
   });
 
+  it('truncates a periodic giant line without flagging any surrounding observation shape', () => {
+    const periodicProgressBody = '====>'.repeat(12_000);
+    expect(periodicProgressBody.length).toBe(60_000);
+
+    // Aperiodic detail so the surrounding bullet is not itself a repetition loop.
+    const aperiodicDetail = Array.from({ length: 600 }, (_, i) => i.toString(36).padStart(5, '0')).join('');
+    const flagged = Array.from({ length: 121 }, (_, i) => i * 25).filter(surroundingSize => {
+      const detail = aperiodicDetail.slice(0, surroundingSize);
+      const output = [
+        '<observations>',
+        `- 🔴 Lint passed ${detail}`,
+        `- 🟡 Install log: ${periodicProgressBody}`,
+        '- 🟢 Tests: 41 passed.',
+        '</observations>',
+      ].join('\n');
+      return parseObserverOutput(output).degenerate === true;
+    });
+
+    expect(flagged).toEqual([]);
+
+    const representative = parseObserverOutput(
+      [
+        '<observations>',
+        `- 🔴 Lint passed ${aperiodicDetail.slice(0, 1500)}`,
+        `- 🟡 Install log: ${periodicProgressBody}`,
+        '- 🟢 Tests: 41 passed.',
+        '</observations>',
+      ].join('\n'),
+    );
+    expect(representative.observations).toContain('Lint passed');
+    expect(representative.observations).toContain('Install log: ====>');
+    expect(representative.observations).toContain('[truncated]');
+    expect(representative.observations).toContain('Tests: 41 passed.');
+  });
+
+  it('flags a loop of many distinct short lines using one aggregate budget', () => {
+    const shortLines = Array.from({ length: 14 }, (_, i) => `  * step ${i} → ok`);
+    expect(shortLines.every(line => line.trim().length < 24)).toBe(true);
+    const output = [
+      '<observations>',
+      '- 🔴 The build emitted many short progress updates',
+      ...Array.from({ length: 400 }, () => shortLines).flat(),
+      '- 🟡 The build never advanced beyond the same steps',
+      '</observations>',
+    ].join('\n');
+    expect(output.length).toBeGreaterThan(90_000);
+
+    expect(parseObserverOutput(output).degenerate).toBe(true);
+  });
+
+  const eightCharLine = '* abcdef';
+  const nineCharLine = '* abcdefg';
+
+  const assertAggregateFixture = (
+    lines: string[],
+    expectedLength: number,
+    expectedEightCharCount: number,
+    expectedNineCharCount: number,
+  ) => {
+    expect(eightCharLine.length).toBe(8);
+    expect(nineCharLine.length).toBe(9);
+    expect(lines.reduce((total, line) => total + line.length + 1, -1)).toBe(expectedLength);
+
+    const counts = new Map<string, number>();
+    const runs = new Map<string, number>();
+    let previous: string | undefined;
+    for (const line of lines) {
+      counts.set(line, (counts.get(line) ?? 0) + 1);
+      if (line !== previous) runs.set(line, (runs.get(line) ?? 0) + 1);
+      previous = line;
+    }
+
+    expect(counts.get(eightCharLine)).toBe(expectedEightCharCount);
+    expect(counts.get(nineCharLine)).toBe(expectedNineCharCount);
+    // collapseBoundedLineRuns only compresses keys with one contiguous run, so
+    // two runs per key ensure every occurrence reaches the aggregate strategy.
+    expect(runs.get(eightCharLine)).toBe(2);
+    expect(runs.get(nineCharLine)).toBe(2);
+  };
+
+  it('accepts aggregate repeated short lines at exactly one line budget', () => {
+    const lines = [
+      ...Array.from({ length: 554 }, () => eightCharLine),
+      nineCharLine,
+      ...Array.from({ length: 555 }, () => eightCharLine),
+      nineCharLine,
+    ];
+    assertAggregateFixture(lines, 10_000, 1_109, 2);
+
+    expect(parseObserverOutput(`<observations>\n${lines.join('\n')}\n</observations>`).degenerate).not.toBe(true);
+  });
+
+  it('flags aggregate repeated short lines immediately above one line budget', () => {
+    const lines = [
+      ...Array.from({ length: 554 }, () => eightCharLine),
+      nineCharLine,
+      ...Array.from({ length: 554 }, () => eightCharLine),
+      nineCharLine,
+      nineCharLine,
+    ];
+    assertAggregateFixture(lines, 10_001, 1_108, 3);
+    const output = `<observations>\n${lines.join('\n')}\n</observations>`;
+
+    expect(parseObserverOutput(output).degenerate).toBe(true);
+    expect(describeDegenerateOutput(output)).toContain('strategy=shortLineLoop');
+  });
+
+  it('preserves the unchanged duplicate-line minimum for sanitized giant repeats', () => {
+    const aperiodicBody = Array.from({ length: 12_000 }, (_, i) => i.toString(36).padStart(5, '0')).join('');
+    expect(aperiodicBody.length).toBe(60_000);
+    const giant = `- 🟡 Progress: ${aperiodicBody}`;
+    const parseCopies = (count: number) =>
+      parseObserverOutput(`<observations>\n${Array.from({ length: count }, () => giant).join('\n')}\n</observations>`);
+    const describeCopies = (count: number) =>
+      describeDegenerateOutput(
+        `<observations>\n${Array.from({ length: count }, () => giant).join('\n')}\n</observations>`,
+      );
+
+    expect(parseCopies(19).degenerate).not.toBe(true);
+    expect(describeCopies(19)).toContain('strategy=none');
+    expect(describeCopies(19)).toContain('countedLines=19');
+    expect(parseCopies(20).degenerate).toBe(true);
+    expect(describeCopies(20)).toContain('strategy=duplicateLines');
+    expect(describeCopies(20)).toContain('countedLines=20');
+  });
 });
 
 describe('detectDegenerateRepetition short-line loops', () => {
