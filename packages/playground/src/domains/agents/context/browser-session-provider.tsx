@@ -2,9 +2,11 @@ import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks/age
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
+import { buildBrowserStreamUrl, readBrowserStreamToken } from '../utils/browser-stream-url';
 import { createBrowserFrameStore } from './browser-frame-store';
 import { BrowserFrameStoreContext, BrowserSessionContext } from './browser-session-context';
 import type { BrowserViewMode } from './browser-session-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
 export interface BrowserSessionProviderProps {
   children: ReactNode;
@@ -100,10 +102,17 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const shouldConnectRef = useRef(shouldConnect);
   const agentIdRef = useRef(agentId);
   const threadIdRef = useRef(threadId);
+  // Studio's configured credential, as a ref for the same reason: a deployment
+  // that authenticates with an `Authorization` header has to put that token on
+  // the WebSocket URL, but it must not destabilize `connect`.
+  const tokenRef = useRef<string | undefined>(undefined);
+  const { headers } = useStudioConfig();
+  const token = readBrowserStreamToken(headers);
   useEffect(() => {
     shouldConnectRef.current = shouldConnect;
     agentIdRef.current = agentId;
     threadIdRef.current = threadId;
+    tokenRef.current = token;
   });
 
   // Stream state
@@ -186,9 +195,11 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
 
     setStatusState('connecting');
 
-    // Construct WebSocket URL based on current protocol
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream?threadId=${encodeURIComponent(threadId)}`;
+    // Construct WebSocket URL based on current protocol. The WebSocket API
+    // can't set request headers, so a header-token deployment passes its
+    // credential as a query parameter instead. The token is read from a ref to
+    // keep `connect` stable across probe updates.
+    const wsUrl = buildBrowserStreamUrl({ agentId, threadId, token: tokenRef.current });
 
     try {
       const ws = new WebSocket(wsUrl);
