@@ -2,6 +2,7 @@ import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KnowledgeSchemaError,
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
@@ -61,6 +62,32 @@ describe('MySQL canonical Knowledge support', () => {
     await store.init();
     const [rows] = await pool.query(`SELECT version FROM \`${TABLE_KNOWLEDGE_SCHEMA}\` WHERE id='canonical'`);
     expect(Number((rows as Array<{ version: number }>)[0]?.version)).toBe(KNOWLEDGE_STORAGE_SCHEMA_VERSION);
+  });
+
+  it('explicitly resets retired Knowledge tables and leaves other storage untouched', async () => {
+    const preserved = `knowledge_reset_preserved_${process.pid}`;
+    await createStore().init();
+    await pool.query(`DELETE FROM \`${TABLE_KNOWLEDGE_SCHEMA}\``);
+    await pool.query('CREATE TABLE IF NOT EXISTS mastra_knowledge_cursors (id VARCHAR(64) PRIMARY KEY)');
+    await pool.query(`CREATE TABLE \`${preserved}\` (id VARCHAR(64) PRIMARY KEY)`);
+    try {
+      await pool.query(`INSERT INTO \`${preserved}\` (id) VALUES ('kept')`);
+      const store = createStore();
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      await store.dangerouslyReset();
+
+      const [tables] = await pool.query(
+        "SELECT table_name AS tableName FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_cursors'",
+      );
+      expect(tables).toEqual([]);
+      const [marker] = await pool.query(`SELECT version FROM \`${TABLE_KNOWLEDGE_SCHEMA}\` WHERE id='canonical'`);
+      expect(Number((marker as Array<{ version: number }>)[0]?.version)).toBe(KNOWLEDGE_STORAGE_SCHEMA_VERSION);
+      const [rows] = await pool.query(`SELECT id FROM \`${preserved}\``);
+      expect((rows as Array<{ id: string }>).map(row => row.id)).toEqual(['kept']);
+    } finally {
+      await pool.query(`DROP TABLE IF EXISTS \`${preserved}\``);
+    }
   });
 });
 
