@@ -336,25 +336,20 @@ function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSu
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
 
-function scopesWithinOrg(nodes: KnowledgeScopeNodeSummary[], orgId: string): KnowledgeScopeNodeSummary[] {
-  const childrenByParent = new Map<string, KnowledgeScopeNodeSummary[]>();
-  for (const node of nodes) {
-    for (const parentId of node.parentIds) {
-      const children = childrenByParent.get(parentId) ?? [];
-      children.push(node);
-      childrenByParent.set(parentId, children);
-    }
-  }
+/** Org scope reads stop after this many storage pages; past it the tree drops whole scopes. */
+const MAX_ORG_SCOPE_PAGES = 10;
 
-  const visibleIds = new Set<string>();
-  const queue = nodes.filter(node => node.address === `org:${orgId}`);
-  for (let index = 0; index < queue.length; index += 1) {
-    const node = queue[index];
-    if (!node || visibleIds.has(node.id)) continue;
-    visibleIds.add(node.id);
-    queue.push(...(childrenByParent.get(node.id) ?? []));
+/** Every scope in one org (the org scope and everything beneath it), filtered and paged in storage. */
+async function listOrgScopeNodes(store: KnowledgeStorage, orgId: string): Promise<KnowledgeScopeNodeSummary[]> {
+  const scopes: KnowledgeScopeNodeSummary[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_ORG_SCOPE_PAGES; page += 1) {
+    const result = await store.listScopeNodes({ withinAddress: `org:${orgId}`, cursor });
+    scopes.push(...result.scopes);
+    if (!result.nextCursor) break;
+    cursor = result.nextCursor;
   }
-  return nodes.filter(node => visibleIds.has(node.id));
+  return scopes;
 }
 
 function knowledgeSearchRank(name: string, query: string): number {
@@ -636,7 +631,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     ];
     let existing: Set<string>;
     try {
-      existing = new Set((await view.store.listScopeNodes()).map(node => node.address));
+      const { scopes } = await view.store.listScopeNodes({ addresses: chain.map(link => link.address) });
+      existing = new Set(scopes.map(node => node.address));
     } catch (error) {
       // Adapters without structural scope nodes have no tree to vouch into.
       if (error instanceof KnowledgeUnsupportedCapabilityError) return;
@@ -690,7 +686,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const childCursors: Record<string, string> = {};
           let storedScopeNodes: KnowledgeScopeNodeSummary[] = [];
           try {
-            storedScopeNodes = scopesWithinOrg(await view.store.listScopeNodes(), view.orgId);
+            storedScopeNodes = await listOrgScopeNodes(view.store, view.orgId);
             const scopeNodeById = new Map(storedScopeNodes.map(node => [node.id, node]));
             const childScopeCountByParent = new Map<string, number>();
             for (const node of storedScopeNodes) {
@@ -851,7 +847,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
           let structuralScopes: KnowledgeScopeNodeSummary[] = [];
           try {
-            structuralScopes = scopesWithinOrg(await view.store.listScopeNodes(), view.orgId).filter(node =>
+            structuralScopes = (await listOrgScopeNodes(view.store, view.orgId)).filter(node =>
               node.name.toLocaleLowerCase().includes(query),
             );
           } catch (error) {
@@ -932,7 +928,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
             let scopeNodes: KnowledgeScopeNodeSummary[];
             try {
-              scopeNodes = scopesWithinOrg(await store.listScopeNodes(), resolved.orgId);
+              scopeNodes = await listOrgScopeNodes(store, resolved.orgId);
             } catch (error) {
               // Adapters without the structural read have no lenses to serve.
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
@@ -1325,7 +1321,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
             let scopeNodes: KnowledgeScopeNodeSummary[];
             try {
-              scopeNodes = scopesWithinOrg(await resolved.store.listScopeNodes(), resolved.orgId);
+              scopeNodes = await listOrgScopeNodes(resolved.store, resolved.orgId);
             } catch (error) {
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
                 return c.json({ error: 'scope_not_found' }, 404);
