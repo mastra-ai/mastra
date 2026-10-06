@@ -10,6 +10,7 @@ const REPOSITORIES = 'source_control_repositories';
 const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
+const SESSION_REPOSITORIES = 'source_control_session_repositories';
 
 export class SourceControlConnectionNotFoundError extends Error {
   constructor() {
@@ -125,7 +126,11 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       session_id: { type: 'text' },
+      // Still written by every entry point (the position-1 link) until FACT-342.
       project_repository_id: { type: 'text' },
+      // Nullable so the column can be added to populated tables; filled by the
+      // init() backfill and written by every `create` since.
+      factory_project_id: { type: 'text', nullable: true },
       org_id: { type: 'text' },
       user_id: { type: 'text' },
       branch: { type: 'text' },
@@ -146,7 +151,33 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
         name: 'source_control_sessions_repository_user_branch_unique',
         columns: ['project_repository_id', 'user_id', 'branch'],
       },
+      {
+        name: 'source_control_sessions_project_user_branch_unique',
+        columns: ['factory_project_id', 'user_id', 'branch'],
+      },
     ],
+    indexes: [{ name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] }],
+  },
+  {
+    name: SESSION_REPOSITORIES,
+    columns: {
+      id: { type: 'uuid-pk' },
+      session_id: { type: 'text' },
+      project_repository_id: { type: 'text' },
+      branch: { type: 'text' },
+      change_request_id: { type: 'text', nullable: true },
+      change_request_url: { type: 'text', nullable: true },
+      pushed_at: { type: 'timestamp' },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'source_control_session_repositories_session_link_unique',
+        columns: ['session_id', 'project_repository_id'],
+      },
+    ],
+    indexes: [{ name: 'source_control_session_repositories_session_idx', columns: ['session_id'] }],
   },
 ];
 
@@ -283,7 +314,14 @@ export type SourceControlSessionVisibility = 'org' | 'private';
 export interface SourceControlSession {
   id: string;
   sessionId: string;
+  /**
+   * The position-1 repository link at creation. Still populated for every
+   * session until FACT-342 moves the per-repository readers to
+   * `sessionRepositories`.
+   */
   projectRepositoryId: string;
+  /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
+  factoryProjectId: string | null;
   orgId: string;
   userId: string;
   branch: string;
@@ -304,6 +342,12 @@ export interface SourceControlSession {
 export interface CreateSourceControlSessionInput {
   sessionId: string;
   projectRepositoryId: string;
+  /**
+   * The factory the link's connection belongs to. Derived from the link when
+   * omitted; when given it must match, so a caller cannot file a session
+   * under another project.
+   */
+  factoryProjectId?: string;
   orgId: string;
   userId: string;
   branch: string;
@@ -312,6 +356,32 @@ export interface CreateSourceControlSessionInput {
   visibility?: SourceControlSessionVisibility;
   baseBranch: string;
 }
+
+/** One repository a session pushed to; the branch and change request it holds there. */
+export interface SourceControlSessionRepository {
+  id: string;
+  sessionId: string;
+  projectRepositoryId: string;
+  branch: string;
+  changeRequestId: string | null;
+  changeRequestUrl: string | null;
+  pushedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UpsertSessionRepositoryInput {
+  sessionId: string;
+  projectRepositoryId: string;
+  branch: string;
+  changeRequestId?: string | null;
+  changeRequestUrl?: string | null;
+  pushedAt?: Date;
+}
+
+export type SessionBranchKey =
+  | { projectRepositoryId: string; userId: string; branch: string }
+  | { factoryProjectId: string; userId: string; branch: string };
 
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
@@ -378,14 +448,20 @@ export interface SourceControlStorageHandle {
      * teardown); never expose directly to a viewer.
      */
     listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
+    /**
+     * Viewer-aware listing of the project's sessions reachable through this
+     * integration, across all of its links. Same visibility rule as `list`.
+     */
+    listByProject(args: {
+      orgId: string;
+      factoryProjectId: string;
+      viewerUserId: string;
+    }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
-    getForBranch(args: {
-      projectRepositoryId: string;
-      userId: string;
-      branch: string;
-    }): Promise<SourceControlSession | null>;
+    /** Keyed by the link (today's callers) or by the factory. */
+    getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     /**
@@ -411,7 +487,13 @@ export interface SourceControlStorageHandle {
      * `sessionId`.
      */
     markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+    /** Removes the session and its repository rows. */
     delete(id: string): Promise<void>;
+  };
+  readonly sessionRepositories: {
+    /** Insert, or on `(session, link)` conflict update branch, change request and push time. */
+    upsert(input: UpsertSessionRepositoryInput): Promise<SourceControlSessionRepository>;
+    listBySession(args: { sessionId: string }): Promise<SourceControlSessionRepository[]>;
   };
 }
 
@@ -477,6 +559,7 @@ interface SessionDbRow extends Record<string, unknown> {
   id: string;
   session_id: string;
   project_repository_id: string;
+  factory_project_id?: string | null;
   org_id: string;
   user_id: string;
   branch: string;
@@ -560,11 +643,38 @@ function byCreatedAt(a: ProjectRepositoryDbRow, b: ProjectRepositoryDbRow): numb
   return a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
+interface SessionRepositoryDbRow extends Record<string, unknown> {
+  id: string;
+  session_id: string;
+  project_repository_id: string;
+  branch: string;
+  change_request_id: string | null;
+  change_request_url: string | null;
+  pushed_at: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function toSessionRepository(row: SessionRepositoryDbRow): SourceControlSessionRepository {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    projectRepositoryId: row.project_repository_id,
+    branch: row.branch,
+    changeRequestId: row.change_request_id,
+    changeRequestUrl: row.change_request_url,
+    pushedAt: row.pushed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function toSession(row: SessionDbRow): SourceControlSession {
   return {
     id: row.id,
     sessionId: row.session_id,
     projectRepositoryId: row.project_repository_id,
+    factoryProjectId: row.factory_project_id ?? null,
     orgId: row.org_id,
     userId: row.user_id,
     branch: row.branch,
@@ -589,6 +699,68 @@ export class SourceControlStorage extends FactoryStorageDomain {
   async init(): Promise<void> {
     await this.ensureCollections(SOURCE_CONTROL_SCHEMAS);
     await this.#backfillEnvironment();
+    await this.#backfillSessionFactory();
+  }
+
+  /**
+   * Fill `factory_project_id` on sessions that predate the column, walking
+   * link → connection. The old constraint was per link, so two links of one
+   * factory may hold the same user and branch; the new per-factory index
+   * would reject the second write and a throwing `init()` only leaves the
+   * domain not-ready. Within such a group the oldest session wins and the
+   * others keep a null factory. Idempotent, O(rows), deletes nothing.
+   */
+  async #backfillSessionFactory(): Promise<void> {
+    let unresolved = 0;
+    let collisions = 0;
+    try {
+      const pending = await this.ops.findMany<SessionDbRow>(SESSIONS, { factory_project_id: null });
+      if (pending.length === 0) return;
+      const connections = await this.ops.findMany<ConnectionDbRow>(CONNECTIONS, {});
+      const links = await this.ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {});
+      const projectByConnectionId = new Map(connections.map(row => [row.id, row.factory_project_id]));
+      const projectByLinkId = new Map(
+        links.flatMap(link => {
+          const projectId = projectByConnectionId.get(link.connection_id);
+          return projectId ? [[link.id, projectId] as const] : [];
+        }),
+      );
+      const keyOf = (projectId: string, row: SessionDbRow) => `${projectId}\u0000${row.user_id}\u0000${row.branch}`;
+      const taken = new Set<string>();
+      for (const row of await this.ops.findMany<SessionDbRow>(SESSIONS, {})) {
+        if (row.factory_project_id) taken.add(keyOf(row.factory_project_id, row));
+      }
+      const ordered = [...pending].sort(
+        (a, b) => a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      );
+      for (const row of ordered) {
+        const projectId = projectByLinkId.get(row.project_repository_id);
+        if (!projectId) {
+          unresolved += 1;
+          continue;
+        }
+        const key = keyOf(projectId, row);
+        if (taken.has(key)) {
+          collisions += 1;
+          continue;
+        }
+        try {
+          await this.ops.updateMany(SESSIONS, { id: row.id }, { factory_project_id: projectId });
+          taken.add(key);
+        } catch (error) {
+          if (!(error instanceof UniqueViolationError)) throw error;
+          collisions += 1;
+        }
+      }
+    } catch (error) {
+      console.warn(`[factory] session backfill did not run: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+    if (unresolved > 0 || collisions > 0) {
+      console.warn(
+        `[factory] session backfill: ${unresolved} sessions have no resolvable factory, ${collisions} sessions collide on (factory, user, branch) and keep a null factory`,
+      );
+    }
   }
 
   /**
@@ -682,6 +854,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany(SESSION_REPOSITORIES, {});
     await this.ops.deleteMany(SESSIONS, {});
     await this.ops.deleteMany(PROJECT_REPOSITORIES, {});
     await this.ops.deleteMany(CONNECTIONS, {});
@@ -1104,6 +1277,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return false;
+          for (const session of await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id })) {
+            await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
+          }
+          await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
           return true;
@@ -1126,6 +1303,29 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
+        listByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
+          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+            factory_project_id: factoryProjectId,
+            integration_id: integrationId,
+          });
+          if (connections.length === 0) return [];
+          const linkIds = new Set<string>();
+          for (const connection of connections) {
+            for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              connection_id: connection.id,
+            })) {
+              linkIds.add(link.id);
+            }
+          }
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
+            factory_project_id: factoryProjectId,
+            org_id: orgId,
+          });
+          return rows
+            .filter(row => linkIds.has(row.project_repository_id))
+            .filter(row => row.visibility !== 'private' || row.user_id === viewerUserId)
+            .map(toSession);
+        },
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
@@ -1136,28 +1336,50 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
-        getForBranch: async ({ projectRepositoryId, userId, branch }) => {
-          if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
+        getForBranch: async args => {
+          if ('factoryProjectId' in args) {
+            const row = await db().findOne<SessionDbRow>(SESSIONS, {
+              factory_project_id: args.factoryProjectId,
+              user_id: args.userId,
+              branch: args.branch,
+            });
+            return row ? toSession(row) : null;
+          }
+          if (!(await getProjectRepositoryById(args.projectRepositoryId))) return null;
           const row = await db().findOne<SessionDbRow>(SESSIONS, {
-            project_repository_id: projectRepositoryId,
-            user_id: userId,
-            branch,
+            project_repository_id: args.projectRepositoryId,
+            user_id: args.userId,
+            branch: args.branch,
           });
           return row ? toSession(row) : null;
         },
         create: async input => {
-          await requireProjectRepositoryById(input.projectRepositoryId);
-          const existing = await db().findOne<SessionDbRow>(SESSIONS, {
-            project_repository_id: input.projectRepositoryId,
-            user_id: input.userId,
-            branch: input.branch,
-          });
+          const link = await requireProjectRepositoryById(input.projectRepositoryId);
+          const connection = await db().findOne<ConnectionDbRow>(CONNECTIONS, { id: link.connectionId });
+          if (!connection) throw new Error('Project repository not found for this integration.');
+          if (input.factoryProjectId !== undefined && input.factoryProjectId !== connection.factory_project_id) {
+            throw new Error('Session factory does not match the repository link.');
+          }
+          const factoryProjectId = connection.factory_project_id;
+          const findExisting = async () =>
+            (await db().findOne<SessionDbRow>(SESSIONS, {
+              factory_project_id: factoryProjectId,
+              user_id: input.userId,
+              branch: input.branch,
+            })) ??
+            (await db().findOne<SessionDbRow>(SESSIONS, {
+              project_repository_id: input.projectRepositoryId,
+              user_id: input.userId,
+              branch: input.branch,
+            }));
+          const existing = await findExisting();
           if (existing) return toSession(existing);
           const now = new Date();
           try {
             const row = await db().insertOne<SessionDbRow>(SESSIONS, {
               session_id: input.sessionId,
               project_repository_id: input.projectRepositoryId,
+              factory_project_id: factoryProjectId,
               org_id: input.orgId,
               user_id: input.userId,
               branch: input.branch,
@@ -1174,11 +1396,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             return toSession(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
-            const row = await db().findOne<SessionDbRow>(SESSIONS, {
-              project_repository_id: input.projectRepositoryId,
-              user_id: input.userId,
-              branch: input.branch,
-            });
+            const row = await findExisting();
             if (!row) throw error;
             return toSession(row);
           }
@@ -1222,8 +1440,52 @@ export class SourceControlStorage extends FactoryStorageDomain {
           );
         },
         delete: async id => {
+          const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
+          if (row) await db().deleteMany(SESSION_REPOSITORIES, { session_id: row.session_id });
           await db().deleteMany(SESSIONS, { id });
         },
+      },
+      sessionRepositories: {
+        upsert: async input => {
+          const key = { session_id: input.sessionId, project_repository_id: input.projectRepositoryId };
+          const now = new Date();
+          const changes = {
+            branch: input.branch,
+            change_request_id: input.changeRequestId ?? null,
+            change_request_url: input.changeRequestUrl ?? null,
+            pushed_at: input.pushedAt ?? now,
+            updated_at: now,
+          };
+          const update = async () => {
+            await db().updateMany(SESSION_REPOSITORIES, key, changes);
+            const row = await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key);
+            if (!row) throw new Error('Session repository row vanished during upsert.');
+            return toSessionRepository(row);
+          };
+          if (await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key)) return update();
+          try {
+            return toSessionRepository(
+              await db().insertOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, {
+                ...key,
+                ...changes,
+                created_at: now,
+              }),
+            );
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            return update();
+          }
+        },
+        listBySession: async ({ sessionId }) =>
+          (
+            await db().findMany<SessionRepositoryDbRow>(
+              SESSION_REPOSITORIES,
+              { session_id: sessionId },
+              {
+                orderBy: [['created_at', 'asc']],
+              },
+            )
+          ).map(toSessionRepository),
       },
     };
   }
