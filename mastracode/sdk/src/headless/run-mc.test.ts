@@ -100,6 +100,13 @@ async function makeHarness(opts: HarnessOptions) {
         metadata: { default: true },
         instructions: 'You answer questions.',
       },
+      {
+        id: 'build',
+        name: 'Build',
+        description: 'build',
+        defaultModelId: 'test',
+        instructions: 'You answer questions.',
+      },
     ],
     initialState: { yolo: false },
   });
@@ -139,6 +146,126 @@ describe('runMC', () => {
     expect(initialThreadId).toBeTruthy();
     expect(result.threadId).toBeTruthy();
     expect(result.threadId).not.toBe(initialThreadId);
+  });
+
+  it('applies the current mode default before sending a fresh prompt when mode is omitted', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Pack-selected answer.') }),
+    });
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    session.model.set({ modelId: 'openai/gpt-5.5' });
+    const originalSendMessage = session.sendMessage.bind(session);
+    let modelIdAtSend: string | undefined;
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Use the selected pack',
+      modeDefaults: { default: packModel!.id },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modelIdAtSend).toBe(packModel!.id);
+  });
+
+  it('preserves a restored thread model when mode is omitted', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Restored answer.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.thread.create();
+
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    const originalSendMessage = session.sendMessage.bind(session);
+    let modelIdAtSend: string | undefined;
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Continue with the restored model',
+      thread: { id: restoredThreadId },
+      modeDefaults: { default: packModel!.id },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modelIdAtSend).toBe('anthropic/restored-model');
+  });
+
+  it('applies an explicit model after restoring a thread', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Explicit answer.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.thread.create();
+
+    const [explicitModel] = await controller.listAvailableModels();
+    expect(explicitModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...explicitModel!, hasApiKey: true }]);
+    const originalSendMessage = session.sendMessage.bind(session);
+    let modelIdAtSend: string | undefined;
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Override the restored model',
+      thread: { id: restoredThreadId },
+      model: explicitModel!.id,
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modelIdAtSend).toBe(explicitModel!.id);
+  });
+
+  it('applies an explicit mode and its model after restoring a thread', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Alternate answer.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.thread.create();
+
+    const [alternateModel] = await controller.listAvailableModels();
+    expect(alternateModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...alternateModel!, hasApiKey: true }]);
+    const originalSendMessage = session.sendMessage.bind(session);
+    let modeIdAtSend: string | undefined;
+    let modelIdAtSend: string | undefined;
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modeIdAtSend = session.mode.get();
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Switch the restored thread mode',
+      thread: { id: restoredThreadId },
+      mode: 'build',
+      modeDefaults: { build: alternateModel!.id },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modeIdAtSend).toBe('build');
+    expect(modelIdAtSend).toBe(alternateModel!.id);
   });
 
   it('yields controller events while iterating, then resolves', async () => {

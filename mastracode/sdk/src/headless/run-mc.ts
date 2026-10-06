@@ -235,39 +235,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   void (async () => {
     armTimeout();
 
-    // --- Config resolution (model / mode / thinking) ---
-    try {
-      if (options.model) {
-        const available = await controller.listAvailableModels();
-        const match = available.find(m => m.id === options.model);
-        if (!match) return fail(`Unknown model: "${options.model}"`);
-        if (!match.hasApiKey) {
-          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-          return fail(`Model "${options.model}" has no API key configured.${keyHint}`);
-        }
-        await session.model.switch({ modelId: options.model });
-      } else if (options.mode) {
-        const modelId = options.modeDefaults?.[options.mode];
-        if (modelId) {
-          const available = await controller.listAvailableModels();
-          const match = available.find(m => m.id === modelId);
-          if (!match) return fail(`Unknown model "${modelId}" configured for mode "${options.mode}"`);
-          if (!match.hasApiKey) {
-            const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-            return fail(`Model "${modelId}" (mode: ${options.mode}) has no API key configured.${keyHint}`);
-          }
-          await session.model.switch({ modelId });
-        }
-        // No configured model for mode → fall through to default (no failure).
-      }
-
-      if (options.thinkingLevel) {
-        await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
-      }
-    } catch (err) {
-      return fail(`Failed to resolve run config: ${(err as Error).message}`);
-    }
-
     // --- Subscribe ---
     unsubscribe = session.subscribe(event => {
       if (settled) return;
@@ -373,17 +340,20 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     }
 
     // --- Thread selection ---
+    let restoredThreadSelection = false;
     try {
       const thread = options.thread;
       if (thread?.id) {
         const resolved = await resolveThread(session, thread.id);
         if ('error' in resolved) return fail(resolved.error);
         await session.thread.switch({ threadId: resolved.threadId });
+        restoredThreadSelection = true;
       } else if (thread?.continueLatest) {
         const threads = await session.thread.list();
         if (threads.length > 0) {
           const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
           await session.thread.switch({ threadId: sorted[0]!.id });
+          restoredThreadSelection = true;
         }
       } else if (!thread?.clone) {
         await session.thread.create();
@@ -396,9 +366,48 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     if (options.thread?.clone) {
       try {
         await session.thread.clone();
+        restoredThreadSelection = true;
       } catch (err) {
         return fail(`Failed to clone thread: ${(err as Error).message}`);
       }
+    }
+
+    // --- Config resolution (model / mode / thinking) ---
+    try {
+      if (options.mode) {
+        await session.mode.switch({ modeId: options.mode });
+      }
+
+      if (options.model) {
+        const available = await controller.listAvailableModels();
+        const match = available.find(m => m.id === options.model);
+        if (!match) return fail(`Unknown model: "${options.model}"`);
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          return fail(`Model "${options.model}" has no API key configured.${keyHint}`);
+        }
+        await session.model.switch({ modelId: options.model });
+      } else if (options.mode || !restoredThreadSelection) {
+        const modeId = options.mode ?? session.mode.get();
+        const modelId = options.modeDefaults?.[modeId];
+        if (modelId) {
+          const available = await controller.listAvailableModels();
+          const match = available.find(m => m.id === modelId);
+          if (!match) return fail(`Unknown model "${modelId}" configured for mode "${modeId}"`);
+          if (!match.hasApiKey) {
+            const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+            return fail(`Model "${modelId}" (mode: ${modeId}) has no API key configured.${keyHint}`);
+          }
+          await session.model.switch({ modelId });
+        }
+        // No configured model for mode → fall through to default (no failure).
+      }
+
+      if (options.thinkingLevel) {
+        await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
+      }
+    } catch (err) {
+      return fail(`Failed to resolve run config: ${(err as Error).message}`);
     }
 
     // --- Title ---
