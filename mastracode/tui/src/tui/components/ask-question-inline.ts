@@ -83,6 +83,8 @@ export class AskQuestionBorderedBox {
   private answerIsNegative = false;
   /** True when created during streaming, before activate() is called */
   private streaming = false;
+  /** Rows the card last took while waiting for an answer; the settled card keeps this height. */
+  private liveHeight = 0;
 
   constructor(
     questionLines: string[],
@@ -152,12 +154,16 @@ export class AskQuestionBorderedBox {
         return this.cachedLines;
       }
       const result = this.renderSafe(width);
+      // Hold the height the card had while it was waiting so answering doesn't pull the prompt up.
+      while (result.length < this.liveHeight) result.push('');
       this.cachedLines = result;
       this.cachedWidth = width;
       this.cachedThemeGeneration = getThemeGeneration();
       return result;
     }
-    return this.renderSafe(width);
+    const result = this.renderSafe(width);
+    this.liveHeight = result.length;
+    return result;
   }
 
   private renderSafe(width: number): string[] {
@@ -172,7 +178,8 @@ export class AskQuestionBorderedBox {
   /**
    * Borderless card with a colored left bar (▎):
    * - waiting for an answer: accent bar, bold question, ❯ options, hint
-   * - answered: collapses to two muted rows, the question and "✓ answer"
+   * - answered: muted question with the options frozen (✓ on the chosen ones), or "✓ answer" for
+   *   free text; a card answered live keeps the height it had while waiting (see render)
    */
   private _render(width: number): string[] {
     const t = theme.getTheme();
@@ -201,8 +208,19 @@ export class AskQuestionBorderedBox {
 
     if (this.answered) {
       const asked = question(s => theme.fg('muted', s));
-      if (this.cancelled)
-        return out(t.border, [...asked, `${theme.fg('error', '✗')} ${theme.fg('dim', '(cancelled)')}`]);
+      const cancelledLine = `${theme.fg('error', '✗')} ${theme.fg('dim', '(cancelled)')}`;
+      if (this.items.length > 0) {
+        // Option prompts keep their list in place: ✓ on the chosen options, the rest dimmed.
+        const chosen = new Set(this.selectedValues ?? (this.selectedValue != null ? [this.selectedValue] : []));
+        const optionLines = this.items.flatMap(item => {
+          const picked = !this.cancelled && chosen.has(item.label);
+          return wrapTextWithAnsi(item.label, Math.max(1, innerWidth - 2)).map(
+            (line, j) => `${picked && j === 0 ? icon : ' '} ${theme.fg(picked ? 'secondary' : 'dim', line)}`,
+          );
+        });
+        return out(t.border, [...asked, '', ...optionLines, ...(this.cancelled ? [cancelledLine] : [])]);
+      }
+      if (this.cancelled) return out(t.border, [...asked, '', cancelledLine]);
       const answers = this.selectedValues ?? (this.selectedValue != null ? [this.selectedValue] : []);
       if (answers.length === 0) return out(t.border, asked);
       const answerLines = answers.flatMap((answer, i) =>
@@ -210,7 +228,7 @@ export class AskQuestionBorderedBox {
           (line, j) => `${j === 0 ? icon : ' '} ${theme.fg('secondary', line)}`,
         ),
       );
-      return out(t.border, [...asked, ...answerLines]);
+      return out(t.border, [...asked, '', ...answerLines]);
     }
 
     // Waiting for an answer
