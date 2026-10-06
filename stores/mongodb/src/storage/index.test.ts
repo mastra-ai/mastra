@@ -1080,6 +1080,39 @@ describe('Hardening: NODE-7556', () => {
     expect(after).toBeNull();
   });
 
+  test.each([
+    ['omitted', undefined],
+    ['null', null],
+  ])('matches an %s sleepTimers field when expecting an empty timer map', async (_, sleepTimers) => {
+    const workflowsStore = await store.getStore('workflows');
+    expect(workflowsStore).toBeDefined();
+
+    const workflowName = `sleep-timer-workflow-${Date.now()}`;
+    const runId = `sleep-timer-run-${Date.now()}`;
+    await workflowsStore!.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        status: 'running',
+        value: {},
+        context: {},
+        activePaths: [],
+        suspendedPaths: {},
+        runId,
+        timestamp: Date.now(),
+        ...(sleepTimers !== undefined ? { sleepTimers } : {}),
+      } as any,
+    });
+
+    const updated = await workflowsStore!.updateWorkflowState({
+      workflowName,
+      runId,
+      opts: { status: 'running', sleepTimers: {}, expectedSleepTimers: {} },
+    });
+
+    expect(updated?.sleepTimers).toEqual({});
+  });
+
   test('F14: updateWorkflowState must throw when the persisted snapshot has no context field', async () => {
     const workflowsStore = await store.getStore('workflows');
     expect(workflowsStore).toBeDefined();

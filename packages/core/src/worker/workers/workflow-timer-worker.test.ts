@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerDeps } from '../worker';
 import { WorkflowTimerWorker } from './workflow-timer-worker';
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 function createTimer(overrides: Record<string, unknown> = {}) {
   return {
     id: 'workflow:run:sleep:0',
@@ -161,5 +169,32 @@ describe('WorkflowTimerWorker', () => {
     expect(harness.workflowsStore.completeWorkflowTimer).not.toHaveBeenCalled();
     expect(harness.workflowsStore.releaseWorkflowTimer).not.toHaveBeenCalled();
     await worker.stop();
+  });
+
+  it('waits for an in-flight poll before stopping', async () => {
+    const harness = createHarness();
+    const published = deferred<void>();
+    harness.workflowsStore.listDueWorkflowTimers
+      .mockResolvedValueOnce({ timers: [], nextPage: 1 })
+      .mockResolvedValueOnce({ timers: [harness.timer], nextPage: 2 });
+    harness.pubsub.publish.mockReturnValueOnce(published.promise);
+    const worker = new WorkflowTimerWorker({ pollInterval: 1_000 });
+
+    await worker.init(harness.deps);
+    await worker.start();
+    const poll = vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => expect(harness.pubsub.publish).toHaveBeenCalledTimes(1));
+
+    let stopped = false;
+    const stop = worker.stop({ drainTimeout: 5_000 }).then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+
+    published.resolve();
+    await poll;
+    await stop;
+    expect(stopped).toBe(true);
   });
 });

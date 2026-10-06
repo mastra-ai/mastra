@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowRunState } from '../../../workflows';
+import type { WorkflowRunState, WorkflowSleepTimer } from '../../../workflows';
 import { InMemoryStore } from '../../mock';
 
 const makeSnapshot = (runId: string, status: WorkflowRunState['status']): WorkflowRunState =>
@@ -41,4 +41,53 @@ describe('WorkflowsInMemory persistWorkflowSnapshot', () => {
     expect(new Date(second!.createdAt).getTime()).toBe(createdAtBefore);
     expect(new Date(second!.updatedAt).getTime()).toBeGreaterThan(createdAtBefore);
   });
+});
+
+describe('WorkflowsInMemory workflow timer ownership', () => {
+  const claimedTimer = {
+    id: 'sleep:0',
+    workflowId: 'wf',
+    runId: 'run-1',
+    stepId: 'sleep',
+    kind: 'sleep',
+    startedAt: 0,
+    dueAt: 1,
+    status: 'claimed',
+    claimToken: 'current-owner',
+    claimedAt: 1,
+    emitStepEvents: false,
+    continuation: {
+      executionPath: [0],
+      resumeSteps: [],
+      stepResults: {},
+      prevResult: { status: 'success', output: undefined, payload: undefined, startedAt: 0, endedAt: 1 },
+      activeStepsPath: {},
+      requestContext: {},
+    },
+  } as WorkflowSleepTimer;
+
+  it.each(['completeWorkflowTimer', 'releaseWorkflowTimer'] as const)(
+    'does not let a stale owner call %s',
+    async method => {
+      const store = new InMemoryStore();
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'wf',
+        runId: 'run-1',
+        snapshot: { ...makeSnapshot('run-1', 'running'), sleepTimers: { [claimedTimer.id]: claimedTimer } },
+      });
+
+      await expect(
+        workflows[method]({
+          workflowId: 'wf',
+          runId: 'run-1',
+          timerId: claimedTimer.id,
+          claimToken: 'stale-owner',
+        }),
+      ).resolves.toBe(false);
+
+      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'run-1' });
+      expect(snapshot?.sleepTimers?.[claimedTimer.id]).toEqual(claimedTimer);
+    },
+  );
 });

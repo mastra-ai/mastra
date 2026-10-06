@@ -171,7 +171,9 @@ export abstract class WorkflowsStorage extends StorageDomain {
     claimToken: string;
   }): Promise<boolean> {
     const snapshot = await this.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-    if (!snapshot?.sleepTimers?.[timerId]) return false;
+    if (!snapshot) return false;
+    const timer = snapshot.sleepTimers?.[timerId];
+    if (timer?.status !== 'claimed' || timer.claimToken !== claimToken) return false;
     const sleepTimers = { ...snapshot.sleepTimers };
     delete sleepTimers[timerId];
     return Boolean(
@@ -201,7 +203,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }): Promise<boolean> {
     const snapshot = await this.loadWorkflowSnapshot({ workflowName: workflowId, runId });
     const timer = snapshot?.sleepTimers?.[timerId];
-    if (!snapshot || !timer) return false;
+    if (!snapshot || timer?.status !== 'claimed' || timer.claimToken !== claimToken) return false;
     return Boolean(
       await this.updateWorkflowState({
         workflowName: workflowId,

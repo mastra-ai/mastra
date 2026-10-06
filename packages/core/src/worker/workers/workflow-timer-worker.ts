@@ -1,5 +1,6 @@
 import type { Event } from '../../events/types';
 import type { StoredWorkflowTimer, WorkflowsStorage } from '../../storage/domains/workflows/base';
+import { assertDrainTimeout } from '../drain-timeout';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps, WorkerStopOptions } from '../worker';
 
@@ -12,6 +13,7 @@ export interface WorkflowTimerWorkerConfig {
 const DEFAULT_POLL_INTERVAL = 1_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_LEASE_DURATION = 30_000;
+const DEFAULT_DRAIN_TIMEOUT = 5_000;
 
 export class WorkflowTimerWorker extends MastraWorker {
   readonly name = 'workflowTimers';
@@ -19,8 +21,8 @@ export class WorkflowTimerWorker extends MastraWorker {
   #config: Required<WorkflowTimerWorkerConfig>;
   #store?: WorkflowsStorage;
   #pollHandle?: ReturnType<typeof setTimeout>;
+  #activePoll?: Promise<void>;
   #running = false;
-  #polling = false;
   #page = 0;
 
   constructor(config: WorkflowTimerWorkerConfig = {}) {
@@ -46,17 +48,29 @@ export class WorkflowTimerWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('WorkflowTimerWorker: call init() before start()');
     this.#running = true;
-    await this.#poll();
+    await this.#runPoll();
     this.#schedulePoll();
   }
 
-  async stop(_options?: WorkerStopOptions): Promise<void> {
+  async stop(options?: WorkerStopOptions): Promise<void> {
     if (!this.#running) return;
     this.#running = false;
     if (this.#pollHandle) {
       clearTimeout(this.#pollHandle);
       this.#pollHandle = undefined;
     }
+
+    const activePoll = this.#activePoll;
+    if (!activePoll) return;
+    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_DRAIN_TIMEOUT, 'WorkflowTimerWorker');
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      activePoll,
+      new Promise<void>(resolve => {
+        timeout = setTimeout(resolve, drainTimeout);
+      }),
+    ]);
+    if (timeout) clearTimeout(timeout);
   }
 
   get isRunning(): boolean {
@@ -67,16 +81,24 @@ export class WorkflowTimerWorker extends MastraWorker {
     if (!this.#running) return;
     this.#pollHandle = setTimeout(async () => {
       try {
-        await this.#poll();
+        await this.#runPoll();
       } finally {
         this.#schedulePoll();
       }
     }, this.#config.pollInterval);
   }
 
+  #runPoll(): Promise<void> {
+    if (this.#activePoll) return this.#activePoll;
+    const poll = this.#poll().finally(() => {
+      if (this.#activePoll === poll) this.#activePoll = undefined;
+    });
+    this.#activePoll = poll;
+    return poll;
+  }
+
   async #poll(): Promise<void> {
-    if (!this.#store || !this.deps || this.#polling) return;
-    this.#polling = true;
+    if (!this.#store || !this.deps) return;
     try {
       const now = Date.now();
       const { timers, nextPage } = await this.#store.listDueWorkflowTimers({
@@ -88,8 +110,6 @@ export class WorkflowTimerWorker extends MastraWorker {
       await Promise.all(timers.map(timer => this.#fire(timer, now)));
     } catch (error) {
       this.deps.logger.error('WorkflowTimerWorker: failed to poll workflow timers', { error });
-    } finally {
-      this.#polling = false;
     }
   }
 
@@ -103,6 +123,15 @@ export class WorkflowTimerWorker extends MastraWorker {
       leaseDuration: this.#config.leaseDuration,
     });
     if (!claimed) return;
+    if (!this.#running) {
+      await this.#store.releaseWorkflowTimer({
+        workflowId: claimed.workflowId,
+        runId: claimed.runId,
+        timerId: claimed.id,
+        claimToken: claimed.claimToken,
+      });
+      return;
+    }
 
     const event: Event = {
       id: claimed.id,

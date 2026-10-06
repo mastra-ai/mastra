@@ -238,7 +238,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         filter['snapshot.status'] = { $in: Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus] };
       }
       if (expectedSleepTimers !== undefined) {
-        filter['snapshot.sleepTimers'] = expectedSleepTimers ?? {};
+        filter['snapshot.sleepTimers'] =
+          Object.keys(expectedSleepTimers).length === 0 ? { $in: [{}, null] } : expectedSleepTimers;
       }
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
