@@ -373,9 +373,15 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async #assertExpectedAccessEpoch(session: ClientSession, expectedAccessEpoch?: number): Promise<void> {
     if (expectedAccessEpoch === undefined) return;
+    // MongoDB transactions only conflict on writes, so the fence writes the access-state document: a concurrent
+    // epoch bump then aborts one side instead of letting this mutation commit under revoked authority.
     const row = await (
       await this.#collection(TABLE_KNOWLEDGE_ACCESS_STATE)
-    ).findOne({ id: 'global' }, sessionOptions(session));
+    ).findOneAndUpdate(
+      { id: 'global' },
+      { $inc: { fence: 1 } },
+      { ...sessionOptions(session), returnDocument: 'after' },
+    );
     if (Number(row?.epoch ?? 0) !== expectedAccessEpoch)
       throw new KnowledgeConflictError('Knowledge access changed during mutation authorization');
   }

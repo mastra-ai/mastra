@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KnowledgeConflictError,
   KnowledgeSchemaError,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
@@ -62,6 +65,36 @@ describe('MySQL canonical Knowledge support', () => {
     await store.init();
     const [rows] = await pool.query(`SELECT version FROM \`${TABLE_KNOWLEDGE_SCHEMA}\` WHERE id='canonical'`);
     expect(Number((rows as Array<{ version: number }>)[0]?.version)).toBe(KNOWLEDGE_STORAGE_SCHEMA_VERSION);
+  });
+
+  it('rejects a fenced mutation when a grant change commits while it waits on the access epoch', async () => {
+    const store = createStore();
+    await store.init();
+    const scope = await store.createNode({ name: `Fence scope ${randomUUID()}`, isScope: true, scopeIds: [] });
+    const node = await store.createNode({ name: `Fenced ${randomUUID()}`, scopeIds: [scope.id] });
+    const epoch = await store.getAccessEpoch();
+    const grantChange = await pool.getConnection();
+    try {
+      await grantChange.beginTransaction();
+      await grantChange.query(`UPDATE \`${TABLE_KNOWLEDGE_ACCESS_STATE}\` SET epoch=epoch+1 WHERE id='global'`);
+      const mutation = store.updateNode({
+        id: node.id,
+        version: node.version,
+        name: 'Renamed',
+        expectedAccessEpoch: epoch,
+      });
+      const settled = mutation.then(
+        () => 'committed',
+        () => 'rejected',
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await grantChange.commit();
+      await settled;
+      await expect(mutation).rejects.toBeInstanceOf(KnowledgeConflictError);
+    } finally {
+      grantChange.release();
+    }
+    expect((await store.getNode(node.id))?.name).toBe(node.name);
   });
 
   it('explicitly resets retired Knowledge tables and leaves other storage untouched', async () => {
