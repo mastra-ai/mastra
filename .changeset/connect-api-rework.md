@@ -38,7 +38,7 @@ tools({ providers: ['linear', 'resend'] }); // only these resolve
 tools({ providers: { linear: true, github: false } }); // enable / exclude
 ```
 
-Unknown provider ids now fail with `invalid_options` instead of warning once and silently resolving nothing.
+Unknown provider ids now fail with `invalid_options` instead of silently resolving nothing. `channels()` throws at call time; `tools()` checks ids against the platform catalog when it resolves tools, and if the catalog can't be reached it logs a warning and skips the id.
 
 In `channels()`, `slack` is accepted as an alias for the platform's `slack-channels` key, so the common spelling needs no quotes:
 

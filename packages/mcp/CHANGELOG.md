@@ -1,5 +1,23 @@
 # @mastra/mcp
 
+## 2.2.0-alpha.2
+
+### Patch Changes
+
+- Fixed MCP resource reads dropping `mimeType` and `_meta`. Reading a resource from a server registered through `MCPClient` (`MCPClientServerProxy.readResource()`) and reading an app resource from a local `MCPServer` (`MCPServer.readResource()`, used by Studio) now return the same metadata as `listResources()` and the MCP `resources/read` request, so MCP App `ui://` resources keep their content type and UI settings such as CSP. Fixes #23068. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Fixed MCP Apps not opening in hosts that read the app link from a tool call result. `MCPServer` now returns a tool's `_meta.ui.resourceUri` (and the flat `ui/resourceUri` key for older hosts) on successful `tools/call` results, as it already does on `tools/list`. `getMcpCallToolMeta(result)` from Mastra's own client now returns the link. Fixes #21277. ([#25990](https://github.com/mastra-ai/mastra/pull/25990))
+
+  Two related cases change with it:
+
+  - **Tools that declare two different links:** `tools/list` and `tools/call` now both report the nested `ui.resourceUri` under both keys, so hosts reading either key open the same app.
+  - **Tools that declare only the flat `ui/resourceUri` key:** the server now advertises the MCP Apps extension for them, as it does for the nested form.
+
+- Resource read results from MCP servers now include the optional `mimeType` and `_meta` fields, both in the `MCPServerBase.readResource()` type and in the `POST /mcp/:serverId/resources/read` response returned to `readMcpServerResource()`. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 2.2.0-alpha.1
 
 ### Minor Changes

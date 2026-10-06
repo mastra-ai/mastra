@@ -1,5 +1,20 @@
 # @mastra/memory
 
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Fixed Observational Memory degenerate-output detection so very long lines are truncated and retained, repeated short lines share the existing bounded budget, and genuinely repetitive output remains rejected. ([#25212](https://github.com/mastra-ai/mastra/pull/25212))
+
+  Fixes #24354.
+
+- Fixed Observational Memory recording completed background-task tool results as `null`. A `null` stored model output now falls back to the actual tool result, matching how `@mastra/core` replays tool results, so the Observer, token counting, and recall see the real result. ([#25961](https://github.com/mastra-ai/mastra/pull/25961))
+
+- Bumped probe-image-size to ^7.4.0 in @mastra/memory to pick up the fix for a quadratic-time denial of service in its SVG parser (GHSA-gjj5-9665-rwrc). Bumped the smol-toml pin in @mastra/code-sdk from 1.8.0 to 1.9.0 for a parser security fix. No API changes. ([#25966](https://github.com/mastra-ai/mastra/pull/25966))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 1.36.0-alpha.4
 
 ### Patch Changes
