@@ -40,8 +40,6 @@ function cloneStep(cloneUrl: string, dir: string) {
   return { method: 'runCmd', args: [`git clone --depth=1 --single-branch '${cloneUrl}' '${dir}'`] };
 }
 
-// Step order: the clone carries no commit and the first setup pass follows it,
-// so both cache across commits; the pin and the second setup pass come after.
 describe('createRepoTemplate', () => {
   it('is side-effect-free until the lazy definition is resolved', async () => {
     const resolveHead = headOf(SHA_1);
@@ -63,7 +61,6 @@ describe('createRepoTemplate', () => {
       schemaVersion: 1,
       operations: [
         { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
-        { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
         { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
         { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
@@ -110,11 +107,7 @@ describe('createRepoTemplate', () => {
 
     const operations = serializeSandboxTemplate(template!).operations;
     const setupOps = operations.filter(op => op.method === 'runCmd' && String(op.args[0]).startsWith('cd '));
-    // Once before the pin, once after.
-    expect(setupOps).toEqual([
-      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
-      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
-    ]);
+    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "widgets" && pnpm i'] }]);
   });
 
   it('treats an all-blank setupCommand as absent', async () => {
@@ -537,14 +530,11 @@ describe('createRepoTemplate with repos', () => {
       { method: 'runCmd', args: ['mkdir -p "/home/user/workspace"'] },
       { method: 'setWorkdir', args: ['/home/user/workspace'] },
       cloneStep(widgets, 'widgets'),
-      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
       { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
       { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
       markerStepAt(repoSetupMarkerPath('widgets'), 'pnpm i'),
       cloneStep(gadgets, 'gadgets'),
-      { method: 'runCmd', args: ['cd "gadgets" && npm ci'] },
-      { method: 'runCmd', args: ['cd "gadgets" && npm run build'] },
       { method: 'runCmd', args: [`git -C "gadgets" fetch origin ${SHA_2}`] },
       { method: 'runCmd', args: [`git -C "gadgets" checkout ${SHA_2}`] },
       { method: 'runCmd', args: ['cd "gadgets" && npm ci'] },
@@ -670,12 +660,10 @@ describe('createRepoTemplate with repos', () => {
         `( cd "widgets" && sh -c 'exit 7' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'widgets' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
       ],
     };
-    expect(guardedOps[1]).toEqual(guardStep);
-    expect(guardedOps[4]).toEqual(guardStep);
-    expect(plainOps[1]).toEqual({ method: 'runCmd', args: ['cd "widgets" && exit 7'] });
-    expect(plainOps[4]).toEqual({ method: 'runCmd', args: ['cd "widgets" && exit 7'] });
+    expect(guardedOps[3]).toEqual(guardStep);
+    expect(plainOps[3]).toEqual({ method: 'runCmd', args: ['cd "widgets" && exit 7'] });
     // Clone, pin, marker and workspace steps are identical in both.
-    const rest = (ops: typeof guardedOps) => ops.filter((_, i) => i !== 1 && i !== 4);
+    const rest = (ops: typeof guardedOps) => ops.filter((_, i) => i !== 3);
     expect(rest(guardedOps)).toEqual(rest(plainOps));
     expect(
       rest(guardedOps)
@@ -700,7 +688,6 @@ describe('createRepoTemplate with repos', () => {
       const commands = serializeSandboxTemplate(template!).operations.map(op => String(op.args[0]));
       expect(commands).toEqual([
         `git clone --depth=1 --single-branch 'https://github.com/acme/no-head-list' 'no-head-list'`,
-        'cd "no-head-list" && make',
         'cd "no-head-list" && make',
         markerStepAt(repoSetupMarkerPath('no-head-list'), 'make').args[0],
         `git clone --depth=1 --single-branch '${gadgets}' 'gadgets'`,
