@@ -250,11 +250,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
     }
     const addresses = input.addresses ? new Set(input.addresses) : undefined;
+    const ids = input.ids ? new Set(input.ids) : undefined;
     const summaries: KnowledgeScopeNodeSummary[] = [];
     for (const [id, scope] of liveScopes) {
       const { address } = scope;
       if (candidateIds && !candidateIds.has(id)) continue;
       if (addresses && !addresses.has(address)) continue;
+      if (ids && !ids.has(id)) continue;
       if (after && (scope.name < after.name || (scope.name === after.name && id <= after.id))) continue;
       summaries.push({
         id,
