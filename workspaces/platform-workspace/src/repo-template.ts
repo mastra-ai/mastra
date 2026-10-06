@@ -79,7 +79,7 @@ export interface PlatformRepoTemplateOptions {
    * cached build steps. Each command runs twice: once right after the clone,
    * so the install layer caches independently of the commit, and again after
    * the checkout is pinned to the resolved head, so the image matches that
-   * commit. (This ordering replaced clone → pin → setup; templates built
+   * commit. Commands must be safe to repeat in the same checkout. (This ordering replaced clone → pin → setup; templates built
    * before the change rebuild once, then reuse their clone and install layers
    * across commits.)
    */
@@ -93,9 +93,16 @@ export interface PlatformRepoTemplateOptions {
    * rotation. Each repository writes `.mastra-sandbox/repos/<repo>`
    * (`setupMarkerContent` of its commands) once every step for it ran.
    *
+   * Every credential is a build env visible to every build step, so any
+   * repository's setup command can read the other repositories' tokens: only
+   * list repositories whose setup commands are trusted together.
+   *
    * Mutually exclusive with `getRepositoryAccess`. If any entry's access
    * cannot be resolved the whole template degrades to resources-only: a
    * sandbox missing one repository is worse than one missing all of them.
+   * Two entries that would clone into the same directory make the resolver
+   * reject (PlatformSandbox then logs and boots the provider default). An
+   * empty array behaves like no repository.
    */
   repos?: PlatformRepoTemplateRepository[];
   /**
@@ -105,9 +112,9 @@ export interface PlatformRepoTemplateOptions {
    */
   workspaceSetupCommand?: string | string[];
   /**
-   * `repos` only. When true a failing per-repository setup command appends
-   * that repository's directory name to `.mastra-sandbox/setup-failed` and
-   * the build continues; clone, pin, workspace and marker steps still fail
+   * `repos` only. When true a failing per-repository setup command records
+   * that repository's directory name in `.mastra-sandbox/setup-failed` (one
+   * line per repository, whichever passes failed) and the build continues; clone, pin, workspace and marker steps still fail
    * the build. A per-repository marker then means "every step ran", so
    * consumers check the failure list first. Default false: any failure fails
    * the build, as in the single form.
