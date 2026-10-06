@@ -133,3 +133,29 @@ export const PreviousValueInRow: Story = {
     </div>
   ),
 };
+
+/**
+ * `isLoading` on `ValueRow` and `Footer`: skeletons in their own line boxes, so the card keeps
+ * its height when the numbers land. The label stays; it doesn't depend on data. Shown next to a
+ * loaded card for comparison.
+ */
+export const Loading: Story = {
+  render: () => (
+    <div className="flex flex-wrap gap-4">
+      {[true, false].map(isLoading => (
+        <div key={String(isLoading)} style={{ width: '20rem' }}>
+          <MetricsKpiCard>
+            <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+            <MetricsKpiCard.ValueRow isLoading={isLoading}>
+              <MetricsKpiCard.Value>
+                <CompactNumber value={12310} />
+              </MetricsKpiCard.Value>
+              <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10,676" />
+            </MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Footer detail="41 runs today" prevValue="10,676" isLoading={isLoading} />
+          </MetricsKpiCard>
+        </div>
+      ))}
+    </div>
+  ),
+};

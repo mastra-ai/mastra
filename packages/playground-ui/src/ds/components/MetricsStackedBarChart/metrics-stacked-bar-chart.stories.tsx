@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 
-import { count, requestsByHour, statusSeries } from '../MetricsCard/metrics-story-data';
+import { MetricsCard } from '../MetricsCard';
+import { count, coldStartSeries, ms, requestsByHour, statusSeries } from '../MetricsCard/metrics-story-data';
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
+import { Txt } from '../Txt';
 import { MetricsStackedBarChart } from './metrics-stacked-bar-chart';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
@@ -155,3 +158,65 @@ export const WithOverlay: Story = {
 export const Loading: Story = {
   args: { data: requestsByHour, series: statusSeries, isLoading: true },
 };
+
+/**
+ * `height="fill"` in two cards of different content heights: each chart takes its card's free
+ * height (the content must be a flex column), so both cards end on one line.
+ */
+export const FillHeight: Story = {
+  render: () => {
+    const fill = { height: 'fill', xLabels: 'edges', showYAxis: false, valueFormatter: count } as const;
+    const cards = [
+      {
+        title: 'Requests',
+        description: 'Responses by status class. A wrapping description makes this top bar taller.',
+        chart: <MetricsStackedBarChart {...fill} data={requestsByHour} series={statusSeries} />,
+      },
+      {
+        title: 'Cold starts',
+        description: 'Requests that woke a stopped app.',
+        chart: (
+          <MetricsStackedBarChart
+            {...fill}
+            data={requestsByHour}
+            series={coldStartSeries}
+            overlay={{ dataKey: 'wakeMs', label: 'Avg wake time', color: 'var(--chart-blue)', valueFormatter: ms }}
+          />
+        ),
+      },
+    ];
+    return (
+      <div className="grid w-[min(56rem,calc(100vw-3rem))] grid-cols-2 gap-4">
+        {cards.map(card => (
+          <MetricsCard key={card.title} className="min-h-0! min-w-0!">
+            <MetricsCard.TopBar>
+              <MetricsCard.TitleAndDescription title={card.title} description={card.description} />
+            </MetricsCard.TopBar>
+            <MetricsCard.Content className="flex h-full flex-col">{card.chart}</MetricsCard.Content>
+          </MetricsCard>
+        ))}
+      </div>
+    );
+  },
+};
+
+function BucketClickDemo() {
+  const [clicked, setClicked] = useState<string>();
+  return (
+    <div className="grid w-[min(48rem,calc(100vw-3rem))] gap-3">
+      <MetricsStackedBarChart
+        data={requestsByHour}
+        series={statusSeries}
+        valueFormatter={count}
+        showYAxis={false}
+        onBucketClick={row => setClicked(`${String(row.time)}: ${count(Number(row.total))} requests`)}
+      />
+      <Txt variant="body-sm" tone={clicked ? 'ink' : 'faint'}>
+        {clicked ? `Clicked bucket ${clicked}` : 'Click a column, e.g. to open its traces.'}
+      </Txt>
+    </div>
+  );
+}
+
+/** `onBucketClick`: the whole column is the target (pointer cursor), with the bucket's row. */
+export const BucketClick: Story = { render: () => <BucketClickDemo /> };

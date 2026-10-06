@@ -1,12 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { EyeIcon, LogsIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { fn } from 'storybook/test';
 
 import { Button } from '../Button/Button';
 import { MetricsCard } from '../MetricsCard';
-import { errorRateSeries, ms, percent, percentileSeries, requestsByHour } from '../MetricsCard/metrics-story-data';
+import {
+  count,
+  errorRateSeries,
+  ms,
+  percent,
+  percentileSeries,
+  requestsByHour,
+  requestsVsPreviousSeries,
+} from '../MetricsCard/metrics-story-data';
 import { Tab, TabContent, TabList, Tabs } from '../Tabs';
 import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
@@ -191,4 +199,99 @@ export const WithoutYAxis: Story = {
       <MetricsLineChart {...args} />
     </div>
   ),
+};
+
+const wide = (node: ReactNode) => <div className="w-[min(48rem,calc(100vw-3rem))]">{node}</div>;
+
+/**
+ * This period against the last: the current series solid with `emphasis`, the comparison
+ * `dashed` (a plain line, no fill). Rows carry `tsMs`, so labels sit on round clock times.
+ */
+export const VsPreviousPeriod: Story = {
+  args: { data: requestsByHour, series: requestsVsPreviousSeries, valueFormatter: count },
+  render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/** `emphasis` on the series to read first (P95): half a pixel heavier than its companions. */
+export const Emphasis: Story = {
+  args: {
+    data: requestsByHour,
+    series: percentileSeries.map(s => ({ ...s, emphasis: s.dataKey === 'p95' })),
+    valueFormatter: ms,
+  },
+  render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/** `xLabels="edges"`: only the first and last bucket, pinned to the plot edges, for small cards. */
+export const EdgeLabels: Story = {
+  args: { data: requestsByHour, series: errorRateSeries, valueFormatter: percent, xLabels: 'edges', showYAxis: false },
+  render: args => (
+    <div className="w-[min(24rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+function FillCard({
+  title,
+  description,
+  summary,
+  children,
+}: {
+  title: string;
+  description: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <MetricsCard className="min-h-0! min-w-0!">
+      <MetricsCard.TopBar>
+        <MetricsCard.TitleAndDescription title={title} description={description} />
+        <MetricsCard.Summary value={summary} />
+      </MetricsCard.TopBar>
+      <MetricsCard.Content className="flex h-full flex-col">{children}</MetricsCard.Content>
+    </MetricsCard>
+  );
+}
+
+/**
+ * `height="fill"`: the chart takes the card's free height (the content must be a flex column).
+ * The left card's description wraps to more lines, yet both cards end on one line because each
+ * chart absorbs the difference.
+ */
+export const FillHeight: Story = {
+  render: () => (
+    <div className="grid w-[min(56rem,calc(100vw-3rem))] grid-cols-2 gap-4">
+      <FillCard
+        title="Requests"
+        description="Requests per hour against the same hours of the previous period, so a dip or a surge reads at a glance."
+        summary="63.9K"
+      >
+        <MetricsLineChart
+          data={requestsByHour}
+          series={requestsVsPreviousSeries}
+          valueFormatter={count}
+          height="fill"
+          xLabels="edges"
+          showYAxis={false}
+        />
+      </FillCard>
+      <FillCard title="Latency" description="Edge duration percentiles." summary="2.3s">
+        <MetricsLineChart
+          data={requestsByHour}
+          series={percentileSeries}
+          valueFormatter={ms}
+          height="fill"
+          xLabels="edges"
+          showYAxis={false}
+        />
+      </FillCard>
+    </div>
+  ),
+};
+
+/** `isLoading`: a line ghost in the chart's footprint. The legend stays, built from the series. */
+export const Loading: Story = {
+  args: { data: requestsByHour, series: requestsVsPreviousSeries, isLoading: true },
+  render: args => wide(<MetricsLineChart {...args} />),
 };
