@@ -34,8 +34,17 @@ describe('handleKnowledgeCommand', () => {
     const showError = vi.fn();
     await handleKnowledgeCommand({ showError } as any);
     expect(showError).toHaveBeenCalledWith(
-      'Knowledge inspection is unavailable. Configure the default Knowledge runtime for this session.',
+      'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1.',
     );
+    expect(mocks.showModalOverlay).not.toHaveBeenCalled();
+  });
+
+  it('shows the reason startup reported when Knowledge could not be opened', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const showError = vi.fn();
+    const reason = 'Knowledge is unavailable: Knowledge schema reset required: Missing Knowledge v2 tables.';
+    await handleKnowledgeCommand({ showError, knowledgeInspectorUnavailableReason: reason } as any);
+    expect(showError).toHaveBeenCalledWith(reason);
     expect(mocks.showModalOverlay).not.toHaveBeenCalled();
   });
 
