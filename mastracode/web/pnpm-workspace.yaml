@@ -19,6 +19,8 @@ overrides:
   'nanoid@<5.1.16': 5.1.16
   # Vanta 2026-10-05 (Aikido): yaml 2.9.0 (vite optional peer) -> 2.9.1
   'yaml@>=2.0.0 <2.9.1': 2.9.1
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 enableGlobalVirtualStore: true
 # Mirrors the monorepo root policy: postinstall build scripts for these deps
 # are unnecessary (esbuild works without its install script under pnpm's

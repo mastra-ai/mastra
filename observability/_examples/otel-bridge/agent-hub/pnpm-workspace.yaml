@@ -52,6 +52,8 @@ overrides:
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
   'zod@<4.0.0': 4.6.5
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 allowBuilds:
   esbuild: false
   protobufjs: false
