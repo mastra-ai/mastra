@@ -1099,7 +1099,7 @@ export class SessionThread {
 
       if (Object.keys(updates).length > 0) {
         try {
-          await session.state.set(updates as Record<string, unknown>);
+          await session.state.set(updates);
         } catch {
           // Old OM overrides must not prevent restoring the model selection.
         }
@@ -2564,7 +2564,7 @@ class SessionState<TState = unknown> {
     shouldApply: () => boolean,
     onApply: () => void,
   ): Promise<boolean> {
-    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const updateSnapshot = { ...updates };
     const run = this.#updateQueue.then(() => this.apply(updateSnapshot, undefined, shouldApply, commit, onApply));
     this.#updateQueue = run.then(
       () => undefined,
