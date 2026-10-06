@@ -40,17 +40,6 @@ import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentTraces from './pages/agents/agent-traces';
-import CmsAgentAgentsPage from './pages/cms/agents/agents';
-import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
-import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
-import CmsAgentInformationPage from './pages/cms/agents/information';
-import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
-import CmsAgentMemoryPage from './pages/cms/agents/memory';
-import CmsAgentScorersPage from './pages/cms/agents/scorers';
-import CmsAgentSkillsPage from './pages/cms/agents/skills';
-import CmsAgentToolsPage from './pages/cms/agents/tools';
-import CmsAgentVariablesPage from './pages/cms/agents/variables';
-import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
 import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
@@ -164,18 +153,6 @@ const MinimalRootLayout = () => {
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
-
-const agentCmsChildRoutes = [
-  { index: true, element: <CmsAgentInformationPage /> },
-  { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
-  { path: 'tools', element: <CmsAgentToolsPage /> },
-  { path: 'agents', element: <CmsAgentAgentsPage /> },
-  { path: 'scorers', element: <CmsAgentScorersPage /> },
-  { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
-  { path: 'skills', element: <CmsAgentSkillsPage /> },
-  { path: 'memory', element: <CmsAgentMemoryPage /> },
-  { path: 'variables', element: <CmsAgentVariablesPage /> },
-];
 
 // eslint-disable-next-line react-refresh/only-export-components -- routes are consumed by the router and tests.
 export const routes: RouteObject[] = [
@@ -327,16 +304,6 @@ export const routes: RouteObject[] = [
       },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
-      {
-        path: '/cms/agents/create',
-        element: <CreateLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
-      {
-        path: '/cms/agents/:agentId/edit',
-        element: <EditLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
       {
         path: '/cms/scorers/create',
         element: <CmsScorersCreatePage />,

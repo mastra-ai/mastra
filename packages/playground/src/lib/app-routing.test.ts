@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import { paths } from './app-routing';
 
+describe('agent editor links', () => {
+  describe('when creating a stored agent', () => {
+    it('opens Agent Builder', () => {
+      expect(paths.cmsAgentCreateLink()).toBe('/agent-builder/agents/create');
+    });
+  });
+
+  describe('when editing a stored agent', () => {
+    it('opens the Agent Builder editor', () => {
+      expect(paths.cmsAgentEditLink('agent-1')).toBe('/agent-builder/agents/agent-1/edit');
+    });
+  });
+});
+
 describe('paths.scorerLink', () => {
   describe('when no params are given', () => {
     it('links to the scorer page', () => {
