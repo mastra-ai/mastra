@@ -7711,6 +7711,7 @@
         "qwen3.7-plus",
         "qwen3.8-flash",
         "qwen3.8-max",
+        "space-bunny",
         "space-bunny-free"
       ],
       "docUrl": "https://opencode.ai/docs/go",
@@ -7753,7 +7754,7 @@
           "npm": "@ai-sdk/anthropic"
         }
       },
-      "deprecatedModels": ["grok-4.5", "kimi-k2.6", "qwen3.6-plus", "qwen3.7-max"]
+      "deprecatedModels": ["grok-4.5", "kimi-k2.6", "qwen3.6-plus", "qwen3.7-max", "space-bunny-free"]
     },
     "openreason": {
       "url": "https://api.openreason.app/v1",
@@ -7779,7 +7780,7 @@
       "apiKeyHeader": "Authorization",
       "name": "AKI.IO",
       "models": [
-        "deepseek-v4-flash-0731-284b",
+        "deepseek-v4.1-flash-552b",
         "gemma4-26b",
         "glm5.3-754b",
         "gpt-oss-120b",
@@ -16495,12 +16496,13 @@
       "qwen3.7-plus",
       "qwen3.8-flash",
       "qwen3.8-max",
+      "space-bunny",
       "space-bunny-free"
     ],
     "openreason": ["deepseek-ai/deepseek-v4-flash-0731", "moonshotai/kimi-k2.7-code", "openai/gpt-oss-120b"],
     "lmstudio": ["openai/gpt-oss-20b", "qwen/qwen3-30b-a3b-2507", "qwen/qwen3-coder-30b"],
     "aki-io": [
-      "deepseek-v4-flash-0731-284b",
+      "deepseek-v4.1-flash-552b",
       "gemma4-26b",
       "glm5.3-754b",
       "gpt-oss-120b",
