@@ -416,9 +416,10 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
     await mastra.shutdown();
   });
 
-  it('does NOT tag events for a distributed unscoped internal workflow as localOnly', async () => {
+  it('does NOT tag events for a distributed workflow as localOnly when this process has no workers', async () => {
     const pubsub = new RecordingPushOnlyPubSub();
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    expect(mastra.__hasLocalWorkflowExecution()).toBe(false);
     mastra.__registerInternalWorkflow(makeNoopWorkflow('durable-agentic-loop') as any, undefined, {
       distributed: true,
     });
@@ -436,6 +437,40 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
     );
 
     expect(pubsub.calls.map(c => c.localOnly)).toEqual([false, false, false]);
+    await mastra.shutdown();
+  });
+
+  it('keeps a distributed workflow pinned while this process runs workers, but sends finish events across', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('durable-agentic-loop') as any, undefined, {
+      distributed: true,
+    });
+    await mastra.startWorkers();
+    expect(mastra.__hasLocalWorkflowExecution()).toBe(true);
+    pubsub.calls.length = 0;
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('durable-agentic-loop', 'run-1'));
+    await mastra.pubsub.publish(
+      'workflows',
+      makeStepRunEvent('nested', 'nested-run', { workflowId: 'durable-agentic-loop', runId: 'run-1' }),
+    );
+    // The caller waiting on the result may be another process, so finish always crosses.
+    await mastra.pubsub.publish('workflows-finish', {
+      type: 'workflow.end',
+      runId: 'run-1',
+      data: { workflowId: 'durable-agentic-loop', runId: 'run-1' },
+    } as Event);
+
+    expect(
+      pubsub.calls
+        .filter(c => c.event.runId === 'run-1' || c.event.runId === 'nested-run')
+        .map(c => [c.topic, c.localOnly]),
+    ).toEqual([
+      ['workflows', true],
+      ['workflows', true],
+      ['workflows-finish', false],
+    ]);
     await mastra.shutdown();
   });
 

@@ -1054,7 +1054,7 @@ export class Mastra<
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
                 const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId)) return true;
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1062,7 +1062,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -3923,14 +3923,19 @@ export class Mastra<
   }
 
   /**
-   * Whether a run of this internal workflow can only execute in this process,
-   * so its pubsub events must stay local. A run-scoped registration always
-   * qualifies; an unscoped one does unless it was registered `distributed`.
+   * Whether this internal workflow event must stay in this process. A
+   * run-scoped registration always qualifies; an unscoped one does unless it
+   * was registered `distributed`. A distributed workflow's `workflows` events
+   * stay local while this process runs workflow workers (so runs stay pinned
+   * to the process that started them) and only cross processes when it
+   * can't run them itself. Its `workflows-finish` events always cross, since
+   * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
-    return !this.#distributedInternalWorkflowIds.has(id);
+    if (!this.#distributedInternalWorkflowIds.has(id)) return true;
+    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
   }
 
   /**
