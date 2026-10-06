@@ -11,18 +11,22 @@ import type { AnySpan, Span } from '@mastra/core/observability';
  * `undefined` until the Mastra constructor initializes context storage — so
  * apps without observability configured pay nothing and nothing throws.
  *
- * Privacy invariant: spans carry method, normalized path, connection id, and
- * response status only. Never record query strings, headers, request bodies,
- * or response bodies — proxy traffic routinely contains vendor data and the
- * credentials endpoint returns secrets.
+ * Privacy invariant: spans carry method, a safe route template, connection id,
+ * and response status only. Never record query strings, headers, request
+ * bodies, response bodies, or vendor path segments — proxy paths are built by
+ * generated templates and can embed credentials or resource identifiers (e.g.
+ * HubSpot's whoami interpolates the access token into its endpoint path).
  */
 
 export interface PlatformCallDescriptor {
   method: string;
-  /** Request path with the query string stripped. */
-  path: string;
-  /** Path with the connection/project id segment replaced, for grouping. */
-  normalizedPath: string;
+  /**
+   * Safe route template: connection/project ids replaced with placeholders
+   * and everything after `/proxy/` collapsed to `*` so vendor-controlled
+   * path segments (which may embed secrets or PII) never enter spans.
+   */
+  route: string;
+  isProxy: boolean;
   connectionId?: string;
   projectId?: string;
 }
@@ -32,20 +36,29 @@ const ID_SEGMENT_ROUTES = [
   { prefix: '/v2/projects/', placeholder: '{projectId}', key: 'projectId' as const },
 ];
 
-/** Describes a platform request path for span naming without leaking query params. */
+const PROXY_SEGMENT = '/proxy/';
+
+/** Describes a platform request for span naming without leaking query params, ids, or vendor path segments. */
 export function describePlatformCall(method: string, rawPath: string): PlatformCallDescriptor {
   const path = rawPath.split('?')[0]!;
-  const descriptor: PlatformCallDescriptor = { method, path, normalizedPath: path };
-  for (const route of ID_SEGMENT_ROUTES) {
-    if (!path.startsWith(route.prefix)) continue;
-    const rest = path.slice(route.prefix.length);
+  let route = path;
+  const descriptor: PlatformCallDescriptor = { method, route, isProxy: false };
+  for (const idRoute of ID_SEGMENT_ROUTES) {
+    if (!path.startsWith(idRoute.prefix)) continue;
+    const rest = path.slice(idRoute.prefix.length);
     const slash = rest.indexOf('/');
     const id = slash === -1 ? rest : rest.slice(0, slash);
     const tail = slash === -1 ? '' : rest.slice(slash);
-    descriptor[route.key] = safeDecode(id);
-    descriptor.normalizedPath = `${route.prefix}${route.placeholder}${tail}`;
+    descriptor[idRoute.key] = safeDecode(id);
+    route = `${idRoute.prefix}${idRoute.placeholder}${tail}`;
     break;
   }
+  const proxyIndex = route.indexOf(PROXY_SEGMENT);
+  if (proxyIndex !== -1) {
+    descriptor.isProxy = true;
+    route = `${route.slice(0, proxyIndex + PROXY_SEGMENT.length)}*`;
+  }
+  descriptor.route = route;
   return descriptor;
 }
 
@@ -67,13 +80,12 @@ export function startPlatformCallSpan(descriptor: PlatformCallDescriptor): Span<
   try {
     parent = resolveCurrentSpan();
     if (!parent) return undefined;
-    const isProxy = descriptor.normalizedPath.includes('/proxy/');
     return parent.createChildSpan({
       type: SpanType.GENERIC,
-      name: `connect.${isProxy ? 'proxy' : 'platform'} ${descriptor.method} ${descriptor.normalizedPath}`,
+      name: `connect.${descriptor.isProxy ? 'proxy' : 'platform'} ${descriptor.method} ${descriptor.route}`,
       metadata: {
         method: descriptor.method,
-        path: descriptor.path,
+        route: descriptor.route,
         ...(descriptor.connectionId ? { connectionId: descriptor.connectionId } : {}),
         ...(descriptor.projectId ? { projectId: descriptor.projectId } : {}),
       },
@@ -93,14 +105,19 @@ export function endPlatformCallSpan(span: Span<SpanType.GENERIC> | undefined, st
   }
 }
 
-/** Records a transport-level failure on a platform-call span. Never throws. */
+/**
+ * Records a transport-level failure on a platform-call span. The original
+ * error message is never recorded — fetch failures can embed the request URL,
+ * which may carry secret query params — only the error's constructor name.
+ * Never throws.
+ */
 export function errorPlatformCallSpan(span: Span<SpanType.GENERIC> | undefined, error: unknown): void {
   if (!span) return;
   try {
-    span.error({
-      error: error instanceof Error ? error : new Error(String(error)),
-      endSpan: true,
-    });
+    const name = error instanceof Error ? error.name : 'Error';
+    const safeError = new Error(`connect request failed (${name})`);
+    safeError.name = name;
+    span.error({ error: safeError, endSpan: true });
   } catch {
     // instrumentation must never break a request
   }

@@ -33,21 +33,31 @@ afterEach(() => {
 describe('describePlatformCall', () => {
   it('strips query strings so query params never reach span metadata', () => {
     const descriptor = describePlatformCall('GET', '/v2/projects/p1/connections?secret=value');
-    expect(descriptor.path).toBe('/v2/projects/p1/connections');
-    expect(descriptor.normalizedPath).toBe('/v2/projects/{projectId}/connections');
+    expect(descriptor.route).toBe('/v2/projects/{projectId}/connections');
     expect(descriptor.projectId).toBe('p1');
+    expect(JSON.stringify(descriptor)).not.toContain('secret');
   });
 
-  it('normalizes connection ids out of proxy paths', () => {
-    const descriptor = describePlatformCall('POST', '/v2/connections/conn%2F1/proxy/issues');
-    expect(descriptor.normalizedPath).toBe('/v2/connections/{connectionId}/proxy/issues');
+  it('collapses vendor path segments after /proxy/ so credential-bearing paths never reach spans', () => {
+    const descriptor = describePlatformCall(
+      'GET',
+      '/v2/connections/conn%2F1/proxy/oauth/v1/access-tokens/secret-vendor-token',
+    );
+    expect(descriptor.route).toBe('/v2/connections/{connectionId}/proxy/*');
+    expect(descriptor.isProxy).toBe(true);
     expect(descriptor.connectionId).toBe('conn/1');
-    expect(descriptor.path).toBe('/v2/connections/conn%2F1/proxy/issues');
+    expect(JSON.stringify(descriptor)).not.toContain('secret-vendor-token');
+  });
+
+  it('keeps platform route templates for non-proxy paths', () => {
+    const descriptor = describePlatformCall('GET', '/v2/connections/conn-1/credential');
+    expect(descriptor.route).toBe('/v2/connections/{connectionId}/credential');
+    expect(descriptor.isProxy).toBe(false);
   });
 
   it('leaves unknown paths untouched', () => {
     const descriptor = describePlatformCall('GET', '/v2/integrations');
-    expect(descriptor.normalizedPath).toBe('/v2/integrations');
+    expect(descriptor.route).toBe('/v2/integrations');
     expect(descriptor.connectionId).toBeUndefined();
     expect(descriptor.projectId).toBeUndefined();
   });
@@ -67,13 +77,14 @@ describe('platformFetch instrumentation', () => {
 
     expect(children).toHaveLength(1);
     const child = children[0]!;
-    expect(child.options.name).toBe('connect.proxy GET /v2/connections/{connectionId}/proxy/issues');
+    expect(child.options.name).toBe('connect.proxy GET /v2/connections/{connectionId}/proxy/*');
     const metadata = child.options.metadata as Record<string, unknown>;
     expect(metadata).toEqual({
       method: 'GET',
-      path: '/v2/connections/conn-1/proxy/issues',
+      route: '/v2/connections/{connectionId}/proxy/*',
       connectionId: 'conn-1',
     });
+    expect(JSON.stringify(child.options)).not.toContain('issues');
     expect(JSON.stringify(child.options)).not.toContain('should-not-leak');
     expect(child.end).toHaveBeenCalledWith({ metadata: { status: 200 } });
     expect(child.error).not.toHaveBeenCalled();
@@ -89,9 +100,10 @@ describe('platformFetch instrumentation', () => {
     expect(children[0]!.end).toHaveBeenCalledWith({ metadata: { status: 503 } });
   });
 
-  it('records a redacted error on transport failure', async () => {
+  it('records only a fixed safe message on transport failure, never the original error message', async () => {
     const { children } = installFakeSpan();
-    const fetchMock = vi.fn().mockRejectedValue(new Error(`fetch failed for Bearer ${TOKEN}`));
+    const transportError = new TypeError(`fetch failed for https://api.example.com/x?apiKey=query-secret ${TOKEN}`);
+    const fetchMock = vi.fn().mockRejectedValue(transportError);
     const client = resolveClient({ accessToken: TOKEN, fetch: fetchMock as unknown as typeof fetch });
 
     await expect(proxyRequest(client, 'conn-1', { method: 'GET', path: 'issues' })).rejects.toThrow('[REDACTED]');
@@ -99,7 +111,10 @@ describe('platformFetch instrumentation', () => {
     const child = children[0]!;
     expect(child.error).toHaveBeenCalledTimes(1);
     const recorded = child.error.mock.calls[0]![0] as { error: Error; endSpan: boolean };
+    expect(recorded.error.message).toBe('connect request failed (TypeError)');
+    expect(recorded.error.name).toBe('TypeError');
     expect(recorded.error.message).not.toContain(TOKEN);
+    expect(recorded.error.message).not.toContain('query-secret');
     expect(recorded.endSpan).toBe(true);
     expect(child.end).not.toHaveBeenCalled();
   });
