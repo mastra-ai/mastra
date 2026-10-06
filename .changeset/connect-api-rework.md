@@ -1,0 +1,72 @@
+---
+'@mastra/connect': minor
+---
+
+Reworked the `@mastra/connect` API ahead of the first stable release. Breaking: the package has not shipped stable, so no deprecation period applies.
+
+**Renamed `integrations` to `providers`**
+
+The option on `tools()` and `channels()` is now called `providers`, with types renamed to match (`ToolsProviderOptions`, `ChannelsProviders`, `ChannelsProviderOptions`).
+
+```ts
+// Before
+const connectTools = tools({ integrations: { linear: { allowTools: ['linear_get_issue'] } } });
+
+// After
+const connectTools = tools({ providers: { linear: { allowTools: ['linear_get_issue'] } } });
+```
+
+**Merge your own tools in a dynamic `tools` callback**
+
+Spread the resolver's result alongside local tools; your tools win on key collision.
+
+```ts
+const agent = new Agent({
+  // ...
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
+});
+```
+
+A `.with()` convenience method also exists for the same merge (`tools: connectTools.with({ weatherTool })`); it accepts a static record or a (sync/async, optionally context-reading) function, and calls chain.
+
+**Simpler provider selection**
+
+The array form is now a real allowlist (only the listed providers resolve), and the record form accepts boolean shorthand:
+
+```ts
+tools({ providers: ['linear', 'resend'] }); // only these resolve
+tools({ providers: { linear: true, github: false } }); // enable / exclude
+```
+
+Unknown provider ids now fail with `invalid_options` instead of warning once and silently resolving nothing.
+
+In `channels()`, `slack` is accepted as an alias for the platform's `slack-channels` key, so the common spelling needs no quotes:
+
+```ts
+channels({ providers: { slack: true, discord: true } });
+```
+
+Both spellings configure the same channel; naming it twice throws.
+
+**Glob filters and top-level defaults**
+
+`allowTools`, `disallowTools`, and `requireApproval` accept `*` globs, and all three can be set at the top level of `tools()` as defaults for every provider. Per-provider options win, including `requireApproval: false` to opt out of a global policy.
+
+```ts
+tools({
+  requireApproval: ['*_delete_*', '*_send_*'],
+  providers: { linear: { requireApproval: false } },
+});
+```
+
+A per-provider glob that matches nothing fails like an unknown literal name, so typos never silently widen access.
+
+**Removed**
+
+- The deprecated `connect()` alias of `tools()`.
+- The `environment()` sandbox credential surface.
+- The `MASTRA_<PROVIDER>_CONNECTION_ID` env-var pin is no longer documented (it keeps working); pass `connectionId` per provider instead.
+- The `TOOLS` registry alias (use `PROVIDERS`) and the `findRegistration`/`findChannelRegistration` lookup helpers.
+- Internal toolset plumbing (`defineProxyTool`, `applyAllowTools`, `resolveConnectionId` and their types) is no longer exported.
+- The `disabled: true` per-provider field — use the `false` shorthand instead: `providers: { github: false }`.
+- The resolver `invalidate()` method — call `refresh()` to force a fetch now, or lower `ttlMs` to control freshness.

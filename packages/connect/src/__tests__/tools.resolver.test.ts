@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { connect } from '../connect.js';
-import type { ConnectOptions } from '../connect.js';
 import { MastraConnectError } from '../errors.js';
 import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { tools as connect } from '../tools.js';
+import type { ToolsOptions as ConnectOptions } from '../tools.js';
+import { applyToolFilter } from '../toolset.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.
@@ -72,12 +73,12 @@ afterEach(() => {
 });
 
 describe('connect resolver caching and liveness', () => {
-  it('returns a resolver function with invalidate/refresh, not a promise', () => {
+  it('returns a resolver function with refresh/disconnect, not a promise', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const tools = connect(resolverOptions(() => []).options);
     expect(typeof tools).toBe('function');
-    expect(typeof tools.invalidate).toBe('function');
     expect(typeof tools.refresh).toBe('function');
+    expect(typeof tools.disconnect).toBe('function');
   });
 
   it('resolves tools from the project connections on first resolution', async () => {
@@ -305,18 +306,6 @@ describe('connect resolver caching and liveness', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('invalidate() forces a refetch on the next resolution', async () => {
-    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options, fetchMock } = resolverOptions(() => [makeConnection()], { ttlMs: 60_000 });
-    const tools = connect(options);
-
-    await tools();
-    tools.invalidate();
-    await tools();
-
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-  });
-
   it('refresh() fetches immediately and updates the cache', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
@@ -399,6 +388,113 @@ describe('connect resolver caching and liveness', () => {
   });
 });
 
+describe('providers option shapes', () => {
+  it('treats a false provider entry as excluded', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: false } });
+    expect(await tools()).toEqual({});
+  });
+
+  it('treats a true provider entry as enabled with default options', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: true } });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('restricts to the listed providers when providers is an array', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_not1', integrationId: 'notion' }),
+    ]);
+    const tools = connect({ ...options, providers: ['linear'] });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('rejects a providers record value that is neither boolean nor object', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, providers: { linear: 'yes' } as unknown as Record<string, boolean> })).toThrow(
+      /expected true, false, or an options object/,
+    );
+  });
+
+  it('rejects a duplicate provider id in the array form', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, providers: ['linear', 'linear'] })).toThrow(/Duplicate provider 'linear'/);
+  });
+
+  it('fails resolution for an unknown provider id when the catalog is available', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: ['linera'] });
+    await expect(tools()).rejects.toThrow(/Unknown provider in the providers option: 'linera'/);
+  });
+
+  it('allows excluding an unknown provider id (harmless no-op)', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: true, linera: false } });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('merges static extra tools via .with(), extras winning on collision', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const localTool = { id: 'local_weather' };
+    const override = { id: 'overridden' };
+    const merged = connect(options).with({ weather: localTool, linear_fake_tool: override });
+    const resolved = await merged();
+    expect(resolved.weather).toBe(localTool);
+    expect(resolved.linear_fake_tool).toBe(override);
+  });
+
+  it('passes the resolution context to a .with() function and supports chaining', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const extras = vi.fn().mockResolvedValue({ weather: { id: 'local_weather' } });
+    const merged = connect(options)
+      .with(extras)
+      .with({ second: { id: 'second' } });
+    const ctx = { requestContext: { role: 'viewer' } };
+    const resolved = await merged(ctx);
+    expect(extras).toHaveBeenCalledWith(ctx);
+    expect(Object.keys(resolved).sort()).toEqual(['linear_fake_tool', 'second', 'weather']);
+  });
+
+  it('delegates cache handles from a .with() resolver to the base resolver', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options, fetchMock } = resolverOptions(() => [makeConnection()]);
+    const merged = connect(options).with({ weather: { id: 'local_weather' } });
+    await merged();
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    await merged();
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst); // cached
+    const refreshed = await merged.refresh();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    expect(Object.keys(refreshed).sort()).toEqual(['linear_fake_tool', 'weather']);
+    await merged.disconnect();
+  });
+
+  it('downgrades unknown-provider validation to warn-and-skip when the catalog is unavailable', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return new Response('nope', { status: 500 });
+      return Response.json({ connections: [makeConnection()] });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+      providers: { linear: true, 'maybe-mcp': {} },
+    });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/cannot verify provider 'maybe-mcp'/));
+  });
+});
+
 describe('catalog availability', () => {
   it('resolves checked-in providers when the catalog request fails', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
@@ -417,7 +513,7 @@ describe('catalog availability', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Platform catalog unavailable'));
   });
 
-  it('ignores disabled catalog-only integrations when the catalog fails', async () => {
+  it('ignores excluded catalog-only integrations when the catalog fails', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const fetchMock = vi.fn().mockImplementation(async input => {
       const path = new URL(String(input)).pathname;
@@ -429,7 +525,7 @@ describe('catalog availability', () => {
     });
     const tools = connect({
       projectId: 'proj_1',
-      integrations: { 'catalog-mcp': { disabled: true } },
+      providers: { 'catalog-mcp': false },
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
 
@@ -455,6 +551,114 @@ describe('catalog availability', () => {
   });
 });
 
+describe('top-level filter and approval defaults', () => {
+  type ApprovalTool = { requireApproval?: boolean };
+
+  function installTwoProviders() {
+    const linear = installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    // Mirror real generated providers, which apply allowTools/disallowTools
+    // inside createTools.
+    linear.createToolsSpy.mockImplementation(
+      (opts?: { allowTools?: string[]; disallowTools?: string[] }) =>
+        applyToolFilter(
+          {
+            linear_get_issue: { id: 'linear_get_issue' },
+            linear_delete_issue: { id: 'linear_delete_issue' },
+          } as never,
+          { allowTools: opts?.allowTools, disallowTools: opts?.disallowTools },
+        ) as never,
+    );
+    const notion = installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    notion.createToolsSpy.mockReturnValue({
+      notion_get_page: { id: 'notion_get_page' },
+    } as never);
+    return resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_not1', integrationId: 'notion', accountLabel: 'Notion' }),
+    ]);
+  }
+
+  it('applies a top-level disallowTools default to every provider without its own filter', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, disallowTools: ['*_delete_*'] });
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_get_issue', 'notion_get_page']);
+  });
+
+  it('applies a top-level allowTools default leniently across providers', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, allowTools: ['linear_get_*'] });
+    // notion has no matching tools: the default applies leniently, so notion
+    // simply contributes nothing rather than failing the resolution.
+    expect(Object.keys(await tools())).toEqual(['linear_get_issue']);
+  });
+
+  it('lets a provider with its own filter opt out of the top-level default', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({
+      ...options,
+      disallowTools: ['*_delete_*'],
+      providers: { linear: { allowTools: ['linear_delete_issue'] } },
+    });
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_delete_issue', 'notion_get_page']);
+  });
+
+  it('warns about a top-level entry that matched nothing anywhere', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, disallowTools: ['*_delete_*', 'nope_*'] });
+    await tools();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Top-level entry 'nope_\*' matched no tools/));
+  });
+
+  it('applies a top-level requireApproval default with per-provider opt-out', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({
+      ...options,
+      requireApproval: true,
+      providers: { notion: { requireApproval: false } },
+    });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_get_issue']!.requireApproval).toBe(true);
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['notion_get_page']!.requireApproval).toBeFalsy();
+  });
+
+  it('applies a top-level requireApproval glob list across providers', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, requireApproval: ['*_delete_*'] });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['linear_get_issue']!.requireApproval).toBeFalsy();
+    expect(result['notion_get_page']!.requireApproval).toBeFalsy();
+  });
+
+  it('never gates list_connections through top-level defaults', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
+    ]);
+    const tools = connect({ ...options, requireApproval: true, allowTools: ['linear_fake_*'] });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(Object.keys(result).sort()).toEqual(['linear__list_connections', 'linear_fake_tool']);
+    expect(result['linear_fake_tool']!.requireApproval).toBe(true);
+    expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
+  });
+
+  it('rejects top-level allowTools and disallowTools together', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, allowTools: ['a'], disallowTools: ['b'] } as never)).toThrow(
+      /Top-level allowTools and disallowTools are mutually exclusive/,
+    );
+  });
+
+  it('rejects a malformed top-level requireApproval value', () => {
+    const { options } = resolverOptions(() => []);
+    expect(() => connect({ ...options, requireApproval: 'yes' } as never)).toThrow(
+      /Top-level requireApproval must be a boolean or an array of tool keys/,
+    );
+  });
+});
+
 describe('HTTP provider tool approval', () => {
   type ApprovalTool = { requireApproval?: boolean };
 
@@ -465,7 +669,7 @@ describe('HTTP provider tool approval', () => {
       linear_delete_issue: { id: 'linear_delete_issue' },
     } as never);
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: true } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: true } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_list_issues']!.requireApproval).toBe(true);
@@ -479,17 +683,57 @@ describe('HTTP provider tool approval', () => {
       linear_delete_issue: { id: 'linear_delete_issue' },
     } as never);
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: ['linear_delete_issue'] } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_issue'] } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_list_issues']!.requireApproval).toBeFalsy();
     expect(result['linear_delete_issue']!.requireApproval).toBe(true);
   });
 
+  it('expands * globs in requireApproval against the generated tools', async () => {
+    const linear = installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    linear.createToolsSpy.mockReturnValue({
+      linear_list_issues: { id: 'linear_list_issues' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+      linear_delete_team: { id: 'linear_delete_team' },
+    } as never);
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_*'] } } });
+
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_list_issues']!.requireApproval).toBeFalsy();
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['linear_delete_team']!.requireApproval).toBe(true);
+  });
+
+  it('fails resolution when a requireApproval glob matches nothing', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope_*'] } } });
+
+    await expect(tools()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining("Pattern 'linear_nope_*'"),
+    });
+  });
+
+  it('never gates list_connections through a broad requireApproval glob', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
+    ]);
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear*'] } } });
+
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(result['linear_fake_tool']!.requireApproval).toBe(true);
+    expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
+  });
+
   it('fails resolution when requireApproval names an unknown generated tool', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: ['linear_nope'] } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope'] } } });
 
     await expect(tools()).rejects.toMatchObject({
       code: 'invalid_options',
@@ -503,7 +747,7 @@ describe('HTTP provider tool approval', () => {
       makeConnection(),
       makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
     ]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: true } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: true } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_fake_tool']!.requireApproval).toBe(true);
@@ -513,11 +757,11 @@ describe('HTTP provider tool approval', () => {
   it('rejects a requireApproval value that is neither a boolean nor a string array', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
-    expect(() => connect({ ...options, integrations: { linear: { requireApproval: 'true' } as never } })).toThrow(
+    expect(() => connect({ ...options, providers: { linear: { requireApproval: 'true' } as never } })).toThrow(
       /requireApproval must be a boolean or an array of tool keys/,
     );
     expect(() =>
-      connect({ ...options, integrations: { linear: { requireApproval: ['linear_fake_tool', 7] } as never } }),
+      connect({ ...options, providers: { linear: { requireApproval: ['linear_fake_tool', 7] } as never } }),
     ).toThrow(/requireApproval must be a boolean or an array of tool keys/);
   });
 
@@ -525,7 +769,7 @@ describe('HTTP provider tool approval', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
     expect(() =>
-      connect({ ...options, integrations: { linear: { autoApproveTools: ['linear_fake_tool'] } as never } }),
+      connect({ ...options, providers: { linear: { autoApproveTools: ['linear_fake_tool'] } as never } }),
     ).toThrow(/autoApproveTools was removed/);
   });
 });

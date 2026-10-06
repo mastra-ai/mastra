@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { connect } from '../connect.js';
-import { tools } from '../tools.js';
+import { tools as connect, tools } from '../tools.js';
 
 describe('tools()/connect() rename', () => {
   it('exports `tools` and a deprecated `connect` alias', () => {
@@ -20,7 +19,6 @@ describe('tools()/connect() rename', () => {
 
       for (const resolver of [resolverA, resolverB]) {
         expect(typeof resolver).toBe('function');
-        expect(typeof resolver.invalidate).toBe('function');
         expect(typeof resolver.refresh).toBe('function');
         expect(typeof resolver.disconnect).toBe('function');
       }
