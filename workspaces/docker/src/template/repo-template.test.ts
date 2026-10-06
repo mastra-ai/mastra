@@ -77,46 +77,28 @@ describe('buildRepoTemplate', () => {
     expect(a.templateId).not.toBe(b.templateId);
   });
 
-  it('runs setup commands around the pin and writes the completion marker last', () => {
+  it('clones and pins in one secret stage, then runs setup and writes the completion marker last', () => {
     const dockerfile = buildRepoTemplate({
       cloneUrl,
       sha,
       setupCommand: ['npm ci', 'npm run build'],
       workingDirectory: '/workspace',
     }).dockerfile;
-    // The whole file is pinned: the clone and first setup pass carry no commit
-    // so they cache across commits; the pin and second pass follow.
+    // The whole file is pinned: this is the single form's shape, unchanged.
     expect(dockerfile.trimEnd()).toBe(
       [
         'FROM node:22-slim AS mastra-main-0',
         'RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/apt/lists/*',
         'FROM mastra-main-0 AS mastra-secret-1',
-        "RUN git clone 'https://example.com/acme/app.git' '/workspace/app'",
+        `RUN git clone 'https://example.com/acme/app.git' '/workspace/app' && git -C '/workspace/app' checkout --detach '${sha}'`,
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-1 /workspace/app /workspace/app',
         'WORKDIR /workspace/app',
         'RUN npm ci',
         'RUN npm run build',
-        `RUN git -C '/workspace/app' checkout --detach '${sha}'`,
-        'RUN npm ci',
-        'RUN npm run build',
         markerLine(SETUP_MARKER_PATH, 'npm ci', 'npm run build'),
       ].join('\n'),
     );
-  });
-
-  it('clones a branch or tag ref directly so the first setup pass runs on it', () => {
-    const dockerfile = buildRepoTemplate({
-      cloneUrl,
-      sha,
-      branch: 'release/1.x',
-      setupCommand: 'npm ci',
-      workingDirectory: '/workspace',
-    }).dockerfile;
-    expect(dockerfile).toContain(
-      "git clone --branch 'release/1.x' 'https://example.com/acme/app.git' '/workspace/app'",
-    );
-    expect(dockerfile.indexOf('RUN npm ci')).toBeLessThan(dockerfile.indexOf('checkout --detach'));
   });
 
   it('writes no marker without setup commands', () => {
@@ -147,7 +129,7 @@ describe('buildMultiRepoTemplate', () => {
   };
   const publicRepo = { cloneUrl, sha: otherSha, setupCommand: "echo it's # note" };
 
-  it('lays every repository out under the workspace, public first, each around its own pin', () => {
+  it('lays every repository out under the workspace, public first, each after its own pin', () => {
     const dockerfile = buildMultiRepoTemplate({
       workingDirectory: '/workspace',
       continueOnSetupFailure: true,
@@ -161,19 +143,15 @@ describe('buildMultiRepoTemplate', () => {
         "RUN mkdir -p '/workspace'",
         'WORKDIR /workspace',
         'FROM mastra-main-0 AS mastra-secret-3',
-        "RUN git clone 'https://example.com/acme/app.git' '/workspace/app'",
+        `RUN git clone 'https://example.com/acme/app.git' '/workspace/app' && git -C '/workspace/app' checkout --detach '${otherSha}'`,
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-3 /workspace/app /workspace/app',
         guarded('app', "echo it'\\''s # note"),
-        `RUN git -C '/workspace/app' checkout --detach '${otherSha}'`,
-        guarded('app', "echo it'\\''s # note"),
         markerLine(repoSetupMarkerPath('app'), "echo it's # note"),
-        'FROM mastra-main-1 AS mastra-secret-8',
-        `RUN --mount=type=secret,id=GH_TOKEN_0,mode=0444 export GH_TOKEN_0="$(cat /run/secrets/GH_TOKEN_0)" && git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)" clone 'https://example.com/acme/private.git' '/workspace/private'`,
+        'FROM mastra-main-1 AS mastra-secret-6',
+        `RUN --mount=type=secret,id=GH_TOKEN_0,mode=0444 export GH_TOKEN_0="$(cat /run/secrets/GH_TOKEN_0)" && git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)" clone 'https://example.com/acme/private.git' '/workspace/private' && git -C '/workspace/private' checkout --detach '${sha}'`,
         'FROM mastra-main-1 AS mastra-main-2',
-        'COPY --from=mastra-secret-8 /workspace/private /workspace/private',
-        guarded('private', 'npm ci'),
-        `RUN git -C '/workspace/private' checkout --detach '${sha}'`,
+        'COPY --from=mastra-secret-6 /workspace/private /workspace/private',
         guarded('private', 'npm ci'),
         markerLine(repoSetupMarkerPath('private'), 'npm ci'),
         'RUN touch .ready',
@@ -411,11 +389,10 @@ describe('createDockerRepoTemplate', () => {
         })!;
         const template = await resolver();
         expect(template.dockerfile).toContain(`git -C '/workspace/private' checkout --detach '${sha}'`);
-        expect(template.dockerfile).toContain("clone --branch 'v1' 'https://example.com/acme/private.git'");
         expect(template.dockerfile).toContain(`git -C '/workspace/app' checkout --detach '${headSha}'`);
         expect(template.dockerfile).toContain('id=GH_TOKEN_0');
         expect(template.dockerfile.indexOf("clone 'https://example.com/acme/app.git'")).toBeLessThan(
-          template.dockerfile.indexOf("clone --branch 'v1' 'https://example.com/acme/private.git'"),
+          template.dockerfile.indexOf("clone 'https://example.com/acme/private.git'"),
         );
         expect(template.dockerfile).not.toContain('tok-1');
 
@@ -423,19 +400,6 @@ describe('createDockerRepoTemplate', () => {
         await expect(
           createDockerRepoTemplate({ repos: [{ getRepositoryAccess }, { getRepositoryAccess }] })!(),
         ).rejects.toThrow(/both clone into/);
-      });
-    });
-
-    it('strips refs/heads and refs/tags for the clone and skips --branch for other refs/ names', async () => {
-      await withFakeGit(`printf '${headSha}\\tx\\n'`, async () => {
-        const getRepositoryAccess = async () => ({ cloneUrl });
-        const heads = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/heads/release/1.x' })!();
-        expect(heads.dockerfile).toContain("git clone --branch 'release/1.x' ");
-        const tags = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/tags/v1' })!();
-        expect(tags.dockerfile).toContain("git clone --branch 'v1' ");
-        const pull = await createDockerRepoTemplate({ getRepositoryAccess, ref: 'refs/pull/7/head' })!();
-        expect(pull.dockerfile).not.toContain('--branch');
-        expect(pull.dockerfile).toContain(`checkout --detach '${headSha}'`);
       });
     });
 
