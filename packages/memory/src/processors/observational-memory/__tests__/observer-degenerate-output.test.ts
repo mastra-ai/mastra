@@ -297,7 +297,14 @@ describe('detectDegenerateRepetition short-line loops', () => {
 
 describe('short status lines recurring across groups', () => {
   it('accepts large thread-scope Reflector output whose groups repeat short status sub-bullets', () => {
-    const statuses = ['  * ✅ build ok', '  * ✅ tests ok', '  * ✅ lint ok', '  * 🟡 retry', '  * ✅ deployed', '  * ✅ synced'];
+    const statuses = [
+      '  * ✅ build ok',
+      '  * ✅ tests ok',
+      '  * ✅ lint ok',
+      '  * 🟡 retry',
+      '  * ✅ deployed',
+      '  * ✅ synced',
+    ];
     const groups = Array.from({ length: 300 }, (_, g) =>
       [
         `## Group g${g}`,
