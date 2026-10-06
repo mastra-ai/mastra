@@ -11,6 +11,8 @@ import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   createKnowledgeV2CoreLoader,
   KNOWLEDGE_V2_ACTIVITY_SCHEMA,
@@ -544,7 +546,15 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [`mastra-knowledge-v2:${this.#schemaName ?? 'current_schema'}`],
       });
       const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
-      const inspection = await this.#inspectSchemaWithExecutor(tx);
+      let inspection = await this.#inspectSchemaWithExecutor(tx);
+      if (inspection.status === 'incompatible-reset-required' && (await this.#isEmptyPublishedV1Layout(tx))) {
+        // Earlier releases created empty Knowledge tables for every app. Replacing them loses nothing.
+        const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
+          .map(table => `"${table}"`)
+          .join(', ');
+        await tx.execute(`DROP TABLE IF EXISTS ${tables}`);
+        inspection = await this.#inspectSchemaWithExecutor(tx);
+      }
       assertKnowledgeSchemaCompatible(inspection);
 
       for (const definition of knowledgeTableDefinitions) {
@@ -558,6 +568,43 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
       });
     });
+  }
+
+  /**
+   * True when the only Knowledge objects are the empty tables and indexes published v1 adapters
+   * created for every app. Anything else (rows, v2 tables, unknown tables, views, triggers, extra
+   * indexes) needs an explicit reset.
+   */
+  async #isEmptyPublishedV1Layout(executor: Executor): Promise<boolean> {
+    const schema = this.#schemaName ?? null;
+    const relations = await executor.execute({
+      sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+      args: [schema],
+    });
+    const tables: string[] = [];
+    for (const row of relations.rows) {
+      const name = String(row.table_name);
+      if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) return false;
+      tables.push(name);
+    }
+    const indexes = await executor.execute({
+      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
+      args: [schema, tables],
+    });
+    for (const row of indexes.rows) {
+      const name = String(row.indexname);
+      if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return false;
+    }
+    const dependents = await executor.execute({
+      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
+      args: [schema, tables, schema, tables],
+    });
+    if (dependents.rows.length > 0) return false;
+    for (const table of tables) {
+      const rows = await executor.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
+      if (rows.rows.length > 0) return false;
+    }
+    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -771,8 +818,8 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,nodeId=?,version=version+1,updatedAt=? WHERE node=?`,
-        args: [target.id, target.id, new Date().toISOString(), source.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,version=version+1,updatedAt=? WHERE node=?`,
+        args: [target.id, new Date().toISOString(), source.id],
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
@@ -850,10 +897,9 @@ export class KnowledgePG extends KnowledgeStorage {
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,nodeId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,createdAt,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,NULL,NULL)`,
         args: [
           record.id,
-          record.node,
           record.node,
           record.text,
           JSON.stringify(scope),
@@ -864,7 +910,6 @@ export class KnowledgePG extends KnowledgeStorage {
           record.maxScope ?? null,
           metadataJson,
           1,
-          record.capturedAt.toISOString(),
           record.capturedAt.toISOString(),
         ],
       });
