@@ -603,7 +603,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
       .map(table => `${schema}"${table}"`)
       .join(', ');
-    await this.#client.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
+    await this.#client.query(`DROP TABLE IF EXISTS ${tables}`);
     await this.init();
   }
 
