@@ -46,7 +46,7 @@ import { DockerTemplate } from './template';
 
 const execFileAsync = promisify(execFile);
 
-/** Env var the build's clone reads the credential from (see `cloneFull`). */
+/** Env var the build's clone reads the credential from (see `cloneAndPin`). */
 const BUILD_TOKEN_ENV = 'GH_TOKEN';
 const DEFAULT_BASE_IMAGE = 'node:22-slim';
 const DEFAULT_WORKING_DIRECTORY = '/workspace';
@@ -100,20 +100,11 @@ export interface DockerRepoTemplateOptions {
     | undefined;
   /**
    * Branch, tag, or commit to prepare. The current head of a branch/tag is
-   * resolved at each template resolution and pinned into the identity. A
-   * branch or tag is cloned directly, so the first setup pass runs on it; a
-   * commit (or any other `refs/…` name) is reached by checkout after a clone
-   * of the default branch.
+   * resolved at each template resolution and pinned into the identity.
    * @default the remote's default branch
    */
   ref?: string;
-  /**
-   * Setup command(s) run inside the checkout as separate cached build steps.
-   * Each command runs twice: once right after the clone, so the install layer
-   * caches independently of the commit, and again after the checkout is
-   * pinned to the resolved head, so the image matches that commit. Commands
-   * must be safe to repeat in the same checkout.
-   */
+  /** Setup command(s) run inside the checkout as separate cached build steps. */
   setupCommand?: string | string[];
   /**
    * Several repositories in one image, each with its own access resolver,
@@ -144,9 +135,9 @@ export interface DockerRepoTemplateOptions {
   /**
    * `repos` only. When true a failing per-repository setup command records
    * that repository's directory name in `.mastra-sandbox/setup-failed` (one
-   * line per repository, whichever passes failed) and the build continues;
-   * clone, pin, workspace and marker steps still fail the build. Default
-   * false: any failure fails the build.
+   * line per repository) and the build continues; clone, pin, workspace and
+   * marker steps still fail the build. Default false: any failure fails the
+   * build.
    */
   continueOnSetupFailure?: boolean;
   /**
@@ -259,7 +250,6 @@ async function resolveRepoTemplate(
     repos.push({
       cloneUrl,
       sha,
-      branch: cloneBranch(entry.ref),
       token,
       // The single form keeps its historical secret name; list entries are
       // numbered by caller position so public/private reordering never
@@ -289,7 +279,6 @@ async function resolveRepoTemplate(
       ...shared,
       cloneUrl: repo.cloneUrl,
       sha: repo.sha,
-      branch: repo.branch,
       token: repo.token,
       setupCommand: repo.setupCommand,
     });
@@ -306,7 +295,6 @@ async function resolveRepoTemplate(
 interface ResolvedRepository {
   cloneUrl: string;
   sha: string;
-  branch?: string;
   token?: string;
   tokenEnv?: string;
   setupCommand?: string | string[];
@@ -315,8 +303,6 @@ interface ResolvedRepository {
 interface RepoTemplateInputs {
   cloneUrl: string;
   sha: string;
-  /** Branch or tag to clone directly, so the first setup pass runs on it. */
-  branch?: string;
   token?: string;
   buildEnv?: Record<string, string>;
   setupCommand?: string | string[];
@@ -351,12 +337,8 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
   }
 
   const tokenEnv = token ? BUILD_TOKEN_ENV : undefined;
-  // Full clone so an arbitrary commit is reachable. The clone step carries no
-  // commit, so it and the first setup pass cache across commits; the pin (its
-  // sha is in the command, so it is part of the template identity) and the
-  // second pass are the only per-commit layers.
   template = template
-    .runWithSecrets(cloneFull({ cloneUrl, destination, tokenEnv, branch: inputs.branch }), {
+    .runWithSecrets(cloneAndPin({ cloneUrl, destination, tokenEnv, sha }), {
       secrets: tokenEnv ? [tokenEnv] : [],
       output: destination,
       ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}),
@@ -364,11 +346,6 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
     .setWorkdir(destination);
 
   const setupCommands = normalizeSetupCommands(inputs.setupCommand);
-  for (const command of setupCommands) {
-    template = template.runCmd(command);
-  }
-  // A full clone already has the commit, so the pin needs no credential.
-  template = template.runCmd(pinCommand(destination, sha));
   for (const command of setupCommands) {
     template = template.runCmd(command);
   }
@@ -424,17 +401,14 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
     const destination = `${workingDirectory}/${repoDir}`;
     const secrets = repo.tokenEnv ? [repo.tokenEnv] : [];
     const setupCommands = normalizeSetupCommands(repo.setupCommand);
-    // Setup steps run at the workspace cwd and `cd` into the checkout.
-    const setupSteps = setupCommands.map(command =>
-      guardedSetupCommand({ repoDir, command, continueOnFailure: continueOnSetupFailure }),
-    );
     template = template.runWithSecrets(
-      cloneFull({ cloneUrl: repo.cloneUrl, destination, tokenEnv: repo.tokenEnv, branch: repo.branch }),
+      cloneAndPin({ cloneUrl: repo.cloneUrl, destination, tokenEnv: repo.tokenEnv, sha: repo.sha }),
       { secrets, output: destination, ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}) },
     );
-    for (const step of setupSteps) template = template.runCmd(step);
-    template = template.runCmd(pinCommand(destination, repo.sha));
-    for (const step of setupSteps) template = template.runCmd(step);
+    // Setup steps run at the workspace cwd and `cd` into the checkout.
+    for (const command of setupCommands) {
+      template = template.runCmd(guardedSetupCommand({ repoDir, command, continueOnFailure: continueOnSetupFailure }));
+    }
     // Last for this repository, so it only exists once every step above ran.
     template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands), repoSetupMarkerPath(repoDir)));
   }
@@ -456,22 +430,6 @@ function assertSingleLineCommands(commands: string | string[] | undefined, optio
       );
     }
   }
-}
-
-/**
- * The name to clone directly so the first setup pass runs on it: a branch or
- * tag, with a `refs/heads/` or `refs/tags/` prefix stripped. A commit or any
- * other `refs/…` name (pull heads, notes) cannot be cloned by name and is
- * reached by the checkout instead.
- */
-function cloneBranch(ref: string | undefined): string | undefined {
-  if (!ref || FULL_SHA_PATTERN.test(ref)) return undefined;
-  const short = ref.replace(/^refs\/(heads|tags)\//, '');
-  return short.startsWith('refs/') ? undefined : short;
-}
-
-function pinCommand(destination: string, sha: string): string {
-  return `git -C ${shellQuote(destination)} checkout --detach ${shellQuote(sha)}`;
 }
 
 /**
@@ -518,26 +476,27 @@ export async function resolveHead(
   }
 }
 
-function cloneFull({
+function cloneAndPin({
   cloneUrl,
   destination,
   tokenEnv,
-  branch,
+  sha,
 }: {
   cloneUrl: string;
   destination: string;
   tokenEnv?: string;
-  branch?: string;
-}) {
+  sha: string;
+}): string[] {
   // Mirrors `repoCloneCommand` from @internal/workspace, minus the shallow
-  // flags. `branch` keeps the first setup pass on the requested branch or tag
-  // (a commit ref cannot be cloned directly; its first pass runs on the
-  // default branch).
+  // flags: a full clone so an arbitrary commit is reachable, then the pin.
+  // The sha is in the command, so it is part of the template identity.
   const auth = tokenEnv
     ? `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)" `
     : '';
-  const branchFlag = branch ? `--branch ${shellQuote(branch)} ` : '';
-  return `git ${auth}clone ${branchFlag}${shellQuote(cloneUrl)} ${shellQuote(destination)}`;
+  return [
+    `git ${auth}clone ${shellQuote(cloneUrl)} ${shellQuote(destination)}`,
+    `git -C ${shellQuote(destination)} checkout --detach ${shellQuote(sha)}`,
+  ];
 }
 
 function assertCloneUrl(cloneUrl: string): void {
