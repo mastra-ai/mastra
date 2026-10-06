@@ -1278,10 +1278,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const configured = config.inputProcessors({ requestContext });
       return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
     },
-    // Mastra Code contributes no output processors of its own; the lane exists
-    // so plugins can. Like the input lane, plugin processors sit last — after
-    // the layers they customize, before the channel and memory layers the
-    // Agent appends.
+    // Like the input lane, plugin processors sit last — after the layers they
+    // customize, before the channel and memory layers the Agent appends.
     outputProcessors: () => [
       // Anthropic cyber refusals finish a step instead of throwing, so they are
       // handled here; OpenAI's throw and are handled in the error lane below.

@@ -1752,7 +1752,6 @@ describe('createMastraCode', () => {
       'request-scoped-reconciler',
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
   });
