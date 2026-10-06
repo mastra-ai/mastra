@@ -312,6 +312,7 @@ import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { RETRY_CONFIG } from './retry';
+import { withStorageLockRetry } from './storage-retry';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -553,7 +554,7 @@ export class ObservationalMemory {
     }
 
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
-    this.storage = config.storage;
+    this.storage = withStorageLockRetry(config.storage);
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
@@ -4215,7 +4216,7 @@ ${formattedMessages}
   }
 
   /**
-   * Get the underlying storage adapter
+   * Get the storage adapter, wrapped so calls that hit lock contention are retried
    */
   getStorage(): MemoryStorage {
     return this.storage;

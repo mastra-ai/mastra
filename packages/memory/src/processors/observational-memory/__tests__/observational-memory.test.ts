@@ -5379,9 +5379,12 @@ describe('ObservationalMemory Integration', () => {
   });
 
   describe('getStorage', () => {
-    it('should return the storage instance', () => {
+    it('should return the configured storage wrapped with lock retries', async () => {
+      const getThreadById = vi.spyOn(storage, 'getThreadById');
       const s = om.getStorage();
-      expect(s).toBe(storage);
+      expect(s).toBeInstanceOf(InMemoryMemory);
+      await s.getThreadById({ threadId: 'thread-1' });
+      expect(getThreadById).toHaveBeenCalledWith({ threadId: 'thread-1' });
     });
   });
 

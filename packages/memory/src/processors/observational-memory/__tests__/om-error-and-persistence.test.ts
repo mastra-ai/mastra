@@ -11,7 +11,7 @@ import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
@@ -527,6 +527,55 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(persistedObservationMarkerParts.map((part: any) => part.type)).toEqual(
       expect.arrayContaining(['data-om-observation-start', 'data-om-observation-failed']),
     );
+  });
+});
+
+// =============================================================================
+// Transient storage lock contention during observation
+// =============================================================================
+
+describe('OM transient storage lock', { timeout: 30_000 }, () => {
+  it('retries a "database is locked" storage error instead of stopping the run', async () => {
+    const store = new InMemoryStore();
+    const memoryStore = (await store.getStore('memory'))!;
+    const busyError = Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    const updateActiveObservations = vi.spyOn(memoryStore, 'updateActiveObservations').mockRejectedValueOnce(busyError);
+
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: createMockObserverModel() as any,
+            messageTokens: 20,
+            bufferTokens: false,
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 50000,
+          },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'test-busy-agent',
+      name: 'Test Busy Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory,
+    });
+
+    const result = await agent.generate('Hello, I need help.', {
+      memory: { thread: 'test-busy-thread', resource: 'test-resource' },
+    });
+
+    expect(result.tripwire).toBeUndefined();
+    expect(result.text).toBe(longResponseText);
+    expect(updateActiveObservations.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const record = await memoryStore.getObservationalMemory('test-busy-thread', 'test-resource');
+    expect(record?.activeObservations).toContain('User asked for help with a task');
   });
 });
 
