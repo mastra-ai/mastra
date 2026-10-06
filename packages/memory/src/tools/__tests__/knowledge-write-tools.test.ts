@@ -24,6 +24,9 @@ async function fixture(toolScopeIds = scopeIds) {
   await store.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
   await store.createNode({ id: scopeIds[1], name: 'User 42', isScope: true, scopeIds: [scopeIds[0]!] });
   await store.createNode({ id: scopeIds[2], name: 'Thread alpha', isScope: true, scopeIds: [scopeIds[1]!] });
+  // The curator writes with the parent session's ordinary authority: its resource and thread rungs own themselves.
+  await store.upsertScopeGrant({ scopeNodeId: scopeIds[1]!, scopeRefId: scopeIds[1]!, role: 'owner' });
+  await store.upsertScopeGrant({ scopeNodeId: scopeIds[2]!, scopeRefId: scopeIds[2]!, role: 'owner' });
   const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scopeIds: [scopeIds[2]!] });
   const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
   const tools = createKnowledgeWriteTools(memory, {
@@ -35,7 +38,7 @@ async function fixture(toolScopeIds = scopeIds) {
 
 const heldAddresses = ['org:acme', 'resource:user-42', 'resource:user-42:thread:alpha'];
 
-async function structuralFixture() {
+async function structuralFixture(memoryRole: 'readonly' | 'append' = 'append') {
   const storage = new InMemoryStore();
   const knowledge = new Knowledge({
     id: 'mastra',
@@ -51,6 +54,7 @@ async function structuralFixture() {
           name: 'memory',
           parentAddresses: ['features'],
           metadata: { description: 'Memory subsystem knowledge.' },
+          grants: [{ scopeRefAddress: 'resource:user-42', role: memoryRole }],
         },
         { address: 'org:other', name: 'other' },
         { address: 'other:things', name: 'things', parentAddresses: ['org:other'] },
@@ -97,7 +101,12 @@ describe('Subconscious knowledge write tools', () => {
         {} as any,
       ),
     ).rejects.toThrow('version conflict');
-    expect(mutation).toHaveBeenCalledWith({ id: record.id, version: record.version, scopeIds: [scopeIds[1]] });
+    expect(mutation).toHaveBeenCalledWith({
+      id: record.id,
+      version: record.version,
+      scopeIds: [scopeIds[1]],
+      expectedAccessEpoch: expect.any(Number),
+    });
     expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
     expect(await store.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
     mutation.mockRestore();
@@ -165,6 +174,60 @@ describe('Subconscious knowledge write tools', () => {
     );
   });
 
+  it('rejects structural placement into a scope the session can only read', async () => {
+    const { store, scopes, tools } = await structuralFixture('readonly');
+    const activityBefore = await store.listActivity({ scopeIds: Object.values(scopes) });
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Recall', kind: 'concept', text: 'Recall ranks records.', nodeScope: 'features:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow('Knowledge scope not found');
+    expect(await store.resolveNode({ name: 'Recall', scopeIds: Object.values(scopes) })).toBeNull();
+    expect(await store.listActivity({ scopeIds: Object.values(scopes) })).toEqual(activityBefore);
+  });
+
+  it('stops writing as soon as the session loses the capability, including warm frontiers', async () => {
+    const { store, source, target, tools } = await fixture();
+    await tools.knowledge_append!.execute?.({ node: source.id, text: 'Warm the access frontier.' }, {} as any);
+    await store.upsertScopeGrant({ scopeNodeId: scopeIds[2]!, scopeRefId: scopeIds[2]!, role: 'readonly' });
+    const records = await store.listRecords({ node: source.id, scopeIds });
+
+    await expect(
+      tools.knowledge_append!.execute?.({ node: source.id, text: 'After revocation.' }, {} as any),
+    ).rejects.toThrow('not found');
+    await expect(
+      tools.knowledge_rename_node!.execute?.(
+        { node: source.id, expectedVersion: source.version, name: 'Renamed' },
+        {} as any,
+      ),
+    ).rejects.toThrow('not found');
+    await expect(
+      tools.knowledge_merge_nodes!.execute?.(
+        { sourceId: source.id, targetId: target.id, sourceVersion: source.version },
+        {} as any,
+      ),
+    ).rejects.toThrow('not found');
+    await expect(
+      tools.knowledge_rescope!.execute?.(
+        { recordId: records.records[0]!.id, expectedVersion: records.records[0]!.version, scope: 'resource' },
+        {} as any,
+      ),
+    ).rejects.toThrow('not found');
+    expect(await store.listRecords({ node: source.id, scopeIds })).toEqual(records);
+    expect(await store.getNode(source.id)).toMatchObject({ name: source.name, version: source.version });
+  });
+
+  it('never resolves mentions against the unvouched org rung', async () => {
+    const { store, source, tools } = await fixture();
+    const secret = await store.createNode({ name: 'Secret Plan', kind: 'project', scopeIds: [scopeIds[0]!] });
+
+    await tools.knowledge_append!.execute?.({ node: source.id, text: 'Depends on [[Secret Plan]].' }, {} as any);
+
+    expect((await store.listMentioningRecords({ node: secret.id, scopeIds })).records).toEqual([]);
+  });
+
   it('rejects structural placement outside the curator frontier', async () => {
     const { store, scopes, tools } = await structuralFixture();
 
@@ -214,7 +277,13 @@ describe('Subconscious knowledge write tools', () => {
     const prior = [];
     for (let index = 0; index < 105; index++) {
       prior.push(
-        await store.createRecord({ node: source, text: `Prior ${index}`, source: 'subconscious:curate', scopeIds }),
+        await store.createRecord({
+          node: source,
+          text: `Prior ${index}`,
+          source: 'subconscious:curate',
+          // The curator writes to its thread rung; replacing a record also needs manageAccess on each of its scopes.
+          scopeIds: [scopeIds[2]!],
+        }),
       );
     }
     const unrelated = await store.createRecord({
@@ -410,7 +479,7 @@ describe('Subconscious knowledge write tools', () => {
       'Knowledge node not found',
     );
     await expect(tools.knowledge_remove!.execute?.({ recordId: foreignRecord.id }, {} as any)).rejects.toThrow(
-      'KnowledgeRecord not found',
+      'Knowledge record not found',
     );
     expect(append).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
