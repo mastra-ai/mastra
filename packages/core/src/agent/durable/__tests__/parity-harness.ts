@@ -604,14 +604,6 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
   });
-  if (wrapper && engine === 'evented') {
-    // Without atomic storage the evented agent silently runs on the default
-    // engine, which would make "evented == plain" a durable-vs-plain check.
-    const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
-    if (engineType !== 'evented') {
-      throw new Error(`expectEngineParity: evented agent resolved to the '${engineType}' engine, not 'evented'`);
-    }
-  }
 
   const turns: ParitySnapshot[] = [];
   const cleanups: Array<() => void | Promise<void>> = [];
@@ -655,6 +647,16 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
         acc.resumed = true;
       }
 
+      // A turn that is still suspended leaves its output stream open until a
+      // resume, so reading the output here would hang until the test times out.
+      // The missing continuation is the real problem, so report that instead.
+      if (suspendedToolCallId) {
+        throw new Error(
+          `expectEngineParity: turn ${turns.length} on ${engine} ended suspended on tool call ` +
+            `'${suspendedToolCallId}'; add a \`resume\` continuation`,
+        );
+      }
+
       const snapshot = await snapshotFromDrainedTurn(acc);
       turns.push(snapshot);
       return snapshot;
@@ -663,6 +665,15 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
 
   let scenarioFailed = false;
   try {
+    if (wrapper && engine === 'evented') {
+      // Without atomic storage the evented agent silently runs on the default
+      // engine, which would make "evented == plain" a durable-vs-plain check.
+      // Checked inside the try so a failed check still shuts the host down.
+      const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
+      if (engineType !== 'evented') {
+        throw new Error(`expectEngineParity: evented agent resolved to the '${engineType}' engine, not 'evented'`);
+      }
+    }
     if (scenario.run) await scenario.run(handle);
     else await handle.turn(scenario.input!, scenario.options);
   } catch (error) {

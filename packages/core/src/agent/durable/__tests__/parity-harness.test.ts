@@ -631,6 +631,19 @@ describe('expectEngineParity', () => {
     }
   });
 
+  it('fails with the tool call when a suspended turn has no resume', async () => {
+    await expect(
+      expectEngineParity(
+        suspendScenario({
+          options: {
+            maxSteps: 3,
+            memory: { thread: 'parity-unresumed-thread', resource: 'parity-unresumed-resource' },
+          },
+        }),
+      ),
+    ).rejects.toThrow('add a `resume` continuation');
+  });
+
   it('runs an approval on all three engines', async () => {
     const results = await expectEngineParity(
       approvalScenario({
