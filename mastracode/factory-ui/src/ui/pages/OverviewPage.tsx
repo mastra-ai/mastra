@@ -15,6 +15,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
+import { PipelineEmptyState } from '../domains/factory/components/PipelineEmptyState';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
 import type { LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -83,13 +84,24 @@ export function OverviewContent({
   return (
     <div className="mt-6 flex flex-col gap-14 pb-16">
       <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
-        <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
+        <StageFunnel
+          funnel={current.funnel}
+          pullRequests={current.pullRequests}
+          merged={current.merged}
+          emptyState={
+            <PipelineEmptyState
+              hasWorkItems={items.length > 0}
+              rangeDays={rangeDays}
+              factoryProjectId={factoryProjectId}
+            />
+          }
+        />
       </Block>
 
       <section className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <Block
           title="Stalled"
-          action={current.waiting.length > 0 ? <Count value={`${current.waiting.length} waiting`} /> : undefined}
+          action={current.waiting.length > 0 && <Count value={`${current.waiting.length} waiting`} />}
         >
           <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
         </Block>
@@ -97,9 +109,11 @@ export function OverviewContent({
         <Block
           title="Running now"
           action={
-            <Count
-              value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
-            />
+            current.inFlight > 0 && (
+              <Count
+                value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
+              />
+            )
           }
         >
           <RunningList running={current.running} factoryProjectId={factoryProjectId} />
@@ -107,7 +121,7 @@ export function OverviewContent({
       </section>
 
       <Block title="Latest commits" action={repository ? <ViewOnGithub slug={repository.slug} /> : undefined}>
-        <CommitRail projectRepositoryId={repository?.projectRepositoryId} />
+        <CommitRail projectRepositoryId={repository?.projectRepositoryId} factoryProjectId={factoryProjectId} />
       </Block>
 
       <Block title="Activity" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/activity`} />}>

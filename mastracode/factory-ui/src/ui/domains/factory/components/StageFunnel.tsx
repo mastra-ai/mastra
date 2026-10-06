@@ -196,10 +196,12 @@ export function StageFunnel({
   funnel,
   pullRequests,
   merged,
+  emptyState,
 }: {
   funnel: FunnelStage[];
   pullRequests: number;
   merged: number;
+  emptyState?: ReactNode;
 }) {
   const down = useMaybeSidebarState()?.isMobile ?? false;
   const hatchId = useId();
@@ -212,6 +214,7 @@ export function StageFunnel({
   const done = funnel.at(-1)?.reached ?? 0;
 
   if (entered === 0) {
+    if (emptyState) return emptyState;
     return (
       <Txt as="p" variant="caption" className={EMPTY}>
         Nothing new in this window
