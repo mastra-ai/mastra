@@ -67,6 +67,25 @@ export const Images: Story = {
 
 export const MixedFiles: Story = {
   render: () => <AttachmentComposer />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const attachments = canvas.getByRole('region', { name: 'Draft attachments' });
+    const previews = Array.from(attachments.children).map(attachment => attachment.firstElementChild);
+    const thumbnailHeight = previews[0]?.getBoundingClientRect().height;
+
+    await expect(thumbnailHeight).toBeGreaterThan(0);
+    for (const preview of previews) {
+      await expect(preview?.getBoundingClientRect().height).toBe(thumbnailHeight);
+      const control = preview?.querySelector('button, a');
+      if (control) await expect(control.getBoundingClientRect().height).toBe(thumbnailHeight);
+    }
+
+    const removeButtons = canvas.getAllByRole('button', { name: /^Remove / });
+    const removeTop = removeButtons[0]?.getBoundingClientRect().top;
+    for (const button of removeButtons) {
+      await expect(button.getBoundingClientRect().top).toBe(removeTop);
+    }
+  },
 };
 
 export const PreviewAndRemove: Story = {
