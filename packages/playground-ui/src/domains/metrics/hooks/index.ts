@@ -40,3 +40,7 @@ export {
   type MetricsDimensionalFilter,
   type MetricsPropertyFilterFieldId,
 } from '../metrics-filters';
+export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
+export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
+export { useModelUsage, type ModelSpendRow } from './use-model-usage';
+export { useBucketTracesNav } from './use-bucket-traces-nav';
