@@ -83,12 +83,12 @@ function segmentShape({
  * Dims every column but the hovered one. Its own tiny state, so a hover only re-renders this
  * <style> tag: with hundreds of buckets, re-rendering the bars on each move froze the pointer.
  */
-function HoverDim({ scope, setter }: { scope: string; setter: { current: (index: number | null) => void } }) {
-  const [hovered, setHovered] = useState<number | null>(null);
+function HoverDim({ scope, setter }: { scope: string; setter: { current: (index: number | undefined) => void } }) {
+  const [hovered, setHovered] = useState<number>();
   useLayoutEffect(() => {
     setter.current = setHovered;
   }, [setter]);
-  if (hovered === null) return null;
+  if (hovered === undefined) return null;
   return (
     <style>{`[data-chart-scope="${scope}"] [data-bucket]:not([data-bucket="${hovered}"]){opacity:${DIMMED}}`}</style>
   );
@@ -99,27 +99,7 @@ export type MetricsStackedBarChartOverlay = MetricsLineChartSeries & {
   valueFormatter?: (value: number) => string;
 };
 
-export function MetricsStackedBarChart({
-  data,
-  series,
-  height = 210,
-  yDomain,
-  valueFormatter,
-  axisFormatter,
-  showLegend = true,
-  referenceLine,
-  variant = 'gradient',
-  showYAxis = true,
-  showTotal = series.length > 1,
-  xKey = 'time',
-  timestampKey = 'tsMs',
-  xLabels = 'auto',
-  tooltipLabelKey,
-  onBucketClick,
-  overlay,
-  isLoading = false,
-  className,
-}: {
+export type MetricsStackedBarChartProps = {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   /** Pixels, or `fill` to grow with the parent (a flex column, e.g. a card's content). */
@@ -159,12 +139,44 @@ export function MetricsStackedBarChart({
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
   isLoading?: boolean;
   className?: string;
-}) {
+};
+
+export function MetricsStackedBarChart(props: MetricsStackedBarChartProps) {
+  const { data, series, overlay, height = 210, showLegend = true, isLoading = false, className } = props;
   const id = useChartDefsId();
-  const setHovered = useRef<(index: number | null) => void>(() => {});
+  const root = cn(height === 'fill' && 'flex min-h-0 flex-1 flex-col', className);
+  const legend = overlay ? [...series, { ...overlay, dashed: true }] : series;
+  // The legend stays while loading: it comes from the series, not the data.
+  return (
+    <div className={root} data-chart-scope={id}>
+      {showLegend && <MetricsLineChartLegend data={isLoading ? undefined : data} series={legend} className="mb-4" />}
+      {isLoading ? <ChartSkeleton kind="bar" height={height} /> : <BarPlot {...props} id={id} />}
+    </div>
+  );
+}
+
+/** The plot itself, once the data is in; `id` scopes its gradients and hover rule. */
+function BarPlot({
+  data,
+  series,
+  height = 210,
+  yDomain,
+  valueFormatter,
+  axisFormatter,
+  referenceLine,
+  variant = 'gradient',
+  showYAxis = true,
+  showTotal = series.length > 1,
+  xKey = 'time',
+  timestampKey = 'tsMs',
+  xLabels = 'auto',
+  tooltipLabelKey,
+  onBucketClick,
+  overlay,
+  id,
+}: MetricsStackedBarChartProps & { id: string }) {
+  const setHovered = useRef<(index: number | undefined) => void>(() => {});
   const { size, onResize, ref } = useChartSize();
-  const fill = height === 'fill';
-  const root = cn(fill && 'flex min-h-0 flex-1 flex-col', className);
 
   const keyList = series.map(s => s.dataKey).join('\u0000');
   const colorList = series.map(s => s.color).join('\u0000');
@@ -183,33 +195,21 @@ export function MetricsStackedBarChart({
     );
   }, [keyList, colorList, variant, id]);
 
-  const legend = overlay ? [...series, { ...overlay, dashed: true }] : series;
-  // The legend stays while loading: it comes from the series, not the data.
-  if (isLoading) {
-    return (
-      <div className={root}>
-        {showLegend && <MetricsLineChartLegend series={legend} className="mb-4" />}
-        <ChartSkeleton kind="bar" height={height} />
-      </div>
-    );
-  }
-
   const format = valueFormatter ?? compactNumber.format;
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
 
   return (
-    <div className={root} data-chart-scope={id}>
+    <>
       <HoverDim scope={id} setter={setHovered} />
-      {showLegend && <MetricsLineChartLegend data={data} series={legend} className="mb-4" />}
       <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
         <ComposedChart
           data={data}
           margin={CHART_MARGIN}
           onMouseMove={state => {
             const index = state?.activeTooltipIndex;
-            setHovered.current(index === undefined || index === null ? null : Number(index));
+            setHovered.current(index === undefined || index === null ? undefined : Number(index));
           }}
-          onMouseLeave={() => setHovered.current(null)}
+          onMouseLeave={() => setHovered.current(undefined)}
           onClick={state => {
             const i = state?.activeTooltipIndex;
             const row = i === undefined || i === null ? undefined : data[Number(i)];
@@ -284,6 +284,6 @@ export function MetricsStackedBarChart({
           )}
         </ComposedChart>
       </ChartPlot>
-    </div>
+    </>
   );
 }

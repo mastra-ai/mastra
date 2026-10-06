@@ -1,24 +1,20 @@
-import type { ReactNode } from 'react';
 import { AgentRunsCard } from './agent-runs-card';
 import { FailureRateCard } from './failure-rate-card';
 import { LatencyCard } from './latency-card';
 import { MetricsKpis } from './metrics-kpis';
+import { ScoresCard } from './scores-card';
 import { TokenUsageCard } from './token-usage-card';
 import { TraceVolumeCard } from './trace-volume-card';
 import { UsageCard } from './usage-card';
 
-export type MetricsDashboardProps = {
-  /** App-specific cards after the shared ones, two across on wide pages. */
-  children?: ReactNode;
-};
-
 /**
  * The Metrics page body, shared by Studio and Platform: KPIs, token usage, then runs, failure
  * rate and latency (three across on wide pages, two plus a full-width third on medium ones),
- * then trace volume beside usage, then any app-specific cards. Rows wrap by the page's width
- * (container queries), not the window's. Render inside `MetricsProvider`.
+ * then trace volume beside usage, then scores. Studio and Platform render the same cards, so
+ * there is no slot for app-specific ones. Rows wrap by the page's width (container queries), not
+ * the window's. Render inside `MetricsProvider`.
  */
-export function MetricsDashboard({ children }: MetricsDashboardProps) {
+export function MetricsDashboard() {
   return (
     <div className="grid content-start gap-4 pb-6">
       <MetricsKpis />
@@ -36,9 +32,9 @@ export function MetricsDashboard({ children }: MetricsDashboardProps) {
         <div className="grid gap-4 @2xl:grid-cols-2">
           <TraceVolumeCard />
           <UsageCard />
-          {children}
         </div>
       </div>
+      <ScoresCard />
     </div>
   );
 }

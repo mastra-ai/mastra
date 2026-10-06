@@ -36,55 +36,7 @@ export function ChartSkeleton({ kind, height = 210, className }: ChartSkeletonPr
 
   // Ghost shapes at a faint fill, and a 40-unit band of light that sweeps across them (masked
   // to the shapes), on the same clock as the text skeletons.
-  let ghost;
-  let mask;
-  let peak;
-  if (kind === 'bar') {
-    const slot = 100 / values.length;
-    const bars = values.map((v, i) => (
-      <rect key={i} x={i * slot + slot * 0.15} width={slot * 0.7} y={100 - v * 100} height={v * 100} rx={0.4} />
-    ));
-    ghost = (
-      <g fill="var(--foreground)" fillOpacity={0.07}>
-        {bars}
-      </g>
-    );
-    mask = <g fill="white">{bars}</g>;
-    peak = 0.09;
-  } else {
-    const step = 100 / (values.length - 1);
-    const pts = values.map((v, i) => [i * step, 100 - v * 100] as const);
-    const line = pts
-      .map(([x, y], i) => {
-        const prev = pts[i - 1];
-        if (!prev) return `M${x},${y}`;
-        const [px, py] = prev;
-        const cx = (px + x) / 2;
-        return `C${cx},${py} ${cx},${y} ${x},${y}`;
-      })
-      .join(' ');
-    const area = `${line} L100,100 L0,100 Z`;
-    ghost = (
-      <>
-        <path d={area} fill="var(--foreground)" fillOpacity={0.025} />
-        <path
-          d={line}
-          fill="none"
-          stroke="var(--foreground)"
-          strokeOpacity={0.12}
-          strokeWidth={1.75}
-          vectorEffect="non-scaling-stroke"
-        />
-      </>
-    );
-    mask = (
-      <>
-        <path d={area} fill="white" fillOpacity={0.2} />
-        <path d={line} fill="none" stroke="white" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-      </>
-    );
-    peak = 0.18;
-  }
+  const { ghost, mask, peak } = kind === 'bar' ? barGhost(values) : lineGhost(values);
   const shape = (
     <>
       <defs>
@@ -133,4 +85,59 @@ export function ChartSkeleton({ kind, height = 210, className }: ChartSkeletonPr
       {plot}
     </div>
   );
+}
+
+/** Ghost bars: the shapes, the mask the light band sweeps through, and the band's peak opacity. */
+function barGhost(values: number[]) {
+  const slot = 100 / values.length;
+  const bars = values.map((v, i) => (
+    <rect key={i} x={i * slot + slot * 0.15} width={slot * 0.7} y={100 - v * 100} height={v * 100} rx={0.4} />
+  ));
+  return {
+    ghost: (
+      <g fill="var(--foreground)" fillOpacity={0.07}>
+        {bars}
+      </g>
+    ),
+    mask: <g fill="white">{bars}</g>,
+    peak: 0.09,
+  };
+}
+
+/** A ghost line with a faint area under it, as `barGhost` returns. */
+function lineGhost(values: number[]) {
+  const step = 100 / (values.length - 1);
+  const pts = values.map((v, i) => [i * step, 100 - v * 100] as const);
+  const line = pts
+    .map(([x, y], i) => {
+      const prev = pts[i - 1];
+      if (!prev) return `M${x},${y}`;
+      const [px, py] = prev;
+      const cx = (px + x) / 2;
+      return `C${cx},${py} ${cx},${y} ${x},${y}`;
+    })
+    .join(' ');
+  const area = `${line} L100,100 L0,100 Z`;
+  return {
+    ghost: (
+      <>
+        <path d={area} fill="var(--foreground)" fillOpacity={0.025} />
+        <path
+          d={line}
+          fill="none"
+          stroke="var(--foreground)"
+          strokeOpacity={0.12}
+          strokeWidth={1.75}
+          vectorEffect="non-scaling-stroke"
+        />
+      </>
+    ),
+    mask: (
+      <>
+        <path d={area} fill="white" fillOpacity={0.2} />
+        <path d={line} fill="none" stroke="white" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      </>
+    ),
+    peak: 0.18,
+  };
 }

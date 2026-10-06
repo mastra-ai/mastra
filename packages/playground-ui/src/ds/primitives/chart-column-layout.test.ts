@@ -13,7 +13,7 @@ function column(values: number[], ppu: number, opts?: { gap?: number; minSize?: 
 
 describe('stackedSegmentBox', () => {
   it('draws nothing for a zero value', () => {
-    expect(column([100, 0, 5], 1)[1]).toBeNull();
+    expect(column([100, 0, 5], 1)[1]).toBeUndefined();
   });
 
   it('keeps a tiny segment at the minimum and the column at its true height', () => {
@@ -42,7 +42,7 @@ describe('singleBarBox', () => {
   });
 
   it('drops zeros', () => {
-    expect(singleBarBox(0, { y: 200, height: 0 })).toBeNull();
+    expect(singleBarBox(0, { y: 200, height: 0 })).toBeUndefined();
   });
 });
 
@@ -50,11 +50,11 @@ describe('column layout with bad values', () => {
   const geo = { y: 100, height: 100 };
 
   it('draws nothing for NaN, negative or missing values', () => {
-    expect(stackedSegmentBox([Number.NaN, 5], 0, geo)).toBeNull();
-    expect(stackedSegmentBox([-3, 5], 0, geo)).toBeNull();
-    expect(stackedSegmentBox([5], 3, geo)).toBeNull();
-    expect(singleBarBox(Number.NaN, geo)).toBeNull();
-    expect(singleBarBox(-1, geo)).toBeNull();
+    expect(stackedSegmentBox([Number.NaN, 5], 0, geo)).toBeUndefined();
+    expect(stackedSegmentBox([-3, 5], 0, geo)).toBeUndefined();
+    expect(stackedSegmentBox([5], 3, geo)).toBeUndefined();
+    expect(singleBarBox(Number.NaN, geo)).toBeUndefined();
+    expect(singleBarBox(-1, geo)).toBeUndefined();
   });
 
   it('ignores NaN and negative neighbours when stacking', () => {

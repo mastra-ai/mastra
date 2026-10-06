@@ -4,6 +4,9 @@ type AggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>
 type BreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
 type TimeSeriesResponse = Awaited<ReturnType<MastraClient['getMetricTimeSeries']>>;
 type PercentilesResponse = Awaited<ReturnType<MastraClient['getMetricPercentiles']>>;
+type ListScoresResponse = Awaited<ReturnType<MastraClient['listScores']>>;
+type ScoreAggregateResponse = Awaited<ReturnType<MastraClient['getScoreAggregate']>>;
+type ScoreTimeSeriesResponse = Awaited<ReturnType<MastraClient['getScoreTimeSeries']>>;
 
 /** Two hours ago: inside the last-24-hours window every test renders. */
 const recent = () => new Date(Date.now() - 2 * 3_600_000).toISOString();
@@ -30,6 +33,14 @@ export const agentVolumeBreakdownFixture: BreakdownResponse = {
 };
 
 export const emptyBreakdownFixture: BreakdownResponse = { groups: [] };
+
+/** Usage by thread: input and output tokens summed, with their estimated cost. */
+export const threadSpendBreakdownFixture: BreakdownResponse = {
+  groups: [
+    { dimensions: { threadId: 'thread-big' }, value: 42_000, estimatedCost: 1.25 },
+    { dimensions: { threadId: 'thread-small' }, value: 900, estimatedCost: 0.02 },
+  ],
+};
 
 /** One bucket of one token metric (input, output or cache reads), with its estimated cost. */
 export function tokenSeriesFixture(value: number, estimatedCost: number): TimeSeriesResponse {
@@ -64,7 +75,25 @@ export const emptyPercentilesFixture: PercentilesResponse = { series: [] };
 /** The server's error body when a metrics query fails. */
 export const metricsErrorFixture = { error: 'Failed to query metrics' };
 
-/** Memory: one thread with 3 agent runs. */
-export const threadRunsBreakdownFixture: BreakdownResponse = {
-  groups: [{ dimensions: { threadId: 'thread-1', resourceId: 'user-1' }, value: 3 }],
+/** The most recent scores in the range: one scorer, Answer relevancy. */
+export function recentScoresFixture(): ListScoresResponse {
+  return {
+    pagination: { total: 1, page: 0, perPage: 100, hasMore: false },
+    scores: [
+      { scorerId: 'answer-relevancy', scorerName: 'Answer relevancy', score: 0.84, timestamp: new Date(recent()) },
+    ],
+  };
+}
+
+export const emptyScoresFixture: ListScoresResponse = {
+  pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
+  scores: [],
 };
+
+/** Answer relevancy's mean over the range. */
+export const scoreAggregateFixture: ScoreAggregateResponse = { value: 0.84, previousValue: null, changePercent: null };
+
+/** One bucket of Answer relevancy's average score. */
+export function scoreSeriesFixture(): ScoreTimeSeriesResponse {
+  return { series: [{ name: 'answer-relevancy', points: [{ timestamp: new Date(recent()), value: 0.84 }] }] };
+}

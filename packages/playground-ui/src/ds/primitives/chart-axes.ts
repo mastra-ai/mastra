@@ -74,7 +74,7 @@ export function pickTimeTicks(
   const widest = Math.max(...labels.map(l => labelWidth(l)));
   const fit = Math.floor(plotWidth / (widest + LABEL_GAP));
   if (fit < 3) return ends;
-  const ts = timestamps.every(t => typeof t === 'number' && Number.isFinite(t)) ? (timestamps as number[]) : null;
+  const ts = timestamps.every(isFiniteNumber) ? timestamps : undefined;
   const bucket = ts ? (ts[1] ?? 0) - (ts[0] ?? 0) : 0;
   // From the full range, so gaps (missing buckets) can't make the series look shorter.
   const span = ts ? ((ts[last] ?? 0) - (ts[0] ?? 0) + bucket) / MINUTE : 0;
@@ -107,4 +107,8 @@ export function pickTimeTicks(
   });
   // Two clock labels land off-centre (one mid-plot, one at an edge): label the ends instead.
   return picked.size < 3 ? ends : picked;
+}
+
+function isFiniteNumber(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }

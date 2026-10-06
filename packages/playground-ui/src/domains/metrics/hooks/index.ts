@@ -42,5 +42,6 @@ export {
 } from '../metrics-filters';
 export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
 export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
-export { useModelUsage, type ModelSpendRow } from './use-model-usage';
+export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
+export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';
 export { useBucketTracesNav } from './use-bucket-traces-nav';

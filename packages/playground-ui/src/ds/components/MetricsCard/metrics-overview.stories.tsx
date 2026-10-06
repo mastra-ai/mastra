@@ -345,11 +345,15 @@ function UsageCard({ isLoading }: Loadable) {
 
 /** Eval scores over time: the average per hour, with the window mean in the legend. */
 function ScoresCard({ isLoading }: Loadable) {
-  const series: MetricsLineChartSeries[] = [
+  const scorers = [
     { dataKey: 'relevancy', label: 'Answer relevancy', color: 'var(--chart-green)' },
     { dataKey: 'faithfulness', label: 'Faithfulness', color: 'var(--chart-blue)' },
     { dataKey: 'tone', label: 'Tone', color: 'var(--chart-orange)' },
-  ].map(s => ({ ...s, aggregate: () => ({ value: score(mean(s.dataKey as keyof AgentActivityBucket)) }) }));
+  ] as const;
+  const series: MetricsLineChartSeries[] = scorers.map(s => ({
+    ...s,
+    aggregate: () => ({ value: score(mean(s.dataKey)) }),
+  }));
   return (
     <Card
       title="Scores"

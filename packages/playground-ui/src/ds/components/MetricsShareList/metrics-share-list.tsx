@@ -24,7 +24,22 @@ import { cn } from '@/lib/utils';
  * and values. Hovering a segment or a row highlights the pair; every segment has its row, so
  * there is no tooltip. A non-zero share always gets a visible segment; a zero gets none.
  */
-export function MetricsShareList({
+export function MetricsShareList({ showHeader = true, className, ...props }: MetricsShareListProps) {
+  const { columns = [], valueLabel, valueWidth = 'w-14' } = props;
+  return (
+    <div className={cn('grid grid-cols-1 gap-4', className)}>
+      {showHeader && (
+        <div className="flex justify-end">
+          <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
+        </div>
+      )}
+      <ShareListBody {...props} />
+    </div>
+  );
+}
+
+/** Below the header: a skeleton while loading, the empty message, or the strip and its rows. */
+function ShareListBody({
   rows,
   columns = [],
   valueLabel,
@@ -36,40 +51,27 @@ export function MetricsShareList({
   pageSize = 50,
   other,
   activeKey,
-  showHeader = true,
   emptyState = 'No data in this range.',
   isLoading = false,
   LinkComponent,
-  className,
-}: MetricsShareListProps) {
+}: Omit<MetricsShareListProps, 'showHeader' | 'className'>) {
   const [hover, setHover] = useState<string>();
   // Extra pages opened with "Show more", so the row count follows `limit` when it changes.
   const [pages, setPages] = useState(0);
   const count = limit + pages * pageSize;
-  const header = showHeader && (
-    <div className="flex justify-end">
-      <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
-    </div>
-  );
 
   if (isLoading) {
     return (
-      <div className={cn('grid grid-cols-1 gap-4', className)}>
-        {header}
-        <ShareListSkeleton rows={overflow === 'other' ? limit + 1 : limit} columns={columns} valueWidth={valueWidth} />
-      </div>
+      <ShareListSkeleton rows={overflow === 'other' ? limit + 1 : limit} columns={columns} valueWidth={valueWidth} />
     );
   }
 
   const ranked = rankRows(rows);
   if (ranked.length === 0) {
     return (
-      <div className={cn('grid grid-cols-1 gap-4', className)}>
-        {header}
-        <Txt variant="body-sm" tone="muted" className="py-6 text-center">
-          {emptyState}
-        </Txt>
-      </div>
+      <Txt variant="body-sm" tone="muted" className="py-6 text-center">
+        {emptyState}
+      </Txt>
     );
   }
 
@@ -83,8 +85,7 @@ export function MetricsShareList({
   const clearHover = () => setHover(undefined);
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4', className)}>
-      {header}
+    <>
       <div className="flex h-2 gap-0.5" onMouseLeave={clearHover}>
         {segments.map(s => (
           <span
@@ -125,7 +126,7 @@ export function MetricsShareList({
           />
         )}
       </ul>
-    </div>
+    </>
   );
 }
 

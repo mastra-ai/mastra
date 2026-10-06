@@ -16,7 +16,7 @@ export type SegmentBox = { y: number; height: number };
 const amount = (v: number | undefined) => (v !== undefined && Number.isFinite(v) && v > 0 ? v : 0);
 
 /**
- * Lays out one stacked column and returns the box of segment `self`, or `null` when its value is
+ * Lays out one stacked column and returns the box of segment `self`, or `undefined` when its value is
  * zero. `geo` is the box Recharts computed for that segment (its true y and height); segments
  * stack bottom to top in `values` order with `gap` pixels between them.
  */
@@ -25,10 +25,10 @@ export function stackedSegmentBox(
   self: number,
   geo: SegmentBox,
   { gap = 0, minSize = CHART_MIN_SEGMENT }: { gap?: number; minSize?: number } = {},
-): SegmentBox | null {
+): SegmentBox | undefined {
   const amounts = values.map(amount);
   const value = amounts[self] ?? 0;
-  if (!(value > 0) || !Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return null;
+  if (!(value > 0) || !Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return undefined;
   // Pixels per unit, from this segment's own box; every segment shares the scale.
   const ppu = geo.height / value;
   const below = amounts.slice(0, self).reduce((sum, v) => sum + v, 0);
@@ -54,7 +54,7 @@ export function stackedSegmentBox(
     if (i === self) return { y: top, height: h(i) };
     top -= gap;
   }
-  return null;
+  return undefined;
 }
 
 /** A single (unstacked) bar: grows up from its base to `minSize` when its value is tiny. */
@@ -62,8 +62,8 @@ export function singleBarBox(
   value: number,
   geo: SegmentBox,
   { minSize = CHART_MIN_SEGMENT }: { minSize?: number } = {},
-): SegmentBox | null {
-  if (!(amount(value) > 0) || !Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return null;
+): SegmentBox | undefined {
+  if (!(amount(value) > 0) || !Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return undefined;
   if (geo.height >= minSize) return geo;
   return { y: geo.y + geo.height - minSize, height: minSize };
 }

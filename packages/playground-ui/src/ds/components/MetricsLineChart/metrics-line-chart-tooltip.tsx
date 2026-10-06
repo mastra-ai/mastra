@@ -35,6 +35,12 @@ export function MetricsLineChartTooltip({
   const total = payload.reduce((sum, entry) => sum + (finite(entry.value) ? entry.value : 0), 0);
   const heading = labelKey ? String(payload[0]?.payload?.[labelKey] ?? label ?? '') : label;
   const format = (entry: { dataKey?: string | number }) => formatByKey?.[String(entry.dataKey)] ?? formatValue;
+  // A number through its formatter; a missing or non-finite one as a dash; text as it is.
+  const reading = (entry: (typeof payload)[number]) => {
+    if (finite(entry.value)) return format(entry)(entry.value);
+    if (typeof entry.value === 'number' || entry.value == null) return '—';
+    return entry.value;
+  };
   return (
     <ChartTooltip>
       <Txt variant="column" tone="ink" className="mb-1">
@@ -48,16 +54,8 @@ export function MetricsLineChartTooltip({
               {entry.name}
             </Txt>
             <span className="text-right font-mono text-foreground tabular-nums">
-              {finite(entry.value) ? (
-                <>
-                  {format(entry)(entry.value)}
-                  {suffix}
-                </>
-              ) : typeof entry.value === 'number' || entry.value == null ? (
-                '—'
-              ) : (
-                entry.value
-              )}
+              {reading(entry)}
+              {finite(entry.value) && suffix}
             </span>
           </div>
         ))}

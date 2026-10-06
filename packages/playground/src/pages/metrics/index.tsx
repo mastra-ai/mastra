@@ -4,7 +4,6 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { MemoryCard } from '@mastra/playground-ui/domains/metrics/components/memory-card';
 import { MetricsDashboard } from '@mastra/playground-ui/domains/metrics/components/metrics-dashboard';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
@@ -236,9 +235,7 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsDashboard>
-          <MemoryCard />
-        </MetricsDashboard>
+        <MetricsDashboard />
       </div>
     </MetricsPageLayout>
   );
