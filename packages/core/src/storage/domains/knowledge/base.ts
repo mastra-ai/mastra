@@ -211,6 +211,13 @@ export interface KnowledgeStructureScope {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeStructurePlan {
   scopes: KnowledgeStructureScope[];
+  /**
+   * Whether scopes that already exist gain parent edges and grants the plan declares but storage lacks.
+   * Defaults to `true`, so rules added to a static structure after first boot take effect. Plans from
+   * lazy materialization set `false`: a scope keeps the edges and grants it was created with, even if
+   * its scope type's template changes later.
+   */
+  retrofit?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
