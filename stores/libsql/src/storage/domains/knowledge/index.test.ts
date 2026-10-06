@@ -479,7 +479,7 @@ describe('KnowledgeLibSQL initialization', () => {
       };
       const { scopes } = await store.reconcileStructure(plan);
 
-      const nodes = await store.listScopeNodes();
+      const { scopes: nodes } = await store.listScopeNodes();
       expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
       const mastra = nodes.find(node => node.name === 'mastra')!;
       const features = nodes.find(node => node.name === 'features')!;
@@ -496,7 +496,7 @@ describe('KnowledgeLibSQL initialization', () => {
         new Date().toISOString(),
         features.id,
       ]);
-      const afterDelete = await store.listScopeNodes();
+      const { scopes: afterDelete } = await store.listScopeNodes();
       expect(afterDelete.find(node => node.id === features.id)).toBeUndefined();
       await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
     } finally {

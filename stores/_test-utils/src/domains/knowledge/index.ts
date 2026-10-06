@@ -47,6 +47,55 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.dangerouslyClearAll();
     });
 
+    it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+      let ids: Record<string, string>;
+      try {
+        ({ scopes: ids } = await store.reconcileStructure({
+          scopes: [
+            { address: 'org:acme', name: 'Acme' },
+            { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+            { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+            { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+            { address: 'org:other', name: 'Other' },
+            { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+          ],
+        }));
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+
+      const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+      expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+      expect(within.nextCursor).toBeNull();
+      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds.sort()).toEqual(
+        [ids['team:a'], ids['team:b']].sort(),
+      );
+
+      const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+      expect(first.scopes).toHaveLength(3);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+      expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+      expect(second.nextCursor).toBeNull();
+      await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+        'does not match this query',
+      );
+
+      expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+        'team:b',
+        'project:p',
+      ]);
+      expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+        ids['team:o'],
+      ]);
+      expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+    });
+
     it('adds newly declared parent edges and grants to existing static scopes, but never to materialized ones', async () => {
       const org = { address: 'org:acme', name: 'Acme' };
       const other = { address: 'org:other', name: 'Other' };
@@ -61,8 +110,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         if (unsupported) return;
         throw error;
       }
-      const teamParents = async () =>
-        (await store.listScopeNodes()).find(scope => scope.address === 'team')?.parentIds ?? [];
+      const teamParents = async () => (await store.listScopeNodes({ addresses: ['team'] })).scopes[0]?.parentIds ?? [];
 
       const withParent = await store.reconcileStructure({
         scopes: [org, other, { address: 'team', name: 'Team', parentAddresses: ['org:acme'] }],
