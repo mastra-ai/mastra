@@ -426,7 +426,7 @@ describe('foreach nested workflow runs', () => {
       .toBe('success');
   });
 
-  it('continues the parent when a nested child is resumed directly', async () => {
+  it('continues an internal-only parent when a nested child is resumed directly', async () => {
     const childStep = createStep({
       id: 'approval-step',
       inputSchema: z.object({ item: z.string() }),
@@ -463,12 +463,13 @@ describe('foreach nested workflow runs', () => {
       filterAccessible: vi.fn(),
     };
     const storage = new MockStore();
-    new Mastra({ workflows: { parentWorkflow }, storage, logger: false, server: { fga: fgaProvider } });
+    const mastra = new Mastra({ storage, logger: false, server: { fga: fgaProvider } });
 
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'user-1' });
 
     const parentRun = await parentWorkflow.createRun();
+    mastra.__registerInternalWorkflow(parentWorkflow, parentRun.runId);
     const parentEvents: Array<{ type: string; payload: Record<string, unknown> }> = [];
     const unwatch = parentRun.watch(event => {
       parentEvents.push(event);
