@@ -143,7 +143,7 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     if (!prepared.ok) return prepared;
     const written = await writeFilesToSandbox(sandbox.value, prepared.value, abortSignal);
     if (!written.ok) return written;
-    prepared.value.forEach(applyUploadedNote);
+    written.value.forEach(applyUploadedNote);
     return ok(undefined);
   }
 

@@ -17,22 +17,27 @@ export function hasWriteCapability(sandbox: WorkspaceSandbox): boolean {
 
 /**
  * Writes with the provider's batch upload when it exists, otherwise through
- * shell commands. On failure, removes whatever was written before reporting it.
+ * shell commands, and returns the files with the path they were written at.
+ * On failure, removes whatever was written before reporting it.
+ *
+ * Relative paths are made absolute from the directory where commands run: each
+ * provider resolves a relative path for `writeFiles` its own way, and the model
+ * looks for the file with its command tool.
  */
-export async function writeFilesToSandbox(
+export async function writeFilesToSandbox<T extends SandboxUpload>(
   sandbox: WorkspaceSandbox,
-  files: SandboxUpload[],
+  files: T[],
   abortSignal?: AbortSignal,
-): Promise<Result<void>> {
+): Promise<Result<T[]>> {
+  let placed = files;
   try {
-    if (sandbox.executeCommand) {
-      await runScript(sandbox, `mkdir -p ${directoriesOf(files).map(shellQuote).join(' ')}`, abortSignal);
-    }
-    if (sandbox.writeFiles) await sandbox.writeFiles(files.map(toSandboxFile), { abortSignal });
-    else await writeWithCommands(sandbox, files, abortSignal);
-    return ok(undefined);
+    const root = await createDirectories(sandbox, files, abortSignal);
+    placed = root ? files.map(file => ({ ...file, path: `${root.replace(/\/+$/, '')}/${file.path}` })) : files;
+    if (sandbox.writeFiles) await sandbox.writeFiles(placed.map(toSandboxFile), { abortSignal });
+    else await writeWithCommands(sandbox, placed, abortSignal);
+    return ok(placed);
   } catch (error) {
-    const orphanPaths = await removeUploaded(sandbox, files);
+    const orphanPaths = await removeUploaded(sandbox, placed);
     return failed(FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED, 'Files could not be written to the sandbox.', {
       cause: describeError(error),
       ...(orphanPaths.length > 0 ? { orphanPaths } : {}),
@@ -41,6 +46,23 @@ export async function writeFilesToSandbox(
 }
 
 const toSandboxFile = ({ path, content }: SandboxUpload) => ({ path, content });
+
+/**
+ * Creates the upload directories and returns the directory where commands run,
+ * in a single command. A sandbox that can't run commands only has its working
+ * directory to go by; without either, paths stay relative.
+ */
+async function createDirectories(
+  sandbox: WorkspaceSandbox,
+  files: SandboxUpload[],
+  abortSignal?: AbortSignal,
+): Promise<string | undefined> {
+  if (!sandbox.executeCommand) return absolute(sandbox.workingDirectory);
+  const directories = directoriesOf(files).map(shellQuote).join(' ');
+  return absolute((await runScript(sandbox, `mkdir -p ${directories} && pwd`, abortSignal)).trim());
+}
+
+const absolute = (directory: string | undefined) => (directory?.startsWith('/') ? directory : undefined);
 
 function directoriesOf(files: SandboxUpload[]): string[] {
   return [...new Set(files.map(file => file.path.slice(0, file.path.lastIndexOf('/'))))];
@@ -88,10 +110,11 @@ async function removeUploaded(sandbox: WorkspaceSandbox, files: SandboxUpload[])
 }
 
 // The script is never echoed in the error: it can carry file content.
-async function runScript(sandbox: WorkspaceSandbox, script: string, abortSignal?: AbortSignal): Promise<void> {
+async function runScript(sandbox: WorkspaceSandbox, script: string, abortSignal?: AbortSignal): Promise<string> {
   if (!sandbox.executeCommand) throw new Error('The sandbox cannot run commands.');
   const result = await sandbox.executeCommand('sh', ['-c', script], { abortSignal });
   if (!result.success) {
     throw new Error(result.stderr.trim() || `Command exited with code ${result.exitCode}`);
   }
+  return result.stdout;
 }

@@ -78,7 +78,9 @@ function createModel(holdFirstStream?: Promise<void>) {
 }
 
 /** Sandbox double with the `writeFiles` fast path; records every write and command. */
-function createFakeSandbox(overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles' | 'executeCommand'>> = {}) {
+function createFakeSandbox(
+  overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles' | 'executeCommand' | 'workingDirectory'>> = {},
+) {
   const writes: SandboxFileInput[][] = [];
   const commands: string[] = [];
   const events: string[] = [];
@@ -147,6 +149,11 @@ const filePartsIn = (prompt: LanguageModelV2Prompt | undefined) =>
   userPartsIn(prompt).filter(part => part.type === 'file');
 const textsIn = (prompt: LanguageModelV2Prompt | undefined) =>
   userPartsIn(prompt).flatMap(part => (part.type === 'text' ? [part.text] : []));
+/** The `path:` line of the first upload note the model received. */
+const notedPathIn = (prompt: LanguageModelV2Prompt | undefined) =>
+  textsIn(prompt)
+    .join('\n')
+    .match(/^path: (.+)$/m)?.[1];
 
 describe('FILE_UPLOAD_ERROR_CODES', () => {
   it('lists every reason the processor can stop a turn', () => {
@@ -231,6 +238,19 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     expect(await fs.readdir(tempDir)).toEqual(['uploads']);
     expect(await fs.readdir(path.join(tempDir, 'uploads'))).toEqual([MEMORY.thread]);
     expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual([path.basename(uploaded)]);
+  });
+  it('gives the model the absolute path of the file, under the directory where commands run', async () => {
+    const { agent, prompts } = createLocalHarness();
+    const bytes = Buffer.from('found by the command tool');
+
+    await agent.generate([userMessage(file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+
+    const noted = notedPathIn(prompts.at(-1))!;
+    expect(path.isAbsolute(noted)).toBe(true);
+    expect(await fs.realpath(noted)).toBe(
+      path.join(await fs.realpath(tempDir), 'uploads', MEMORY.thread, path.basename(noted)),
+    );
+    expect(await fs.readFile(noted)).toEqual(bytes);
   });
   it('keeps the uploads of a thread with a hostile id inside the uploads directory', async () => {
     const { agent } = createLocalHarness();
@@ -374,7 +394,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       { memory: MEMORY },
     );
 
-    expect(commands).toEqual([`mkdir -p uploads/${MEMORY.thread}`]);
+    expect(commands).toEqual([`mkdir -p uploads/${MEMORY.thread} && pwd`]);
     expect(events).toEqual(['executeCommand', 'writeFiles']);
     expect(writes).toHaveLength(1);
     expect(writes[0]!.map(written => written.content)).toEqual([first, second]);
@@ -937,6 +957,65 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes[0]![0]!.path).toMatch(uploadedPath('\\.png'));
       expect(writes[0]![0]!.content).toEqual(bytes);
       expect(userPartsIn(prompts.at(-1)).map(part => part.type)).toEqual(['text', 'text']);
+    });
+  });
+
+  // Providers resolve a relative path against different directories for writes and for commands,
+  // so the file is written, and shown to the model, at an absolute path.
+  describe('upload location', () => {
+    const COMMAND_DIRECTORY = '/home/user/project';
+    const notesFile = () => [userMessage(file(Buffer.from('notes'), 'notes.txt', 'text/plain'))];
+    const runsIn = (directory: string, scripts: string[] = []) =>
+      (async (_command: string, args: string[] = []) => {
+        scripts.push(args.at(-1)!);
+        return { success: true, exitCode: 0, stdout: `${directory}\n`, stderr: '', executionTimeMs: 0 };
+      }) as WorkspaceSandbox['executeCommand'];
+
+    it('writes under the directory where commands run, and gives that absolute path to the model and the metadata', async () => {
+      const { sandbox, writes } = createFakeSandbox({ executeCommand: runsIn(COMMAND_DIRECTORY) });
+      const { agent, prompts, recall } = createHarness(sandbox);
+
+      await agent.generate(notesFile(), { memory: MEMORY });
+
+      const written = writes[0]![0]!.path;
+      expect(written).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/${MEMORY.thread}/${UUID}\\.txt$`));
+      expect(notedPathIn(prompts.at(-1))).toBe(written);
+      const stored = (await recall()).find(message => message.role === 'user');
+      expect(stored?.content.metadata?.fileUploads).toEqual([expect.objectContaining({ path: written })]);
+    });
+
+    it('writes through commands to that absolute path when the sandbox has no writeFiles', async () => {
+      const scripts: string[] = [];
+      const { sandbox } = createFakeSandbox({
+        writeFiles: undefined,
+        executeCommand: runsIn(COMMAND_DIRECTORY, scripts),
+      });
+      const { agent, prompts } = createHarness(sandbox);
+
+      await agent.generate(notesFile(), { memory: MEMORY });
+
+      const noted = notedPathIn(prompts.at(-1))!;
+      expect(noted).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/`));
+      expect(scripts.find(script => script.startsWith('base64 -d'))).toContain(`> ${noted} `);
+    });
+
+    it('uses the sandbox working directory when the sandbox cannot run commands', async () => {
+      const { sandbox, writes } = createFakeSandbox({ executeCommand: undefined, workingDirectory: '/srv/app' });
+      const { agent, prompts } = createHarness(sandbox);
+
+      await agent.generate(notesFile(), { memory: MEMORY });
+
+      expect(writes[0]![0]!.path).toMatch(new RegExp(`^/srv/app/uploads/${MEMORY.thread}/${UUID}\\.txt$`));
+      expect(notedPathIn(prompts.at(-1))).toBe(writes[0]![0]!.path);
+    });
+
+    it('keeps the path relative when the sandbox tells neither where commands run nor its working directory', async () => {
+      const { sandbox, writes } = createFakeSandbox({ executeCommand: undefined });
+      const { agent } = createHarness(sandbox);
+
+      await agent.generate(notesFile(), { memory: MEMORY });
+
+      expect(writes[0]![0]!.path).toMatch(new RegExp(`^uploads/${MEMORY.thread}/${UUID}\\.txt$`));
     });
   });
 

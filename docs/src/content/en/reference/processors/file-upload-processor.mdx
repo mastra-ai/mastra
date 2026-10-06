@@ -199,11 +199,13 @@ Only files sent inline, as binary, base64, or a data URL, are uploaded. A file s
 
 ## Upload location
 
-Files are written to `uploads/<thread>/<uuid>.<extension>`, relative to the sandbox working directory. Each thread has its own directory, so threads that share a sandbox don't mix their files.
+Files are written to `uploads/<thread>/<uuid>.<extension>`, under the directory where the sandbox runs commands. The processor reads that directory with `pwd` when it creates the upload directories, then writes the file and reports it at its absolute path. Providers resolve a relative path differently for writes and for commands, so the absolute path is the one the command tool finds. A sandbox that can't run commands uses its `workingDirectory` instead, and the path stays relative when neither is known.
+
+Each thread has its own directory, so threads that share a sandbox don't mix their files.
 
 The path keeps nothing of the original name but its extension. A path that looks like the name invites the model to retype one from the other, and to ask the sandbox for a file that doesn't exist. The name stays available in the note and in the message metadata.
 
-| Name sent | Path written |
+| Name sent | Path written, under the command directory |
 | - | - |
 | `report Q3 (final).pdf` | `uploads/<thread>/<uuid>.pdf` |
 | `résumé.PDF` | `uploads/<thread>/<uuid>.pdf` |
@@ -214,7 +216,7 @@ A file sent without a name takes its extension from its MIME type when the type 
 
 The thread ID is rewritten so the directory is safe in a shell command. Accents are removed, and every character outside `A-Z`, `a-z`, `0-9`, `.`, `_`, and `-` becomes `_`. Path separators and `..` are replaced too, so a file always stays inside `uploads/`.
 
-The processor writes with the sandbox `writeFiles` method when the sandbox has one, in a single call for all the files of a turn. Otherwise it writes with `executeCommand`, sending each file as base64 in chunks. This path needs `sh`, `base64`, `printf`, and `mkdir` in the sandbox.
+The processor writes with the sandbox `writeFiles` method when the sandbox has one, in a single call for all the files of a turn. Otherwise it writes with `executeCommand`, sending each file as base64 in chunks, which needs `base64` and `printf` in the sandbox. When the sandbox can run commands, the processor also needs `sh`, `mkdir`, and `pwd` there.
 
 ## Message content after upload
 
@@ -222,7 +224,7 @@ The file part is replaced, at the same position in the message, by a text part:
 
 ```text
 [File uploaded to the sandbox]
-path: uploads/thread-1/3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f.pdf
+path: /home/user/uploads/thread-1/3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f.pdf
 name: report.pdf
 type: application/pdf
 size: 1258291 bytes
@@ -232,7 +234,7 @@ The processor also records each upload in the message metadata. The metadata is 
 
 ```typescript
 message.content.metadata.fileUploads
-// [{ name: 'report.pdf', path: 'uploads/thread-1/<uuid>.pdf', mimeType: 'application/pdf', size: 1258291 }]
+// [{ name: 'report.pdf', path: '/home/user/uploads/thread-1/<uuid>.pdf', mimeType: 'application/pdf', size: 1258291 }]
 ```
 
 `name` is omitted for a file sent without a name.
@@ -334,7 +336,6 @@ The processor handles files sent with `agent.sendMessage()` and `agent.sendSigna
 - **Sandboxes shared across threads.** The directory of each thread keeps files apart but doesn't protect them. In a sandbox shared by other threads or users, the command tool of any thread can read every upload. When files are private, resolve [one sandbox per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 - **Text files sent from Studio.** Studio inserts a text file, such as a CSV, JSON, Markdown, or source file, into the message as text instead of attaching it as a file. The processor never sees it, so it isn't uploaded and its whole content goes into the prompt. A file sent through the API as a file part is uploaded as usual.
 - **Durable agents and early signals.** On a durable agent, a signal that arrives before the first model call of a run isn't uploaded. The turn stops with `FILE_NOT_UPLOADED`.
-- **Relative paths with `writeFiles`.** Each sandbox provider resolves the relative `uploads/` path itself. Check that your provider resolves it against the directory where commands run.
 - **Processor workflows.** The check before each model call doesn't run when the processor is nested in a processor workflow.
 
 ## Related
