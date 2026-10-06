@@ -2164,6 +2164,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visibleNodeScope
         WHERE visibleNodeScope.nodeId=${nodeAlias}.id AND ${inScope('visibleNodeScope.scopeNodeId', ids)}
       )))`;
+    // A tombstoned scope no longer reads as itself; like InMemory, its parent memberships decide visibility.
+    const membershipVisible = (nodeAlias: string, ids: string[]) => `EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" deletedScopeMembership
+        WHERE deletedScopeMembership.nodeId=${nodeAlias}.id AND ${inScope('deletedScopeMembership.scopeNodeId', ids)}
+      )`;
     const targetValue = (field: string) => `json_extract(target.value, '$.${field}')`;
     const currentTargetVisible = (ids: string[], includeMentionClosure: boolean) => `(
       (${targetValue('type')}='node' AND EXISTS (
@@ -2171,7 +2176,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         WHERE targetNode.id=${targetValue('id')}
           AND ((COALESCE(${targetValue('expectedDeleted')},0)=1 AND targetNode.deletedAt IS NOT NULL)
             OR (COALESCE(${targetValue('expectedDeleted')},0)=0 AND targetNode.deletedAt IS NULL))
-          AND ${nodeVisible('targetNode', ids)}
+          AND (CASE WHEN COALESCE(${targetValue('expectedDeleted')},0)=1 THEN ${membershipVisible('targetNode', ids)} ELSE ${nodeVisible('targetNode', ids)} END)
       )) OR
       (${targetValue('type')}='record' AND EXISTS (
         SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord
