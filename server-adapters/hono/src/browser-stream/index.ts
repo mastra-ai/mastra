@@ -33,8 +33,10 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
  *
  * All routes are authenticated with the server's auth configuration. Browsers
  * cannot attach an `Authorization` header to a WebSocket upgrade, so
- * session-cookie providers authenticate from the upgrade request's cookies while
- * token-based clients pass the token as the `apiKey` query parameter.
+ * session-cookie providers authenticate from the upgrade request's cookies.
+ * Non-browser clients can pass the token as the `apiKey` query parameter — use a
+ * short-lived token, since a URL can be retained in proxy and access logs, and
+ * prefer the `Authorization` header on the HTTP routes where the client can set one.
  *
  * **Note**: Requires `ws` package to be installed. If not available, returns null
  * and logs a warning. Browser streaming will be disabled but everything else works.
