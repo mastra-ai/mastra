@@ -237,6 +237,48 @@ describe('RedeliveryDriver', () => {
     });
   });
 
+  it('replays through publish like the durability harness, with a fresh id and attempt 1', async () => {
+    const execute = vi.fn(async ({ suspend, resumeData }: any) => {
+      if (!resumeData) {
+        await suspend({ reason: 'needs-approval' });
+        return {};
+      }
+      return { approved: resumeData.approved };
+    });
+    const workflow = singleStepWorkflow('driver-publish-wf', execute);
+    const driver = new RedeliveryDriver();
+
+    await withMastra(driver, { workflows: { [workflow.id]: workflow } }, async () => {
+      const runId = 'driver-publish-run';
+      const match = { spec: 'driver-publish-wf@0', runId };
+      const run = await workflow.createRun({ runId });
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const original = driver.stepRuns(match)[0]!;
+      const endedBefore = stepEndCount(driver);
+      const { event, handled } = await driver.redeliver(match, { viaPublish: true });
+
+      // The harness re-published, so the duplicate is a new event, not a
+      // same-id redelivery: publish mints an id and forces attempt 1.
+      expect(event.id).not.toBe(original.id);
+      expect(event.deliveryAttempt).toBe(1);
+      expect(event.data).toMatchObject({ workflowId: workflow.id, runId, executionPath: [0] });
+      expect(handled).toHaveLength(1);
+      expect(handled[0]!.event.id).toBe(event.id);
+      // The processor saw the transport's own attempt — no re-apply here.
+      expect(handled[0]!.event.deliveryAttempt).toBe(1);
+      expect(handled[0]!.result.ok).toBe(true);
+      expect(driver.deliveryCount(match)).toBe(2);
+      // A suspended step is dropped whatever its id, so even a fresh event
+      // does not re-execute it or emit a step.end.
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(stepEndCount(driver)).toBe(endedBefore);
+
+      const resumed = await run.resume({ step: 'step1', resumeData: { approved: true } });
+      expect(resumed.status).toBe('success');
+    });
+  });
+
   it('fences a redelivered step.run while the step is still running', async () => {
     const started = deferred();
     const gate = deferred();

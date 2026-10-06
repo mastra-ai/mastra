@@ -49,6 +49,11 @@
  * spec or no processor consumed the duplicate, so a spec that never matched
  * fails the test instead of passing silently.
  *
+ * `redeliver(match, { viaPublish: true })` replays through
+ * `EventEmitterPubSub.publish` instead — a fresh id with `deliveryAttempt` 1,
+ * i.e. exactly what the durability harness's `CapturePubSub` did. Ports of
+ * harness redelivery cases should use it so they exercise the same path.
+ *
  * Redelivering the step.run of a step that already *completed* re-executes it
  * (F4). The only thing dropping a duplicate today is the id-keyed step lease
  * (`STEP_FENCE_TTL_MS`), which covers an immediate redelivery but not a late
@@ -202,7 +207,9 @@ export class RedeliveryDriver {
       delivered: Event,
     ) {
       // Group delivery copies the event and recomputes deliveryAttempt from
-      // its own per-id counter, so re-apply the injected attempt here.
+      // its own per-id counter. Nothing in the engine decides on that field
+      // (`WorkflowEventProcessor` only logs it), so this is fidelity: the
+      // caller sees the attempt a broker would have delivered.
       const injecting = driver.#injecting;
       const event =
         injecting && delivered.id === injecting.id
@@ -251,8 +258,22 @@ export class RedeliveryDriver {
    * Re-delivers a clone of the most recent original (`deliveryAttempt` 1)
    * matching `workflow.step.run` and resolves once every workflow event
    * processor that received it has finished handling it.
+   *
+   * By default the clone is emitted with the *original event id* and
+   * `deliveryAttempt` 2 — what a real broker redelivery looks like (the Redis,
+   * Valkey and unix-socket transports keep the payload id and only bump the
+   * attempt).
+   *
+   * Pass `viaPublish: true` to replay through `EventEmitterPubSub.publish`
+   * instead: the mechanism the durability harness used, which mints a fresh id
+   * and forces `deliveryAttempt: 1`, so the duplicate arrives as a brand new
+   * event. Reuse it when porting a harness redelivery case, so the port
+   * exercises the same path the harness did.
    */
-  async redeliver(match: RedeliveryMatch, options: { deliveryAttempt?: number } = {}): Promise<RedeliveryOutcome> {
+  async redeliver(
+    match: RedeliveryMatch,
+    options: { deliveryAttempt?: number; viaPublish?: boolean } = {},
+  ): Promise<RedeliveryOutcome> {
     if (this.#disposed) throw new Error('RedeliveryDriver is disposed');
     const original = this.stepRuns(match)
       .filter(e => e.deliveryAttempt === 1)
@@ -263,18 +284,29 @@ export class RedeliveryDriver {
       );
     }
 
-    const event: Event = {
-      ...snapshotClone(original),
-      id: original.id,
-      createdAt: new Date(),
-      deliveryAttempt: options.deliveryAttempt ?? 2,
-    };
     const before = this.#handled.length;
-    this.#injecting = event;
-    try {
-      this.#emitter.emit(WORKFLOWS_TOPIC, event);
-    } finally {
-      this.#injecting = undefined;
+    let event: Event;
+    if (options.viaPublish) {
+      // publish() emits synchronously before it resolves, so the capture at
+      // this index is our replay even if later publishes land behind it.
+      const capturedBefore = this.events.length;
+      await this.pubsub.publish(WORKFLOWS_TOPIC, snapshotClone(original));
+      const published = this.events[capturedBefore];
+      if (!published) throw new Error(`Replaying "${match.spec}" did not publish a workflows event`);
+      event = published;
+    } else {
+      event = {
+        ...snapshotClone(original),
+        id: original.id,
+        createdAt: new Date(),
+        deliveryAttempt: options.deliveryAttempt ?? 2,
+      };
+      this.#injecting = event;
+      try {
+        this.#emitter.emit(WORKFLOWS_TOPIC, event);
+      } finally {
+        this.#injecting = undefined;
+      }
     }
     // Subscribers invoke the processor synchronously from emit(), so every
     // consumer of this delivery has registered its handle() call by now.
