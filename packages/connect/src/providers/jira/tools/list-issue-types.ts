@@ -10,7 +10,7 @@ const MetadataSchema = z.object({
 });
 
 export const listIssueTypesInputSchema = z.object({
-  // No input required - lists all issue types available to the user
+  projectId: z.string().optional().describe('Project ID used to list only issue types available in that project.'),
 });
 
 const IssueTypeSchema = z.object({
@@ -99,18 +99,30 @@ export function listIssueTypesTool(proxy: PlatformProxy) {
         });
       }
 
-      const config: PlatformProxyRequest = {
-        // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-types/#api-rest-api-3-issuetype-get
-        endpoint: `/ex/jira/${cloudId}/rest/api/3/issuetype`,
-        headers: {
-          'X-Atlassian-Token': 'no-check',
-        },
-        retries: 3,
-      };
+      const config: PlatformProxyRequest = input.projectId
+        ? {
+            // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-types/#api-rest-api-3-issuetype-project-get
+            endpoint: `/ex/jira/${cloudId}/rest/api/3/issuetype/project`,
+            params: { projectId: input.projectId },
+            headers: {
+              'X-Atlassian-Token': 'no-check',
+            },
+            retries: 3,
+          }
+        : {
+            // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-types/#api-rest-api-3-issuetype-get
+            endpoint: `/ex/jira/${cloudId}/rest/api/3/issuetype`,
+            headers: {
+              'X-Atlassian-Token': 'no-check',
+            },
+            retries: 3,
+          };
 
       const response = await platformProxy.get(config);
 
-      const issueTypes = z.array(IssueTypeSchema).parse(response.data);
+      const issueTypes = input.projectId
+        ? z.object({ values: z.array(IssueTypeSchema) }).parse(response.data).values
+        : z.array(IssueTypeSchema).parse(response.data);
 
       return {
         issueTypes: issueTypes.map(issueType => ({
