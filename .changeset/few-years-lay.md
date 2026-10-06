@@ -1,5 +1,4 @@
 ---
-'@mastra/code-sdk': patch
 'mastracode': patch
 ---
 
