@@ -84,14 +84,13 @@ describe('WorkflowTimerWorker', () => {
         workflowId: 'workflow',
         runId: 'run',
         ...harness.timer.continuation,
+        workflowTimer: {
+          id: harness.timer.id,
+          claimToken: 'claim',
+        },
       },
     });
-    expect(harness.workflowsStore.completeWorkflowTimer).toHaveBeenCalledWith({
-      workflowId: 'workflow',
-      runId: 'run',
-      timerId: harness.timer.id,
-      claimToken: 'claim',
-    });
+    expect(harness.workflowsStore.completeWorkflowTimer).not.toHaveBeenCalled();
 
     await worker.stop();
   });
@@ -151,17 +150,16 @@ describe('WorkflowTimerWorker', () => {
     await worker.stop();
   });
 
-  it('keeps a published timer claimed when acknowledgement fails so lease expiry controls redelivery', async () => {
+  it('keeps a published timer claimed until continuation processing settles it', async () => {
     const harness = createHarness();
-    harness.workflowsStore.completeWorkflowTimer.mockRejectedValueOnce(new Error('ack failed'));
     const worker = new WorkflowTimerWorker({ pollInterval: 10_000 });
 
     await worker.init(harness.deps);
     await worker.start();
 
     expect(harness.pubsub.publish).toHaveBeenCalledTimes(1);
+    expect(harness.workflowsStore.completeWorkflowTimer).not.toHaveBeenCalled();
     expect(harness.workflowsStore.releaseWorkflowTimer).not.toHaveBeenCalled();
-    expect(harness.logger.error).toHaveBeenCalled();
     await worker.stop();
   });
 });

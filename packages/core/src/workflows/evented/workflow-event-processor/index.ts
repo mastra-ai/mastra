@@ -3443,6 +3443,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
+      await this.#completeWorkflowTimer(event);
       return { ok: true };
     } catch (err) {
       const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
@@ -3493,7 +3494,33 @@ export class WorkflowEventProcessor extends EventProcessor {
             error: failErr,
           });
       }
+      await this.#completeWorkflowTimer(event);
       return { ok: false, retry: false };
+    }
+  }
+
+  async #completeWorkflowTimer(event: Event): Promise<void> {
+    const data = event.data as {
+      workflowId?: string;
+      runId?: string;
+      workflowTimer?: { id: string; claimToken: string };
+    };
+    if (!data.workflowId || !data.runId || !data.workflowTimer) return;
+
+    try {
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return;
+      await workflowsStore.completeWorkflowTimer({
+        workflowId: data.workflowId,
+        runId: data.runId,
+        timerId: data.workflowTimer.id,
+        claimToken: data.workflowTimer.claimToken,
+      });
+    } catch (error) {
+      this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: failed to complete workflow timer', {
+        timerId: data.workflowTimer.id,
+        error,
+      });
     }
   }
 

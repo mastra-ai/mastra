@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createStep, createWorkflow } from '..';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -52,6 +52,53 @@ class AlwaysThrowsProcessor extends WorkflowEventProcessor {
 }
 
 describe('WorkflowEventProcessor retry budget (Sig D)', () => {
+  it('completes a workflow timer only after its continuation is processed', async () => {
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub: new EventEmitterPubSub(),
+    });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const completeWorkflowTimer = vi.spyOn(workflowsStore, 'completeWorkflowTimer');
+    const processor = new WorkflowEventProcessor({ mastra });
+    const event = makeStartEvent('wf', 'run-timer-complete', 'timer-event');
+    event.data.workflowTimer = { id: 'timer-event', claimToken: 'claim-token' };
+
+    expect(await processor.handle(event)).toEqual({ ok: true });
+    expect(completeWorkflowTimer).toHaveBeenCalledWith({
+      workflowId: 'wf',
+      runId: 'run-timer-complete',
+      timerId: 'timer-event',
+      claimToken: 'claim-token',
+    });
+
+    await mastra.shutdown();
+  });
+
+  it('keeps a workflow timer claimed while continuation processing is retried', async () => {
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub: new EventEmitterPubSub(),
+    });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const completeWorkflowTimer = vi.spyOn(workflowsStore, 'completeWorkflowTimer');
+    const releaseWorkflowTimer = vi.spyOn(workflowsStore, 'releaseWorkflowTimer');
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const event = makeStartEvent('wf', 'run-timer-retry', 'timer-event');
+    event.data.workflowTimer = { id: 'timer-event', claimToken: 'claim-token' };
+
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    expect(completeWorkflowTimer).not.toHaveBeenCalled();
+    expect(releaseWorkflowTimer).not.toHaveBeenCalled();
+
+    await mastra.shutdown();
+  });
+
   it('caps retries at MAX_DELIVERY_ATTEMPTS and publishes workflow.fail (event with id)', async () => {
     const pubsub = new EventEmitterPubSub();
     const mastra = new Mastra({

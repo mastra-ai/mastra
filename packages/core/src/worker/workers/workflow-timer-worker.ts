@@ -113,10 +113,13 @@ export class WorkflowTimerWorker extends MastraWorker {
         workflowId: claimed.workflowId,
         runId: claimed.runId,
         ...claimed.continuation,
+        workflowTimer: {
+          id: claimed.id,
+          claimToken: claimed.claimToken,
+        },
       },
     };
 
-    let published = false;
     try {
       if (claimed.emitStepEvents) {
         const output =
@@ -143,28 +146,19 @@ export class WorkflowTimerWorker extends MastraWorker {
         });
       }
       await this.deps.pubsub.publish('workflows', event);
-      published = true;
-      await this.#store.completeWorkflowTimer({
-        workflowId: claimed.workflowId,
-        runId: claimed.runId,
-        timerId: claimed.id,
-        claimToken: claimed.claimToken,
-      });
     } catch (error) {
-      if (!published) {
-        try {
-          await this.#store.releaseWorkflowTimer({
-            workflowId: claimed.workflowId,
-            runId: claimed.runId,
-            timerId: claimed.id,
-            claimToken: claimed.claimToken,
-          });
-        } catch (releaseError) {
-          this.deps.logger.error('WorkflowTimerWorker: failed to release workflow timer lease', {
-            timerId: claimed.id,
-            error: releaseError,
-          });
-        }
+      try {
+        await this.#store.releaseWorkflowTimer({
+          workflowId: claimed.workflowId,
+          runId: claimed.runId,
+          timerId: claimed.id,
+          claimToken: claimed.claimToken,
+        });
+      } catch (releaseError) {
+        this.deps.logger.error('WorkflowTimerWorker: failed to release workflow timer lease', {
+          timerId: claimed.id,
+          error: releaseError,
+        });
       }
       this.deps.logger.error('WorkflowTimerWorker: failed to fire workflow timer', { timerId: claimed.id, error });
     }
