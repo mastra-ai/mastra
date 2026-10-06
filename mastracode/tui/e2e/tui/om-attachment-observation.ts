@@ -1,6 +1,5 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LibSQLStore } from '@mastra/libsql';
 import { installOpenAIFetchCapture } from './openai-fetch-capture.js';
 import type { McE2eScenario } from './types.js';
 
@@ -47,16 +46,13 @@ export const omAttachmentObservationScenario = {
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
-  async inProcessApp({ dbPath, startMastraCodeApp }) {
+  async inProcessApp({ startMastraCodeApp }) {
     const restoreFetch = installOpenAIFetchCapture({
       capturePath: RAW_REQUEST_CAPTURE_PATH,
       append: true,
       inputTokens: 2600,
     });
-    // Keep this attachment-input scenario independent of downloading an embedding model.
-    // An injected real store preserves OM persistence and uses its vector-less retrieval path.
-    const storage = new LibSQLStore({ id: 'om-attachment-observation', url: `file:${dbPath}` });
-    const app = await startMastraCodeApp({ config: { storage } });
+    const app = await startMastraCodeApp();
     return {
       stop: async () => {
         await app.stop?.();
