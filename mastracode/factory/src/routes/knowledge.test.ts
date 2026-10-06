@@ -1658,6 +1658,36 @@ describe('KnowledgeRoutes', () => {
     });
   });
 
+  it('materializes access-profile scopes parent-first regardless of profile order', async () => {
+    const runtime = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    let projectId = '';
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      accessProfile: async ({ builtInScopes }) => {
+        const team = {
+          address: `resource:${projectId}:team`,
+          parentAddresses: [builtInScopes.resource.address],
+          contextualScopeAddress: builtInScopes.resource.address,
+        };
+        const repository = {
+          address: `resource:${projectId}:team:repo`,
+          parentAddresses: [team.address],
+          contextualScopeAddress: team.address,
+        };
+        return {
+          id: 'project',
+          rootScopeAddress: builtInScopes.resource.address,
+          baselineScopes: [repository, team, builtInScopes.org, builtInScopes.resource],
+        };
+      },
+    });
+    projectId = h.projectId;
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(200);
+    expect(await runtime.resolveScopeAddress(`resource:${h.projectId}:team:repo`)).toBeTruthy();
+  });
+
   it('filters proposals by the project perspective and applies admin review actions', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
