@@ -152,7 +152,7 @@ export function RunningList({
   running: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (running.length === 0) return <OverviewListEmptyState kind="running" title="Nothing running" />;
+  if (running.length === 0) return <OverviewListEmptyState kind="running" />;
 
   return (
     <Rows
@@ -178,7 +178,7 @@ export function StalledList({
   waiting: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (waiting.length === 0) return <OverviewListEmptyState kind="stalled" title="Nothing stalled" />;
+  if (waiting.length === 0) return <OverviewListEmptyState kind="stalled" />;
 
   return (
     <Rows
@@ -204,7 +204,7 @@ export function ActivityFeed({
   moved: MovedItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (moved.length === 0) return <OverviewListEmptyState kind="activity" title="Nothing moved" />;
+  if (moved.length === 0) return <OverviewListEmptyState kind="activity" />;
 
   return (
     <Rows
@@ -252,7 +252,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
   if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
-  if (items.length === 0) return <OverviewListEmptyState kind="attention" title="All clear" />;
+  if (items.length === 0) return <OverviewListEmptyState kind="attention" />;
 
   return (
     <Rows

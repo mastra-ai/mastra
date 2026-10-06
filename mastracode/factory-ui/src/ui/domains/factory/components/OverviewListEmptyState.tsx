@@ -4,6 +4,13 @@ import type { ReactNode } from 'react';
 
 type PreviewKind = 'activity' | 'running' | 'stalled' | 'attention';
 
+const TITLES: Record<PreviewKind, string> = {
+  activity: 'Nothing moved',
+  running: 'Nothing running',
+  stalled: 'Nothing stalled',
+  attention: 'All clear',
+};
+
 /** A static outline of a list row, without invented titles, stages, or timestamps. */
 function PreviewRow({ y, detail = false, children }: { y: number; detail?: boolean; children: ReactNode }) {
   return (
@@ -68,14 +75,14 @@ function PreviewRows({ kind }: { kind: PreviewKind }) {
 }
 
 /** Echo the populated list's actors, titles, stage pills, and times with one short status. */
-export function OverviewListEmptyState({ kind, title }: { kind: PreviewKind; title: string }) {
+export function OverviewListEmptyState({ kind }: { kind: PreviewKind }) {
   return (
     <div className="flex min-h-32 items-center gap-6 sm:gap-10">
       <svg aria-hidden="true" viewBox="0 0 240 96" className="text-placeholder w-28 shrink-0 sm:w-48">
         <PreviewRows kind={kind} />
       </svg>
-      <Txt as="h4" variant="subheading">
-        {title}
+      <Txt as="h4" variant="subheading" tone="muted">
+        {TITLES[kind]}
       </Txt>
     </div>
   );
