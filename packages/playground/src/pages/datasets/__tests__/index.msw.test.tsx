@@ -3,7 +3,7 @@ import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DatasetsPage from '..';
 import { emptyScorers } from './fixtures/query-loading';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
@@ -121,6 +121,33 @@ describe('Datasets page', () => {
 });
 
 describe('Datasets page query loading', () => {
+  describe('when datasets are still loading', () => {
+    it('starts the experiment request before the dataset response arrives', async () => {
+      useDatasets();
+      const experimentsRequested = vi.fn();
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets`, async () => {
+          await held;
+          return HttpResponse.json(buildListDatasetsResponse());
+        }),
+        http.get(`${TEST_BASE_URL}/api/experiments`, () => {
+          experimentsRequested();
+          return HttpResponse.json(buildListExperimentsResponse(experiments));
+        }),
+      );
+      try {
+        renderPage();
+        await waitFor(() => expect(experimentsRequested).toHaveBeenCalledTimes(1));
+      } finally {
+        release();
+      }
+    });
+  });
+
   describe('when experiment summaries are still loading', () => {
     it('shows the datasets before experiment summaries resolve', async () => {
       useDatasets([buildDataset({ id: 'ds-1', name: 'Alpha' })]);
@@ -160,6 +187,35 @@ describe('Datasets page query loading', () => {
         release();
         expect(await screen.findByRole('link', { name: '4 (100%)' })).not.toBeNull();
         expect(screen.queryByLabelText('Loading experiment summary for Alpha')).toBeNull();
+      } finally {
+        release();
+      }
+    });
+
+    it('waits for experiment data when the user selects an experiment-dependent filter', async () => {
+      useDatasets([buildDataset({ name: 'Alpha' })]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, async () => {
+          await held;
+          return HttpResponse.json(buildListExperimentsResponse(experiments));
+        }),
+      );
+      try {
+        renderPage();
+        await screen.findByText('Alpha');
+        fireEvent.click(screen.getByRole('combobox', { name: 'Experiments' }));
+        const option = await screen.findByRole('option', { name: 'With experiments' });
+        fireEvent.pointerDown(option, { pointerType: 'mouse', button: 0 });
+        fireEvent.pointerUp(option, { pointerType: 'mouse', button: 0 });
+        fireEvent.click(option);
+        await waitFor(() => expect(screen.queryByText('Alpha')).toBeNull());
+
+        release();
+        expect(await screen.findByText('Alpha')).not.toBeNull();
       } finally {
         release();
       }

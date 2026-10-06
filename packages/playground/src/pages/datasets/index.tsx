@@ -10,8 +10,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
+import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
+import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
+import { getDatasetTagOptions } from '@/domains/datasets/components/datasets-list/helpers';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
+import { DatasetsToolbar } from '@/domains/datasets/components/datasets-toolbar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 
@@ -133,46 +136,49 @@ export default function Datasets() {
       }
     >
       <h1 className="sr-only">Datasets</h1>
-      <DatasetsList
-        datasets={datasets}
-        experiments={experiments}
-        isLoading={isLoading}
-        renderTrailingCell={dataset => {
-          if (isLoadingExperiments) {
-            return (
-              <Txt
-                as="span"
-                variant="caption"
-                tone="muted"
-                aria-label={`Loading experiment summary for ${dataset.name}`}
-              >
-                …
-              </Txt>
-            );
-          }
-          if (errorExperiments) {
-            return (
-              <Txt
-                as="span"
-                variant="caption"
-                tone="muted"
-                aria-label={`Experiment summary unavailable for ${dataset.name}`}
-              >
-                Unavailable
-              </Txt>
-            );
-          }
-          return null;
-        }}
-        search={search}
-        experimentFilter={experimentFilter}
-        tagFilter={tagFilter}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        sort={sort}
-        onSortChange={onSortChange}
-      />
+      {isLoading ? (
+        <DatasetsListSkeleton />
+      ) : (
+        <DatasetsList
+          datasets={datasets}
+          experiments={experiments}
+          renderTrailingCell={dataset => {
+            if (isLoadingExperiments) {
+              return (
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  aria-label={`Loading experiment summary for ${dataset.name}`}
+                >
+                  …
+                </Txt>
+              );
+            }
+            if (errorExperiments) {
+              return (
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  aria-label={`Experiment summary unavailable for ${dataset.name}`}
+                >
+                  Unavailable
+                </Txt>
+              );
+            }
+            return null;
+          }}
+          search={search}
+          experimentFilter={experimentFilter}
+          tagFilter={tagFilter}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          sort={sort}
+          onSortChange={onSortChange}
+        />
+      )}
     </PageLayout>
   );
 }

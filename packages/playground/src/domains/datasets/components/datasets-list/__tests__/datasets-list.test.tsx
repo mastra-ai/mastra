@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/render';
 const renderList = (props: Partial<DatasetsListProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetsList datasets={datasets} experiments={experiments} isLoading={false} {...props} />
+      <DatasetsList datasets={datasets} experiments={experiments} {...props} />
     </TestLinkProvider>,
   );
 

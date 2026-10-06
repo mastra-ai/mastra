@@ -2,19 +2,19 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
+import { DATASETS_LIST_COLUMNS } from './helpers';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: Pick<DatasetExperiment, 'datasetId' | 'status'>[];
-  isLoading: boolean;
   search?: string;
   experimentFilter?: string;
   tagFilter?: string;
@@ -41,8 +41,6 @@ export interface DatasetsListProps {
 }
 
 export type DatasetsSortKey = 'name' | 'updatedAt';
-
-const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
   if (successPct !== null && successPct >= 70) return 'success';
@@ -176,7 +174,6 @@ function DatasetRow({
 export function DatasetsList({
   datasets,
   experiments,
-  isLoading,
   search = '',
   experimentFilter = 'all',
   tagFilter = 'all',
@@ -215,12 +212,8 @@ export function DatasetsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
-  if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
-  }
-
   return (
-    <DataList columns={COLUMNS} scrollRef={containerRef}>
+    <DataList columns={DATASETS_LIST_COLUMNS} scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <DataList.SortableTopCell
