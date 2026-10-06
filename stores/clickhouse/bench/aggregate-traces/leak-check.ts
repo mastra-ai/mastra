@@ -1,0 +1,138 @@
+/**
+ * Scans the write-up, results, staged diff and any extra files (e.g. a PR body draft) for
+ * credential values, real org/project ids, the hash salt and discovered literals.
+ * Prints only `clean` or per-file match counts — never the matched values.
+ *
+ *   tsx bench/aggregate-traces/leak-check.ts [--no-staged] [extra files…]
+ */
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { parseArgs } from 'node:util';
+
+import { DOC_LITERALS } from './cases';
+import type { Literals } from './cases';
+import { ALLOWED_HOST, ENV_FILE, installOutputRedaction, readEnvFileValues, registerSensitive } from './env';
+import { loadSelection } from './profile';
+import type { Selection } from './profile';
+
+export type NeedleKind = 'credential' | 'id' | 'salt' | 'literal';
+
+export interface Needle {
+  kind: NeedleKind;
+  value: string;
+}
+
+/** Enum-like fields that are not customer content and would only cause false positives. */
+const PUBLIC_LITERAL_KEYS: Array<keyof Literals> = ['entityType'];
+/** Conventional environment names are generic vocabulary, not customer content (and collide with schema words). */
+const STANDARD_ENVIRONMENTS = new Set([
+  'production',
+  'prod',
+  'staging',
+  'stage',
+  'development',
+  'dev',
+  'test',
+  'testing',
+  'local',
+  'preview',
+  'qa',
+  'uat',
+]);
+
+export function needlesFrom(env: Record<string, string> | undefined, selection: Selection | undefined): Needle[] {
+  const needles: Needle[] = [];
+  const add = (kind: NeedleKind, value: string | undefined) => {
+    if (value && value.length >= 4) needles.push({ kind, value });
+  };
+  if (env) {
+    add('credential', env.BENCH_CLICKHOUSE_PASSWORD);
+    add('credential', env.BENCH_CLICKHOUSE_USER);
+    const url = env.BENCH_CLICKHOUSE_URL;
+    // The approved host is public (it is in the host guard); a URL is only secret beyond that.
+    if (url && !new RegExp(`^https://${ALLOWED_HOST.replace(/\./g, '\\.')}(:8443)?/?$`).test(url))
+      add('credential', url);
+  }
+  if (selection) {
+    add('salt', selection.salt);
+    for (const project of selection.projects) {
+      add('id', project.organizationId);
+      add('id', project.projectId);
+      for (const key of Object.keys(project.literalSource) as Array<keyof Literals>) {
+        const value = project.literals[key];
+        if (project.literalSource[key] !== 'discovered' || PUBLIC_LITERAL_KEYS.includes(key)) continue;
+        if (Object.values(DOC_LITERALS).includes(value)) continue;
+        if (key === 'environment' && STANDARD_ENVIRONMENTS.has(value)) continue;
+        add('literal', value);
+      }
+    }
+  }
+  return needles;
+}
+
+export function countMatches(text: string, needles: Needle[]): Partial<Record<NeedleKind, number>> {
+  const counts: Partial<Record<NeedleKind, number>> = {};
+  for (const { kind, value } of needles) {
+    for (const form of new Set([value, encodeURIComponent(value)])) {
+      const n = text.split(form).length - 1;
+      if (n) counts[kind] = (counts[kind] ?? 0) + n;
+    }
+  }
+  return counts;
+}
+
+function filesUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? filesUnder(join(dir, entry.name)) : [join(dir, entry.name)],
+  );
+}
+
+function main(): number {
+  installOutputRedaction();
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { 'no-staged': { type: 'boolean', default: false } },
+  });
+  const env = existsSync(ENV_FILE) ? readEnvFileValues() : undefined;
+  if (env) registerSensitive(Object.values(env));
+  const needles = needlesFrom(env, loadSelection());
+  if (!needles.length) {
+    process.stdout.write('No credentials or selection found; nothing to check against.\n');
+    return 1;
+  }
+
+  const here = import.meta.dirname;
+  const sources: Array<{ name: string; text: string }> = [];
+  for (const file of [
+    join(here, 'FINDINGS.md'),
+    join(here, 'README.md'),
+    ...filesUnder(join(here, 'results')),
+    ...positionals,
+  ]) {
+    if (existsSync(file)) sources.push({ name: relative(process.cwd(), file), text: readFileSync(file, 'utf8') });
+  }
+  if (!values['no-staged']) {
+    const diff = execFileSync('git', ['diff', '--cached'], { encoding: 'utf8', maxBuffer: 256 * 2 ** 20 });
+    sources.push({ name: 'git diff --cached', text: diff });
+  }
+
+  let dirty = 0;
+  for (const source of sources) {
+    const counts = countMatches(source.text, needles);
+    const total = Object.values(counts).reduce((s, n) => s + n, 0);
+    if (!total) continue;
+    dirty += total;
+    const detail = Object.entries(counts)
+      .map(([kind, n]) => `${n} ${kind}`)
+      .join(', ');
+    process.stdout.write(`${total} matches in ${source.name} (${detail})\n`);
+  }
+  process.stdout.write(
+    dirty ? `NOT CLEAN (${sources.length} sources checked)\n` : `clean (${sources.length} sources checked)\n`,
+  );
+  return dirty ? 1 : 0;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(main());
