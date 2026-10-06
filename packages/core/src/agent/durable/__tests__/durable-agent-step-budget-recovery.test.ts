@@ -10,8 +10,10 @@
  *
  * Coverage matches the harness conditions exactly: `default` and `ceiling` on
  * each of plain/durable/evented, and `durable-recover`/`evented-recover` on the
- * `default` variant only — the harness declares no `variants` for those two
- * conditions, so the ceiling variant is not a restart cell there either.
+ * `default` variant — the harness declares no `variants` for those two
+ * conditions. One cell goes further than the harness and holds the `ceiling`
+ * budget across a restart; the comment there says why its shape has to differ
+ * from the in-process variant.
  *
  * Excluded, as in the harness: `stopWhen` across a restart (a closure, never
  * persisted) and exact timing. Unlike the harness this runs without Memory
@@ -37,11 +39,13 @@ const MAX = 3;
 type Probe = { modelCalls: number; started: number[] };
 
 // Calls `step` for n = 1..count, one per model turn, then answers with every result.
-// A pure function of the prompt, like the harness's script model.
-function createStepModel(count: number, probe: Probe) {
+// A pure function of the prompt, like the harness's script model. `block` parks the
+// given model call (1-based) on a test-controlled promise.
+function createStepModel(count: number, probe: Probe, block?: { call: number; gate: Gate }) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       probe.modelCalls++;
+      if (block && probe.modelCalls === block.call) await block.gate.wait();
       const done = prompt
         .filter(m => m.role === 'tool')
         .flatMap(m => m.content)
@@ -77,13 +81,18 @@ function createStepModel(count: number, probe: Probe) {
 
 function buildAgent(
   core: Pick<CoreGraph, 'Agent' | 'createTool'>,
-  { variant, probe, block }: { variant: Variant; probe: Probe; block?: Gate },
+  {
+    variant,
+    probe,
+    block,
+    modelBlock,
+  }: { variant: Variant; probe: Probe; block?: Gate; modelBlock?: { call: number; gate: Gate } },
 ) {
   return new core.Agent({
     id: 't20-agent',
     name: 't20-agent',
     instructions: 'Follow the script.',
-    model: createStepModel(variant === 'ceiling' ? 0 : 6, probe),
+    model: createStepModel(variant === 'ceiling' ? 0 : 6, probe, modelBlock),
     tools: {
       step: core.createTool({
         id: 'step',
@@ -257,6 +266,85 @@ describe('T20 step budget across recovery', () => {
         scorerCalls: 0,
         restarted: true,
       });
+    }, 30_000);
+  }
+
+  // The harness runs `ceiling` only on the in-process cells: `isTaskComplete` is a
+  // closure and is never persisted, so a recovered run cannot be given the same
+  // failing scorer. What a restart *can* be held to is the other half of the
+  // variant — the budget is persisted state. Graph 1 is the harness ceiling shape
+  // exactly (the script answers at once and the failing scorer keeps asking for
+  // another step), cut off inside the model call that failing feedback asked for;
+  // graph 2 takes the script that keeps asking for steps, so it wants to keep
+  // calling the model and only the budget the run started with can stop it.
+  for (const kind of ['durable', 'evented'] as const) {
+    it(`${kind}-recover / ceiling`, async () => {
+      const runId = `t20-${kind}-recover-ceiling`;
+      const gate = createGate();
+      gates.push(gate);
+      const probes = new Map<number, Probe>();
+      const scorer = { calls: 0 };
+      const scenario = createRestartScenario({
+        kind,
+        runId,
+        build: ({ core, generation }) => {
+          const probe: Probe = { modelCalls: 0, started: [] };
+          probes.set(generation, probe);
+          return buildAgent(core, {
+            variant: generation === 1 ? 'ceiling' : 'default',
+            probe,
+            modelBlock: generation === 1 ? { call: 2, gate } : undefined,
+          });
+        },
+      });
+      scenarios.push(scenario);
+      const original = await scenario.start(({ agent }) =>
+        agent.stream('Go.', streamOptions(runId, 'ceiling', scorer)),
+      );
+      // Graph 1 is parked inside its second model call once the gate resolves; its
+      // gate is released in afterEach, so its fate is not the subject here.
+      const drained = original.driven
+        .then((result: any) => drain(result.fullStream))
+        .then(
+          () => 'ended' as const,
+          () => 'ended' as const,
+        );
+      const reached = await Promise.race([gate.reached.then(() => 'reached' as const), drained]);
+      expect(reached, 'not exercised: the run never made a second model call').toBe('reached');
+
+      const checkpoint = await original.checkpoint();
+      const before = structuredClone(probes.get(1)!);
+      expect(scorer.calls, 'completion feedback asked for another step').toBeGreaterThanOrEqual(1);
+      // Guards that make the budget bound meaningful: the script answers at once,
+      // so the call graph 1 is parked in is the one failing feedback asked for,
+      // and no tool step ran on either side of it.
+      expect(before.modelCalls, 'graph 1 spent its second call on completion feedback').toBe(2);
+      expect(before.started, 'the script answered at once, so no tool step ran').toEqual([]);
+
+      const recovered = await scenario.restart(checkpoint);
+      expect(recovered.streamErrors).toEqual([]);
+      expect(recovered.executionError).toBeUndefined();
+
+      const after = probes.get(2)!;
+      const types = recovered.chunkTypes!;
+      expect(count(types, 'finish'), `run settled with exactly one finish: ${types.join(',')}`).toBe(1);
+      expect(after.modelCalls, 'the recovered run ran').toBeGreaterThanOrEqual(1);
+      // The call graph 1 was cut inside is issued again by the recovered run instead
+      // of being charged to the budget, so it is not part of what `maxSteps` caps.
+      // This is the harness's own `MAX + 1` restart relaxation, in counted terms.
+      const counted = before.modelCalls - 1 + after.modelCalls;
+      expect(
+        counted,
+        `maxSteps=${MAX} caps the run's counted steps across the restart ` +
+          `(${before.modelCalls - 1} before it was cut, ${after.modelCalls} after)`,
+      ).toBeLessThanOrEqual(MAX);
+      const started = [...new Set([...before.started, ...after.started])];
+      // Not exercised is not a pass: `every` is vacuously true on an empty list.
+      expect(started.length, 'a step ran after the restart').toBeGreaterThan(0);
+      expect(
+        started.every(n => n <= MAX),
+        `no step beyond the budget (n <= ${MAX}): ${started}`,
+      ).toBe(true);
     }, 30_000);
   }
 });
