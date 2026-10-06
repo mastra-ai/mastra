@@ -1,6 +1,11 @@
 import { canonicalizeKnowledgeScopeIds } from '../../storage/domains/knowledge';
 import type { KnowledgeScopeGrant } from '../../storage/domains/knowledge';
-import { combineKnowledgeCapabilities, NO_KNOWLEDGE_CAPABILITIES, resolveKnowledgeGrantCapabilities } from './grants';
+import {
+  combineKnowledgeCapabilities,
+  intersectKnowledgeCapabilities,
+  NO_KNOWLEDGE_CAPABILITIES,
+  resolveKnowledgeGrantCapabilities,
+} from './grants';
 import type { KnowledgeAccessFrontier, KnowledgeCapabilities, KnowledgeScopeAccess } from './types';
 
 function capabilitiesEqual(left: KnowledgeCapabilities | undefined, right: KnowledgeCapabilities): boolean {
@@ -40,9 +45,9 @@ export function evaluateKnowledgeAccessFrontier(input: {
   // Monotone fixed point: a scope is reprocessed whenever its capability set grows, so later owner or
   // suggest paths still reach every mirror dependent. Host vouching only makes a scope eligible to
   // activate ordinary grants that reference it; it never grants readability or owner by itself.
-  // A scope's grant to itself is identity ownership: only vouching as that scope activates it.
-  // Reaching a scope through another grant keeps the arriving role, so a readonly share of a
-  // self-owned scope never escalates to owner.
+  // Only a host-vouched scope acts with a grant's full role. A scope reached through grants passes on
+  // at most the capabilities the caller holds there: readonly on B yields at most readonly on
+  // anything B is granted, including B's own self-owner grant.
   while (pending.size > 0) {
     const referencedScopeId = pending.values().next().value!;
     pending.delete(referencedScopeId);
@@ -51,8 +56,11 @@ export function evaluateKnowledgeAccessFrontier(input: {
     const activatesRoleGrants = isSeed || referencedCapabilities.read;
     for (const grant of grantsByReference.get(referencedScopeId) ?? []) {
       if (grant.role !== 'mirror' && !activatesRoleGrants) continue;
-      if (grant.scopeNodeId === referencedScopeId && !isSeed) continue;
-      const grantedCapabilities = resolveKnowledgeGrantCapabilities(grant, referencedCapabilities);
+      const roleCapabilities = resolveKnowledgeGrantCapabilities(grant, referencedCapabilities);
+      const grantedCapabilities =
+        grant.role === 'mirror' || isSeed
+          ? roleCapabilities
+          : intersectKnowledgeCapabilities(roleCapabilities, referencedCapabilities);
       const current = capabilitiesByScopeId.get(grant.scopeNodeId);
       const combined = combineKnowledgeCapabilities(current ? [current, grantedCapabilities] : [grantedCapabilities]);
       if (capabilitiesEqual(current ?? NO_KNOWLEDGE_CAPABILITIES, combined)) continue;
