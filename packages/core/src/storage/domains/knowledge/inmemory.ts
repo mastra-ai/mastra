@@ -23,7 +23,6 @@ import type {
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
-  KnowledgeCurationCursor,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeMention,
@@ -109,7 +108,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeNodeKeys.clear();
     this.#db.knowledgeRecords.clear();
     this.#db.knowledgeMentions.clear();
-    this.#db.knowledgeCursors.clear();
     this.#db.knowledgeActivity.length = 0;
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
@@ -514,25 +512,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       });
     }
     return results.slice(0, input.limit ?? 20);
-  }
-
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
-    const cursor = this.#db.knowledgeCursors.get(`${input.sourceThreadId}\u0000${input.agent}`);
-    return cursor ? { ...cursor, updatedAt: new Date(cursor.updatedAt) } : null;
-  }
-
-  async advanceCurationCursor(input: {
-    sourceThreadId: string;
-    agent: string;
-    lastKnowledgeId: string;
-  }): Promise<KnowledgeCurationCursor> {
-    const key = `${input.sourceThreadId}\u0000${input.agent}`;
-    const existing = this.#db.knowledgeCursors.get(key);
-    if (existing && input.lastKnowledgeId < existing.lastKnowledgeId)
-      throw new Error('Knowledge curation cursor cannot move backwards');
-    const cursor = { ...input, updatedAt: new Date() };
-    this.#db.knowledgeCursors.set(key, cursor);
-    return { ...cursor };
   }
 
   async listActivity(input: {
