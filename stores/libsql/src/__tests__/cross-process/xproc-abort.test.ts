@@ -534,15 +534,17 @@ for (const spec of CELLS) {
  * cells visible instead of silent.
  */
 describe('T79 parity: cross-process cells match their in-process controls', () => {
-  it('reached the same judged outcome', () => {
-    const judged = (condition: string) => {
-      const outcome = outcomes.get(condition);
-      expect(
-        outcome,
-        `${condition} ran and recorded an outcome (a failed cell records none, so this comparison has nothing to compare)`,
-      ).toBeDefined();
-      return outcome?.judged;
-    };
+  it('reached the same judged outcome', ctx => {
+    const compared = ['durable', 'evented', 'xproc-durable', 'xproc-evented'];
+    const missing = compared.filter(condition => !outcomes.has(condition));
+    if (missing.length) {
+      // Nothing to compare. Either the run was filtered down to this test and
+      // the cells never executed, or a cell failed and reported that itself —
+      // with a better message than a second assertion here could give.
+      ctx.skip(`${missing.join(', ')} recorded no outcome`);
+    }
+
+    const judged = (condition: string) => outcomes.get(condition)?.judged;
 
     for (const [xprocCondition, controlCondition] of [
       ['xproc-durable', 'durable'],

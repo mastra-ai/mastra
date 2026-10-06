@@ -119,8 +119,12 @@ export interface PeerHandle {
   pause(): Promise<void>;
   /** SIGCONT the peer; resolves once the OS reports it running again. */
   resume(): Promise<void>;
-  /** SIGKILL the peer (resuming it first if paused) and wait for it to exit. */
-  kill(): Promise<PeerExit>;
+  /**
+   * SIGKILL the peer (resuming it first if paused) and wait for it to exit.
+   * The wait is bounded by `timeoutMs`: a descendant the fixture spawned can
+   * hold this peer's stdio open after the peer itself is gone.
+   */
+  kill(options?: { timeoutMs?: number }): Promise<PeerExit>;
   readonly stdout: string;
   readonly stderr: string;
 }
@@ -407,11 +411,16 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
           fail(`${label()} still reported stopped after SIGCONT (hang guard)`),
         );
       },
-      async kill() {
+      async kill({ timeoutMs = PEER_TIMEOUT_MS } = {}) {
         if (exitInfo) return exitInfo;
         child.kill('SIGCONT');
         child.kill('SIGKILL');
-        return exited;
+        // Bounded: 'close' waits for the peer's stdio to drain, so a descendant
+        // the fixture spawned while holding this pipe open would otherwise leave
+        // `cleanup()` waiting on a process that is already gone.
+        return withHangGuard(exited, timeoutMs, () =>
+          fail(`${label()} was killed but its stdio did not close within ${timeoutMs}ms (hang guard)`),
+        );
       },
     };
     peers.push({ handle, child, errors });
@@ -459,9 +468,17 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     spawnPeer,
     describe,
     async cleanup() {
-      await Promise.all(peers.map(({ handle }) => handle.kill()));
+      // A peer that will not settle must not keep the socket and the temp dir
+      // alive: collect the failures, tear the environment down either way, then
+      // report them.
+      const killFailures = await Promise.all(
+        peers.map(({ handle }) =>
+          handle.kill().catch((error: unknown) => `${handle.config.role} (pid ${handle.pid}): ${String(error)}`),
+        ),
+      ).then(results => results.filter((result): result is string => typeof result === 'string'));
       await pubsub?.close();
       await rm(dir, { recursive: true, force: true });
+      if (killFailures.length) throw new Error(`cleanup: peers did not all exit\n${killFailures.join('\n')}`);
     },
   };
 }

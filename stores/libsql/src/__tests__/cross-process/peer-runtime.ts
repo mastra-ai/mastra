@@ -233,8 +233,12 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
   };
 
   void (async () => {
-    await send({ kind: 'config', config });
+    // Inside the try with everything else: a rejected send here would otherwise
+    // take the IIFE down as an unhandled rejection, and the failure would reach
+    // the test as "exited without reporting a result" with the reason only in
+    // this process's stderr.
     try {
+      await send({ kind: 'config', config });
       await selfCheck();
       const value = await main(peer);
       const mismatch = workerBootMismatch(config.workers);
