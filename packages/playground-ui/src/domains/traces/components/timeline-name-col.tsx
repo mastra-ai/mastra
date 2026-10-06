@@ -49,8 +49,9 @@ export function TimelineNameCol({
   // Nested rows mount late, once expansion opens their ancestors; the effect runs on that
   // mount as well as when the row becomes the selected / revealed one.
   useEffect(() => {
-    if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [shouldScrollIntoView]);
+    if (shouldScrollIntoView)
+      rowRef.current?.scrollIntoView({ block: isRevealed ? 'center' : 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView, isRevealed]);
 
   const toggleLabel = isExpanded ? `Collapse children (${numOfChildren})` : `Expand children (${numOfChildren})`;
 
