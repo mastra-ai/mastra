@@ -67,6 +67,26 @@ describe('MySQL canonical Knowledge support', () => {
     expect(Number((rows as Array<{ version: number }>)[0]?.version)).toBe(KNOWLEDGE_STORAGE_SCHEMA_VERSION);
   });
 
+  it('serializes concurrent fenced scope deletes into one winner and conflicts, never lock deadlocks', async () => {
+    const store = createStore();
+    await store.init();
+    for (let round = 0; round < 5; round++) {
+      const scopes = await Promise.all(
+        [0, 1, 2].map(() => store.createNode({ name: `Empty scope ${randomUUID()}`, isScope: true, scopeIds: [] })),
+      );
+      const epoch = await store.getAccessEpoch();
+      const results = await Promise.allSettled(
+        scopes.map(scope =>
+          store.deleteNode({ id: scope.id, version: scope.version, deletedBy: 'test', expectedAccessEpoch: epoch }),
+        ),
+      );
+      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+      for (const result of results) {
+        if (result.status === 'rejected') expect(result.reason).toBeInstanceOf(KnowledgeConflictError);
+      }
+    }
+  });
+
   it('rejects a fenced mutation when a grant change commits while it waits on the access epoch', async () => {
     const store = createStore();
     await store.init();

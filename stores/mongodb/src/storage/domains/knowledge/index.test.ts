@@ -190,6 +190,28 @@ describe('MongoDB canonical Knowledge support', () => {
     expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
   });
 
+  it('commits concurrent fenced mutations at one epoch through write-conflict retries', async () => {
+    const store = createStore();
+    await store.init();
+    const scope = await store.createNode({ name: `Busy scope ${randomUUID()}`, isScope: true, scopeIds: [] });
+    const nodes = await Promise.all(
+      Array.from({ length: 6 }, () => store.createNode({ name: `Busy ${randomUUID()}`, scopeIds: [scope.id] })),
+    );
+    const epoch = await store.getAccessEpoch();
+    const updated = await Promise.all(
+      nodes.map(node =>
+        store.updateNode({
+          id: node.id,
+          version: node.version,
+          name: `${node.name} renamed`,
+          expectedAccessEpoch: epoch,
+        }),
+      ),
+    );
+    expect(updated.map(node => node.name)).toEqual(nodes.map(node => `${node.name} renamed`));
+    expect(await store.getAccessEpoch()).toBe(epoch);
+  });
+
   it('rejects a fenced mutation when a grant change commits while it waits on the access epoch', async () => {
     const store = createStore();
     await store.init();
