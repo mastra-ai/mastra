@@ -52,7 +52,6 @@ const DEFAULT_BASE_IMAGE = 'node:22-slim';
 const DEFAULT_WORKING_DIRECTORY = '/workspace';
 // Only a full sha is unambiguous; a short hex string may be a branch or tag.
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/i;
-const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 
 const CLONE_URL_ALLOWED_CHARS = /^[a-z0-9:/._-]+$/i;
 const CLONE_URL_HOST_PATTERN = /^[a-z0-9.-]+$/i;
@@ -202,7 +201,9 @@ export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): Do
     if (entry.ref !== undefined && !REF_PATTERN.test(entry.ref)) {
       throw new Error(`Invalid ref '${entry.ref}': expected a git ref name`);
     }
+    assertSingleLineCommands(entry.setupCommand, 'setupCommand');
   }
+  assertSingleLineCommands(options.workspaceSetupCommand, 'workspaceSetupCommand');
   const workingDirectory = trimTrailingSlashes(options.workingDirectory ?? DEFAULT_WORKING_DIRECTORY);
   if (!workingDirectory.startsWith('/')) {
     throw new Error(`workingDirectory must be an absolute path, got '${options.workingDirectory}'`);
@@ -255,6 +256,9 @@ async function resolveRepoTemplate(
     repos.push({
       cloneUrl,
       sha,
+      // A branch or tag ref is cloned directly so the first setup pass runs
+      // on it; a commit ref has no clonable name.
+      branch: entry.ref && !FULL_SHA_PATTERN.test(entry.ref) ? entry.ref : undefined,
       token,
       // The single form keeps its historical secret name; list entries are
       // numbered by caller position so public/private reordering never
@@ -284,6 +288,7 @@ async function resolveRepoTemplate(
       ...shared,
       cloneUrl: repo.cloneUrl,
       sha: repo.sha,
+      branch: repo.branch,
       token: repo.token,
       setupCommand: repo.setupCommand,
     });
@@ -300,6 +305,7 @@ async function resolveRepoTemplate(
 interface ResolvedRepository {
   cloneUrl: string;
   sha: string;
+  branch?: string;
   token?: string;
   tokenEnv?: string;
   setupCommand?: string | string[];
@@ -308,6 +314,8 @@ interface ResolvedRepository {
 interface RepoTemplateInputs {
   cloneUrl: string;
   sha: string;
+  /** Branch or tag to clone directly, so the first setup pass runs on it. */
+  branch?: string;
   token?: string;
   buildEnv?: Record<string, string>;
   setupCommand?: string | string[];
@@ -347,7 +355,7 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
   // sha is in the command, so it is part of the template identity) and the
   // second pass are the only per-commit layers.
   template = template
-    .runWithSecrets(cloneFull({ cloneUrl, destination, tokenEnv }), {
+    .runWithSecrets(cloneFull({ cloneUrl, destination, tokenEnv, branch: inputs.branch }), {
       secrets: tokenEnv ? [tokenEnv] : [],
       output: destination,
       ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}),
@@ -418,11 +426,10 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
     const setupSteps = setupCommands.map(command =>
       guardedSetupCommand({ repoDir, command, continueOnFailure: continueOnSetupFailure }),
     );
-    template = template.runWithSecrets(cloneFull({ cloneUrl: repo.cloneUrl, destination, tokenEnv: repo.tokenEnv }), {
-      secrets,
-      output: destination,
-      ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}),
-    });
+    template = template.runWithSecrets(
+      cloneFull({ cloneUrl: repo.cloneUrl, destination, tokenEnv: repo.tokenEnv, branch: repo.branch }),
+      { secrets, output: destination, ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}) },
+    );
     for (const step of setupSteps) template = template.runCmd(step);
     template = template.runCmd(pinCommand(destination, repo.sha));
     for (const step of setupSteps) template = template.runCmd(step);
@@ -433,6 +440,17 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
   for (const command of workspaceCommands) template = template.runCmd(command);
   template = template.runCmd(setupMarkerCommand(setupMarkerContent(workspaceCommands), WORKSPACE_SETUP_MARKER_PATH));
   return template;
+}
+
+/** A Dockerfile `RUN` cannot span lines, so a setup command cannot either. */
+function assertSingleLineCommands(commands: string | string[] | undefined, option: string): void {
+  for (const command of normalizeSetupCommands(commands)) {
+    if (/[\r\n]/.test(command)) {
+      throw new Error(
+        `createDockerRepoTemplate: ${option} entries must be single lines; pass an array of commands instead`,
+      );
+    }
+  }
 }
 
 function pinCommand(destination: string, sha: string): string {
@@ -476,19 +494,33 @@ export async function resolveHead(
       .map(line => line.split('\t'));
     const peeled = lines.find(([, name]) => name?.endsWith('^{}'));
     const sha = (peeled ?? lines[0])?.[0]?.trim();
-    return sha && SHA_PATTERN.test(sha) ? sha.toLowerCase() : undefined;
+    return sha && FULL_SHA_PATTERN.test(sha) ? sha.toLowerCase() : undefined;
   } catch (error) {
     if (abortSignal?.aborted) throw normalizeAbortError(error, 'resolve Docker repository template');
     return undefined;
   }
 }
 
-function cloneFull({ cloneUrl, destination, tokenEnv }: { cloneUrl: string; destination: string; tokenEnv?: string }) {
-  // Mirrors `repoCloneCommand` from @internal/workspace, minus the shallow flags.
+function cloneFull({
+  cloneUrl,
+  destination,
+  tokenEnv,
+  branch,
+}: {
+  cloneUrl: string;
+  destination: string;
+  tokenEnv?: string;
+  branch?: string;
+}) {
+  // Mirrors `repoCloneCommand` from @internal/workspace, minus the shallow
+  // flags. `branch` keeps the first setup pass on the requested branch or tag
+  // (a commit ref cannot be cloned directly; its first pass runs on the
+  // default branch).
   const auth = tokenEnv
     ? `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)" `
     : '';
-  return `git ${auth}clone ${shellQuote(cloneUrl)} ${shellQuote(destination)}`;
+  const branchFlag = branch ? `--branch ${shellQuote(branch)} ` : '';
+  return `git ${auth}clone ${branchFlag}${shellQuote(cloneUrl)} ${shellQuote(destination)}`;
 }
 
 function assertCloneUrl(cloneUrl: string): void {

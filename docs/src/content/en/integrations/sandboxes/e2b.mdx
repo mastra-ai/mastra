@@ -428,10 +428,12 @@ const sandbox = new E2BSandbox({
 
 Every repository lands at `<workingDirectory>/<repo>`. Public repositories
 (entries whose access resolves without `authorization`) are built before
-private ones, keeping the caller's order within each group, so their layers
-can outlive credential rotation. Private credentials enter the template
+private ones, keeping the caller's order within each group, the same layout
+the platform and Docker templates use. Private credentials enter the template
 definition as `GH_TOKEN_<n>` build envs, where `n` is the entry's position in
-`repos`. Build envs are visible to every build step, so any repository's setup
+`repos`. On E2B every build env is set one step ahead of every clone, so a
+rotated credential still rebuilds every layer, public repositories included.
+Build envs are also visible to every build step, so any repository's setup
 command can read every other repository's token: only list repositories whose
 setup commands you trust together.
 

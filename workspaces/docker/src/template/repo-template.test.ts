@@ -119,6 +119,20 @@ describe('buildRepoTemplate', () => {
     );
   });
 
+  it('clones a branch or tag ref directly so the first setup pass runs on it', () => {
+    const dockerfile = buildRepoTemplate({
+      cloneUrl,
+      sha,
+      branch: 'release/1.x',
+      setupCommand: 'npm ci',
+      workingDirectory: '/workspace',
+    }).dockerfile;
+    expect(dockerfile).toContain(
+      "git clone --branch 'release/1.x' 'https://example.com/acme/app.git' '/workspace/app'",
+    );
+    expect(dockerfile.indexOf('RUN npm ci')).toBeLessThan(dockerfile.indexOf('checkout --detach'));
+  });
+
   it('writes no marker without setup commands', () => {
     expect(buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' }).dockerfile).not.toContain(
       SETUP_MARKER_PATH,
@@ -234,6 +248,17 @@ describe('createDockerRepoTemplate', () => {
     );
     expect(() => createDockerRepoTemplate({ getRepositoryAccess, workspaceSetupCommand: 'x' })).toThrow(TypeError);
     expect(() => createDockerRepoTemplate({ getRepositoryAccess, continueOnSetupFailure: false })).toThrow(TypeError);
+  });
+
+  it('rejects multi-line setup commands up front, since a Dockerfile RUN cannot span lines', () => {
+    const getRepositoryAccess = async () => ({ cloneUrl });
+    expect(() => createDockerRepoTemplate({ getRepositoryAccess, setupCommand: 'npm ci\nnpm test' })).toThrow(
+      /single lines/,
+    );
+    expect(() =>
+      createDockerRepoTemplate({ repos: [{ getRepositoryAccess }], workspaceSetupCommand: ['ok', 'a\nb'] }),
+    ).toThrow(/workspaceSetupCommand/);
+    expect(() => createDockerRepoTemplate({ getRepositoryAccess, setupCommand: ['npm ci', 'npm test'] })).not.toThrow();
   });
 
   it('validates every entry ref up front', () => {
@@ -410,10 +435,11 @@ describe('createDockerRepoTemplate', () => {
         })!;
         const template = await resolver();
         expect(template.dockerfile).toContain(`git -C '/workspace/private' checkout --detach '${sha}'`);
+        expect(template.dockerfile).toContain("clone --branch 'v1' 'https://example.com/acme/private.git'");
         expect(template.dockerfile).toContain(`git -C '/workspace/app' checkout --detach '${headSha}'`);
         expect(template.dockerfile).toContain('id=GH_TOKEN_0');
         expect(template.dockerfile.indexOf("clone 'https://example.com/acme/app.git'")).toBeLessThan(
-          template.dockerfile.indexOf("clone 'https://example.com/acme/private.git'"),
+          template.dockerfile.indexOf("clone --branch 'v1' 'https://example.com/acme/private.git'"),
         );
         expect(template.dockerfile).not.toContain('tok-1');
 

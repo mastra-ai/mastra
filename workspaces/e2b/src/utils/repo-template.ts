@@ -170,8 +170,9 @@ export interface RepoTemplateOptions {
    * Several repositories in one template, each with its own access resolver
    * and setup command, cloned to `<workingDirectory>/<repo>` in this order.
    * Public repositories (no `authorization`) are built before private ones in
-   * caller order within each group, so their layers can outlive credential
-   * rotation. Each repository writes `.mastra-sandbox/repos/<repo>`
+   * caller order within each group, the same layout the platform and Docker
+   * templates use; on E2B every build env is one step ahead of every clone,
+   * so a rotated token still rebuilds all of them. Each repository writes `.mastra-sandbox/repos/<repo>`
    * (`setupMarkerContent` of its commands) once every step for it ran.
    *
    * Every credential enters the template definition as a build env visible to
@@ -331,7 +332,7 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
       ? [
           'repos',
           identity.repos.map(repo => [normalizeCloneUrl(repo.cloneUrl), repo.setupCommand ?? null]),
-          identity.workspaceSetupCommand ?? null,
+          normalizeSetupCommands(identity.workspaceSetupCommand),
           identity.continueOnSetupFailure ?? false,
         ]
       : []),
@@ -420,6 +421,7 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
   const buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv() : options.buildEnv;
 
   const repos: ResolvedRepository[] = [];
+  const seenDirs = new Map<string, string>();
   for (const [index, entry] of entries.entries()) {
     const access = await entry.getRepositoryAccess().catch(() => undefined);
     const cloneUrl = access?.cloneUrl;
@@ -429,12 +431,18 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
       );
     }
     assertCloneUrl(cloneUrl);
+    const repoDir = repoDirName(normalizeCloneUrl(cloneUrl));
+    const other = seenDirs.get(repoDir);
+    if (other) {
+      throw new Error(`Repo template: repositories ${other} and ${cloneUrl} would both clone into "${repoDir}"`);
+    }
+    seenDirs.set(repoDir, cloneUrl);
     const token = access?.authorization?.token;
     const resolved = await resolveDefaultBranchHead(cloneUrl, token).catch(() => undefined);
     const sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
     repos.push({
       cloneUrl,
-      repoDir: repoDirName(normalizeCloneUrl(cloneUrl)),
+      repoDir,
       token,
       // The single form keeps its historical env name; list entries are
       // numbered by caller position so public/private reordering never
@@ -443,17 +451,6 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
       sha,
       setupCommand: entry.setupCommand,
     });
-  }
-
-  const seenDirs = new Map<string, string>();
-  for (const repo of repos) {
-    const other = seenDirs.get(repo.repoDir);
-    if (other) {
-      throw new Error(
-        `Repo template: repositories ${other} and ${repo.cloneUrl} would both clone into "${repo.repoDir}"`,
-      );
-    }
-    seenDirs.set(repo.repoDir, repo.cloneUrl);
   }
 
   const first = repos[0]!;
@@ -588,8 +585,9 @@ function buildRepoTemplateSpec(
     const dir = trimTrailingSlashes(workingDirectory);
     template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
   }
-  // Public repositories first so their layers sit below any credential
-  // layer; caller order within each group.
+  // Public repositories first, caller order within each group: the same
+  // layout as the other templates (no cache benefit here, every build env is
+  // one step ahead of every clone).
   const ordered = [...repos.filter(repo => !repo.token), ...repos.filter(repo => repo.token)];
   for (const repo of ordered) {
     const { repoDir, sha, tokenEnv } = repo;
