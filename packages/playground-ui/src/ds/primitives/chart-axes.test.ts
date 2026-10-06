@@ -82,6 +82,25 @@ describe('pickTimeTicks edge cases', () => {
     for (const i of picked) expect(new Date(days[i] ?? 0).getHours()).toBe(0);
   });
 
+  it('labels daily buckets cut off local midnight (UTC days), one per date when they fit', () => {
+    const days = series(7, 24 * HOUR, new Date(2026, 8, 29, 2).getTime());
+    expect([
+      ...pickTimeTicks(
+        days,
+        days.map(t => new Date(t).toDateString()),
+        1100,
+      ),
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    const three = days.slice(0, 3);
+    expect([
+      ...pickTimeTicks(
+        three,
+        three.map(t => new Date(t).toDateString()),
+        1100,
+      ),
+    ]).toEqual([0, 1, 2]);
+  });
+
   it('spaces buckets longer than a week evenly instead of guessing a grid', () => {
     const months = series(12, 30 * 24 * HOUR);
     const picked = [

@@ -56,7 +56,8 @@ export const labelWidth = (text: string) => text.length * CHART_AXIS_FONT_SIZE *
 
 /**
  * Which buckets get a label: the smallest round step whose labels fit the width, on
- * clock-aligned times (hours divisible by the step, days on local midnight). Without
+ * clock-aligned times (hours divisible by the step, days on local midnight or, for daily
+ * buckets, on their local date). Without
  * timestamps, evenly spaced buckets that fit; when fewer than three would show, just the
  * first and last bucket.
  */
@@ -94,10 +95,13 @@ export function pickTimeTicks(
   ts.forEach((t, i) => {
     const d = new Date(t);
     const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    // Daily buckets are often cut on UTC midnight, which isn't local midnight: they align by
+    // local date. Shorter buckets need the clock time itself.
+    const onClock = bucket >= DAY || (d.getHours() === 0 && d.getMinutes() === 0);
     const onStep =
       step < 1440
         ? d.getSeconds() === 0 && (d.getHours() * 60 + d.getMinutes()) % step === 0
-        : d.getHours() === 0 && d.getMinutes() === 0 && Math.round(midnight / DAY) % (step / 1440) === 0;
+        : onClock && Math.round(midnight / DAY) % (step / 1440) === 0;
     if (onStep) picked.add(i);
   });
   // Two clock labels land off-centre (one mid-plot, one at an edge): label the ends instead.
