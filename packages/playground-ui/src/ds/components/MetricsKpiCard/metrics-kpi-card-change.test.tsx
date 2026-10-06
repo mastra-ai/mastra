@@ -17,6 +17,14 @@ describe('MetricsKpiCardChange', () => {
     );
   });
 
+  it('shows no change as a neutral 0% without an arrow', () => {
+    for (const changePct of [0, 0.04, -0.04]) {
+      const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} />);
+      expect(html).toContain('>0%<');
+      expect(html).not.toContain('lucide-arrow');
+    }
+  });
+
   it('describes the change against the previous window', () => {
     const markup = renderToStaticMarkup(
       <MetricsKpiCardChange changePct={-8.2} comparison="vs previous 7d" prevValue="9,400" />,

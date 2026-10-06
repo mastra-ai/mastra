@@ -82,6 +82,8 @@ const DEFAULT_COLOR = 'var(--chart-share-1)';
  * apart on the wheel; no warning amber or error red. The first row's color leads.
  */
 const HUES = [1, 2, 3, 4, 5].map(i => `var(--chart-share-${i})`);
+/** The palette after a custom lead color: violet, teal, sky, indigo, then green last. */
+const CUSTOM_LEAD_HUES = [3, 4, 2, 5, 1].map(i => `var(--chart-share-${i})`);
 const SHADES = [1, 0.7, 0.48, 0.32, 0.2, 0.14];
 const REST: Paint = { color: 'var(--chart-share-rest)', alpha: 1 };
 /** Rows with their own strip segment; past that, segments get too thin and share the gray one. */
@@ -93,8 +95,10 @@ type Paint = { color: string; alpha: number };
 
 function rowColors(base: string, count: number, palette: 'shades' | 'hues'): Paint[] {
   if (palette === 'hues') {
-    // A lead color from the palette moves to the front; any other color takes the first hue's place.
-    const hues = HUES.includes(base) ? [base, ...HUES.filter(h => h !== base)] : [base, ...HUES.slice(1)];
+    // A lead color from the palette moves to the front. Any other color leads the violet and teal
+    // hues first: custom leads are usually green or blue, which sit next to the palette's own
+    // green and sky.
+    const hues = HUES.includes(base) ? [base, ...HUES.filter(h => h !== base)] : [base, ...CUSTOM_LEAD_HUES];
     return Array.from({ length: count }, (_, i) => ({
       color: hues[i % hues.length] ?? base,
       alpha: [1, 0.55, 0.3][Math.floor(i / hues.length)] ?? 0.2,
@@ -170,7 +174,7 @@ export function MetricsShareList({
 
   if (isLoading) {
     return (
-      <div className={cn('grid gap-4', className)}>
+      <div className={cn('grid grid-cols-1 gap-4', className)}>
         {header}
         <ShareListSkeleton rows={overflow === 'other' ? limit + 1 : limit} columns={columns} valueWidth={valueWidth} />
       </div>
@@ -184,7 +188,7 @@ export function MetricsShareList({
     .sort((a, b) => b.share - a.share);
   if (sorted.length === 0) {
     return (
-      <div className={cn('grid gap-4', className)}>
+      <div className={cn('grid grid-cols-1 gap-4', className)}>
         {header}
         <Txt variant="body-sm" tone="muted" className="py-6 text-center">
           {emptyState}
@@ -250,13 +254,16 @@ export function MetricsShareList({
       ? [{ key: REST_KEY, share: rest.reduce((sum, r) => sum + Math.max(r.share, 0), 0), paint: REST }]
       : []),
   ].filter(s => s.share > 0);
+  // Grow factors in percent: flex-grow values that sum below 1 (shares like $0.09 of cost)
+  // would leave the rest of the strip empty.
+  const stripTotal = segments.reduce((sum, s) => sum + s.share, 0);
   const hoveredSegment = hover === null ? null : (shown.find(r => r.key === hover)?.segment ?? hover);
   const dimSegment = (key: string) => hoveredSegment !== null && hoveredSegment !== key;
   const dimRow = (r: Shown) => hover !== null && hover !== r.key && !(hover === REST_KEY && r.segment === REST_KEY);
   const Anchor = LinkComponent ?? 'a';
 
   return (
-    <div className={cn('grid gap-4', className)}>
+    <div className={cn('grid grid-cols-1 gap-4', className)}>
       {header}
       <div className="flex h-2 gap-0.5" onMouseLeave={() => setHover(null)}>
         {segments.map(s => (
@@ -265,14 +272,14 @@ export function MetricsShareList({
             onMouseEnter={() => setHover(s.key)}
             className="h-full min-w-[3px] transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
             style={{
-              flex: `${s.share} 1 0`,
+              flex: `${(s.share / stripTotal) * 100} 1 0`,
               backgroundColor: s.paint.color,
               opacity: s.paint.alpha * (dimSegment(s.key) ? 0.3 : 1),
             }}
           />
         ))}
       </div>
-      <ul className="grid min-w-0 gap-0.5" onMouseLeave={() => setHover(null)}>
+      <ul className="grid min-w-0 grid-cols-1 gap-0.5" onMouseLeave={() => setHover(null)}>
         {shown.map(r => {
           const content = (
             <>
@@ -405,7 +412,7 @@ function ShareListSkeleton({
       <div className="flex h-2">
         <Skeleton className="size-full rounded-full" />
       </div>
-      <ul className="grid min-w-0 gap-0.5" aria-busy>
+      <ul className="grid min-w-0 grid-cols-1 gap-0.5" aria-busy>
         {Array.from({ length: rows }, (_, i) => (
           <li key={i} className={ROW}>
             <Skeleton className="size-2 shrink-0 rounded-[2px]" />

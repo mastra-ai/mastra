@@ -91,6 +91,12 @@ describe('MetricsShareList', () => {
     expect(within(empty).getAllByText('0%').length).toBeGreaterThan(0);
   });
 
+  it('fills the strip when the shares sum to less than one', () => {
+    const { container } = render(<MetricsShareList rows={[row('a', 0.03), row('b', 0.01)]} valueLabel="Cost" />);
+    const grow = strip(container).map(flex => Number.parseFloat(flex));
+    expect(grow).toEqual([75, 25]);
+  });
+
   it('treats NaN, negative and infinite shares as zero', () => {
     render(
       <MetricsShareList
@@ -143,12 +149,19 @@ describe('MetricsShareList', () => {
     expect(a.style.opacity).toBe('1');
   });
 
-  it('leads the hues with a custom color without repeating the default green', () => {
-    const rows = ['a', 'b', 'c'].map((k, i) => row(k, 3 - i));
+  it('follows a custom lead color with violet and teal, not the green or sky it may resemble', () => {
+    const rows = ['a', 'b', 'c', 'd', 'e', 'f'].map((k, i) => row(k, 6 - i));
     const { container } = render(
-      <MetricsShareList rows={rows} valueLabel="Runs" palette="hues" color="var(--chart-amber)" />,
+      <MetricsShareList rows={rows} valueLabel="Runs" palette="hues" color="var(--chart-blue)" limit={6} />,
     );
     const colors = [...container.querySelectorAll<HTMLSpanElement>('.h-2 > span')].map(s => s.style.backgroundColor);
-    expect(colors).toEqual(['var(--chart-amber)', 'var(--chart-share-2)', 'var(--chart-share-3)']);
+    expect(colors).toEqual([
+      'var(--chart-blue)',
+      'var(--chart-share-3)',
+      'var(--chart-share-4)',
+      'var(--chart-share-2)',
+      'var(--chart-share-5)',
+      'var(--chart-share-1)',
+    ]);
   });
 });

@@ -6,8 +6,12 @@ import { cn } from '@/lib/utils';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
+// A change that rounds to 0.0% is no change: a neutral badge, no arrow.
+const isFlat = (changePct: number) => Math.abs(changePct) < 0.05;
+
 // Past +1000% a percentage is unreadable, so show how many times bigger the value got instead.
 function formatChange(changePct: number) {
+  if (isFlat(changePct)) return '0%';
   if (changePct >= 1000) return `×${compact.format(1 + changePct / 100)}`;
   const digits = Math.abs(changePct) < 10 ? 1 : 0;
   return `${changePct > 0 ? '+' : ''}${changePct.toFixed(digits)}%`;
@@ -31,6 +35,7 @@ export function MetricsKpiCardChange({
   caption?: boolean;
   className?: string;
 }) {
+  const flat = isFlat(changePct);
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
   const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
   const formattedChange = formatChange(changePct);
@@ -41,10 +46,10 @@ export function MetricsKpiCardChange({
       <Tooltip>
         <TooltipTrigger render={<span tabIndex={0} className="inline-flex rounded-full" />}>
           <Badge
-            variant={isGood ? 'success' : 'destructive'}
+            variant={flat ? 'neutral' : isGood ? 'success' : 'destructive'}
             emphasis="strong"
             size="xs"
-            icon={<Icon />}
+            icon={flat ? undefined : <Icon />}
             className="tabular-nums"
             aria-hidden="true"
           >
