@@ -11,12 +11,12 @@ Dispatches `.github/workflows/npm-publish.yml` with `publish_type=playground-sna
 
 Use `ask_user` with exactly this single-select question:
 
-> Sur quelle branche veux-tu exécuter le workflow ?
+> Which branch should the workflow run on?
 
 Options:
 
 - `main` — publish from the latest `main` through a fresh branch
-- `Branche courante (<current-branch>)` — publish from the current branch (show the real name from `git branch --show-current`)
+- `Current branch (<current-branch>)` — publish from the current branch (show the real name from `git branch --show-current`)
 
 ## 2. Prepare the branch
 
