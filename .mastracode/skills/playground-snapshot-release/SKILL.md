@@ -92,11 +92,18 @@ On failure, report `gh run view <run-id> --repo mastra-ai/mastra --log-failed` a
 
 ## 6. Resolve the published version
 
+Do **not** use `npm view` here: freshly published versions can take many minutes to show up on the npm registry/CDN, so lookups fail even though the publish succeeded. Read the versions from the workflow run logs instead:
+
 ```bash
-version=$(npm view @mastra/playground-ui "dist-tags.$tag")
+gh run view <run-id> --repo mastra-ai/mastra --log \
+  | grep "Published package @mastra/" \
+  | sed -E 's/.*Published package (@mastra\/[^ ]+)@([^ ]+).*/\1 \2/'
+version=$(gh run view <run-id> --repo mastra-ai/mastra --log \
+  | grep -oE "Published package @mastra/playground-ui@[^ ]+" \
+  | sed 's/.*@mastra\/playground-ui@//')
 ```
 
-All packages in the set share this version. Verify each package you are about to bump resolves to the same value with `npm view <pkg> "dist-tags.$tag"`. Do not continue if any lookup fails.
+All packages in the set share this version. Check that every package you are about to bump appears in the "Published package" lines with the same version. Do not continue if any is missing.
 
 ## 7. Open the platform PR
 
@@ -113,19 +120,30 @@ In `frontend/package.json`, set every `@mastra/*` dependency that belongs to the
 
 Update the lockfile, then commit, push, and open the PR:
 
+The new versions may not be installable yet because of npm registry propagation. Try the install, and if it fails, wait 1 minute and retry, for up to 10 attempts:
+
 ```bash
-pnpm install --filter ./frontend --lockfile-only
+for i in $(seq 1 10); do
+  pnpm install --filter ./frontend --lockfile-only && break
+  [ "$i" = 10 ] && { echo "install failed after 10 attempts"; exit 1; }
+  sleep 60
+done
+```
+
+Run this with a long `timeout` (e.g. 900 s) or in the background and poll.
+
+```bash
 git add frontend/package.json pnpm-lock.yaml
 git commit -m "chore(frontend): bump playground UI to $version" \
   -m "Snapshot published from mastra-ai/mastra@$head_sha ($branch)." \
   -m "Co-Authored-By: mastracode <284800079+mastra-platform[bot]@users.noreply.github.com>"
 git push -u origin HEAD
-gh pr create --repo mastra-ai/platform --base main \
+gh pr create --repo mastra-ai/platform --base main --head "$(git branch --show-current)" \
   --title "chore(frontend): bump playground UI to $version" \
   --body "<summary: source branch, SHA, workflow run URL, npm tag, bumped packages and version>"
 ```
 
-If `pnpm install --lockfile-only` fails, report the error rather than committing an inconsistent lockfile.
+If `pnpm install --lockfile-only` still fails after the 10 attempts, report the error rather than committing an inconsistent lockfile.
 
 ## 8. Report
 
