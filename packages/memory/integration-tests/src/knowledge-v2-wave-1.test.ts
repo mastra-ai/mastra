@@ -29,10 +29,13 @@ const memories: Memory[] = [];
 const postgresSchemas: string[] = [];
 // Same default as with-pg-storage.test.ts: this package's docker-compose.yml PostgreSQL.
 const postgresConnectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
-const publishedKnowledgeV1Fixture = new URL(
-  '../../../../stores/libsql/src/storage/domains/knowledge/fixtures/published-1.21.1.sql',
-  import.meta.url,
-);
+const publishedKnowledgeV1Fixtures: Record<Adapter, URL> = {
+  libsql: new URL(
+    '../../../../stores/libsql/src/storage/domains/knowledge/fixtures/published-1.21.1.sql',
+    import.meta.url,
+  ),
+  pg: new URL('../../../../stores/pg/src/storage/domains/knowledge/fixtures/published-1.29.0.sql', import.meta.url),
+};
 
 const structure = {
   scopes: [
@@ -190,6 +193,91 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
   memories.push(memory);
   const mastra = new Mastra({ knowledge: { mastra: knowledge }, memory: { default: memory }, logger: false });
   return { knowledge: mastra.getKnowledge('mastra'), memory, doGenerate, curator };
+}
+
+/**
+ * Loads the Knowledge tables a published v1 store created, with one node and one curation cursor,
+ * and returns probes that read the seeded database directly. `hasTable` is PostgreSQL-only: a separate
+ * node:sqlite connection does not see what LibSQL writes to its WAL, so it cannot observe a LibSQL reset.
+ */
+async function seedPublishedKnowledgeV1(
+  adapter: Adapter,
+  storage: MastraCompositeStore,
+  location: string,
+): Promise<{ countV1Nodes: () => Promise<number>; hasTable?: (name: string) => Promise<boolean> }> {
+  const fixture = await readFile(publishedKnowledgeV1Fixtures[adapter], 'utf8');
+  const node = [
+    'v1-node',
+    'entity',
+    'Atlas',
+    'atlas',
+    '["shipyard"]',
+    'shipyard',
+    1,
+    '2026-01-01T00:00:00.000Z',
+  ] as const;
+  const cursor = ['v1-thread', 'curate', 'v1-record', '2026-01-01T00:00:00.000Z'] as const;
+  if (storage instanceof PostgresStore) {
+    const client = await storage.pool.connect();
+    try {
+      // SET LOCAL keeps the unqualified fixture inside the proof schema and off the pooled connection.
+      await client.query(`BEGIN; CREATE SCHEMA "${location}"; SET LOCAL search_path TO "${location}";`);
+      await client.query(fixture);
+      await client.query(
+        'INSERT INTO mastra_knowledge_nodes (id, type, name, "canonicalName", scope, "scopeKey", version, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $8)',
+        [...node],
+      );
+      await client.query(
+        'INSERT INTO mastra_knowledge_cursors ("sourceThreadId", agent, "lastKnowledgeId", "updatedAt") VALUES ($1, $2, $3, $4)',
+        [...cursor],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    return {
+      countV1Nodes: async () =>
+        Number(
+          (
+            await storage.db.one<{ count: string }>(
+              `SELECT count(*) AS count FROM "${location}".mastra_knowledge_nodes`,
+            )
+          ).count,
+        ),
+      hasTable: async name =>
+        (await storage.db.one<{ found: string | null }>('SELECT to_regclass($1) AS found', [`"${location}".${name}`]))
+          .found !== null,
+    };
+  }
+
+  const seed = new DatabaseSync(location);
+  seed.exec(fixture);
+  seed
+    .prepare(
+      'INSERT INTO mastra_knowledge_nodes (id, type, name, canonicalName, scope, scopeKey, version, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(...node, node[7]);
+  seed
+    .prepare(
+      'INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES (?, ?, ?, ?)',
+    )
+    .run(...cursor);
+  seed.close();
+  return {
+    countV1Nodes: async () => {
+      const rows = new DatabaseSync(location, { readOnly: true });
+      try {
+        return Number(
+          (rows.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get() as { count: number }).count,
+        );
+      } finally {
+        rows.close();
+      }
+    },
+  };
 }
 
 function sanitizePackageUrl(url: string): string {
@@ -371,32 +459,11 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     },
   );
 
-  it.skipIf(adapter !== 'libsql')('upgrades a database written by the published v1 Knowledge release', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-upgrade-'));
-    temporaryDirectories.push(directory);
-    const databasePath = join(directory, 'upgrade.db');
-    const seed = new DatabaseSync(databasePath);
-    seed.exec(await readFile(publishedKnowledgeV1Fixture, 'utf8'));
-    seed
-      .prepare(
-        'INSERT INTO mastra_knowledge_nodes (id, type, name, canonicalName, scope, scopeKey, version, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      )
-      .run(
-        'v1-node',
-        'entity',
-        'Atlas',
-        'atlas',
-        '["shipyard"]',
-        'shipyard',
-        1,
-        '2026-01-01T00:00:00.000Z',
-        '2026-01-01T00:00:00.000Z',
-      );
-    seed.close();
+  it('upgrades a database written by the published v1 Knowledge release', async () => {
+    const { storage, location } = await createStorage('wave-1-upgrade', adapter);
+    const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, storage, location);
 
     // Ordinary memory keeps working on the upgraded database while Knowledge is unused.
-    const storage = new LibSQLStore({ id: 'wave-1-upgrade', url: `file:${databasePath}` });
-    stores.push(storage);
     const plainMemory = new Memory({ storage });
     new Mastra({ memory: { default: plainMemory }, logger: false });
     await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
@@ -406,11 +473,11 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     const vector = await createVector();
     const blocked = createRuntime(storage, vector);
     await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores.knowledge.dangerouslyReset()');
-    const v1Rows = new DatabaseSync(databasePath, { readOnly: true });
-    expect(v1Rows.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get()).toEqual({ count: 1 });
-    v1Rows.close();
+    expect(await countV1Nodes()).toBe(1);
 
     await storage.stores!.knowledge!.dangerouslyReset();
+    // Reset removes the retired v1 cursor table from this store's own schema.
+    if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
     const upgraded = createRuntime(storage, vector);
     await upgraded.knowledge.reconcile();
     const threadId = `upgrade-${randomUUID()}`;
