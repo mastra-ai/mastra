@@ -268,7 +268,7 @@ function SpanDataPanelContent({
       className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
     >
       <DataPanel.Header>
-        <TabList variant="pill-ghost" size="sm">
+        <TabList variant="pill-ghost" size="md">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
         </TabList>

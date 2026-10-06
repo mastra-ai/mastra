@@ -363,7 +363,7 @@ export function TraceDataPanelView({
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
             <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
+              <TabList variant="pill-ghost" size="md">
                 {sideViews.map(view => (
                   <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
                     {view.label}
