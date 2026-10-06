@@ -80,7 +80,7 @@ export function guardedSetupCommand({ repoDir, command, continueOnFailure }: Gua
     `( cd "${repoDir}" && ( ${command}\n) ) || ` +
     // One line per repository: the same guarded command runs before and after
     // the pin, so a second failure must not add a second line.
-    `{ mkdir -p "${SETUP_MARKER_DIR}" && grep -qxF '${repoDir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || ` +
+    `{ mkdir -p "${SETUP_MARKER_DIR}" && grep -qxF -- '${repoDir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || ` +
     `printf '%s\\n' '${repoDir}' >> "${SETUP_FAILED_MARKER_PATH}"; }`
   );
 }

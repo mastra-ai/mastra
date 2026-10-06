@@ -67,7 +67,7 @@ describe('guardedSetupCommand', () => {
 
   it('wraps the command and appends the repo dir to the failure list when the guard is on', () => {
     expect(guardedSetupCommand({ repoDir: 'x', command: 'pnpm i && pnpm build', continueOnFailure: true })).toBe(
-      `( cd "x" && ( pnpm i && pnpm build\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
+      `( cd "x" && ( pnpm i && pnpm build\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
     );
   });
 
