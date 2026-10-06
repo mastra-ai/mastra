@@ -654,7 +654,7 @@ if (recording.status === 'ready') {
 
 Register [`liveKitRecordingRoute()`](#review-recordings-in-studio) on the server first. The helper requests its default `/voice/livekit/recordings/:traceId` path, independently of the client's API prefix. It preserves the client's authentication headers, cookies, custom fetch function, and abort signal. Pass `{ signal }` as a third argument to cancel an individual request. Failed requests use `MastraClientError` and aren't retried automatically.
 
-The published client SDK 1.51.2 has a legacy dependency that requires Zod 3. For strict npm peer dependency checks, use Zod `^3.25.76` with that SDK. Server and worker consumers without the optional client SDK also support Zod 4.
+`@mastra/client-js@1.51.2` declares support for Zod 3 and 4, but its `@ai-sdk/ui-utils@1.2.11` dependency declares a Zod 3 peer dependency. This mismatch can cause strict npm installs with Zod 4 to fail. Use Zod `^3.25.76` with that SDK to satisfy both peer ranges. Server and worker consumers without the optional client SDK also support Zod 4.
 
 The `/client` entry point excludes LiveKit server and worker imports. Other integration entry points don't require `@mastra/client-js`. Installing `@mastra/livekit` still installs its package-level dependencies; the browser entry point only controls which code enters the browser bundle. Storage credentials and recording authorization remain on the server.
 
@@ -847,7 +847,7 @@ npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/age
 
 Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
 
-Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Package import checks cover both supported minimums, 3.25.76 and 4.1.8, including the recording route. Verify the installed dependency tree and initialize the worker's models:
+Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Verify the installed dependency tree and initialize the worker's models:
 
 ```bash npm2yarn
 npm ls @mastra/livekit @livekit/agents @livekit/agents-plugin-livekit @livekit/agents-plugin-silero @livekit/rtc-node

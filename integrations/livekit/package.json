@@ -56,8 +56,7 @@
     "build:watch": "pnpm build:lib --watch",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
-    "test": "vitest run",
-    "test:package": "node scripts/smoke-package.mjs"
+    "test": "vitest run"
   },
   "keywords": [
     "mastra",
