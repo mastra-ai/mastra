@@ -44,12 +44,12 @@
     [data-variant='pill'] [data-slot='tab'] {
       position: relative;
       z-index: 10;
-      padding: 4px 12px;
+      padding: 0 12px;
       border-radius: 9999px;
     }
 
     [data-variant='pill'][data-size='sm'] [data-slot='tab'] {
-      padding-block: 0;
+      padding: 0 10px;
     }
 
     :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-active][data-closable] {

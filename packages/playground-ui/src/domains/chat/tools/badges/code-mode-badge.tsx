@@ -4,6 +4,7 @@ import type { MessageMetadata } from '../../messages/message-metadata';
 import type { CodeModeResult } from '../code-mode';
 import type { ToolApprovalRequest } from './tool-approval-badge';
 import { ToolApprovalBadge } from './tool-approval-badge';
+import { Code } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
@@ -78,14 +79,11 @@ export const CodeModeBadge = ({
         {error && (
           <div>
             <SectionLabel>Error</SectionLabel>
-            <pre
+            <Code
               data-testid="code-mode-error"
               className="rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap text-destructive-foreground"
-            >
-              {error.name ? `${error.name}: ` : ''}
-              {error.message}
-              {typeof error.line === 'number' ? ` (line ${error.line})` : ''}
-            </pre>
+              code={`${error.name ? `${error.name}: ` : ''}${error.message}${typeof error.line === 'number' ? ` (line ${error.line})` : ''}`}
+            />
           </div>
         )}
 
@@ -93,12 +91,11 @@ export const CodeModeBadge = ({
           <div>
             <SectionLabel>Result</SectionLabel>
             {typeof resultValue === 'string' ? (
-              <pre
+              <Code
                 className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
-              >
-                {resultValue}
-              </pre>
+                code={resultValue}
+              />
             ) : (
               <CodeEditor data={resultValue as Record<string, unknown>} data-testid="code-mode-result" />
             )}
@@ -108,12 +105,11 @@ export const CodeModeBadge = ({
         {logs.length > 0 && (
           <div>
             <SectionLabel>Logs</SectionLabel>
-            <pre
+            <Code
               data-testid="code-mode-logs"
               className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
-            >
-              {logs.join('\n')}
-            </pre>
+              code={logs.join('\n')}
+            />
           </div>
         )}
       </div>

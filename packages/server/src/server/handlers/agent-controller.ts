@@ -46,6 +46,7 @@ import { enforceThreadAccess } from './utils';
  */
 const RESERVED_THREAD_METADATA_KEYS = {
   currentModelId: true,
+  modelPersistenceVersion: true,
   currentModeId: true,
   observerModelId: true,
   reflectorModelId: true,
@@ -204,8 +205,7 @@ const toolSuspensionBodySchema = z.object({
 const switchModeBodySchema = z.object({ modeId: z.string() });
 const switchModelBodySchema = z.object({
   modelId: z.string(),
-  scope: z.enum(['global', 'thread']).optional(),
-  modeId: z.string().optional(),
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
 });
 const switchThreadBodySchema = z.object({ threadId: z.string() });
 const createThreadBodySchema = z.object({ title: z.string().optional() });
@@ -834,15 +834,16 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
   bodySchema: switchModelBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Switch the session model',
-  description: 'Switches the model for the session, scoped to the thread by default.',
+  description:
+    'Switches the model for the session and persists it to the active thread. Optionally applies and persists a thinking level with the model.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, modelId, scope, modeId, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, modelId, thinkingLevel, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.model.switch({ modelId, scope, modeId });
+      await session.model.switch(modelId, { thinkingLevel });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller model');

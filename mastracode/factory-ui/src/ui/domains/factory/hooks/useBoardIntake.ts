@@ -67,7 +67,7 @@ export function useBoardIntake({
   const incidentioStatusQuery = useIncidentioStatusQuery();
 
   const config = configQuery.data;
-  const gitlabStatusQuery = useGitLabStatusQuery(config?.gitlab.enabled ?? false);
+  const gitlabStatusQuery = useGitLabStatusQuery(!review);
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
@@ -344,6 +344,20 @@ export function useBoardIntake({
     ...(kind === 'work' && active === 'github' ? { triage: triageIssues } : {}),
   };
 
+  // Discovery can add more source tabs without holding the selected feed's
+  // loading state. Keep an unresolved board pending until a source is known.
+  const discoveringSources =
+    ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
+    ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
+    ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
+    ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending) ||
+    bindingsPending ||
+    routesPending;
+  const isConfigurationPending = !review && configQuery.isPending;
+  const isSourcePending = !active && discoveringSources;
+  const isRoutingPending = active === 'github' && routesPending;
+  const isPending = isConfigurationPending || isSourcePending || isRoutingPending || Boolean(feed?.isPending);
+
   return {
     available,
     active,
@@ -353,16 +367,7 @@ export function useBoardIntake({
     alreadyMaterialized,
     participantCandidates,
     feedByColumn,
-    isPending:
-      (!review &&
-        (configQuery.isPending ||
-          ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
-          ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
-          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
-          ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending))) ||
-      routesPending ||
-      bindingsPending ||
-      Boolean(feed?.isPending),
+    isPending,
     isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
   };
 }
