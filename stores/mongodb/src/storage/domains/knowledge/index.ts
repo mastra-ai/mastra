@@ -75,7 +75,6 @@ import type {
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   ListKnowledgeNodesInput,
-  PromoteKnowledgeNodeInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -403,45 +402,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       role: row.role,
       ...(row.canSuggest ? { canSuggest: true } : {}),
     }));
-  }
-
-  async reconcileScopeReferenceGrants(input: {
-    scopeRefId: string;
-    grants: KnowledgeScopeGrant[];
-    expectedAccessEpoch?: number;
-  }): Promise<{ changed: boolean; accessEpoch: number }> {
-    return this.#transaction(async session => {
-      await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
-      if (input.grants.some(grant => grant.scopeRefId !== input.scopeRefId)) {
-        throw new KnowledgeConflictError(input.scopeRefId);
-      }
-      const normalized = [...new Map(input.grants.map(grant => [grant.scopeNodeId, grant])).values()].sort((a, b) =>
-        a.scopeNodeId.localeCompare(b.scopeNodeId),
-      );
-      await this.#assertScopeNodes(
-        normalized.map(grant => grant.scopeNodeId),
-        session,
-      );
-      const collection = await this.#collection(TABLE_KNOWLEDGE_SCOPE_GRANTS);
-      const existing = await collection.find({ scopeRefId: input.scopeRefId }, sessionOptions(session)).toArray();
-      const existingKey = JSON.stringify(
-        existing
-          .filter(row => !row.deletedAt)
-          .map(row => [row.scopeNodeId, row.role, Boolean(row.canSuggest)])
-          .sort(),
-      );
-      const nextKey = JSON.stringify(
-        normalized.map(grant => [grant.scopeNodeId, grant.role, Boolean(grant.canSuggest)]),
-      );
-      if (existingKey === nextKey) return { changed: false, accessEpoch: await this.getAccessEpoch() };
-      await collection.deleteMany({ scopeRefId: input.scopeRefId }, sessionOptions(session));
-      if (normalized.length)
-        await collection.insertMany(
-          normalized.map(grant => ({ ...grant })),
-          sessionOptions(session),
-        );
-      return { changed: true, accessEpoch: await this.#bumpAccessEpoch(session) };
-    });
   }
 
   async upsertScopeGrant(
@@ -1339,87 +1299,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return { ...node, deletedAt: undefined, deletedBy: undefined };
   }
 
-  async promoteNode(input: PromoteKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(session => this.#promoteNode(input, session));
-  }
-
-  async #promoteNode(
-    input: PromoteKnowledgeNodeInput,
-    session: ClientSession,
-    expectedRecordVersions?: Map<string, number>,
-  ): Promise<KnowledgeNode> {
-    await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
-    await this.#assertScopeNodes([input.sourceScopeId, input.destinationScopeId], session);
-    const row = await (
-      await this.#collection(TABLE_KNOWLEDGE_NODES)
-    ).findOne({ id: input.id, deletedAt: { $exists: false } }, sessionOptions(session));
-    if (!row) throw new KnowledgeNotFoundError('node', input.id);
-    if (Number(row.version) !== input.version) throw new KnowledgeConflictError(input.id);
-    const nodeScopes = await this.#getNodeScopeIds(input.id, session);
-    if (!nodeScopes.includes(input.sourceScopeId)) throw new KnowledgeConflictError(input.id);
-    const nextNodeScopes = canonicalizeKnowledgeScopeIds([
-      ...nodeScopes.filter(scopeId => scopeId !== input.sourceScopeId),
-      input.destinationScopeId,
-    ]);
-    const records = await (
-      await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-    )
-      .find({ nodeId: input.id, deletedAt: { $exists: false } }, sessionOptions(session))
-      .toArray();
-    if (
-      expectedRecordVersions &&
-      (records.length !== expectedRecordVersions.size ||
-        records.some(record => expectedRecordVersions.get(String(record.id)) !== Number(record.version)))
-    ) {
-      throw new KnowledgeConflictError('Promotion record set changed');
-    }
-    for (const recordRow of records) {
-      const recordId = String(recordRow.id);
-      const scopes = await this.#getRecordScopeIds(recordId, session);
-      const nextScopes = canonicalizeKnowledgeScopeIds([
-        ...scopes.filter(scopeId => scopeId !== input.sourceScopeId),
-        input.destinationScopeId,
-      ]);
-      await this.#replaceRecordScopes(recordId, nextScopes, session);
-      const nextVersion = Number(recordRow.version) + 1;
-      await (
-        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-      ).updateOne(
-        { id: recordId, version: Number(recordRow.version) },
-        { $set: { updatedAt: new Date() }, $inc: { version: 1 } },
-        sessionOptions(session),
-      );
-      await this.#outbox('record', recordId, 'upsert', nextScopes, nextVersion, session);
-    }
-    const result = await (
-      await this.#collection(TABLE_KNOWLEDGE_NODES)
-    ).findOneAndUpdate(
-      { id: input.id, version: input.version, deletedAt: { $exists: false } },
-      {
-        $set: {
-          updatedAt: new Date(),
-          activeNameScopeKey: `${canonicalName(String(row.name))}\u0000${knowledgeScopeIdsKey(nextNodeScopes)}`,
-        },
-        $inc: { version: 1 },
-      },
-      { ...sessionOptions(session), returnDocument: 'after' },
-    );
-    if (!result) throw new KnowledgeConflictError(input.id);
-    await this.#replaceNodeScopes(input.id, nextNodeScopes, session);
-    const node = nodeFromDocument(result);
-    await this.#activity(
-      'promote',
-      'node',
-      node.id,
-      input.contextScopeId,
-      undefined,
-      { scopeIds: nextNodeScopes },
-      session,
-    );
-    await this.#outbox('node', node.id, 'upsert', nextNodeScopes, node.version, session);
-    return node;
-  }
-
   async mergeNodes(input: Parameters<KnowledgeStorage['mergeNodes']>[0]): Promise<KnowledgeNode> {
     return this.#transaction(session => this.#mergeNodes(session, input));
   }
@@ -1439,7 +1318,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     if (!sourceRow) throw new KnowledgeNotFoundError('node', input.sourceId);
     if (!targetRow) throw new KnowledgeNotFoundError('node', input.targetId);
     if (Number(sourceRow.version) !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
-    if (Number(targetRow.version) !== input.targetVersion) throw new KnowledgeConflictError(input.targetId);
     const records = await (
       await this.#collection(TABLE_KNOWLEDGE_RECORDS)
     )
@@ -1926,58 +1804,28 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return row ? proposalFromDocument(row) : null;
   }
 
-  async #isProposalVisible(
-    proposal: KnowledgeProposal,
-    input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
-  ): Promise<boolean> {
-    const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const proposerContextScopeId = proposal.proposerContextScopeId;
-    const readBranch =
-      proposerContextScopeId !== undefined &&
-      (readable.includes(proposerContextScopeId) ||
-        (await this.#getNodeScopeIds(proposerContextScopeId)).some(scopeId => readable.includes(scopeId)));
-    let everyTargetReadable = readBranch;
-    let everyTargetWritable = true;
-    for (const target of proposal.targets) {
-      let currentScopeIds: KnowledgeScopeIds;
-      if (target.type === 'node') {
-        const node = await this.getNodeIncludingDeleted(target.id);
-        if (!node || Boolean(node.deletedAt) !== Boolean(target.expectedDeleted)) return false;
-        currentScopeIds = target.expectedDeleted
-          ? canonicalizeKnowledgeScopeIds(target.scopeIds)
-          : node.isScope
-            ? [node.id]
-            : await this.#getNodeScopeIds(node.id);
-        if (readBranch && !isKnowledgeScopeVisible(currentScopeIds, readable)) everyTargetReadable = false;
-      } else {
-        const record = await this.getRecord({ id: target.id, includeDeleted: true });
-        if (!record || Boolean(record.deletedAt) !== Boolean(target.expectedDeleted)) return false;
-        currentScopeIds = target.expectedDeleted
-          ? canonicalizeKnowledgeScopeIds(target.scopeIds)
-          : await this.#getRecordScopeIds(target.id);
-        if (readBranch && !(await this.#isRecordVisible(record, readable))) everyTargetReadable = false;
-      }
-      const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
-      if (!authorizedScopeIds?.some(scopeId => currentScopeIds.includes(scopeId))) everyTargetWritable = false;
-    }
-    return everyTargetReadable || everyTargetWritable;
-  }
-
   async getVisibleProposal(input: {
     id: string;
     scopeIds: KnowledgeScopeIds;
     approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
   }): Promise<KnowledgeProposal | null> {
-    const proposal = await this.getProposal(input.id);
-    return proposal && (await this.#isProposalVisible(proposal, input)) ? proposal : null;
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) return null;
+    const [row] = await (
+      await this.#collection(TABLE_KNOWLEDGE_PROPOSALS)
+    )
+      .aggregate([
+        { $match: { id: input.id } },
+        ...this.#proposalVisibilityPipeline(scopeIds, input.approvalScopeIds),
+        { $limit: 1 },
+      ])
+      .toArray();
+    return row ? proposalFromDocument(row) : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const hasApprovalScopeIds = Object.values(input.approvalScopeIds ?? {}).some(
-      authorizedScopeIds => authorizedScopeIds && authorizedScopeIds.length > 0,
-    );
-    if (scopeIds.length === 0 && !hasApprovalScopeIds) return { proposals: [] };
+    if (scopeIds.length === 0) return { proposals: [] };
     if (
       input.cursor &&
       !(await this.getVisibleProposal({ id: input.cursor, scopeIds, approvalScopeIds: input.approvalScopeIds }))
@@ -2235,10 +2083,16 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
               everyTarget(targetVisible(scopeIds, true)),
             ],
           };
+    // Approval authority is a visibility path, not an exemption: the complete payload must still be readable.
     const writeBranch =
-      capabilityBranches.length === 0
+      capabilityBranches.length === 0 || scopeIds.length === 0
         ? false
-        : everyTarget({ $switch: { branches: capabilityBranches, default: false } });
+        : {
+            $and: [
+              everyTarget({ $switch: { branches: capabilityBranches, default: false } }),
+              everyTarget(targetVisible(scopeIds, true)),
+            ],
+          };
     return [
       liveLookup(TABLE_KNOWLEDGE_NODES, 'targets.id', 'id', '__targetNodes', true),
       liveLookup(TABLE_KNOWLEDGE_RECORDS, 'targets.id', 'id', '__targetRecords', true),
@@ -2358,15 +2212,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       case 'promote-node':
         await this.#updateNode({ ...mutation.mutation, ...fence }, session);
         return;
-      case 'curate-node':
-        await this.#promoteNode(
-          { ...mutation.mutation, ...fence },
-          session,
-          new Map(
-            targets.filter(target => target.type === 'record').map(target => [target.id, target.expectedVersion]),
-          ),
-        );
-        return;
       case 'merge-nodes':
         await this.#mergeNodes(session, { ...mutation.mutation, ...fence });
         return;
@@ -2447,11 +2292,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
-      if (
-        !input.verifiedMutation &&
-        proposal.operation !== mutation.kind &&
-        !(proposal.operation === 'promote-node' && mutation.kind === 'curate-node')
-      ) {
+      if (!input.verifiedMutation && proposal.operation !== mutation.kind) {
         throw new KnowledgeConflictError('Proposal operation does not match its payload');
       }
       assertKnowledgeProposalMutationSemantics(mutation, targets);
