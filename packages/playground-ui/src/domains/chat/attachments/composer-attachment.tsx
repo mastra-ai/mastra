@@ -20,7 +20,7 @@ export function ComposerAttachment({ name, children, onRemove, variant = 'thumbn
       className={cn(
         raisedSurfaceStyle,
         surfaceStateLayerStyle,
-        'group/attachment relative flex h-14 min-w-24 shrink-0 items-center overflow-hidden rounded-(--attachment-radius) [--attachment-radius:var(--radius-lg)]',
+        'group/attachment relative flex h-14 min-w-24 shrink-0 items-center overflow-hidden rounded-(--attachment-radius) [--attachment-radius:var(--radius-xl)]',
         variant === 'inline' ? 'max-w-56' : 'max-w-48',
       )}
       title={name}

@@ -6,7 +6,7 @@ export function ComposerAttachmentList({ className, ...props }: ComponentProps<t
   return (
     <ComposerAttachments
       aria-label="Draft attachments"
-      className={cn('flex max-w-none items-center gap-3 overflow-x-auto px-3 pt-3 pb-2', className)}
+      className={cn('flex max-w-none items-center gap-3 overflow-x-auto p-2', className)}
       {...props}
     />
   );
