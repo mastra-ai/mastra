@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -149,11 +149,11 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="overlay-test">
+            <SidebarProvider storageKey="overlay-test">
               <ChatSessionProvider threadId="thread-test">
                 <OverlaysProvider>{children}</OverlaysProvider>
               </ChatSessionProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
         <Route path="*" element={<NavigatedPath />} />

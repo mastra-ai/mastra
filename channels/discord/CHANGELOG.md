@@ -1,5 +1,14 @@
 # @mastra/discord
 
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Fixed a Discord Gateway reconnect storm that could trip Discord's connection abuse limit (>1000 connects in a short window) and get the bot token force-reset. The provider now owns the Gateway reconnection loop: failed connects (invalid token, Message Content privileged intent not enabled) back off exponentially instead of retrying instantly, a revoked token parks reconnection until new credentials arrive, and exactly one loop runs per installation — credential rotations and `disconnect()` now stop the previous loop instead of leaking it. ([#26095](https://github.com/mastra-ai/mastra/pull/26095))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 1.3.0-alpha.0
 
 ### Minor Changes
