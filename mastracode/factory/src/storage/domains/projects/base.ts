@@ -15,6 +15,19 @@ export interface FactoryProject {
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans: boolean;
+  /** Sandbox provider for the Factory's environment (null = never configured). */
+  sandboxProvider: string | null;
+  /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
+  sandboxWorkdir: string | null;
+  sandboxCpuCount: number | null;
+  sandboxMemoryMb: number | null;
+  sandboxIdleTimeoutMinutes: number | null;
+  /** Command run once in the workspace root after every repository's own setup. */
+  workspaceSetupCommand: string | null;
+  /** Template id of the environment's current build, written by the build path. */
+  activeTemplateId: string | null;
+  /** Repository slug → commit the active template was built at. */
+  activeTemplateHeads: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +45,14 @@ export interface UpdateFactoryProjectInput {
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
+  sandboxProvider?: string | null;
+  sandboxWorkdir?: string | null;
+  sandboxCpuCount?: number | null;
+  sandboxMemoryMb?: number | null;
+  sandboxIdleTimeoutMinutes?: number | null;
+  workspaceSetupCommand?: string | null;
+  activeTemplateId?: string | null;
+  activeTemplateHeads?: Record<string, string> | null;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -46,6 +67,14 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
+    sandbox_provider: { type: 'text', nullable: true },
+    sandbox_workdir: { type: 'text', nullable: true },
+    sandbox_cpu_count: { type: 'integer', nullable: true },
+    sandbox_memory_mb: { type: 'integer', nullable: true },
+    sandbox_idle_timeout_minutes: { type: 'integer', nullable: true },
+    workspace_setup_command: { type: 'text', nullable: true },
+    active_template_id: { type: 'text', nullable: true },
+    active_template_heads: { type: 'json', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -62,6 +91,14 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
+  sandbox_provider: string | null;
+  sandbox_workdir: string | null;
+  sandbox_cpu_count: number | null;
+  sandbox_memory_mb: number | null;
+  sandbox_idle_timeout_minutes: number | null;
+  workspace_setup_command: string | null;
+  active_template_id: string | null;
+  active_template_heads: Record<string, string> | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -77,6 +114,14 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
+    sandboxProvider: row.sandbox_provider ?? null,
+    sandboxWorkdir: row.sandbox_workdir ?? null,
+    sandboxCpuCount: row.sandbox_cpu_count ?? null,
+    sandboxMemoryMb: row.sandbox_memory_mb ?? null,
+    sandboxIdleTimeoutMinutes: row.sandbox_idle_timeout_minutes ?? null,
+    workspaceSetupCommand: row.workspace_setup_command ?? null,
+    activeTemplateId: row.active_template_id ?? null,
+    activeTemplateHeads: row.active_template_heads ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -168,6 +213,16 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
       ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
+      ...(input.sandboxProvider !== undefined ? { sandbox_provider: input.sandboxProvider } : {}),
+      ...(input.sandboxWorkdir !== undefined ? { sandbox_workdir: input.sandboxWorkdir } : {}),
+      ...(input.sandboxCpuCount !== undefined ? { sandbox_cpu_count: input.sandboxCpuCount } : {}),
+      ...(input.sandboxMemoryMb !== undefined ? { sandbox_memory_mb: input.sandboxMemoryMb } : {}),
+      ...(input.sandboxIdleTimeoutMinutes !== undefined
+        ? { sandbox_idle_timeout_minutes: input.sandboxIdleTimeoutMinutes }
+        : {}),
+      ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
+      ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
+      ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
       updated_at: new Date(),
     }));
     return row ? toFactoryProject(row) : null;
