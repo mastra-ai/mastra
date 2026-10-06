@@ -10,7 +10,7 @@ import {
   listConnectionsToolKey,
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { TOOLS } from './registry.js';
+import { PROVIDERS } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
@@ -34,8 +34,6 @@ interface ToolsProviderOptionsBase {
    * option.)
    */
   requireApproval?: boolean | string[];
-  /** Exclude this provider entirely, even if a connection exists. */
-  disabled?: boolean;
 }
 
 /**
@@ -76,10 +74,10 @@ export interface ToolsOptions {
    *   is ignored.
    * - `{ linear: true, github: { allowTools: [...] }, notion: false }` —
    *   per-provider configuration. Every connected provider still resolves
-   *   unless excluded: `true` (or `{}`) enables with defaults, `false` (or
-   *   `{ disabled: true }`) excludes, and an options object configures tool
-   *   filters, approval policy, or a pinned connection. Each provider may set
-   *   at most one of `allowTools` and `disallowTools`; supplying both throws.
+   *   unless excluded: `true` (or `{}`) enables with defaults, `false`
+   *   excludes, and an options object configures tool filters, approval
+   *   policy, or a pinned connection. Each provider may set at most one of
+   *   `allowTools` and `disallowTools`; supplying both throws.
    *
    * Omit the option entirely to resolve every provider the project has a
    * connection for.
@@ -141,8 +139,6 @@ export type ToolsWithInput =
  */
 export interface ToolsResolver {
   (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord>;
-  /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
-  invalidate(): void;
   /** Fetches tools from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<ResolvedToolsRecord>;
   /** Closes MCP transports owned by this resolver and clears its cached snapshot. */
@@ -152,9 +148,8 @@ export interface ToolsResolver {
    * so an agent can combine its own tools with connect tools in one
    * expression: `tools: connectTools.with({ weatherTool })`. On a key
    * collision the extra tools win — connect keys are provider-prefixed, so
-   * collisions only happen deliberately. The cache handles (`invalidate`,
-   * `refresh`, `disconnect`) delegate to the base resolver, and `.with()`
-   * calls chain.
+   * collisions only happen deliberately. The cache handles (`refresh`,
+   * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
 }
@@ -171,7 +166,7 @@ let nextResolverId = 0;
 
 /**
  * Returns a live toolset resolver over the project's Platform connections.
- * HTTP providers are loaded from the shipped `TOOLS` registry. MCP providers
+ * HTTP providers are loaded from the shipped `PROVIDERS` registry. MCP providers
  * are discovered from the Platform integration catalog. Tools from every supported
  * provider with a matching project connection are merged into one flat record
  * (matched by `integrationId`). The resolver serves a cached snapshot,
@@ -253,7 +248,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       return { connections, catalog: catalogResult.value, catalogAvailable: true };
     }
 
-    const checkedIn = new Set(TOOLS.map(registration => registration.integrationId));
+    const checkedIn = new Set(PROVIDERS.map(registration => registration.integrationId));
     const needsCatalog = connections.some(
       connection =>
         connection.status === 'active' &&
@@ -322,9 +317,6 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   };
 
   const resolver: ToolsResolver = Object.assign(resolve, {
-    invalidate: (): void => {
-      cache = undefined;
-    },
     refresh,
     disconnect: (): Promise<void> => {
       // Let the refresh in progress settle first so it cannot repopulate the
@@ -360,7 +352,6 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
     return { ...baseTools, ...extraTools };
   };
   const resolver: ToolsResolver = Object.assign(resolve, {
-    invalidate: (): void => base.invalidate(),
     refresh: async (): Promise<ResolvedToolsRecord> => {
       const [baseTools, extraTools] = await Promise.all([base.refresh(), resolveExtra()]);
       return { ...baseTools, ...extraTools };
@@ -371,10 +362,16 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
   return resolver;
 }
 
+/**
+ * Internal per-provider options: the public shape plus the exclusion marker
+ * that the `false` shorthand expands to.
+ */
+type NormalizedToolsProviderOptions = ToolsProviderOptions & { disabled?: boolean };
+
 /** Internal normalization of the `providers` option. */
 interface NormalizedProviders {
   /** Per-provider options with boolean shorthands expanded. */
-  overrides: Record<string, ToolsProviderOptions>;
+  overrides: Record<string, NormalizedToolsProviderOptions>;
   /**
    * Set when the array form was used: only these providers resolve. The
    * record form never restricts — unlisted providers keep resolving.
@@ -386,14 +383,14 @@ interface NormalizedProviders {
  * Turns the two accepted `providers` shapes into the internal form. The
  * array form (`["linear", "github"]`) becomes an allowlist with default
  * options; the record form expands boolean shorthands (`true` → `{}`,
- * `false` → `{ disabled: true }`). Malformed inputs (non-string array
- * entries, duplicates, non-boolean/non-object record values) throw at
+ * `false` → an internal exclusion marker). Malformed inputs (non-string
+ * array entries, duplicates, non-boolean/non-object record values) throw at
  * tools() time rather than at first refresh.
  */
 function normalizeProviderOverrides(providers: ToolsOptions['providers']): NormalizedProviders {
   if (providers === undefined) return { overrides: {}, only: undefined };
   if (Array.isArray(providers)) {
-    const overrides: Record<string, ToolsProviderOptions> = {};
+    const overrides: Record<string, NormalizedToolsProviderOptions> = {};
     for (const entry of providers) {
       if (typeof entry !== 'string') {
         throw new MastraConnectError(
@@ -408,7 +405,7 @@ function normalizeProviderOverrides(providers: ToolsOptions['providers']): Norma
     }
     return { overrides, only: new Set(Object.keys(overrides)) };
   }
-  const overrides: Record<string, ToolsProviderOptions> = {};
+  const overrides: Record<string, NormalizedToolsProviderOptions> = {};
   for (const [providerId, value] of Object.entries(providers)) {
     if (value === undefined) continue;
     if (value === true) {
@@ -433,7 +430,7 @@ function normalizeProviderOverrides(providers: ToolsOptions['providers']): Norma
  * runtime guard catches loosely typed inputs (e.g. built from JSON or a
  * `Record<string, unknown>` upstream).
  */
-function validateProviderXor(providers: Record<string, ToolsProviderOptions>): void {
+function validateProviderXor(providers: Record<string, NormalizedToolsProviderOptions>): void {
   for (const [integrationId, providerOptions] of Object.entries(providers)) {
     const filters = providerOptions as { allowTools?: unknown; disallowTools?: unknown };
     if (filters.allowTools !== undefined && filters.disallowTools !== undefined) {
@@ -452,7 +449,7 @@ function validateProviderXor(providers: Record<string, ToolsProviderOptions>): v
  * approval on MCP providers silently (and crash the HTTP path into
  * warn-and-skip) instead of gating tools as the author intended.
  */
-function validateRequireApproval(providers: Record<string, ToolsProviderOptions>): void {
+function validateRequireApproval(providers: Record<string, NormalizedToolsProviderOptions>): void {
   for (const [integrationId, providerOptions] of Object.entries(providers)) {
     const requireApproval = (providerOptions as Record<string, unknown>).requireApproval;
     if (requireApproval === undefined || typeof requireApproval === 'boolean') continue;
@@ -470,7 +467,7 @@ function validateRequireApproval(providers: Record<string, ToolsProviderOptions>
  * carrying this key would otherwise be ignored silently and its tools would
  * run without the prompts the author expected.
  */
-function rejectRemovedAutoApproveTools(providers: Record<string, ToolsProviderOptions>): void {
+function rejectRemovedAutoApproveTools(providers: Record<string, NormalizedToolsProviderOptions>): void {
   for (const [integrationId, providerOptions] of Object.entries(providers)) {
     if ('autoApproveTools' in (providerOptions as Record<string, unknown>)) {
       throw new MastraConnectError(
@@ -487,7 +484,7 @@ function buildRequests(
   catalogAvailable: boolean,
 ): NormalizedRequest[] {
   const { overrides, only } = providers;
-  const registrations = new Map(TOOLS.map(registration => [registration.integrationId, registration]));
+  const registrations = new Map(PROVIDERS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
     if (!integration.capabilities.mcp) continue;

@@ -37,9 +37,9 @@ const PLATFORM_IDS: Record<ChannelId, string> = {
   telegram: 'telegram',
 };
 
-/** Integration overrides disabling every channel except `keep`. */
-function disableAllExcept(keep: ChannelId): Record<string, { disabled: true }> {
-  return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, { disabled: true as const }]));
+/** Provider overrides excluding every channel except `keep` via the `false` shorthand. */
+function disableAllExcept(keep: ChannelId): Record<string, false> {
+  return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, false as const]));
 }
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -191,7 +191,7 @@ async function resolverContractOutcome(
       const allDisabled = await channels({
         projectId,
         client: clientOptions,
-        providers: Object.fromEntries(CHANNEL_IDS.map(id => [id, { disabled: true as const }])),
+        providers: Object.fromEntries(CHANNEL_IDS.map(id => [id, false as const])),
       });
       const disabledRoutes = allDisabled.getRoutes();
       const disabledMap = await allDisabled();
@@ -258,30 +258,15 @@ async function resolverContractOutcome(
             ),
       );
 
-      resolver.invalidate();
-      const afterInvalidate = await resolver();
-      steps.push(
-        afterInvalidate !== resolved && sameKeys(afterInvalidate, resolved)
-          ? makeStep('invalidate() forces refetch', undefined, 'pass')
-          : makeStep(
-              'invalidate() forces refetch',
-              undefined,
-              'fail',
-              afterInvalidate === resolved
-                ? 'resolution still served the invalidated snapshot'
-                : 'refetched map keys changed',
-            ),
-      );
-
       const refreshed = await resolver.refresh();
       steps.push(
-        refreshed !== afterInvalidate && sameKeys(refreshed, afterInvalidate)
+        refreshed !== resolved && sameKeys(refreshed, resolved)
           ? makeStep('refresh() fetches a new snapshot', undefined, 'pass')
           : makeStep(
               'refresh() fetches a new snapshot',
               undefined,
               'fail',
-              refreshed === afterInvalidate ? 'refresh() returned the cached snapshot' : 'refreshed map keys changed',
+              refreshed === resolved ? 'refresh() returned the cached snapshot' : 'refreshed map keys changed',
             ),
       );
       resolved = refreshed;
@@ -291,8 +276,10 @@ async function resolverContractOutcome(
 
     // --- concurrent resolution shares one inflight build --------------------
     try {
-      resolver.invalidate();
-      const [a, b] = await Promise.all([resolver(), resolver()]);
+      // A fresh resolver has no cached snapshot, so both racing resolutions
+      // must go through (and dedupe on) the single inflight build.
+      const fresh = await channels({ projectId, client: clientOptions });
+      const [a, b] = await Promise.all([fresh(), fresh()]);
       steps.push(
         a === b
           ? makeStep('concurrent resolves share one inflight build', undefined, 'pass')
@@ -303,7 +290,6 @@ async function resolverContractOutcome(
               'two concurrent resolutions produced different snapshots — the inflight gate did not dedupe',
             ),
       );
-      resolved = a;
     } catch (error) {
       steps.push(makeStep('concurrent resolves share one inflight build', undefined, 'fail', errorMessage(error)));
     }

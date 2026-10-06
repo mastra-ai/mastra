@@ -586,15 +586,14 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     expect(acmeInitsAfterFailure).toBeGreaterThanOrEqual(1);
     warnSpy.mockRestore();
 
-    // Recovery: unblock Globex, invalidate the empty snapshot, and refresh.
-    // If the mcpClients cache still held the first-pass Acme MCPClient, it
-    // would be reused with no fresh `initialize`. The cleanup evicts +
-    // disconnects Acme's client, so both connections re-initialize on the
-    // retry. (`.invalidate()` clears only the snapshot cache, not the
+    // Recovery: unblock Globex and force a refetch past the cached empty
+    // snapshot. If the mcpClients cache still held the first-pass Acme
+    // MCPClient, it would be reused with no fresh `initialize`. The cleanup
+    // evicts + disconnects Acme's client, so both connections re-initialize
+    // on the retry. (`.refresh()` rebuilds only the snapshot, not the
     // MCPClient cache we are exercising here.)
     failing.clear();
-    tools.invalidate();
-    const discovered = (await tools()) as Record<string, unknown>;
+    const discovered = (await tools.refresh()) as Record<string, unknown>;
     expect(discovered).toHaveProperty('catalog-mcp_update_record');
     expect(gateway.getInitializeCountForConnection(acmeId)).toBeGreaterThan(acmeInitsAfterFailure);
     expect(gateway.getInitializeCountForConnection(globexId)).toBeGreaterThanOrEqual(1);

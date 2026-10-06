@@ -56,3 +56,7 @@ A per-provider glob that matches nothing fails like an unknown literal name, so 
 - The deprecated `connect()` alias of `tools()`.
 - The `environment()` sandbox credential surface.
 - The `MASTRA_<PROVIDER>_CONNECTION_ID` env-var pin is no longer documented (it keeps working); pass `connectionId` per provider instead.
+- The `TOOLS` registry alias (use `PROVIDERS`) and the `findRegistration`/`findChannelRegistration` lookup helpers.
+- Internal toolset plumbing (`defineProxyTool`, `applyAllowTools`, `resolveConnectionId` and their types) is no longer exported.
+- The `disabled: true` per-provider field — use the `false` shorthand instead: `providers: { github: false }`.
+- The resolver `invalidate()` method — call `refresh()` to force a fetch now, or lower `ttlMs` to control freshness.

@@ -19,7 +19,6 @@ describe('tools()/connect() rename', () => {
 
       for (const resolver of [resolverA, resolverB]) {
         expect(typeof resolver).toBe('function');
-        expect(typeof resolver.invalidate).toBe('function');
         expect(typeof resolver.refresh).toBe('function');
         expect(typeof resolver.disconnect).toBe('function');
       }

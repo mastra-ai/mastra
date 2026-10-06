@@ -48,8 +48,8 @@ The `providers` option accepts two shapes:
 tools({ providers: ['resend', 'incident-io'] });
 
 // Record — per-provider configuration. Every connected provider resolves
-// unless excluded: `true` (or `{}`) enables with defaults, `false` (or
-// `{ disabled: true }`) excludes, and an object configures the provider.
+// unless excluded: `true` (or `{}`) enables with defaults, `false` excludes,
+// and an object configures the provider.
 tools({
   providers: {
     resend: { allowTools: ['resend_send_email'] },

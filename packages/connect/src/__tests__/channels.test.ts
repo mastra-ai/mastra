@@ -525,8 +525,7 @@ describe('channels()', () => {
     state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
     state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-B' } };
     state.contexts = {};
-    resolver.invalidate();
-    await resolver();
+    await resolver.refresh();
 
     // B's identity must come from B's token via /applications/@me — never
     // from A's leftover metadata.
@@ -722,20 +721,20 @@ describe('channels()', () => {
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
-  it('skips channels marked disabled via per-integration overrides (no instance, no routes)', async () => {
+  it('skips channels excluded via a false provider entry (no instance, no routes)', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
     });
     const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': { disabled: true } } }));
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': false } }));
     const providers = await resolver();
     expect(providers['slack-channels']).toBeUndefined();
     expect(FakeChannelProvider.configSpy).not.toHaveBeenCalledWith('slack-channels', expect.anything());
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
-  it('treats a false provider entry as excluded, like disabled: true', async () => {
+  it('treats a false provider entry as excluded', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
@@ -795,7 +794,7 @@ describe('channels()', () => {
     await expect(
       channelsFn(
         options(platformFetch({ connections: [] }), {
-          providers: { telegram: 'yes' as unknown as { disabled?: boolean } },
+          providers: { telegram: 'yes' as unknown as { connectionId?: string } },
         }),
       ),
     ).rejects.toThrow(/expected true, false, or an options object/);
@@ -935,7 +934,7 @@ describe('channels()', () => {
     await expect(tokenResolver!()).resolves.toBe(TELEGRAM_BOT_TOKEN);
   });
 
-  it('caches providers within ttlMs and invalidate() forces refresh', async () => {
+  it('caches providers within ttlMs', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -943,12 +942,10 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     await resolver();
-    await resolver();
     const firstCallCount = fetchMock.mock.calls.length;
     expect(firstCallCount).toBeGreaterThan(0);
-    resolver.invalidate();
     await resolver();
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(firstCallCount);
+    expect(fetchMock.mock.calls.length).toBe(firstCallCount);
   });
 
   it('refresh() returns a fresh map and updates the cache', async () => {
@@ -988,9 +985,8 @@ describe('channels()', () => {
       // A Slack connection appears on the platform — no restart, no new code.
       state.connections = [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })];
       state.credentials = { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } };
-      resolver.invalidate();
 
-      const providers = await resolver();
+      const providers = await resolver.refresh();
       expect(providers['slack-channels']).toBeInstanceOf(FakeChannelProvider);
       await expect(slackConfig().tokenResolver!()).resolves.toBe(SLACK_ACCESS_TOKEN);
       // The route surface never changed — the pre-mounted routes now have a
@@ -1008,8 +1004,7 @@ describe('channels()', () => {
       const channelsFn = await importChannels();
       const resolver = await channelsFn(options(fetchMock));
       const first = await resolver();
-      resolver.invalidate();
-      const second = await resolver();
+      const second = await resolver.refresh();
       expect(second.slack).toBe(first.slack);
     });
 
@@ -1026,8 +1021,7 @@ describe('channels()', () => {
       const { tokenResolver } = slackConfig();
 
       state.connections = [];
-      resolver.invalidate();
-      await expect(resolver()).resolves.toEqual({});
+      await expect(resolver.refresh()).resolves.toEqual({});
       // Routes stay mounted (the instance is long-lived)…
       expect(resolver.getRoutes().map(route => route.path)).toContain('/slack/webhook');
       // …but lazy credential fetches now fail loudly instead of using the
@@ -1068,8 +1062,7 @@ describe('channels()', () => {
       // Connection A is replaced by connection B on the platform.
       state.connections = [makeConnection({ id: 'c_slack_b', integrationId: 'slack-channels' })];
       state.credentials = { c_slack_b: { type: 'oauth2', accessToken: 'token-b', expiresAt: null } };
-      resolver.invalidate();
-      await resolver();
+      await resolver.refresh();
       await expect(tokenResolver!()).resolves.toBe('token-b');
     });
   });
@@ -1096,8 +1089,7 @@ describe('channels()', () => {
     );
 
     // The warning fires once per resolver instance, not on every refresh.
-    resolver.invalidate();
-    await resolver();
+    await resolver.refresh();
     const staleWarnings = warnSpy.mock.calls.filter(
       ([msg]) =>
         typeof msg === 'string' && msg.includes("active 'slack' connection but no 'slack-channels' connection"),
@@ -1110,8 +1102,7 @@ describe('channels()', () => {
     state.credentials = {
       c_slack_new: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
     };
-    resolver.invalidate();
-    const providersAfter = await resolver();
+    const providersAfter = await resolver.refresh();
     expect(providersAfter['slack-channels']).toBeInstanceOf(FakeChannelProvider);
   });
 });

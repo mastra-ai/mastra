@@ -85,7 +85,7 @@ describe('connect', () => {
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        providers: { 'does.not.exist': { disabled: true } },
+        providers: { 'does.not.exist': false },
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
   });
@@ -652,13 +652,13 @@ describe('connect', () => {
     expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_env' }));
   });
 
-  it('respects disabled: true and does not include the provider', async () => {
+  it('excludes a provider set to false even when a connection exists', async () => {
     const { createTools } = installProvider();
     const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      providers: { linear: { disabled: true } },
+      providers: { linear: false },
     })();
     expect(tools).toEqual({});
     expect(createTools).not.toHaveBeenCalled();

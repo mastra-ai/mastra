@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { isValidationError } from '@mastra/core/tools';
 
 import { tools as createToolsResolver } from '../../src/tools.js';
-import { TOOLS as REGISTERED_PROVIDERS } from '../../src/registry.js';
+import { PROVIDERS as REGISTERED_PROVIDERS } from '../../src/registry.js';
 import type { Scenario, ScenarioStep, ResolvedToolset } from './scenario.js';
 import { enrichToolError, toolsForProvider } from './scenario.js';
 import { scenarios as REGISTERED_SCENARIOS } from './scenarios/index.js';

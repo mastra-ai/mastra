@@ -73,12 +73,12 @@ afterEach(() => {
 });
 
 describe('connect resolver caching and liveness', () => {
-  it('returns a resolver function with invalidate/refresh, not a promise', () => {
+  it('returns a resolver function with refresh/disconnect, not a promise', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const tools = connect(resolverOptions(() => []).options);
     expect(typeof tools).toBe('function');
-    expect(typeof tools.invalidate).toBe('function');
     expect(typeof tools.refresh).toBe('function');
+    expect(typeof tools.disconnect).toBe('function');
   });
 
   it('resolves tools from the project connections on first resolution', async () => {
@@ -306,18 +306,6 @@ describe('connect resolver caching and liveness', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('invalidate() forces a refetch on the next resolution', async () => {
-    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options, fetchMock } = resolverOptions(() => [makeConnection()], { ttlMs: 60_000 });
-    const tools = connect(options);
-
-    await tools();
-    tools.invalidate();
-    await tools();
-
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-  });
-
   it('refresh() fetches immediately and updates the cache', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
@@ -401,7 +389,7 @@ describe('connect resolver caching and liveness', () => {
 });
 
 describe('providers option shapes', () => {
-  it('treats a false provider entry as excluded, like disabled: true', async () => {
+  it('treats a false provider entry as excluded', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
     const tools = connect({ ...options, providers: { linear: false } });
@@ -484,7 +472,6 @@ describe('providers option shapes', () => {
     const callsAfterFirst = fetchMock.mock.calls.length;
     await merged();
     expect(fetchMock.mock.calls.length).toBe(callsAfterFirst); // cached
-    merged.invalidate();
     const refreshed = await merged.refresh();
     expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
     expect(Object.keys(refreshed).sort()).toEqual(['linear_fake_tool', 'weather']);
@@ -526,7 +513,7 @@ describe('catalog availability', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Platform catalog unavailable'));
   });
 
-  it('ignores disabled catalog-only integrations when the catalog fails', async () => {
+  it('ignores excluded catalog-only integrations when the catalog fails', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const fetchMock = vi.fn().mockImplementation(async input => {
       const path = new URL(String(input)).pathname;
@@ -538,7 +525,7 @@ describe('catalog availability', () => {
     });
     const tools = connect({
       projectId: 'proj_1',
-      providers: { 'catalog-mcp': { disabled: true } },
+      providers: { 'catalog-mcp': false },
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
 

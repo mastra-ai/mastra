@@ -49,8 +49,6 @@ export type TeamsChannelsProviderOptions = Record<string, unknown> & ForbidReser
 export interface ChannelsProviderOptions<ProviderOptions = Record<string, unknown>> {
   /** Pin a specific connection id (bypasses single-active-connection resolution). */
   connectionId?: string;
-  /** Exclude this provider entirely — no instance is constructed and no routes are mounted. */
-  disabled?: boolean;
   /** Provider-specific options merged into the first argument of `ChannelProviderRegistration.create()`. */
   providerOptions?: ProviderOptions;
 }
@@ -78,9 +76,9 @@ export interface ChannelsOptions {
    *   constructed and mounted.
    * - `{ discord: true, telegram: { connectionId: "..." }, "slack-channels": false }` —
    *   per-channel configuration. Every registered channel still resolves
-   *   unless excluded: `true` (or `{}`) enables with defaults, `false` (or
-   *   `{ disabled: true }`) excludes, and an options object pins a connection
-   *   or passes provider-specific options.
+   *   unless excluded: `true` (or `{}`) enables with defaults, `false`
+   *   excludes, and an options object pins a connection or passes
+   *   provider-specific options.
    *
    * Omit the option entirely to resolve every registered channel.
    */
@@ -119,16 +117,14 @@ export interface ChannelsResolverContext {
  * - `getRoutes()` — the union of routes for every non-disabled channel,
  *   available synchronously so Mastra can mount them at construction. Routes
  *   exist before (and after) their integration has an active connection.
- * - Handles — `invalidate()` / `refresh()` / `disconnect()` control the
- *   resolver's private cache; `refresh()` forces a platform fetch now.
+ * - Handles — `refresh()` / `disconnect()` control the resolver's private
+ *   cache; `refresh()` forces a platform fetch now.
  */
 export interface ChannelsResolver {
   /** Returns the current provider map for providers with an active connection. */
   (context?: ChannelsResolverContext): Promise<ResolvedChannels>;
   /** Union of API routes for every non-disabled channel integration. */
   getRoutes(): ApiRoute[];
-  /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
-  invalidate(): void;
   /** Fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<ResolvedChannels>;
   /** Clears the cached snapshot. Reserved for symmetry with `tools()`; currently a no-op beyond invalidation. */
@@ -364,9 +360,6 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   // doesn't vary by context (channel resolution is instance-scoped).
   const invocable = ((_context?: ChannelsResolverContext) => resolve()) as ChannelsResolver;
   invocable.getRoutes = (): ApiRoute[] => states.flatMap(state => state.instance.provider.getRoutes());
-  invocable.invalidate = (): void => {
-    cache = undefined;
-  };
   invocable.refresh = refresh;
   invocable.disconnect = async (): Promise<void> => {
     cache = undefined;
@@ -374,10 +367,16 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   return invocable;
 }
 
+/**
+ * Internal per-channel options: the public shape plus the exclusion marker
+ * that the `false` shorthand expands to.
+ */
+type NormalizedChannelsProviderOptions = ChannelsProviderOptions & { disabled?: boolean };
+
 /** Internal normalization of the `providers` option. */
 interface NormalizedChannelProviders {
   /** Per-channel options with boolean shorthands expanded. */
-  overrides: Record<string, ChannelsProviderOptions>;
+  overrides: Record<string, NormalizedChannelsProviderOptions>;
   /**
    * Set when the array form was used: only these channels are constructed.
    * The record form never restricts — unlisted channels keep resolving.
@@ -388,13 +387,13 @@ interface NormalizedChannelProviders {
 /**
  * Turns the two accepted `providers` shapes into the internal form, mirroring
  * `tools()`. The array form becomes an allowlist with default options; the
- * record form expands boolean shorthands (`true` → `{}`, `false` →
- * `{ disabled: true }`). Malformed inputs throw at channels() time.
+ * record form expands boolean shorthands (`true` → `{}`, `false` → an
+ * internal exclusion marker). Malformed inputs throw at channels() time.
  */
 function normalizeChannelProviders(providers: ChannelsOptions['providers']): NormalizedChannelProviders {
   if (providers === undefined) return { overrides: {}, only: undefined };
   if (Array.isArray(providers)) {
-    const overrides: Record<string, ChannelsProviderOptions> = {};
+    const overrides: Record<string, NormalizedChannelsProviderOptions> = {};
     for (const entry of providers) {
       if (typeof entry !== 'string') {
         throw new MastraConnectError(
@@ -409,7 +408,7 @@ function normalizeChannelProviders(providers: ChannelsOptions['providers']): Nor
     }
     return { overrides, only: new Set(Object.keys(overrides)) };
   }
-  const overrides: Record<string, ChannelsProviderOptions> = {};
+  const overrides: Record<string, NormalizedChannelsProviderOptions> = {};
   for (const [providerId, value] of Object.entries(providers)) {
     if (value === undefined) continue;
     if (value === true) {
