@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
+import type { Knowledge } from '@mastra/core/knowledge';
+import type { KnowledgeScopeIds } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
 import { omError } from '../debug';
@@ -95,11 +96,12 @@ async function curateCommittedObservations(
   },
 ): Promise<void> {
   const { config, subconscious, getCuratorMemory, omModel } = options;
-  let store: KnowledgeStorage | undefined;
   let scopeIds: KnowledgeScopeIds | undefined;
+  let knowledge: Knowledge | undefined;
   try {
     scopeIds = await resolveCuratorScope(memory, context);
-    store = await memory.getKnowledgeStore();
+    await memory.getKnowledgeStore();
+    knowledge = memory.getKnowledgeInstance?.();
 
     const agent = await createCuratorAgent(
       memory,
@@ -113,7 +115,7 @@ async function curateCommittedObservations(
     const accepted = await dispatchCuratorObservation(agent, context, config, observations).accepted;
     if (accepted.action === 'wake') await accepted.output.consumeStream();
   } catch (error) {
-    await reportCuratorError(error, context, subconscious, store, scopeIds).catch(reportingError =>
+    await reportCuratorError(error, context, subconscious, knowledge, scopeIds).catch(reportingError =>
       omError(`[Subconscious:curate] failed to report curator error: ${String(reportingError)}`),
     );
   }
@@ -150,15 +152,15 @@ async function reportCuratorError(
   error: unknown,
   context: ExtractorOnExtractedContext,
   subconscious: ResolvedSubconsciousConfig,
-  store?: KnowledgeStorage,
+  knowledge?: Knowledge,
   scopeIds?: KnowledgeScopeIds,
 ): Promise<void> {
   const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
   omError(`[Subconscious:curate] ${message}`);
   await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
-  if (store && scopeIds) {
+  if (knowledge && scopeIds) {
     await publishSubconsciousActivity({
-      store,
+      knowledge,
       scopeIds,
       recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
       sendStateSignal: context.sendStateSignal,

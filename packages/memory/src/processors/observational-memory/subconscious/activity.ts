@@ -1,3 +1,5 @@
+import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from '@mastra/core/knowledge';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type {
   KnowledgeActivityEvent,
@@ -5,7 +7,6 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { isKnowledgeNodeVisible } from '@mastra/core/storage';
 
 export const SUBCONSCIOUS_ACTIVITY_STATE_ID = 'subconscious-activity';
 
@@ -30,34 +31,44 @@ export interface SubconsciousActivitySnapshot {
 async function getActivityTarget(
   store: KnowledgeStorage,
   event: KnowledgeActivityEvent,
-  scopeIds: KnowledgeScopeIds,
+  readableScopeIds: KnowledgeScopeIds,
 ): Promise<{ id: string; name?: string; type: 'node' } | null> {
-  if (event.targetType === 'node') {
-    const node = await store.getNode(event.targetId);
-    if (node?.isScope) return null;
-    if (!node || !isKnowledgeNodeVisible(node, await store.getNodeScopeIds(node.id), scopeIds)) return null;
-    return { id: node.id, name: node.name, type: 'node' };
+  let nodeId = event.targetId;
+  if (event.targetType !== 'node') {
+    const record = await store.getVisibleRecord({
+      id: event.targetId,
+      scopeIds: readableScopeIds,
+      includeDeleted: true,
+    });
+    if (!record) return null;
+    nodeId = record.nodeId;
   }
-  const record = await store.getRecord({ id: event.targetId, includeDeleted: true });
-  const node = record ? await store.getNode(record.nodeId) : undefined;
-  if (!node || !isKnowledgeNodeVisible(node, await store.getNodeScopeIds(node.id), scopeIds)) return null;
+  const node = await store.getNode(nodeId);
+  if (!node || node.isScope) return null;
+  if (!isKnowledgeReadVisible(await store.getNodeScopeIds(node.id), readableScopeIds)) return null;
   return { id: node.id, name: node.name, type: 'node' };
 }
 
+/**
+ * Activity is read with the session's ordinary authority: the resource and thread rungs are vouched
+ * (the org rung never is), and only scopes the evaluated grants make readable contribute events,
+ * records, or node names.
+ */
 export async function buildSubconsciousActivitySnapshot(input: {
-  store: KnowledgeStorage;
+  knowledge: Knowledge;
   scopeIds: KnowledgeScopeIds;
   recentUpdates: number;
   errors?: string[];
 }): Promise<SubconsciousActivitySnapshot> {
-  const events = await input.store.listActivity({
-    scopeIds: input.scopeIds,
-    limit: Math.min(input.recentUpdates * 2, 100),
-  });
+  const store = await input.knowledge.getStorageInternal();
+  const readableScopeIds = getKnowledgeReadableScopeIds(await input.knowledge.evaluateAccess(input.scopeIds.slice(1)));
+  const events = readableScopeIds.length
+    ? await store.listActivity({ scopeIds: readableScopeIds, limit: Math.min(input.recentUpdates * 2, 100) })
+    : [];
   const resolvedUpdates = (
     await Promise.all(
       events.map(async event => {
-        const target = await getActivityTarget(input.store, event, input.scopeIds);
+        const target = await getActivityTarget(store, event, readableScopeIds);
         if (!target) return null;
         return {
           action: event.action,
@@ -138,7 +149,7 @@ export async function publishSubconsciousError(input: {
 }
 
 export async function publishSubconsciousActivity(input: {
-  store: KnowledgeStorage;
+  knowledge: Knowledge;
   scopeIds: KnowledgeScopeIds;
   recentUpdates: number;
   sendStateSignal?: ProcessorContext['sendStateSignal'];
