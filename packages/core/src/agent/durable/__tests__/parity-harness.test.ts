@@ -17,6 +17,7 @@ import type {
   ParityEngine,
 } from './parity-harness';
 import {
+  chunksOfType,
   expectEngineParity,
   lastUserText,
   staleKnownDifferences,
@@ -161,6 +162,40 @@ describe('expectEngineParity', () => {
       expect(turn.toolResults).toEqual([{ toolCallId: 'parity-call-1', toolName: 'echo', result: 'echo:hi' }]);
       expect(turn.text).toBe('Echoed: hi');
       expect(results[engine]!.requests).toHaveLength(2);
+    }
+  });
+
+  it('carries the model-reported providerExecuted value onto the tool-result chunk', async () => {
+    const echo = createTool({
+      id: 'echo',
+      description: 'Echo the input',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => `echo:${value}`,
+    });
+
+    const results = await expectEngineParity({
+      model: { tapes: [toolCallTape('echo', { value: 'hi' }), textOnlyTape('Echoed: hi')] },
+      buildAgent: ({ model }) =>
+        new Agent({
+          id: 'parity-provider-executed',
+          name: 'Provider Executed',
+          instructions: 'Use echo',
+          model,
+          tools: { echo },
+        }),
+      input: 'echo hi',
+      options: { maxSteps: 2 },
+    });
+
+    // `toolCallTape` reports `providerExecuted: false` on the tool call, so a
+    // consumer reading the tool-result chunk must see the same value on every
+    // engine. Durable and evented used to hand-build that payload without the
+    // field, leaving it `undefined` where plain echoed the model's value.
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(chunksOfType(turn, 'tool-result')).toBe(1);
+      const payload = turn.chunkPayloads[turn.chunkTypes.indexOf('tool-result')] as Record<string, unknown>;
+      expect(payload.providerExecuted).toBe(false);
     }
   });
 

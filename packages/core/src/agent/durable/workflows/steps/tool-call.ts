@@ -1418,6 +1418,7 @@ export function createDurableToolCallStep() {
                     args: cleanedArgs,
                     result: chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
+                    providerExecuted,
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
@@ -1818,7 +1819,7 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result },
+                payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
                 policy: registryEntry?.toolPayloadTransform,

@@ -778,12 +778,6 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
     ],
   },
   {
-    ticket: 'COR-1393',
-    reason: 'Durable and evented drop `providerExecuted` from tool-result chunk payloads.',
-    chunkType: 'tool-result',
-    paths: ['providerExecuted'],
-  },
-  {
     ticket: 'COR-1399',
     reason:
       'Wrapped engines serialise the approval `resumeSchema` from a hand-written literal, without the `$schema` ' +
