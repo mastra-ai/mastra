@@ -8,6 +8,7 @@ import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { Plug, Unplug } from 'lucide-react';
 import { PlatformIcon } from './platform-icons';
 import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface AgentChannelsProps {
   agentId: string;
@@ -56,6 +57,8 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel({ platform: platform.id });
 
   const activeInstallation = installations?.find(i => i.status === 'active');
+  const hasPendingInstall = installations?.some(i => i.status === 'pending') ?? false;
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const handleConnect = () => {
     connect(agentId);

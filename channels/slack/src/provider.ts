@@ -1259,6 +1259,16 @@ export class SlackProvider implements ChannelProvider {
         // Remove adapter and command handlers
         this.#adapters.delete(installation.id);
         this.#slashCommands.delete(installation.webhookId);
+      } else if (record.status === 'pending') {
+        // A pending installation already minted a real Slack app via the
+        // manifest API (OAuth was just never completed). Delete that app too,
+        // otherwise it is orphaned in the Slack workspace.
+        try {
+          const pending = this.#decryptPendingInstallation(this.#parsePendingInstallation(record));
+          await client.deleteApp(pending.appId);
+        } catch (err) {
+          console.warn(`[Slack] Failed to delete pending Slack app for "${agentId}":`, err);
+        }
       }
 
       // Remove from storage (active, pending, or error)

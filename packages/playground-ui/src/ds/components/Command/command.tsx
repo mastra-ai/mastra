@@ -8,7 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { transitions } from '@/ds/primitives/transitions';
+import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const Command = React.forwardRef<
@@ -26,7 +26,64 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
+type CommandDialogVariant = 'default' | 'inset';
+
+const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
+  default: 'overflow-hidden py-0',
+  inset: 'top-1/4 translate-y-0 overflow-hidden rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+};
+
+const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
+  default: cn(
+    '[&_[data-slot=command-input-wrapper]_svg]:size-5',
+    '**:[[cmdk-input]]:h-12',
+    '[&_[cmdk-item]_svg]:size-5',
+  ),
+  inset: cn(
+    'gap-1',
+    '[&_[data-slot=command-input-wrapper]_svg]:size-icon-md',
+    '**:[[cmdk-input]]:h-11 **:[[cmdk-input]]:text-label',
+    '[&_[cmdk-item]_svg]:size-icon-sm',
+    '**:[[cmdk-empty]]:px-4 **:[[cmdk-empty]]:pt-3 **:[[cmdk-empty]]:pb-1 **:[[cmdk-empty]]:text-left **:[[cmdk-empty]]:text-caption',
+  ),
+};
+
+const commandDialogHeadingCase: Record<CommandDialogVariant, 'upper' | 'sentence'> = {
+  default: 'upper',
+  inset: 'sentence',
+};
+
+const CommandDialogVariantContext = React.createContext<CommandDialogVariant>('default');
+
+const CommandDialogBody = ({
+  variant,
+  footer,
+  children,
+}: {
+  variant: CommandDialogVariant;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
+}) => {
+  if (variant === 'default') return children;
+
+  return (
+    <>
+      <div
+        data-slot="command-dialog-panel"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background"
+      >
+        {children}
+      </div>
+      {footer && (
+        <div data-slot="command-dialog-footer" className="flex items-center justify-between gap-3 pr-1">
+          {footer}
+        </div>
+      )}
+    </>
+  );
+};
+
+type CommandDialogBaseProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
   children?: React.ReactNode;
   title?: string;
   description?: string;
@@ -38,8 +95,13 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   overlayClassName?: string;
 };
 
+type CommandDialogProps = CommandDialogBaseProps &
+  ({ variant?: 'default'; footer?: never } | { variant: 'inset'; footer?: React.ReactNode });
+
 const CommandDialog = ({
   children,
+  variant = 'default',
+  footer,
   title = 'Command Palette',
   description = 'Search for commands and actions',
   size,
@@ -70,8 +132,9 @@ const CommandDialog = ({
       <DialogContent
         size={size}
         showOverlay={showOverlay}
+        showCloseButton={variant !== 'inset'}
         overlayClassName={overlayClassName}
-        className={cn('overflow-hidden py-0', contentClassName)}
+        className={cn(commandDialogContentClasses[variant], contentClassName)}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
@@ -80,17 +143,20 @@ const CommandDialog = ({
           loop
           filter={filter}
           onKeyDown={handleKeyDown}
+          data-heading-case={commandDialogHeadingCase[variant]}
           className={cn(
             '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-column **:[[cmdk-group-heading]]:text-muted-foreground',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
-            '[&_[data-slot=command-input-wrapper]_svg]:size-5',
-            '**:[[cmdk-input]]:h-12',
             '**:[[cmdk-item]]:p-2',
-            '[&_[cmdk-item]_svg]:size-5',
+            commandDialogCommandClasses[variant],
             commandClassName,
           )}
         >
-          {children}
+          <CommandDialogVariantContext.Provider value={variant}>
+            <CommandDialogBody variant={variant} footer={footer}>
+              {children}
+            </CommandDialogBody>
+          </CommandDialogVariantContext.Provider>
         </Command>
       </DialogContent>
     </Dialog>
@@ -154,11 +220,13 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
     ref,
   ) => {
     const menu = useFluidMenu<HTMLDivElement>({ activeAttr: 'data-selected' });
+    const animateHeight = React.useContext(CommandDialogVariantContext) === 'inset';
     const list = (
       <CommandPrimitive.List
         className={cn(
           'outline-none focus:outline-none focus-visible:outline-none',
           scrollArea ? 'overflow-visible' : 'max-h-dropdown overflow-x-hidden overflow-y-auto',
+          animateHeight && cn('h-(--cmdk-list-height)', heightTransition),
           menu.containerClassName,
           className,
         )}
@@ -200,6 +268,7 @@ const CommandGroup = React.forwardRef<
       'overflow-hidden p-1 text-muted-foreground',
       '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-muted-foreground',
       '[&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:uppercase',
+      'in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:tracking-normal in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:normal-case',
       className,
     )}
     {...props}

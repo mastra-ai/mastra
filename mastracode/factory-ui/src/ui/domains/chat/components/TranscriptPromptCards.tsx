@@ -1,5 +1,3 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Code } from '@mastra/playground-ui/components/Code';
 import type { PlanResume } from '@mastra/client-js';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -10,7 +8,6 @@ import { useState } from 'react';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
 import { SubmitPlanCard } from './SubmitPlanCard';
-import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
   'border-border border-l-warning-indicator bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
@@ -43,16 +40,12 @@ export function ApprovalCard({
   return (
     <ToolApproval
       toolName={prompt.toolName}
+      args={prompt.args}
       autoFocus
       disabled={isSubmitting}
       onApprove={() => onApprove(prompt.toolCallId, true, prompt.id)}
       onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
-    >
-      <Code
-        className={cn(resultBlock, 'text-caption text-foreground font-mono')}
-        code={truncate(stringify(prompt.args), 400)}
-      />
-    </ToolApproval>
+    />
   );
 }
 

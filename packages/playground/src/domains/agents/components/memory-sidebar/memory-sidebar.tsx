@@ -31,8 +31,8 @@ export interface MemorySidebarProps {
   onDelete?: (threadId: string) => void;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
-  /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
-  onHidePanel?: () => void;
+  /** Forwarded to ChatThreads; keeps its header in place while the list loads. */
+  isThreadsLoading?: boolean;
 }
 
 const barColor = (percent: number): string => {
@@ -84,7 +84,7 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete, isThreadsLoading }: MemorySidebarProps) {
   return (
     <SidebarPanel>
       <MemorySidebarBody
@@ -92,7 +92,7 @@ export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePane
         threadId={threadId}
         threads={threads}
         onDelete={onDelete}
-        onHidePanel={onHidePanel}
+        isThreadsLoading={isThreadsLoading}
       />
     </SidebarPanel>
   );
@@ -104,7 +104,7 @@ export function MemorySidebarBody({
   threads,
   onDelete,
   threadsSlot,
-  onHidePanel,
+  isThreadsLoading,
 }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
@@ -243,7 +243,7 @@ export function MemorySidebarBody({
                 threadId={threadId}
                 onDelete={onDelete ?? (() => {})}
                 embedded
-                onHidePanel={onHidePanel}
+                isLoading={isThreadsLoading}
               />
             ) : (
               <EmptyState
