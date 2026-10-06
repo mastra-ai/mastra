@@ -1,3 +1,4 @@
+import { getLiveKitRecording } from '@mastra/livekit/client';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -6,7 +7,7 @@ export function useLiveKitRecording(traceId: string) {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['livekit-recording', traceId],
-    queryFn: () => client.getLiveKitRecording(traceId),
+    queryFn: ({ signal }) => getLiveKitRecording(client, traceId, { signal }),
     staleTime: 0,
     gcTime: 0,
     retry: false,

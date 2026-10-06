@@ -1,16 +1,13 @@
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import type { SpanRecord } from '@mastra/core/storage';
 import { z } from 'zod/v4';
+import type { LiveKitRecording, LiveKitRecordingResponse } from './recording-types';
 
 const traceIdSchema = z.string().min(1).max(256);
 export const recordingSchema = z.object({
   url: z.url({ protocol: /^https?$/ }),
   expiresAt: z.string().datetime().optional(),
-});
-
-/** A playback URL, normally signed with a short expiry by your storage provider. */
-export type LiveKitRecording = z.infer<typeof recordingSchema>;
-export type LiveKitRecordingResponse = ({ status: 'ready' } & LiveKitRecording) | { status: 'unavailable' };
+}) satisfies z.ZodType<LiveKitRecording>;
 
 export interface LiveKitRecordingResolverArgs {
   traceId: string;

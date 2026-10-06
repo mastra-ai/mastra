@@ -182,7 +182,6 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
-  GetLiveKitRecordingResponse,
   GetObservabilityCapabilitiesResponse,
   BuilderSettingsResponse,
   BuilderAvailableModelsResponse,
@@ -1786,13 +1785,6 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/system/packages');
-  }
-
-  /** Retrieves a fresh playback URL for a voice call trace. Requires liveKitRecordingRoute(). */
-  public getLiveKitRecording(traceId: string): Promise<GetLiveKitRecordingResponse> {
-    // Custom integration routes mount at the server root, independently of apiPrefix.
-    const integration = new BaseResource({ ...this.options, apiPrefix: '' });
-    return integration.request(`/voice/livekit/recordings/${encodeURIComponent(traceId)}`, { retries: 0 });
   }
 
   // ============================================================================

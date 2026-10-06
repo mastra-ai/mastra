@@ -628,6 +628,36 @@ export const mastra = new Mastra({
 
 Tracing is on by default. Pass `observability: false` to `createLiveKitWorker` to turn it off.
 
+### Request recording playback from your application
+
+Import the browser client helper from `@mastra/livekit/client`. Install `@mastra/client-js` 1.51.2 or newer within 1.x to use this entry point:
+
+```bash npm2yarn
+npm install @mastra/livekit @mastra/client-js
+```
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+import { getLiveKitRecording } from '@mastra/livekit/client'
+import type { LiveKitRecordingResponse } from '@mastra/livekit/client'
+
+const client = new MastraClient({
+  baseUrl: 'https://mastra.example.com',
+  credentials: 'include',
+})
+
+const recording: LiveKitRecordingResponse = await getLiveKitRecording(client, traceId)
+if (recording.status === 'ready') {
+  audioElement.src = recording.url
+}
+```
+
+Register [`liveKitRecordingRoute()`](#review-recordings-in-studio) on the server first. The helper requests its default `/voice/livekit/recordings/:traceId` path, independently of the client's API prefix. It preserves the client's authentication headers, cookies, custom fetch function, and abort signal. Pass `{ signal }` as a third argument to cancel an individual request. Failed requests use `MastraClientError` and aren't retried automatically.
+
+The published client SDK 1.51.2 has a legacy dependency that requires Zod 3. For strict npm peer dependency checks, use Zod `^3.25.76` with that SDK. Server and worker consumers without the optional client SDK also support Zod 4.
+
+The `/client` entry point excludes LiveKit server and worker imports. Other integration entry points don't require `@mastra/client-js`. Installing `@mastra/livekit` still installs its package-level dependencies; the browser entry point only controls which code enters the browser bundle. Storage credentials and recording authorization remain on the server.
+
 ### Turn metrics and playback completion
 
 `createLiveKitWorker()` accepts two observers for evaluating voice calls:
@@ -790,6 +820,8 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 ## Upgrade to 0.5.0
 
 The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
+
+If you used `client.getLiveKitRecording(traceId)` in an earlier snapshot, switch to `getLiveKitRecording(client, traceId)` from `@mastra/livekit/client`. Import `LiveKitRecordingResponse` from the same entry point instead of `GetLiveKitRecordingResponse` from client-js.
 
 ### Authorize recording access
 

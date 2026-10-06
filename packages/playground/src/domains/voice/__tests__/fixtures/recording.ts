@@ -1,5 +1,6 @@
-import type { GetLiveKitRecordingResponse, GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
+import type { GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
+import type { LiveKitRecordingResponse } from '@mastra/livekit/client';
 import { defaultSystemPackages } from '@/test/msw-server';
 
 export const recordingEnabledPackages: GetSystemPackagesResponse = {
@@ -23,10 +24,10 @@ export const recordedTrace: Awaited<ReturnType<MastraClient['getTraceLight']>> =
   ],
 };
 
-export const readyRecording: GetLiveKitRecordingResponse = {
+export const readyRecording: LiveKitRecordingResponse = {
   status: 'ready',
   url: 'https://audio.example/call-room.ogg?signature=temporary',
   expiresAt: '2026-09-21T12:30:00Z',
 };
 
-export const unavailableRecording: GetLiveKitRecordingResponse = { status: 'unavailable' };
+export const unavailableRecording: LiveKitRecordingResponse = { status: 'unavailable' };

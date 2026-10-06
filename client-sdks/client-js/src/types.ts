@@ -1458,11 +1458,6 @@ export interface MastraPackage {
 
 export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
-/** Playback details from the optional @mastra/livekit recording review route. */
-export type GetLiveKitRecordingResponse =
-  | { status: 'ready'; url: string; expiresAt?: string }
-  | { status: 'unavailable' };
-
 export type GetObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
 
 // ============================================================================

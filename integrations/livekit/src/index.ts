@@ -9,12 +9,8 @@ export type { DispatchVoiceSessionOptions } from './dispatch';
 export { LiveKitRecordingRoomConflictError } from './recording';
 export type { LiveKitRecordingOptions } from './recording';
 export { liveKitRecordingRoute } from './recording-route';
-export type {
-  LiveKitRecording,
-  LiveKitRecordingResponse,
-  LiveKitRecordingResolverArgs,
-  LiveKitRecordingRouteOptions,
-} from './recording-route';
+export type { LiveKitRecording, LiveKitRecordingResponse } from './recording-types';
+export type { LiveKitRecordingResolverArgs, LiveKitRecordingRouteOptions } from './recording-route';
 export { serializeSessionMetadata } from './metadata';
 export type { LiveKitSessionMetadata } from './metadata';
 export { pipeAgentReplyToWriter } from './workflow-generator';

@@ -2325,6 +2325,9 @@ importers:
       '@livekit/agents-plugin-silero':
         specifier: ^1.7.1
         version: 1.7.1(@livekit/agents@1.7.1(@aws-sdk/credential-provider-node@3.972.78)(@livekit/rtc-node@0.13.34)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5))(@livekit/rtc-node@0.13.34)(bufferutil@4.1.0)
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -5846,6 +5849,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/livekit':
+        specifier: workspace:*
+        version: link:../../integrations/livekit
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory

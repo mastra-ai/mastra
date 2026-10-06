@@ -96,6 +96,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/livekit": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@playwright/test": "^1.61.1",
     "@stryker-mutator/core": "catalog:",

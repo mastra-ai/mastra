@@ -2,11 +2,11 @@
 '@mastra/client-js': minor
 ---
 
-Added `getLiveKitRecording(traceId)` and `GetLiveKitRecordingResponse` to request a fresh playback URL for a recorded voice call. The application must register `liveKitRecordingRoute()` and authorize access to the trace.
+Added the optional `liveKitRecordingRouteEnabled` capability to `getSystemPackages()` response types so applications can discover recording review support.
 
 ```ts
-const recording = await client.getLiveKitRecording(traceId);
-if (recording.status === 'ready') {
-  audio.src = recording.url;
+const packages = await client.getSystemPackages();
+if (packages.liveKitRecordingRouteEnabled) {
+  // Show recording controls for voice call traces.
 }
 ```
