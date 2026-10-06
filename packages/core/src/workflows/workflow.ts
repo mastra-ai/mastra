@@ -3836,7 +3836,13 @@ export class Run<
     return this.#mastra.getWorkflowById(parent.workflowId);
   }
 
-  #wakeParentWorkflow(): void {
+  #wakeParentWorkflow({
+    requestContext,
+    actor,
+  }: {
+    requestContext?: RequestContext<TRequestContext>;
+    actor?: ActorSignal;
+  }): void {
     if (!this.parentWorkflow || !this.#mastra) {
       return;
     }
@@ -3853,7 +3859,12 @@ export class Run<
       }
 
       const parentRun = await parentWorkflow.createRun({ runId: parent.runId });
-      await parentRun.resume({ step: parent.stepId, forEachIndex: parent.foreachIndex });
+      await parentRun.resume({
+        step: parent.stepId,
+        forEachIndex: parent.foreachIndex,
+        requestContext,
+        actor,
+      });
     })().catch(error => {
       this.#mastra?.getLogger()?.error('Failed to resume parent workflow after nested child completion.', error);
     });
@@ -4172,10 +4183,6 @@ export class Run<
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
-    if (result.status === 'success') {
-      this.#wakeParentWorkflow();
-    }
-
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
@@ -5312,8 +5319,8 @@ export class Run<
                   ?.getLogger()
                   ?.error('Failed to resume parent workflow after nested child completion.', error);
               });
-          } else {
-            this.#wakeParentWorkflow();
+          } else if (!params.skipParentWorkflowClaim) {
+            this.#wakeParentWorkflow({ requestContext: params.requestContext, actor: params.actor });
           }
         } else {
           await releaseParentClaim();
