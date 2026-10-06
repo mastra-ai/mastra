@@ -65,6 +65,21 @@ export function combineKnowledgeCapabilities(capabilities: readonly KnowledgeCap
   );
 }
 
+export function intersectKnowledgeCapabilities(
+  left: KnowledgeCapabilities,
+  right: KnowledgeCapabilities,
+): KnowledgeCapabilities {
+  return {
+    read: left.read && right.read,
+    append: left.append && right.append,
+    edit: left.edit && right.edit,
+    delete: left.delete && right.delete,
+    createChildren: left.createChildren && right.createChildren,
+    manageAccess: left.manageAccess && right.manageAccess,
+    suggest: left.suggest && right.suggest,
+  };
+}
+
 export function resolveKnowledgeGrantCapabilities(
   grant: Pick<KnowledgeScopeGrant, 'role' | 'canSuggest'>,
   referencedCapabilities?: KnowledgeCapabilities,

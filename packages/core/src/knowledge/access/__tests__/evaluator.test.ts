@@ -27,17 +27,28 @@ function grant(
 }
 
 describe('Knowledge access frontier evaluator', () => {
-  it('computes chained grants from host-vouched scopes and uses the arriving grant role', () => {
+  it('caps chained grants at the capabilities held on the referenced scope', () => {
     const frontier = evaluateKnowledgeAccessFrontier({
       vouchedScopeIds: [PRINCIPAL],
-      grants: [grant(TEAM, PRINCIPAL, 'readonly'), grant(PROJECT, TEAM, 'edit')],
+      grants: [
+        grant(TEAM, PRINCIPAL, 'readonly'),
+        grant(PROJECT, TEAM, 'edit'),
+        grant(COMPANION, PRINCIPAL, 'edit'),
+        grant(SIBLING, COMPANION, 'owner'),
+      ],
       accessEpoch: 7,
     });
 
     expect(frontier.accessEpoch).toBe(7);
     expect(getKnowledgeScopeAccess(frontier, PRINCIPAL)).toBeUndefined();
     expect(getKnowledgeScopeAccess(frontier, TEAM)?.capabilities).toMatchObject({ read: true, edit: false });
-    expect(getKnowledgeScopeAccess(frontier, PROJECT)?.capabilities).toMatchObject({ read: true, edit: true });
+    // Readonly on the team yields at most readonly on what the team is granted.
+    expect(getKnowledgeScopeAccess(frontier, PROJECT)?.capabilities).toMatchObject({ read: true, edit: false });
+    expect(getKnowledgeScopeAccess(frontier, SIBLING)?.capabilities).toMatchObject({
+      read: true,
+      edit: true,
+      manageAccess: false,
+    });
     expect(Object.isFrozen(frontier)).toBe(true);
     expect(Object.isFrozen(frontier.vouchedScopeIds)).toBe(true);
     expect(Object.isFrozen(frontier.scopes)).toBe(true);
@@ -55,12 +66,12 @@ describe('Knowledge access frontier evaluator', () => {
     const Y = '10000000-0000-4000-8000-000000000008';
     const grants = [
       grant(A, H, 'readonly'),
-      grant(B, H, 'readonly'),
+      grant(B, H, 'owner'),
       grant(M, A, 'mirror'),
       grant(N, M, 'mirror'),
       grant(A, N, 'mirror'),
       grant(A, B, 'owner'),
-      grant(SUGGESTER, H, 'readonly'),
+      grant(SUGGESTER, H, 'readonly', true),
       grant(A, SUGGESTER, 'readonly', true),
       grant(X, Y, 'mirror'),
       grant(Y, X, 'mirror'),
@@ -85,7 +96,7 @@ describe('Knowledge access frontier evaluator', () => {
     }
   });
 
-  it('keeps a reached scope at the arriving role even when that scope owns itself', () => {
+  it('never escalates a readonly share through self-owned or owning scopes', () => {
     const frontier = evaluateKnowledgeAccessFrontier({
       vouchedScopeIds: [PRINCIPAL],
       grants: [
@@ -93,15 +104,15 @@ describe('Knowledge access frontier evaluator', () => {
         grant(PROJECT, PRINCIPAL, 'readonly', true),
         grant(TEAM, TEAM, 'owner'),
         grant(TEAM, PRINCIPAL, 'readonly'),
-        grant(SIBLING, TEAM, 'edit'),
+        grant(SIBLING, TEAM, 'owner'),
       ],
       accessEpoch: 1,
     });
 
     expect(frontier.scopes[PROJECT]).toMatchObject({ read: true, suggest: true, edit: false, manageAccess: false });
     expect(frontier.scopes[TEAM]).toMatchObject({ read: true, edit: false, manageAccess: false });
-    // Chains through other scopes still resolve at the arriving grant's role.
-    expect(frontier.scopes[SIBLING]).toMatchObject({ read: true, edit: true, manageAccess: false });
+    // One hop further: the team owns SIBLING, but a readonly share of the team stays readonly.
+    expect(frontier.scopes[SIBLING]).toMatchObject({ read: true, append: false, edit: false, manageAccess: false });
 
     const owner = evaluateKnowledgeAccessFrontier({
       vouchedScopeIds: [PROJECT],
@@ -145,13 +156,14 @@ describe('Knowledge access frontier evaluator', () => {
       accessEpoch: 1,
     });
 
+    // The owner grant arrives through append access to the team, so it contributes at most append.
     expect(frontier.scopes[PROJECT]).toEqual({
       read: true,
       append: true,
-      edit: true,
-      delete: true,
-      createChildren: true,
-      manageAccess: true,
+      edit: false,
+      delete: false,
+      createChildren: false,
+      manageAccess: false,
       suggest: false,
     });
     expect(frontier.scopes[COMPANION]).toEqual(frontier.scopes[PROJECT]);
