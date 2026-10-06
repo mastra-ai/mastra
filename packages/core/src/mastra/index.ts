@@ -83,7 +83,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
+import { OrchestrationWorker, SchedulerWorker, WorkflowTimerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
 import { assertDrainTimeout } from '../worker/drain-timeout';
 import type { AnyWorkflow, Workflow } from '../workflows';
@@ -1595,6 +1595,7 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
+      defaultWorkers.push(new WorkflowTimerWorker());
       // SchedulerWorker is added lazily in startWorkers() once scheduling work exists.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
@@ -6762,21 +6763,16 @@ export class Mastra<
       this.#ensureBackgroundTaskManager('full');
     }
 
+    // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
+    // OrchestrationWorker pulling events. Wire the consumer before starting
+    // producers so an overdue durable timer cannot publish into a gap.
+    if (!name || name === 'workflowTimers') {
+      await this.#wirePushWorkflowSubscription();
+    }
+
     for (const worker of targets) {
       await worker.init(deps);
       await worker.start();
-    }
-
-    // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
-    // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
-    // to the pubsub so workflow events still get processed in-process.
-    if (!name) {
-      await this.#wirePushWorkflowSubscription();
-      if (!this.#workflowEventProcessor) {
-        this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
-      }
-      this.#workflowEventProcessor.clearSleepTimers();
-      await this.#workflowEventProcessor.recoverSleepTimers();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -6948,15 +6944,20 @@ export class Mastra<
       mastra: this,
     };
 
+    await this.#wirePushWorkflowSubscription();
+
     for (const worker of this.#workers) {
-      if (worker.name !== 'orchestration' && worker.name !== 'backgroundTasks') continue;
+      if (
+        worker.name !== 'orchestration' &&
+        worker.name !== 'backgroundTasks' &&
+        worker.name !== 'workflowTimers'
+      )
+        continue;
       if (this.#workerFilter && !this.#workerFilter.has(worker.name)) continue;
       if (worker.isRunning) continue;
       await worker.init(deps);
       await worker.start();
     }
-
-    await this.#wirePushWorkflowSubscription();
     this.#executionWorkersStarted = true;
   }
 
@@ -6978,7 +6979,6 @@ export class Mastra<
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
-    this.#workflowEventProcessor?.clearSleepTimers();
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —

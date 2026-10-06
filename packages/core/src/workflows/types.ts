@@ -404,6 +404,7 @@ export interface WorkflowSleepTimer {
   status: 'pending' | 'claimed';
   claimToken?: string;
   claimedAt?: number;
+  emitStepEvents: boolean;
   continuation: {
     executionPath: number[];
     stepResults: Record<string, SerializedStepResult<any, any, any, any>>;

@@ -3,6 +3,8 @@ export type { WorkerDeps, WorkerStopOptions } from './worker';
 export { OrchestrationWorker } from './workers/orchestration-worker';
 export type { OrchestrationWorkerConfig } from './workers/orchestration-worker';
 export { SchedulerWorker } from './workers/scheduler-worker';
+export { WorkflowTimerWorker } from './workers/workflow-timer-worker';
+export type { WorkflowTimerWorkerConfig } from './workers/workflow-timer-worker';
 export { BackgroundTaskWorker } from './workers/background-task-worker';
 export type { BackgroundTaskWorkerConfig } from './workers/background-task-worker';
 export type { StepExecutionStrategy, StepExecutionParams } from './types';
