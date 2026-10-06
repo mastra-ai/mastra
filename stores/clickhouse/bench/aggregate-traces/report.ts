@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { CASES } from './cases';
 import { BUCKETS } from './profile';
 import type { Bucket } from './profile';
-import { PREFLIGHT_FILE, PROFILE_FILE, readRecords } from './run';
+import { MEMORY_FILE, PREFLIGHT_FILE, PROFILE_FILE, readRecords } from './run';
 import type { RunRecord } from './run';
 
 export const FINDINGS_FILE = join(import.meta.dirname, 'FINDINGS.md');
@@ -19,6 +19,7 @@ export const BUDGET = { timeoutMs: 15_000, hardTimeoutMs: 30_000, comfortableMem
 
 const GROUP_TITLES: Record<string, string> = {
   canonical: 'Canonical decision-doc examples',
+  tokens: 'Token and cost measures',
   highcard: 'High-cardinality groupBy',
   interval: 'Interval path at the bucket cap',
   pushdown: 'Pushed-down vs non-pushed `where`',
@@ -62,6 +63,8 @@ export interface Cell {
   peakMemory: number;
   failures: string[];
   runs: number;
+  /** The first run kept the filesystem cache (shared-instance mode), so it is not a cold read. */
+  firstNotCold: boolean;
 }
 
 export function summarize(records: RunRecord[]): Cell | null {
@@ -78,6 +81,7 @@ export function summarize(records: RunRecord[]): Cell | null {
     peakMemory: Math.max(0, ...records.map(r => r.metrics.memoryBytes ?? 0)),
     failures: [...new Set(records.filter(r => !r.ok).map(r => r.errorCategory ?? 'other'))],
     runs: records.length,
+    firstNotCold: records.some(r => r.cold && r.coldBypass === false),
   };
 }
 
@@ -85,7 +89,7 @@ function cellText(cell: Cell | null): string {
   if (!cell) return '–';
   if (!Number.isFinite(cell.warmMedianMs)) return `✗ ${cell.failures.join('/')}`;
   const fail = cell.failures.length ? ` ✗${cell.failures.join('/')}` : '';
-  const cold = cell.coldMs === null ? '' : ` (cold ${fmtMs(cell.coldMs)})`;
+  const cold = cell.coldMs === null ? '' : ` (${cell.firstNotCold ? 'first' : 'cold'} ${fmtMs(cell.coldMs)})`;
   return `${fmtMs(cell.warmMedianMs)} / ${fmtMs(cell.warmMaxMs)}${cold}<br>${fmtRows(cell.readRows)} rows · ${fmtBytes(cell.readBytes)} · ${fmtMem(cell.peakMemory)}${fail}`;
 }
 
@@ -180,6 +184,7 @@ function comparison(
   variantOf: (r: RunRecord) => string | null,
   title: string,
   buckets: Bucket[],
+  isAlt: (r: RunRecord) => boolean,
 ): string[] {
   const pairs = groupBy(
     records.filter(r => r.ok && !r.cold && variantOf(r) !== null),
@@ -196,12 +201,18 @@ function comparison(
     const [label, window] = key.split('\u0000');
     const cells = buckets.map(bucket => {
       const inBucket = rs.filter(r => r.bucket === bucket);
-      const base = inBucket.filter(r => r.variant === 'base' && (r.stage === 'main' || r.stage === 'payload'));
-      const alt = inBucket.filter(r => r.variant !== 'base' || r.stage === 'payload-scoped');
+      const alt = inBucket.filter(isAlt);
+      // Variants may run on the representative project only; compare like with like.
+      const hashes = new Set(alt.map(r => r.hash));
+      const base = inBucket.filter(
+        r => r.variant === 'base' && (r.stage === 'main' || r.stage === 'payload') && hashes.has(r.hash),
+      );
       if (!base.length || !alt.length) return '–';
       const t = median(alt.map(r => r.metrics.durationMs)) / median(base.map(r => r.metrics.durationMs));
       const b = median(alt.map(r => r.metrics.readBytes)) / Math.max(1, median(base.map(r => r.metrics.readBytes)));
-      return `×${t.toFixed(2)} time · ×${b.toFixed(2)} bytes`;
+      const peak = (xs: RunRecord[]) => Math.max(1, ...xs.map(r => r.metrics.memoryBytes ?? 0));
+      const m = peak(alt) / peak(base);
+      return `×${m.toFixed(2)} memory · ×${t.toFixed(2)} time · ×${b.toFixed(2)} bytes`;
     });
     if (cells.every(c => c === '–')) continue;
     any = true;
@@ -210,7 +221,7 @@ function comparison(
   return any ? [...out, ''] : [];
 }
 
-export function renderReport(records: RunRecord[]): string {
+export function renderReport(records: RunRecord[], memoryRecords: RunRecord[] = []): string {
   const buckets = BUCKETS.filter(b => records.some(r => r.bucket === b));
   const lines: string[] = [
     START,
@@ -296,32 +307,87 @@ export function renderReport(records: RunRecord[]): string {
       r => (['P1', 'P2', 'P3'].includes(r.caseId) ? r.caseId : null),
       '`quantileExact` vs `quantileDeterministic`',
       buckets,
+      r => r.variant === 'exact',
     ),
     ...comparison(
       records,
       r => (['C1', 'C2', 'C3'].includes(r.caseId) ? r.caseId : null),
       '`uniq` vs `uniqExact`',
       buckets,
+      r => r.variant === 'uniq',
     ),
     ...comparison(
       records,
-      r => (['F0', 'F1'].includes(r.caseId) ? r.caseId : null),
+      r => (['F0', 'F1', 'E4'].includes(r.caseId) && r.stage === 'main' ? r.caseId : null),
       'W1: tenant-scoped `current_roots` re-read vs as compiled',
       buckets,
+      r => r.variant === 'w1',
+    ),
+    ...comparison(
+      records,
+      r => (['E4', 'T1', 'T3'].includes(r.caseId) ? r.caseId : null),
+      'mkey: dedupe token metrics on `metricId` alone vs `(traceId, metricId)`',
+      buckets,
+      r => r.variant === 'mkey',
+    ),
+    ...comparison(
+      records,
+      r => (r.caseId === 'E4' ? r.caseId : null),
+      't2: `max_threads = 2` vs 4',
+      buckets,
+      r => r.variant === 't2',
+    ),
+    ...comparison(
+      records,
+      r => (r.caseId === 'E4' ? r.caseId : null),
+      'spill: external GROUP BY / sort above 256 MiB vs in-memory',
+      buckets,
+      r => r.variant === 'spill',
     ),
     ...comparison(
       records,
       r => (r.group === 'baseline' && r.stage !== 'main' ? r.caseId : null),
       'Payload stage: org/project-scoped vs as compiled',
       buckets,
+      r => r.stage === 'payload-scoped',
     ),
   );
+  if (memoryRecords.length) {
+    const memBuckets = BUCKETS.filter(b => memoryRecords.some(r => r.bucket === b));
+    const main = (r: RunRecord) => (r.stage === 'main' ? r.caseId : null);
+    lines.push(
+      '### Memory reduction, same-session base (`results/memory.jsonl`)',
+      '',
+      ...comparison(
+        memoryRecords,
+        main,
+        'W1: tenant-scoped `current_roots` re-read',
+        memBuckets,
+        r => r.variant === 'w1',
+      ),
+      ...comparison(memoryRecords, main, 't2: `max_threads = 2` vs 4', memBuckets, r => r.variant === 't2'),
+      ...comparison(
+        memoryRecords,
+        main,
+        'spill: external GROUP BY / sort above 256 MiB',
+        memBuckets,
+        r => r.variant === 'spill',
+      ),
+      ...(
+        [
+          ['nocm', 'nocm (diagnostic): skip the `costMetadata` parse'],
+          ['nodedupe', 'nodedupe (diagnostic): no `(traceId, metricId)` retry dedupe'],
+          ['final', 'final: `FINAL` read instead of the GROUP BY dedupe'],
+        ] as const
+      ).flatMap(([variant, title]) => comparison(memoryRecords, main, title, memBuckets, r => r.variant === variant)),
+    );
+  }
   lines.push(END);
   return lines.join('\n');
 }
 
 export function writeReport(): void {
-  const generated = renderReport(readRecords());
+  const generated = renderReport(readRecords(), readRecords(MEMORY_FILE));
   const current = existsSync(FINDINGS_FILE) ? readFileSync(FINDINGS_FILE, 'utf8') : `# Findings\n\n${START}\n${END}\n`;
   const start = current.indexOf(START);
   const end = current.indexOf(END);

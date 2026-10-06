@@ -17,6 +17,8 @@ const RELATION_CTE: Record<Relation, string> = {
   feedback: 'current_feedback AS (',
 };
 
+const USAGE_CTE = 'usage AS (';
+
 const TENANT_FRAGMENT = /AND organizationId = (\{trace_query_\d+:String\})/g;
 
 export class RewriteError extends Error {
@@ -32,7 +34,8 @@ function countOccurrences(haystack: string, needle: string): number {
 
 /**
  * Adds `AND projectId = {bench_project_id:String}` after every tenant fragment the compiler emitted.
- * Expected fragments: the roots seed, `root_scope`, and one per related collection.
+ * Expected fragments: the roots seed, `root_scope`, one per related collection, and one for the
+ * token/cost `usage` CTE when present. Every fragment must bind the same organization.
  */
 export function injectProjectScope(
   compiled: CompiledClickHouseTraceQuery,
@@ -46,7 +49,9 @@ export function injectProjectScope(
       throw new RewriteError(`Relation ${relation}: expected ${declared} CTE(s), found ${present}`);
     }
   }
-  const expected = 2 + relations.length;
+  const usage = countOccurrences(compiled.query, USAGE_CTE);
+  if (usage > 1) throw new RewriteError(`Expected at most one usage CTE, found ${usage}`);
+  const expected = 2 + relations.length + usage;
   const tenantParams = new Set<string>();
   let matched = 0;
   const query = compiled.query.replace(TENANT_FRAGMENT, (fragment, param: string) => {
@@ -57,7 +62,10 @@ export function injectProjectScope(
   if (matched !== expected) {
     throw new RewriteError(`Expected ${expected} tenant-scoped scans, found ${matched}`);
   }
-  if (tenantParams.size !== 1) throw new RewriteError('Expected one shared tenant parameter');
+  const orgValues = new Set([...tenantParams].map(param => compiled.query_params[param.slice(1, -':String}'.length)]));
+  if (orgValues.size !== 1 || orgValues.has(undefined)) {
+    throw new RewriteError('Tenant fragments must all bind the same organization');
+  }
   if (PROJECT_PARAM in compiled.query_params) throw new RewriteError('Project parameter name collides');
   return { ...compiled, query, query_params: { ...compiled.query_params, [PROJECT_PARAM]: projectId } };
 }
@@ -76,18 +84,65 @@ export function scopePayloadQuery(
   );
 }
 
-export type Variant = 'base' | 'uniq' | 'exact' | 'w1';
+export type Variant = 'base' | 'uniq' | 'exact' | 'w1' | 't2' | 'spill' | 'mkey' | 'nocm' | 'nodedupe' | 'final';
+
+/** Variants that only change per-query settings. They may only tighten the tier's limits. */
+export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | number>>> = {
+  t2: { max_threads: 2 },
+  spill: {
+    max_bytes_before_external_group_by: String(256 * 2 ** 20),
+    max_bytes_before_external_sort: String(256 * 2 ** 20),
+  },
+};
 
 /**
  * Applies a labelled what-if variant to an already project-scoped query.
  * - `uniq`: `uniqExact` → `uniq`
  * - `exact`: `quantileDeterministic(p)(durationMs, traceSeed)` → `quantileExact(p)(durationMs)`
  * - `w1`: tenant- and project-scope the outer `current_roots` re-read by `traceId`
+ * - `t2` / `spill`: SQL unchanged; see `VARIANT_SETTINGS`
+ * - `mkey`: dedupe token metric rows on `metricId` alone instead of `(traceId, metricId)`;
+ *   `metricId` is unique per row, so `traceId` is constant within each key
+ * - `nocm` (diagnostic): skip the per-row `costMetadata` JSON parse (`hasError` = 0)
+ * - `nodedupe` (diagnostic): drop the `(traceId, metricId)` retry dedupe and aggregate raw rows
+ * - `final`: replace that dedupe with a `FINAL` read, letting ReplacingMergeTree collapse retried rows
  */
 export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Variant): CompiledClickHouseTraceQuery {
   switch (variant) {
     case 'base':
+    case 't2':
+    case 'spill':
       return compiled;
+    case 'nocm':
+      return rewriteEach(compiled, variant, [
+        [
+          /if\(name IN \([^()]*\), ifNull\(JSONHas\(costMetadata, 'error'\) AND JSONType\(costMetadata, 'error'\) != 'Null', 0\), 0\) AS hasError/g,
+          'toUInt8(0) AS hasError',
+        ],
+      ]);
+    case 'nodedupe':
+    case 'final':
+      return rewriteEach(compiled, variant, [
+        ...(variant === 'final'
+          ? ([[/FROM mastra_metric_events\n/g, 'FROM mastra_metric_events FINAL\n']] as Array<[RegExp, string]>)
+          : []),
+        [/argMax\((tuple\(name, value, estimatedCost, costUnit, hasError\)), timestamp\) AS latest/g, '$1 AS latest'],
+        [/\n\s*GROUP BY traceId, metricId/g, ''],
+      ]);
+    case 'mkey': {
+      let query = compiled.query;
+      const rewrites: Array<[RegExp, string]> = [
+        [/SELECT traceId,(\s+)latest\.1 AS name/g, 'SELECT mkTraceId AS traceId,$1latest.1 AS name'],
+        [/SELECT traceId,(\s+)argMax\(tuple\(/g, 'SELECT any(traceId) AS mkTraceId,$1argMax(tuple('],
+        [/GROUP BY traceId, metricId/g, 'GROUP BY metricId'],
+      ];
+      for (const [pattern, replacement] of rewrites) {
+        const count = query.match(pattern)?.length ?? 0;
+        if (count !== 1) throw new RewriteError(`Variant mkey: expected 1 match for ${pattern}, found ${count}`);
+        query = query.replace(pattern, replacement);
+      }
+      return { ...compiled, query };
+    }
     case 'uniq': {
       const count = countOccurrences(compiled.query, 'uniqExact(');
       if (count === 0) throw new RewriteError('Variant uniq: no uniqExact() to rewrite');
@@ -134,4 +189,18 @@ function replaceExactlyOnce(
     query: compiled.query.replace(needle, replacement),
     query_params: { ...compiled.query_params, ...params },
   };
+}
+
+function rewriteEach(
+  compiled: CompiledClickHouseTraceQuery,
+  variant: Variant,
+  rewrites: Array<[RegExp, string]>,
+): CompiledClickHouseTraceQuery {
+  let query = compiled.query;
+  for (const [pattern, replacement] of rewrites) {
+    const count = query.match(pattern)?.length ?? 0;
+    if (count !== 1) throw new RewriteError(`Variant ${variant}: expected 1 match for ${pattern}, found ${count}`);
+    query = query.replace(pattern, replacement);
+  }
+  return { ...compiled, query };
 }

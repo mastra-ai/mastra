@@ -14,7 +14,7 @@ import {
 } from './profile';
 import type { Candidate, SelectedProject, Selection } from './profile';
 import { logLogSlope, median, renderReport } from './report';
-import { needsGateB, parseSkipIndexes, planRuns, skippedByEscalation } from './run';
+import { needsGateB, parseSkipIndexes, planRuns, skippedByEscalation, variantSettings } from './run';
 import type { RunRecord } from './run';
 
 const SCOPE = { organizationId: 'org-test', projectId: 'proj-test' };
@@ -191,6 +191,32 @@ describe('run planning', () => {
     expect(planned.filter(p => p.def.id === 'F2').map(p => p.project.hash)).toEqual(['a']);
     const costs = planned.map(p => p.def.cost);
     expect(costs).toEqual([...costs].sort((x, y) => x - y));
+  });
+
+  it('runs what-if variants on the representative only and honours the variant filter', () => {
+    const planned = planRuns(selection, { buckets: ['p99'], windows: ['1d'], gateBApproved: false });
+    const e4 = planned.filter(p => p.def.id === 'E4');
+    expect(
+      e4
+        .filter(p => p.variant === 'base')
+        .map(p => p.project.hash)
+        .sort(),
+    ).toEqual(['a', 'b']);
+    expect(e4.filter(p => p.variant !== 'base').every(p => p.project.hash === 'a')).toBe(true);
+    const filtered = planRuns(selection, {
+      buckets: ['p99'],
+      windows: ['1d'],
+      cases: ['F3'],
+      variants: ['base', 't2'],
+      gateBApproved: false,
+    });
+    expect([...new Set(filtered.map(p => p.variant))].sort()).toEqual(['base', 't2']);
+  });
+
+  it('only lets variant settings tighten the tier', () => {
+    expect(variantSettings('t2', TIERS[1])).toEqual({ max_threads: 2 });
+    expect(variantSettings('base', TIERS[1])).toBeUndefined();
+    expect(() => variantSettings('t2', { ...TIERS[1], maxThreads: 1 })).toThrow('above the tier');
   });
 
   it('applies the escalation rule', () => {

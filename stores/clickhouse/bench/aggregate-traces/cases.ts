@@ -51,7 +51,15 @@ export const DOC_LITERALS: Literals = {
   entityType: 'agent',
 };
 
-export type CaseGroup = 'canonical' | 'highcard' | 'interval' | 'pushdown' | 'distinct' | 'percentile' | 'baseline';
+export type CaseGroup =
+  | 'canonical'
+  | 'tokens'
+  | 'highcard'
+  | 'interval'
+  | 'pushdown'
+  | 'distinct'
+  | 'percentile'
+  | 'baseline';
 
 export interface CaseDef {
   id: string;
@@ -131,7 +139,7 @@ export const CASES: CaseDef[] = [
     kind: 'aggregate',
     windows: [W['1d'], W['7d'], W['30d']],
     relations: ['spans'],
-    variants: ['base'],
+    variants: ['base', 'w1', 't2', 'spill'],
     core: true,
     cost: 20,
     request: l => ({ measures: ['count'], where: toolCalled(l) }),
@@ -193,7 +201,7 @@ export const CASES: CaseDef[] = [
     kind: 'traces',
     windows: [W['1d'], W['7d'], W['30d']],
     relations: ['spans'],
-    variants: ['base'],
+    variants: ['base', 'w1', 't2', 'spill'],
     core: false,
     cost: 22,
     request: l => ({ where: toolCalled(l) }),
@@ -243,7 +251,7 @@ export const CASES: CaseDef[] = [
     kind: 'aggregate',
     windows: [W['1d'], W['7d'], W['30d']],
     relations: ['spans'],
-    variants: ['base'],
+    variants: ['base', 'w1', 't2', 'spill'],
     core: true,
     cost: 23,
     request: l => ({
@@ -416,6 +424,89 @@ export const CASES: CaseDef[] = [
       having: { op: 'gt', left: { path: 'count' }, right: { literal: 1 } },
       orderBy: { field: 'duration.p95', direction: 'desc' },
     }),
+  },
+
+  // --- Token and cost measures (usage joined from mastra_metric_events) ---
+  {
+    id: 'E4',
+    group: 'tokens',
+    title: 'Ex.4 token spend and cost per agent per day, most expensive first',
+    kind: 'aggregate',
+    windows: [W['1d'], W['7d'], W['30d']],
+    relations: [],
+    variants: ['base', 'mkey', 't2', 'spill', 'w1', 'nocm', 'nodedupe', 'final'],
+    core: true,
+    cost: 50,
+    request: () => ({
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum'],
+      orderBy: { field: 'cost.sum', direction: 'desc' },
+      limit: 20,
+    }),
+  },
+  {
+    id: 'T1',
+    group: 'tokens',
+    title: 'ungrouped total tokens and cost',
+    kind: 'aggregate',
+    windows: [W['1d'], W['7d'], W['30d']],
+    relations: [],
+    variants: ['base', 'mkey', 'final'],
+    core: false,
+    cost: 48,
+    request: () => ({ measures: ['count', 'tokens.total.sum', 'cost.sum'] }),
+  },
+  {
+    id: 'T2',
+    group: 'tokens',
+    title: 'every token/cost average, by entityName',
+    kind: 'aggregate',
+    windows: [W['7d'], W['30d']],
+    relations: [],
+    variants: ['base'],
+    core: false,
+    cost: 49,
+    request: () => ({
+      groupBy: ['entityName'],
+      measures: [
+        'tokens.input.avg',
+        'tokens.output.avg',
+        'tokens.total.avg',
+        'tokens.reasoning.avg',
+        'tokens.cached.avg',
+        'cost.avg',
+      ],
+    }),
+  },
+  {
+    id: 'T3',
+    group: 'tokens',
+    title: 'top threads by total tokens, limit 100',
+    kind: 'aggregate',
+    windows: [W['7d'], W['30d']],
+    relations: [],
+    variants: ['base', 'mkey'],
+    core: false,
+    cost: 51,
+    request: () => ({
+      groupBy: ['threadId'],
+      measures: ['count', 'tokens.total.sum'],
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+      limit: 100,
+    }),
+  },
+  {
+    id: 'T4',
+    group: 'tokens',
+    title: 'tokens and cost for traces calling the top tool',
+    kind: 'aggregate',
+    windows: [W['7d'], W['30d']],
+    relations: ['spans'],
+    variants: ['base'],
+    core: false,
+    cost: 52,
+    request: l => ({ where: toolCalled(l), measures: ['count', 'tokens.total.sum', 'cost.sum'] }),
   },
 
   // --- Interval path at the bucket / row caps (fixed windows) ---

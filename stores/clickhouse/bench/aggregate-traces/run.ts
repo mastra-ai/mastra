@@ -37,10 +37,13 @@ import {
   saveSelection,
 } from './profile';
 import type { Bucket, ProfileContext, Selection, SelectedProject, TableColumns } from './profile';
+import { VARIANT_SETTINGS } from './scope';
 import type { Variant } from './scope';
 
 export const RESULTS_DIR = join(import.meta.dirname, 'results');
 export const RESULTS_FILE = join(RESULTS_DIR, 'runs.jsonl');
+/** Memory-variant sweeps re-measure their base in the same session so ratios are comparable. */
+export const MEMORY_FILE = join(RESULTS_DIR, 'memory.jsonl');
 export const PREFLIGHT_FILE = join(RESULTS_DIR, 'preflight.json');
 export const PROFILE_FILE = join(RESULTS_DIR, 'profile.json');
 
@@ -53,6 +56,7 @@ const TABLES = [
 ] as const;
 
 const PAUSE_MS = 2_000;
+const SHARED_PAUSE_MS = 3_000;
 const MAX_CONSECUTIVE_ERRORS = 3;
 
 // ---------------------------------------------------------------------------
@@ -75,6 +79,10 @@ export interface RunRecord {
   traces30d: number;
   rep: number;
   cold: boolean;
+  /** False when the first run kept the filesystem cache (`--shared`); absent on older records. */
+  coldBypass?: boolean;
+  /** Other queries visible in system.processes just before this case ran (null if not visible). */
+  concurrent?: number | null;
   tier: number;
   anchorTo: string;
   ts: string;
@@ -151,6 +159,11 @@ export interface Context {
   reps?: number;
   /** Print redacted error messages (local smoke run only). */
   verbose?: boolean;
+  /**
+   * Another workload shares the instance: the first run keeps the filesystem cache (no forced
+   * object-storage reads) and each case records how many other queries were running.
+   */
+  shared?: boolean;
 }
 
 async function pause(ctx: Context): Promise<void> {
@@ -216,6 +229,19 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
     'parentSpanId',
   ],
   mastra_span_events: ['organizationId', 'projectId', 'traceId', 'spanId', 'spanType', 'name', 'endedAt', 'dedupeKey'],
+  // Read by the token/cost usage CTE.
+  mastra_metric_events: [
+    'organizationId',
+    'projectId',
+    'traceId',
+    'metricId',
+    'timestamp',
+    'name',
+    'value',
+    'estimatedCost',
+    'costUnit',
+    'costMetadata',
+  ],
 };
 
 /** Extracts `INDEX name expr TYPE type GRANULARITY n` clauses from a CREATE TABLE statement. */
@@ -412,6 +438,7 @@ export interface RunFilter {
   windows: Array<'1d' | '7d' | '30d'>;
   groups?: string[];
   cases?: string[];
+  variants?: string[];
   gateBApproved: boolean;
 }
 
@@ -434,8 +461,12 @@ export function planRuns(selection: Pick<Selection, 'projects'>, filter: RunFilt
       for (const def of defs) {
         for (const window of def.windows.filter(w => windowStage(w) === stage)) {
           if (!filter.gateBApproved && needsGateB(def, window, bucket)) continue;
-          for (const project of projects.filter(p => def.core || p.representative)) {
-            for (const variant of def.variants) out.push({ def, variant, window, project });
+          for (const variant of def.variants.filter(v => !filter.variants || filter.variants.includes(v))) {
+            // What-if variants run on the representative project only; F0/F1 `w1` predates this rule.
+            const everyProject = def.core && (variant === 'base' || (variant === 'w1' && /^F[01]$/.test(def.id)));
+            for (const project of projects.filter(p => everyProject || p.representative)) {
+              out.push({ def, variant, window, project });
+            }
           }
         }
       }
@@ -448,18 +479,44 @@ function repsFor(bucket: Bucket): number {
   return bucket === 'p99' || bucket === 'largest' ? 4 : 6;
 }
 
+export function variantSettings(variant: Variant, tier: Tier): Record<string, string | number> | undefined {
+  const settings = VARIANT_SETTINGS[variant];
+  if (settings && Number(settings.max_threads ?? 0) > tier.maxThreads) {
+    throw new Error(`Variant ${variant} would raise max_threads above the tier`);
+  }
+  return settings;
+}
+
 async function measure(
   ctx: Context,
   sql: string,
   params: Record<string, unknown>,
   comment: string,
   cold: boolean,
+  variant: Variant,
 ): Promise<{ outcome: QueryOutcome; metrics: QueryMetrics }> {
   await pause(ctx);
-  const outcome = await ctx.client.discard(sql, params, { tier: ctx.tier, logComment: comment, cold });
+  const outcome = await ctx.client.discard(sql, params, {
+    tier: ctx.tier,
+    logComment: comment,
+    cold: cold && !ctx.shared,
+    settings: variantSettings(variant, ctx.tier),
+  });
   ctx.lastQueryEnd = Date.now();
   const metrics = await collectMetrics(ctx.client, ctx.queryLog, outcome, ctx.tier, `${comment}:metrics`);
   return { outcome, metrics };
+}
+
+/** Other queries currently visible to this user; null when system.processes is not readable. */
+async function concurrentQueries(ctx: Context, comment: string): Promise<number | null> {
+  await pause(ctx);
+  const outcome = await ctx.client.rows<{ n: string }>(
+    'SELECT count() AS n FROM system.processes WHERE query_id != queryID()',
+    {},
+    { tier: ctx.tier, logComment: comment },
+  );
+  ctx.lastQueryEnd = Date.now();
+  return outcome.ok ? Number(outcome.rows?.[0]?.n ?? 0) : null;
 }
 
 /** Page keys for the payload stage: the exact list query wrapped to project only key columns. */
@@ -507,7 +564,9 @@ export async function runCases(ctx: Context, selection: Selection, filter: RunFi
       continue;
     }
     const compiled = compileCase(def, variant, project.literals, timeRangeFor(window, to), project);
-    const stages: Stage[] = def.kind === 'traces' ? ['main', 'payload', 'payload-scoped'] : ['main'];
+    // The payload query does not depend on the variant, so only the base variant measures it.
+    const stages: Stage[] =
+      def.kind === 'traces' && variant === 'base' ? ['main', 'payload', 'payload-scoped'] : ['main'];
     let payloadKeys: PageKey[] | undefined;
 
     for (const stage of stages) {
@@ -531,10 +590,13 @@ export async function runCases(ctx: Context, selection: Selection, filter: RunFi
         params = payload.query_params;
       }
       const label = `${def.id}${variant === 'base' ? '' : `-${variant}`}${stage === 'main' ? '' : `:${stage}`}`;
+      const concurrent = ctx.shared
+        ? await concurrentQueries(ctx, logComment(ctx, label, 'processes', project.bucket, project.hash))
+        : undefined;
       for (let rep = 0; rep < (ctx.reps ?? repsFor(project.bucket)); rep++) {
         const cold = rep === 0;
         const comment = logComment(ctx, label, window.id, project.bucket, project.hash, rep);
-        const { outcome, metrics } = await measure(ctx, sql, params, comment, cold);
+        const { outcome, metrics } = await measure(ctx, sql, params, comment, cold, variant);
         const record: RunRecord = {
           runId: ctx.runId,
           key,
@@ -549,6 +611,7 @@ export async function runCases(ctx: Context, selection: Selection, filter: RunFi
           traces30d: project.stats.traces30d,
           rep,
           cold,
+          ...(ctx.shared ? { coldBypass: false, concurrent } : {}),
           tier: ctx.tier.id,
           anchorTo: selection.anchorTo,
           ts: new Date().toISOString(),
@@ -563,7 +626,9 @@ export async function runCases(ctx: Context, selection: Selection, filter: RunFi
         const status = outcome.ok
           ? `${Math.round(metrics.durationMs)} ms, ${(metrics.readBytes / 1e6).toFixed(1)} MB read, ${((metrics.memoryBytes ?? 0) / 2 ** 20).toFixed(0)} MiB`
           : `FAILED ${outcome.errorCategory} (code ${outcome.errorCode ?? '?'})${ctx.verbose ? `: ${outcome.errorMessage}` : ''}`;
-        log(`${project.bucket}:${project.hash} ${label} ${window.id} rep${rep}${cold ? ' cold' : ''}: ${status}`);
+        const first = cold ? (ctx.shared ? ' first' : ' cold') : '';
+        const others = concurrent === undefined ? '' : ` [others running: ${concurrent ?? '?'}]`;
+        log(`${project.bucket}:${project.hash} ${label} ${window.id} rep${rep}${first}: ${status}${others}`);
         if (outcome.ok) {
           consecutiveErrors = 0;
           continue;
@@ -605,6 +670,9 @@ async function main(): Promise<void> {
       windows: { type: 'string' },
       groups: { type: 'string' },
       cases: { type: 'string' },
+      variants: { type: 'string' },
+      shared: { type: 'boolean', default: false },
+      'memory-session': { type: 'boolean', default: false },
       tier: { type: 'string', default: '1' },
       'gate-b-approved': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
@@ -665,8 +733,9 @@ async function main(): Promise<void> {
     runId,
     tier: TIERS[tierId],
     lastQueryEnd: 0,
-    resultsFile: RESULTS_FILE,
-    pauseMs: PAUSE_MS,
+    resultsFile: values['memory-session'] ? MEMORY_FILE : RESULTS_FILE,
+    pauseMs: values.shared ? SHARED_PAUSE_MS : PAUSE_MS,
+    shared: Boolean(values.shared),
   };
   try {
     // Every session re-verifies that its readonly level is the one preflight accepted.
@@ -711,6 +780,7 @@ function parseFilter(values: Record<string, string | boolean | undefined>): RunF
     windows: list(values.windows as string | undefined, WINDOW_ORDER, [...WINDOW_ORDER]),
     groups: values.groups ? (values.groups as string).split(',') : undefined,
     cases: values.cases ? (values.cases as string).split(',') : undefined,
+    variants: values.variants ? (values.variants as string).split(',') : undefined,
     gateBApproved: Boolean(values['gate-b-approved']),
   };
 }

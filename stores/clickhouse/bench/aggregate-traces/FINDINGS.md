@@ -1,11 +1,14 @@
 # OBS-539 findings: ClickHouse `aggregateTraces()` on production-scale data
 
-Benchmark of the merged ClickHouse `aggregateTraces()` compiler (#25842) and the shared trace-query selection against Platform's production observability data, to inform OBS-515 (`aggregateTraces()` on mobs-query). The harness and safety model are described in [README.md](./README.md); the tables below the marker are generated from the raw results.
+Benchmark of the merged ClickHouse `aggregateTraces()` compiler (#25842, plus token/cost measures from #25970) and the shared trace-query selection against Platform's production observability data, to inform OBS-515 (`aggregateTraces()` on mobs-query). The harness and safety model are described in [README.md](./README.md); the tables below the marker are generated from the raw results.
 
 ## Summary
 
-- **Memory is not a concern at any project size.** Peak memory across 4 198 queries is **592 MiB** (largest bucket, `queryTraces()` with `spans.some` over 30 days). Every case at every size stays under the 1 GiB comfortable budget and far under the 4 GiB hard cap. Per bucket, peak memory is small 195 MiB, mid 218 MiB, p90 206 MiB, p99 273 MiB, largest 592 MiB.
-- **Warm latency is fine.** 3 384 warm runs had 1 failure (F5, `or(env, spans.some)`, largest bucket 7d timeout). The slowest warm median is 2.5 s (E3 on the largest bucket at 30d). Single warm outliers reach 13.5 s (root-only, 8 of 2 736 runs over 7 s) and 21.9 s (span cases); their bytes read don't change, which points to replica load rather than query shape.
+- **Memory is within budget at every project size, and token/cost queries set the peak.** Without token/cost measures, peak memory across 4 198 queries is **592 MiB** (largest bucket, `queryTraces()` with `spans.some` over 30 days). Token/cost queries (E4, T1–T4; 910 queries, 0 failures) peak at **991 MiB** on the largest project over 30 days, just under the 1 GiB comfortable budget and far under the 4 GiB hard cap. Per bucket, token/cost peak memory is small 253 MiB, mid 258 MiB, p90 256 MiB, p99 353 MiB, largest 991 MiB.
+- **Token/cost memory scales with the project's token metric rows, not its traces.** The largest representative project has ~2.5 M token metric rows in 30 days. Its usage CTE reads ~1 GB and peaks at ~970 MiB (warm median 2.6 s for E4). p99 projects (~0.5 M rows) stay at ~320 MiB. Another large project with 290 k traces but almost no token rows stays at 364 MiB.
+- **Half of that memory is the retry dedupe.** In the usage CTE, the `(traceId, metricId)` GROUP BY collapses retried metric rows. Dropping it (diagnostic only) cuts peak memory on the largest project from 976 to 462 MiB (×0.47) and latency ×0.68; at p99 the cut is ×0.86. Cheaper variants of the dedupe don't help: grouping on `metricId` alone (×1.03), a `FINAL` read (worse, 1.1–1.2 GiB), 2 threads (×0.97) and tenant-scoping the re-read (×1.00) leave memory unchanged. Skipping the `costMetadata` JSON parse saves 2%. External GROUP BY above 256 MiB cuts memory ×0.65 but is 3.8× slower.
+- **For `spans.some` cases, no setting meaningfully reduces memory.** On the largest project, two threads trim peak memory by 7–9%, and external aggregation and tenant-scoping the re-read leave it between ×0.92 and ×1.18 (~510–650 MiB). At p90/p99, tenant-scoping cuts bytes read 2–8× and latency up to 2.3×, but raises peak memory ×1.1–1.4 on a ~180–270 MiB base.
+- **Warm latency is fine.** 3 384 warm runs had 1 failure (F5, `or(env, spans.some)`, largest bucket 7d timeout). The slowest warm median is 2.5 s (E3 on the largest bucket at 30d); with token/cost measures it's 4.7 s (T4, token totals for traces calling the top tool, largest bucket at 7d). No token/cost query failed or exceeded 15 s warm. Single warm outliers reach 13.5 s (root-only, 8 of 2 736 runs over 7 s) and 21.9 s (span cases); their bytes read don't change, which points to replica load rather than query shape.
 - **Cold reads are the latency risk.** With the filesystem cache disabled, every `spans.some` case (F3/F4/F5/E3/Q3) takes 25–30 s or times out at **every** project size, including projects with ~25 traces. Root-only cases at 7d+ take 12–24 s cold.
 - **Cost barely depends on project size.** From 25 to 430 k traces (17 000×), warm latency rises 2–5× and bytes read 2–5×. Log-log slopes against trace count are about 0.1–0.2 for latency and 0.5 for bytes. The fixed cost dominates.
 - **The fixed cost is the unscoped `current_roots` re-read.** Its `WHERE traceId IN (…)` has no tenant predicate, and the replica has no `traceId` skip index. So whenever the candidate set is non-empty, it reads ~2.6 M rows (the whole of `mastra_trace_roots`, all tenants) for ~90 MB. The `W1` what-if (same re-read plus `organizationId`/`projectId`) cuts bytes read 4–25× and latency about 2× for small–p99 projects. For the largest projects the gain narrows (×0.4–0.6 bytes, ×0.55–0.7 time) because their own data starts to dominate.
@@ -21,17 +24,26 @@ Benchmark of the merged ClickHouse `aggregateTraces()` compiler (#25842) and the
 - **Buckets:** the 30-day distribution is heavily right-skewed (884 projects; p50 25, p75 180, p90 1.3 k, p99 41 k, max 434 k traces). Buckets are small = p50, mid = p75, p90, p99 and largest, with 3 projects each. Core cases run on all 3 projects; the rest run on one representative.
 - **Repetitions:** 1 cold run (`enable_filesystem_cache=0`) plus 5 warm runs (3 for p99/largest). Queries ran one at a time, 2 s apart, under Tier 1 limits: 30 s, 4 GiB, 4 threads, 50 GB read, 20 k result rows. Tier 2 was never needed. A limit hit on a warm run skips that case's larger windows (escalation rule), which is why F5 30d is missing for the largest bucket.
 - **Windows** all end at the same anchor (`2026-10-05T17:00Z`). The largest bucket's 7d/30d runs executed about a day later than the rest, so the oldest day of their 30d window may have partially aged out under the 30-day TTL.
-- **Token and cost measures (E4) are pending** OBS-389's ClickHouse PR (#25970), which was not merged when the runs happened.
+- **Token and cost measures** ran in a second pass after #25970 merged. Cases: E4 (the decision doc's example: groupBy entityName, interval 1d, input/output tokens and cost, ordered by cost), T1 (ungrouped totals), T2 (all token/cost averages by entityName), T3 (top 100 threads by tokens) and T4 (token totals for traces calling the top tool). They use the same buckets, anchor and Tier 1 limits.
+- **Shared-instance mode for the second pass.** Another benchmark was running on the same replica, so the second pass skipped forced cold reads (the first run keeps the filesystem cache; tables label it "first"), paced queries 3 s apart, and stayed sequential with 4 threads. The bench user cannot read `system.processes`, so concurrent load could not be recorded. Treat second-pass latency as noisier than memory and bytes. The replica had also been patch-upgraded (26.4.1.2359 → 26.4.1.2596).
+- **Memory-reduction variants** were measured on the representative project per bucket at 30d. `mkey`, `t2` (2 threads), `spill` (external GROUP BY/sort above 256 MiB), `w1`, `nocm` (diagnostic: skip the `costMetadata` parse), `nodedupe` (diagnostic: no retry dedupe) and `final` (`FINAL` read instead of the dedupe GROUP BY). The `spans.some` cases (F3/E3/Q3) and E4 diagnostics re-measured their base in the same session (`results/memory.jsonl`). On a docker fixture with retried metric rows, `mkey` and `final` return the same deduped totals as the compiled query. `nocm`/`nodedupe` change semantics and only attribute cost.
+- `mastra_metric_events` on the replica keeps 6 months (TTL) versus 30 days for traces, so token rows never limit the 30d window.
 
 ## Recommendations for OBS-515
 
 1. **Tenant-scope the `current_roots` re-read first.** Add `organizationId`/`projectId` to the outer `SELECT * FROM mastra_trace_roots WHERE traceId IN (…)` (and to the root payload lookup, for consistency). It is the dominant fixed cost for nearly every project on Platform, and it reads every tenant's roots. This is a compiler change, so it needs its own ticket.
 2. **Treat `spans.some` filters as the expensive shape.** They're safe warm (median ≤2.5 s, ≤600 MiB at the largest size), but cold they hit 25–30 s at any size. Either budget a timeout above the 15 s default for queries with relation filters, or prefer pushed-down root filters (environment, entityType, etc.) in product surfaces.
-3. **Memory limits:** a per-query `max_memory_usage` of 1–2 GiB gives more than 3× headroom over the observed 592 MiB peak. There's no evidence that window or cardinality caps are needed for memory reasons.
+3. **Memory limits:** set a per-query `max_memory_usage` of 2 GiB. That's about 2× headroom over the ~1 GiB token/cost peak and 3× over the 592 MiB peak without token/cost. 1 GiB would be too tight for token/cost queries on the largest projects. Window and cardinality caps aren't needed for memory reasons. Token/cost memory follows the project's token metric rows, so it is the number to watch as projects grow.
 4. **Timeouts:** keep the 15 s default for root-only shapes. Expect cold-cache outliers of 12–24 s on 7d+ windows until (1) lands. Warm root-only medians stay under 2 s; rare warm outliers (up to 13.5 s) track replica load, not query shape.
 5. **Limits and caps:** the planner's existing caps (limit ≤ 1000, limit × buckets ≤ 10 000, ≤ 2 group dimensions) are sufficient up to 430 k traces per project over 30 days. No extra per-size limits are needed.
 6. **No change needed for the percentile/distinct functions.** `quantileDeterministic` and `uniqExact` cost the same as the alternatives here.
 7. **Consider a `traceId` bloom-filter skip index** on `mastra_trace_roots` (OSS has one) as a cheaper alternative or complement to (1).
+8. **To reduce token/cost memory, target the retry dedupe, not settings.** It's half the peak on the largest project. Options, in order of impact:
+   - pre-aggregate usage per trace at write time (an MV keyed by `traceId`), which removes the per-query metric scan entirely;
+   - rely on `ReplacingMergeTree` collapsing retries on merge plus idempotent writes, and drop the query-time dedupe, accepting brief double counting until parts merge;
+   - keep the dedupe but make it conditional on duplicates existing.
+
+   Thread caps, grouping on `metricId` alone, tenant-scoping the re-read and `FINAL` don't reduce memory. External aggregation (`max_bytes_before_external_group_by`) does (×0.65), but it's 3.8× slower, so use it only as a safety net under the memory limit.
 
 <!-- report:start -->
 
@@ -39,14 +51,14 @@ _Generated by `run.ts report` from `results/runs.jsonl`. Do not edit by hand._
 
 ### Replica
 
-ClickHouse 26.4.1.2359; metrics from X-ClickHouse-Summary.
+ClickHouse 26.4.1.2596; metrics from X-ClickHouse-Summary.
 
 | table                  | sorting key                                                      | partition key       | rows   |
 | ---------------------- | ---------------------------------------------------------------- | ------------------- | ------ |
-| mastra_feedback_events | `organizationId, projectId, traceId, timestamp, feedbackId`      | `toDate(timestamp)` | 831    |
-| mastra_metric_events   | `organizationId, projectId, name, timestamp, metricId`           | `toDate(timestamp)` | 26.2 M |
-| mastra_span_events     | `organizationId, projectId, traceId, endedAt, spanId, dedupeKey` | `toDate(endedAt)`   | 26.2 M |
-| mastra_trace_roots     | `organizationId, projectId, startedAt, traceId, dedupeKey`       | `toDate(endedAt)`   | 2.5 M  |
+| mastra_feedback_events | `organizationId, projectId, traceId, timestamp, feedbackId`      | `toDate(timestamp)` | 833    |
+| mastra_metric_events   | `organizationId, projectId, name, timestamp, metricId`           | `toDate(timestamp)` | 27.5 M |
+| mastra_span_events     | `organizationId, projectId, traceId, endedAt, spanId, dedupeKey` | `toDate(endedAt)`   | 27.4 M |
+| mastra_trace_roots     | `organizationId, projectId, startedAt, traceId, dedupeKey`       | `toDate(endedAt)`   | 2.6 M  |
 
 Skip indexes: none.
 
@@ -91,6 +103,40 @@ Cells: warm median / warm max (cold) latency, then median read rows · read byte
 | E3     | 30d    | 507 ms / 732 ms (cold 29.4 s)<br>5.2 M rows · 189 MB · 178 MiB ✗timeout | 512 ms / 11.0 s (cold 28.7 s)<br>5.3 M rows · 200 MB · 185 MiB ✗timeout | 568 ms / 976 ms<br>5.3 M rows · 206 MB · 184 MiB ✗timeout             | 652 ms / 800 ms<br>6.2 M rows · 372 MB · 273 MiB ✗timeout               | 2.50 s / 5.54 s<br>7.3 M rows · 631 MB · 577 MiB ✗timeout               |
 | E1-doc | 7d     | 83 ms / 102 ms (cold 5.07 s)<br>88 k rows · 2 MB · 176 MiB              | 146 ms / 152 ms (cold 13.5 s)<br>2.6 M rows · 92 MB · 185 MiB           | 156 ms / 198 ms (cold 14.4 s)<br>2.6 M rows · 93 MB · 186 MiB         | 190 ms / 209 ms (cold 15.0 s)<br>2.6 M rows · 100 MB · 190 MiB          | 416 ms / 427 ms (cold 23.8 s)<br>2.9 M rows · 169 MB · 203 MiB          |
 | E3-doc | 7d     | 547 ms / 673 ms (cold 28.0 s)<br>5.2 M rows · 185 MB · 179 MiB          | 348 ms / 404 ms (cold 28.3 s)<br>5.3 M rows · 185 MB · 183 MiB          | 510 ms / 683 ms (cold 28.1 s)<br>5.3 M rows · 189 MB · 191 MiB        | 457 ms / 600 ms<br>6.1 M rows · 262 MB · 185 MiB ✗timeout               | 1.78 s / 2.19 s<br>8.5 M rows · 674 MB · 369 MiB ✗timeout               |
+
+### Token and cost measures
+
+| case     | window | small                                                            | mid                                                              | p90                                                              | p99                                                              | largest                                                          |
+| -------- | ------ | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| E4       | 1d     | 186 ms / 441 ms (first 163 ms)<br>249 k rows · 5 MB · 176 MiB    | 107 ms / 134 ms (first 202 ms)<br>258 k rows · 5 MB · 189 MiB    | 156 ms / 381 ms (first 312 ms)<br>289 k rows · 5 MB · 181 MiB    | 387 ms / 493 ms (first 419 ms)<br>5.5 M rows · 209 MB · 184 MiB  | 505 ms / 760 ms (first 568 ms)<br>5.5 M rows · 207 MB · 197 MiB  |
+| E4       | 7d     | 348 ms / 533 ms (first 306 ms)<br>5.6 M rows · 201 MB · 178 MiB  | 314 ms / 369 ms (first 453 ms)<br>5.5 M rows · 202 MB · 200 MiB  | 196 ms / 745 ms (first 138 ms)<br>467 k rows · 14 MB · 182 MiB   | 671 ms / 1.81 s (first 748 ms)<br>5.8 M rows · 267 MB · 241 MiB  | 1.37 s / 3.62 s (first 1.42 s)<br>5.8 M rows · 289 MB · 536 MiB  |
+| E4       | 30d    | 386 ms / 694 ms (first 372 ms)<br>5.9 M rows · 220 MB · 226 MiB  | 486 ms / 882 ms (first 515 ms)<br>6.0 M rows · 234 MB · 226 MiB  | 376 ms / 434 ms (first 410 ms)<br>6.0 M rows · 232 MB · 225 MiB  | 989 ms / 1.16 s (first 1.10 s)<br>6.5 M rows · 433 MB · 333 MiB  | 1.46 s / 3.41 s (first 1.57 s)<br>6.8 M rows · 544 MB · 967 MiB  |
+| E4-mkey  | 1d     | 102 ms / 143 ms (first 102 ms)<br>241 k rows · 4 MB · 174 MiB    | 126 ms / 291 ms (first 130 ms)<br>278 k rows · 5 MB · 178 MiB    | 313 ms / 333 ms (first 360 ms)<br>5.5 M rows · 192 MB · 182 MiB  | 627 ms / 661 ms (first 341 ms)<br>5.4 M rows · 197 MB · 181 MiB  | 642 ms / 840 ms (first 666 ms)<br>5.7 M rows · 247 MB · 193 MiB  |
+| E4-mkey  | 7d     | 346 ms / 493 ms (first 389 ms)<br>5.6 M rows · 201 MB · 179 MiB  | 307 ms / 381 ms (first 340 ms)<br>5.7 M rows · 202 MB · 181 MiB  | 347 ms / 472 ms (first 358 ms)<br>5.6 M rows · 203 MB · 185 MiB  | 767 ms / 778 ms (first 638 ms)<br>5.7 M rows · 263 MB · 226 MiB  | 1.75 s / 1.84 s (first 1.93 s)<br>7.0 M rows · 589 MB · 538 MiB  |
+| E4-mkey  | 30d    | 376 ms / 450 ms (first 362 ms)<br>6.0 M rows · 220 MB · 225 MiB  | 476 ms / 551 ms (first 681 ms)<br>6.0 M rows · 239 MB · 226 MiB  | 383 ms / 486 ms (first 374 ms)<br>6.0 M rows · 232 MB · 225 MiB  | 1.15 s / 1.30 s (first 1.15 s)<br>6.5 M rows · 433 MB · 339 MiB  | 3.35 s / 3.78 s (first 4.28 s)<br>8.8 M rows · 1.0 GB · 991 MiB  |
+| E4-spill | 1d     | 105 ms / 148 ms (first 833 ms)<br>242 k rows · 4 MB · 174 MiB    | 104 ms / 146 ms (first 132 ms)<br>279 k rows · 5 MB · 178 MiB    | 347 ms / 377 ms (first 303 ms)<br>5.5 M rows · 192 MB · 184 MiB  | 523 ms / 527 ms (first 630 ms)<br>5.4 M rows · 197 MB · 182 MiB  | 543 ms / 883 ms (first 614 ms)<br>5.7 M rows · 247 MB · 193 MiB  |
+| E4-spill | 7d     | 355 ms / 372 ms (first 339 ms)<br>5.6 M rows · 202 MB · 179 MiB  | 318 ms / 332 ms (first 520 ms)<br>5.7 M rows · 202 MB · 178 MiB  | 429 ms / 688 ms (first 333 ms)<br>5.6 M rows · 203 MB · 182 MiB  | 691 ms / 855 ms (first 667 ms)<br>5.7 M rows · 263 MB · 211 MiB  | 10.9 s / 11.7 s (first 10.2 s)<br>7.0 M rows · 589 MB · 471 MiB  |
+| E4-spill | 30d    | 370 ms / 470 ms (first 330 ms)<br>6.0 M rows · 220 MB · 226 MiB  | 559 ms / 746 ms (first 517 ms)<br>6.0 M rows · 239 MB · 225 MiB  | 379 ms / 609 ms (first 667 ms)<br>6.0 M rows · 232 MB · 225 MiB  | 2.08 s / 2.14 s (first 1.57 s)<br>6.5 M rows · 433 MB · 353 MiB  | 9.20 s / 9.84 s (first 9.50 s)<br>8.8 M rows · 1.0 GB · 633 MiB  |
+| E4-t2    | 1d     | 169 ms / 826 ms (first 147 ms)<br>242 k rows · 4 MB · 174 MiB    | 142 ms / 145 ms (first 141 ms)<br>278 k rows · 5 MB · 178 MiB    | 407 ms / 436 ms (first 398 ms)<br>5.5 M rows · 192 MB · 181 MiB  | 399 ms / 661 ms (first 545 ms)<br>5.4 M rows · 197 MB · 181 MiB  | 929 ms / 945 ms (first 675 ms)<br>5.7 M rows · 247 MB · 192 MiB  |
+| E4-t2    | 7d     | 403 ms / 557 ms (first 393 ms)<br>5.6 M rows · 202 MB · 178 MiB  | 390 ms / 396 ms (first 387 ms)<br>5.7 M rows · 202 MB · 178 MiB  | 447 ms / 473 ms (first 431 ms)<br>5.6 M rows · 203 MB · 184 MiB  | 791 ms / 809 ms (first 749 ms)<br>5.7 M rows · 263 MB · 208 MiB  | 1.64 s / 2.44 s (first 1.73 s)<br>7.0 M rows · 589 MB · 506 MiB  |
+| E4-t2    | 30d    | 501 ms / 591 ms (first 504 ms)<br>6.0 M rows · 220 MB · 224 MiB  | 656 ms / 2.79 s (first 763 ms)<br>6.0 M rows · 239 MB · 227 MiB  | 471 ms / 478 ms (first 479 ms)<br>6.0 M rows · 232 MB · 225 MiB  | 1.34 s / 1.36 s (first 1.35 s)<br>6.5 M rows · 433 MB · 284 MiB  | 3.24 s / 3.38 s (first 3.51 s)<br>8.8 M rows · 1.0 GB · 936 MiB  |
+| E4-w1    | 1d     | 106 ms / 148 ms (first 147 ms)<br>242 k rows · 4 MB · 174 MiB    | 110 ms / 150 ms (first 161 ms)<br>279 k rows · 5 MB · 178 MiB    | 183 ms / 247 ms (first 179 ms)<br>442 k rows · 12 MB · 207 MiB   | 261 ms / 364 ms (first 415 ms)<br>502 k rows · 20 MB · 211 MiB   | 303 ms / 348 ms (first 548 ms)<br>1.6 M rows · 99 MB · 227 MiB   |
+| E4-w1    | 7d     | 186 ms / 191 ms (first 308 ms)<br>609 k rows · 22 MB · 201 MiB   | 261 ms / 351 ms (first 198 ms)<br>676 k rows · 23 MB · 203 MiB   | 190 ms / 304 ms (first 194 ms)<br>626 k rows · 24 MB · 208 MiB   | 462 ms / 589 ms (first 455 ms)<br>794 k rows · 85 MB · 219 MiB   | 2.27 s / 2.62 s (first 1.59 s)<br>2.9 M rows · 433 MB · 535 MiB  |
+| E4-w1    | 30d    | 202 ms / 218 ms (first 200 ms)<br>948 k rows · 40 MB · 222 MiB   | 338 ms / 433 ms (first 805 ms)<br>1.0 M rows · 59 MB · 222 MiB   | 250 ms / 377 ms (first 218 ms)<br>996 k rows · 53 MB · 222 MiB   | 987 ms / 1.05 s (first 2.27 s)<br>1.6 M rows · 252 MB · 320 MiB  | 2.11 s / 2.12 s (first 2.24 s)<br>4.7 M rows · 852 MB · 971 MiB  |
+| T1       | 1d     | 186 ms / 838 ms (first 506 ms)<br>248 k rows · 5 MB · 174 MiB    | 104 ms / 131 ms (first 170 ms)<br>275 k rows · 5 MB · 177 MiB    | 378 ms / 445 ms (first 532 ms)<br>5.5 M rows · 192 MB · 181 MiB  | 317 ms / 387 ms (first 286 ms)<br>5.4 M rows · 197 MB · 180 MiB  | 579 ms / 787 ms (first 858 ms)<br>5.7 M rows · 247 MB · 190 MiB  |
+| T1       | 7d     | 303 ms / 352 ms (first 633 ms)<br>5.6 M rows · 201 MB · 176 MiB  | 331 ms / 368 ms (first 376 ms)<br>5.7 M rows · 202 MB · 177 MiB  | 335 ms / 375 ms (first 365 ms)<br>5.6 M rows · 203 MB · 182 MiB  | 775 ms / 790 ms (first 834 ms)<br>5.7 M rows · 262 MB · 207 MiB  | 1.21 s / 3.37 s (first 1.50 s)<br>7.0 M rows · 582 MB · 520 MiB  |
+| T1       | 30d    | 340 ms / 565 ms (first 676 ms)<br>6.0 M rows · 220 MB · 220 MiB  | 373 ms / 578 ms (first 586 ms)<br>6.0 M rows · 238 MB · 220 MiB  | 358 ms / 509 ms (first 672 ms)<br>6.0 M rows · 231 MB · 221 MiB  | 1.15 s / 2.87 s (first 1.31 s)<br>6.5 M rows · 430 MB · 317 MiB  | 2.74 s / 7.60 s (first 3.40 s)<br>8.8 M rows · 1.0 GB · 969 MiB  |
+| T1-mkey  | 1d     | 92 ms / 314 ms (first 122 ms)<br>248 k rows · 5 MB · 172 MiB     | 89 ms / 123 ms (first 89 ms)<br>275 k rows · 5 MB · 177 MiB      | 396 ms / 441 ms (first 448 ms)<br>5.5 M rows · 192 MB · 181 MiB  | 319 ms / 352 ms (first 281 ms)<br>5.4 M rows · 197 MB · 180 MiB  | 782 ms / 1.53 s (first 551 ms)<br>5.7 M rows · 247 MB · 191 MiB  |
+| T1-mkey  | 7d     | 381 ms / 452 ms (first 632 ms)<br>5.6 M rows · 201 MB · 176 MiB  | 312 ms / 336 ms (first 317 ms)<br>5.7 M rows · 202 MB · 177 MiB  | 336 ms / 545 ms (first 341 ms)<br>5.6 M rows · 203 MB · 180 MiB  | 585 ms / 633 ms (first 641 ms)<br>5.7 M rows · 262 MB · 223 MiB  | 1.27 s / 1.46 s (first 1.32 s)<br>7.0 M rows · 582 MB · 519 MiB  |
+| T1-mkey  | 30d    | 635 ms / 645 ms (first 363 ms)<br>6.0 M rows · 220 MB · 220 MiB  | 667 ms / 693 ms (first 706 ms)<br>6.0 M rows · 238 MB · 220 MiB  | 378 ms / 467 ms (first 414 ms)<br>6.0 M rows · 231 MB · 221 MiB  | 1.24 s / 1.37 s (first 1.23 s)<br>6.5 M rows · 430 MB · 317 MiB  | 3.25 s / 4.12 s (first 3.30 s)<br>8.8 M rows · 1.0 GB · 977 MiB  |
+| T2       | 7d     | 419 ms / 573 ms (first 532 ms)<br>5.6 M rows · 202 MB · 176 MiB  | 292 ms / 329 ms (first 289 ms)<br>5.7 M rows · 202 MB · 177 MiB  | 371 ms / 422 ms (first 340 ms)<br>5.6 M rows · 203 MB · 180 MiB  | 674 ms / 943 ms (first 646 ms)<br>5.7 M rows · 263 MB · 210 MiB  | 1.98 s / 2.71 s (first 1.94 s)<br>7.0 M rows · 589 MB · 534 MiB  |
+| T2       | 30d    | 477 ms / 789 ms (first 650 ms)<br>6.0 M rows · 220 MB · 222 MiB  | 707 ms / 793 ms (first 394 ms)<br>6.0 M rows · 239 MB · 222 MiB  | 367 ms / 436 ms (first 368 ms)<br>6.0 M rows · 232 MB · 221 MiB  | 1.12 s / 1.18 s (first 1.03 s)<br>6.5 M rows · 432 MB · 323 MiB  | 3.51 s / 3.51 s (first 4.34 s)<br>8.8 M rows · 1.0 GB · 962 MiB  |
+| T3       | 7d     | 321 ms / 328 ms (first 263 ms)<br>5.6 M rows · 202 MB · 172 MiB  | 363 ms / 592 ms (first 589 ms)<br>5.7 M rows · 202 MB · 175 MiB  | 367 ms / 389 ms (first 359 ms)<br>5.6 M rows · 203 MB · 180 MiB  | 560 ms / 570 ms (first 637 ms)<br>5.7 M rows · 262 MB · 200 MiB  | 1.63 s / 2.04 s (first 2.06 s)<br>7.0 M rows · 585 MB · 539 MiB  |
+| T3       | 30d    | 309 ms / 335 ms (first 300 ms)<br>6.0 M rows · 220 MB · 217 MiB  | 597 ms / 1.45 s (first 561 ms)<br>6.0 M rows · 239 MB · 221 MiB  | 366 ms / 381 ms (first 560 ms)<br>6.0 M rows · 232 MB · 218 MiB  | 994 ms / 1.08 s (first 1.09 s)<br>6.5 M rows · 431 MB · 317 MiB  | 1.99 s / 2.13 s (first 2.20 s)<br>8.8 M rows · 1.0 GB · 973 MiB  |
+| T3-mkey  | 7d     | 295 ms / 355 ms (first 345 ms)<br>5.6 M rows · 202 MB · 172 MiB  | 617 ms / 632 ms (first 582 ms)<br>5.7 M rows · 202 MB · 175 MiB  | 372 ms / 411 ms (first 358 ms)<br>5.6 M rows · 203 MB · 179 MiB  | 687 ms / 743 ms (first 835 ms)<br>5.7 M rows · 263 MB · 212 MiB  | 1.57 s / 2.64 s (first 1.89 s)<br>7.0 M rows · 585 MB · 522 MiB  |
+| T3-mkey  | 30d    | 368 ms / 473 ms (first 361 ms)<br>6.0 M rows · 220 MB · 217 MiB  | 456 ms / 674 ms (first 551 ms)<br>6.0 M rows · 239 MB · 218 MiB  | 358 ms / 459 ms (first 377 ms)<br>6.0 M rows · 232 MB · 218 MiB  | 816 ms / 885 ms (first 1.08 s)<br>6.5 M rows · 431 MB · 311 MiB  | 2.27 s / 2.39 s (first 2.05 s)<br>8.8 M rows · 1.0 GB · 985 MiB  |
+| T4       | 7d     | 743 ms / 1.06 s (first 691 ms)<br>11.1 M rows · 394 MB · 205 MiB | 773 ms / 1.06 s (first 775 ms)<br>11.2 M rows · 395 MB · 205 MiB | 785 ms / 819 ms (first 1.12 s)<br>11.1 M rows · 400 MB · 205 MiB | 1.37 s / 1.46 s (first 2.75 s)<br>13.0 M rows · 567 MB · 229 MiB | 4.65 s / 5.12 s (first 5.49 s)<br>18.5 M rows · 1.5 GB · 439 MiB |
+| T4       | 30d    | 870 ms / 907 ms (first 733 ms)<br>11.5 M rows · 417 MB · 253 MiB | 1.09 s / 1.19 s (first 1.82 s)<br>11.6 M rows · 437 MB · 258 MiB | 826 ms / 973 ms (first 1.86 s)<br>11.5 M rows · 440 MB · 256 MiB | 1.49 s / 2.07 s (first 3.64 s)<br>13.9 M rows · 871 MB · 322 MiB | 3.44 s / 3.55 s (first 5.13 s)<br>20.7 M rows · 2.5 GB · 667 MiB |
 
 ### High-cardinality groupBy
 
@@ -515,54 +561,160 @@ Cells: warm median / warm max (cold) latency, then median read rows · read byte
 | Q3 payload-scoped | 7d       | 0.06          | 0.09             | 3        |
 | Q3 payload        | 30d      | 0.05          | 0.08             | 3        |
 | Q3 payload-scoped | 30d      | 0.06          | 0.09             | 3        |
+| T1                | 1d       | 0.13          | 0.45             | 5        |
+| T1-mkey           | 1d       | 0.22          | 0.45             | 5        |
+| E4                | 1d       | 0.14          | 0.40             | 15       |
+| E4-mkey           | 1d       | 0.21          | 0.45             | 5        |
+| E4-t2             | 1d       | 0.18          | 0.45             | 5        |
+| E4-spill          | 1d       | 0.19          | 0.45             | 5        |
+| E4-w1             | 1d       | 0.12          | 0.30             | 5        |
+| T1                | 7d       | 0.15          | 0.10             | 5        |
+| T1-mkey           | 7d       | 0.13          | 0.10             | 5        |
+| T2                | 7d       | 0.16          | 0.10             | 5        |
+| E4                | 7d       | 0.18          | 0.12             | 15       |
+| E4-mkey           | 7d       | 0.17          | 0.10             | 5        |
+| E4-t2             | 7d       | 0.14          | 0.10             | 5        |
+| E4-spill          | 7d       | 0.31          | 0.10             | 5        |
+| E4-w1             | 7d       | 0.23          | 0.30             | 5        |
+| T3                | 7d       | 0.15          | 0.10             | 5        |
+| T3-mkey           | 7d       | 0.14          | 0.10             | 5        |
+| T4                | 7d       | 0.17          | 0.13             | 5        |
+| T1                | 30d      | 0.22          | 0.15             | 5        |
+| T1-mkey           | 30d      | 0.17          | 0.15             | 5        |
+| T2                | 30d      | 0.19          | 0.15             | 5        |
+| E4                | 30d      | 0.15          | 0.12             | 15       |
+| E4-mkey           | 30d      | 0.22          | 0.15             | 5        |
+| E4-t2             | 30d      | 0.18          | 0.15             | 5        |
+| E4-spill          | 30d      | 0.32          | 0.15             | 5        |
+| E4-w1             | 30d      | 0.24          | 0.31             | 5        |
+| T3                | 30d      | 0.17          | 0.15             | 5        |
+| T3-mkey           | 30d      | 0.17          | 0.15             | 5        |
+| T4                | 30d      | 0.13          | 0.18             | 5        |
 
 ### Variant comparisons (variant ÷ as-compiled, warm medians)
 
 #### `quantileExact` vs `quantileDeterministic`
 
-| case | window | small                    | mid                      | p90                      | p99                      | largest                  |
-| ---- | ------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ |
-| P1   | 7d     | ×1.00 time · ×1.00 bytes | ×0.97 time · ×1.00 bytes | ×0.69 time · ×1.00 bytes | ×1.77 time · ×1.00 bytes | ×0.95 time · ×1.00 bytes |
-| P2   | 7d     | ×1.00 time · ×1.00 bytes | ×1.29 time · ×1.00 bytes | ×1.07 time · ×1.00 bytes | ×1.12 time · ×1.00 bytes | ×0.88 time · ×1.00 bytes |
-| P3   | 7d     | ×0.89 time · ×1.00 bytes | ×0.96 time · ×1.00 bytes | ×1.03 time · ×1.00 bytes | ×1.05 time · ×1.00 bytes | ×0.85 time · ×1.00 bytes |
-| P1   | 30d    | ×0.99 time · ×1.00 bytes | ×0.72 time · ×1.00 bytes | ×1.52 time · ×1.00 bytes | ×1.03 time · ×1.00 bytes | ×0.98 time · ×1.00 bytes |
-| P2   | 30d    | ×0.70 time · ×1.00 bytes | ×1.00 time · ×1.00 bytes | ×1.11 time · ×1.00 bytes | ×0.65 time · ×1.00 bytes | ×1.05 time · ×1.00 bytes |
-| P3   | 30d    | ×1.04 time · ×1.00 bytes | ×1.12 time · ×1.00 bytes | ×1.12 time · ×1.00 bytes | ×1.37 time · ×1.00 bytes | ×1.48 time · ×1.00 bytes |
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| P1   | 7d     | ×1.00 memory · ×1.00 time · ×1.00 bytes | ×1.00 memory · ×0.97 time · ×1.00 bytes | ×1.00 memory · ×0.69 time · ×1.00 bytes | ×1.00 memory · ×1.77 time · ×1.00 bytes | ×1.00 memory · ×0.95 time · ×1.00 bytes |
+| P2   | 7d     | ×1.00 memory · ×1.00 time · ×1.00 bytes | ×1.00 memory · ×1.29 time · ×1.00 bytes | ×1.00 memory · ×1.07 time · ×1.00 bytes | ×1.00 memory · ×1.12 time · ×1.00 bytes | ×1.04 memory · ×0.88 time · ×1.00 bytes |
+| P3   | 7d     | ×1.00 memory · ×0.89 time · ×1.00 bytes | ×0.99 memory · ×0.96 time · ×1.00 bytes | ×1.00 memory · ×1.03 time · ×1.00 bytes | ×1.01 memory · ×1.05 time · ×1.00 bytes | ×0.99 memory · ×0.85 time · ×1.00 bytes |
+| P1   | 30d    | ×1.00 memory · ×0.99 time · ×1.00 bytes | ×0.99 memory · ×0.72 time · ×1.00 bytes | ×0.99 memory · ×1.52 time · ×1.00 bytes | ×1.00 memory · ×1.03 time · ×1.00 bytes | ×0.93 memory · ×0.98 time · ×1.00 bytes |
+| P2   | 30d    | ×1.00 memory · ×0.70 time · ×1.00 bytes | ×1.01 memory · ×1.00 time · ×1.00 bytes | ×1.01 memory · ×1.11 time · ×1.00 bytes | ×1.00 memory · ×0.65 time · ×1.00 bytes | ×0.93 memory · ×1.05 time · ×1.00 bytes |
+| P3   | 30d    | ×1.00 memory · ×1.04 time · ×1.00 bytes | ×1.00 memory · ×1.12 time · ×1.00 bytes | ×1.00 memory · ×1.12 time · ×1.00 bytes | ×1.00 memory · ×1.37 time · ×1.00 bytes | ×1.00 memory · ×1.48 time · ×1.00 bytes |
 
 #### `uniq` vs `uniqExact`
 
-| case | window | small                    | mid                      | p90                      | p99                      | largest                  |
-| ---- | ------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ |
-| C1   | 7d     | ×1.00 time · ×1.00 bytes | ×0.95 time · ×1.00 bytes | ×0.97 time · ×1.00 bytes | ×0.97 time · ×1.00 bytes | ×0.94 time · ×1.00 bytes |
-| C2   | 7d     | ×0.94 time · ×1.00 bytes | ×1.16 time · ×1.00 bytes | ×0.86 time · ×1.00 bytes | ×0.91 time · ×1.00 bytes | ×1.02 time · ×1.00 bytes |
-| C3   | 7d     | ×0.93 time · ×1.00 bytes | ×0.85 time · ×1.00 bytes | ×1.05 time · ×1.00 bytes | ×1.09 time · ×1.00 bytes | ×0.84 time · ×1.00 bytes |
-| C1   | 30d    | ×0.74 time · ×1.00 bytes | ×0.76 time · ×1.00 bytes | ×0.98 time · ×1.00 bytes | ×0.88 time · ×1.00 bytes | ×0.88 time · ×1.00 bytes |
-| C2   | 30d    | ×0.70 time · ×1.00 bytes | ×1.45 time · ×1.00 bytes | ×1.01 time · ×1.00 bytes | ×1.01 time · ×1.00 bytes | ×0.94 time · ×1.00 bytes |
-| C3   | 30d    | ×0.73 time · ×1.00 bytes | ×1.18 time · ×1.00 bytes | ×1.03 time · ×1.00 bytes | ×1.09 time · ×1.00 bytes | ×0.96 time · ×1.00 bytes |
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| C1   | 7d     | ×1.00 memory · ×1.00 time · ×1.00 bytes | ×1.02 memory · ×0.95 time · ×1.00 bytes | ×1.00 memory · ×0.97 time · ×1.00 bytes | ×1.01 memory · ×0.97 time · ×1.00 bytes | ×1.00 memory · ×0.94 time · ×1.00 bytes |
+| C2   | 7d     | ×0.99 memory · ×0.94 time · ×1.00 bytes | ×1.00 memory · ×1.16 time · ×1.00 bytes | ×0.99 memory · ×0.86 time · ×1.00 bytes | ×1.01 memory · ×0.91 time · ×1.00 bytes | ×0.99 memory · ×1.02 time · ×1.00 bytes |
+| C3   | 7d     | ×1.00 memory · ×0.93 time · ×1.00 bytes | ×1.00 memory · ×0.85 time · ×1.00 bytes | ×0.99 memory · ×1.05 time · ×1.00 bytes | ×1.01 memory · ×1.09 time · ×1.00 bytes | ×1.03 memory · ×0.84 time · ×1.00 bytes |
+| C1   | 30d    | ×1.00 memory · ×0.74 time · ×1.00 bytes | ×1.00 memory · ×0.76 time · ×1.00 bytes | ×1.00 memory · ×0.98 time · ×1.00 bytes | ×1.00 memory · ×0.88 time · ×1.00 bytes | ×1.07 memory · ×0.88 time · ×1.00 bytes |
+| C2   | 30d    | ×0.99 memory · ×0.70 time · ×1.00 bytes | ×1.00 memory · ×1.45 time · ×1.00 bytes | ×1.00 memory · ×1.01 time · ×1.00 bytes | ×1.00 memory · ×1.01 time · ×1.00 bytes | ×0.93 memory · ×0.94 time · ×1.00 bytes |
+| C3   | 30d    | ×1.00 memory · ×0.73 time · ×1.00 bytes | ×1.00 memory · ×1.18 time · ×1.00 bytes | ×1.00 memory · ×1.03 time · ×1.00 bytes | ×0.99 memory · ×1.09 time · ×1.00 bytes | ×1.01 memory · ×0.96 time · ×1.00 bytes |
 
 #### W1: tenant-scoped `current_roots` re-read vs as compiled
 
-| case | window | small                    | mid                      | p90                      | p99                      | largest                  |
-| ---- | ------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ |
-| F0   | 1d     | ×1.58 time · ×1.00 bytes | ×1.05 time · ×1.00 bytes | ×1.16 time · ×1.00 bytes | ×0.47 time · ×0.08 bytes | ×0.54 time · ×0.24 bytes |
-| F1   | 1d     | ×0.88 time · ×1.00 bytes | ×1.12 time · ×1.00 bytes | ×0.70 time · ×1.00 bytes | ×0.49 time · ×0.08 bytes | ×0.59 time · ×0.24 bytes |
-| F0   | 7d     | ×0.59 time · ×0.05 bytes | ×0.44 time · ×0.04 bytes | ×1.05 time · ×1.00 bytes | ×0.50 time · ×0.16 bytes | ×0.55 time · ×0.38 bytes |
-| F1   | 7d     | ×0.72 time · ×0.04 bytes | ×0.49 time · ×0.04 bytes | ×0.67 time · ×1.00 bytes | ×0.55 time · ×0.15 bytes | ×0.69 time · ×0.37 bytes |
-| F0   | 30d    | ×0.41 time · ×0.07 bytes | ×0.46 time · ×0.08 bytes | ×0.40 time · ×0.12 bytes | ×0.52 time · ×0.27 bytes | ×0.67 time · ×0.58 bytes |
-| F1   | 30d    | ×0.42 time · ×0.04 bytes | ×0.49 time · ×0.08 bytes | ×0.50 time · ×0.13 bytes | ×0.67 time · ×0.24 bytes | ×0.72 time · ×0.43 bytes |
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| F0   | 1d     | ×1.07 memory · ×1.58 time · ×1.00 bytes | ×1.01 memory · ×1.05 time · ×1.00 bytes | ×1.08 memory · ×1.16 time · ×1.00 bytes | ×1.09 memory · ×0.47 time · ×0.08 bytes | ×1.16 memory · ×0.54 time · ×0.24 bytes |
+| F1   | 1d     | ×1.06 memory · ×0.88 time · ×1.00 bytes | ×1.02 memory · ×1.12 time · ×1.00 bytes | ×1.09 memory · ×0.70 time · ×1.00 bytes | ×1.07 memory · ×0.49 time · ×0.08 bytes | ×1.09 memory · ×0.59 time · ×0.24 bytes |
+| F0   | 7d     | ×1.11 memory · ×0.59 time · ×0.05 bytes | ×1.05 memory · ×0.44 time · ×0.04 bytes | ×1.09 memory · ×1.05 time · ×1.00 bytes | ×1.10 memory · ×0.50 time · ×0.16 bytes | ×1.24 memory · ×0.55 time · ×0.38 bytes |
+| F1   | 7d     | ×1.08 memory · ×0.72 time · ×0.04 bytes | ×1.01 memory · ×0.49 time · ×0.04 bytes | ×1.11 memory · ×0.67 time · ×1.00 bytes | ×1.08 memory · ×0.55 time · ×0.15 bytes | ×1.26 memory · ×0.69 time · ×0.37 bytes |
+| F0   | 30d    | ×1.12 memory · ×0.41 time · ×0.07 bytes | ×1.13 memory · ×0.46 time · ×0.08 bytes | ×1.08 memory · ×0.40 time · ×0.12 bytes | ×1.16 memory · ×0.52 time · ×0.27 bytes | ×0.89 memory · ×0.67 time · ×0.58 bytes |
+| F1   | 30d    | ×1.04 memory · ×0.42 time · ×0.04 bytes | ×1.05 memory · ×0.49 time · ×0.08 bytes | ×1.06 memory · ×0.50 time · ×0.13 bytes | ×1.19 memory · ×0.67 time · ×0.24 bytes | ×0.94 memory · ×0.72 time · ×0.43 bytes |
+| E4   | 1d     | ×1.00 memory · ×0.65 time · ×0.94 bytes | ×1.00 memory · ×1.03 time · ×1.01 bytes | ×1.14 memory · ×0.55 time · ×0.06 bytes | ×1.16 memory · ×0.79 time · ×0.10 bytes | ×1.15 memory · ×0.46 time · ×0.40 bytes |
+| E4   | 7d     | ×1.13 memory · ×0.53 time · ×0.11 bytes | ×1.13 memory · ×0.78 time · ×0.11 bytes | ×1.15 memory · ×0.46 time · ×0.12 bytes | ×1.06 memory · ×0.78 time · ×0.32 bytes | ×1.00 memory · ×1.14 time · ×0.74 bytes |
+| E4   | 30d    | ×0.99 memory · ×0.31 time · ×0.18 bytes | ×0.99 memory · ×0.59 time · ×0.25 bytes | ×0.99 memory · ×0.66 time · ×0.23 bytes | ×0.96 memory · ×1.00 time · ×0.58 bytes | ×1.00 memory · ×0.81 time · ×0.84 bytes |
+
+#### mkey: dedupe token metrics on `metricId` alone vs `(traceId, metricId)`
+
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| T1   | 1d     | ×0.99 memory · ×0.49 time · ×1.01 bytes | ×1.00 memory · ×0.86 time · ×1.01 bytes | ×1.00 memory · ×1.05 time · ×1.00 bytes | ×1.00 memory · ×1.01 time · ×1.00 bytes | ×1.00 memory · ×1.35 time · ×1.00 bytes |
+| E4   | 1d     | ×1.00 memory · ×0.63 time · ×0.94 bytes | ×1.00 memory · ×1.18 time · ×1.00 bytes | ×1.01 memory · ×0.94 time · ×1.00 bytes | ×1.00 memory · ×1.89 time · ×1.00 bytes | ×0.98 memory · ×0.98 time · ×1.00 bytes |
+| T1   | 7d     | ×1.00 memory · ×1.26 time · ×1.00 bytes | ×1.00 memory · ×0.94 time · ×1.00 bytes | ×0.99 memory · ×1.00 time · ×1.00 bytes | ×1.08 memory · ×0.75 time · ×1.00 bytes | ×1.00 memory · ×1.06 time · ×1.00 bytes |
+| E4   | 7d     | ×1.01 memory · ×0.98 time · ×1.00 bytes | ×1.01 memory · ×0.91 time · ×1.00 bytes | ×1.02 memory · ×0.85 time · ×1.00 bytes | ×1.08 memory · ×1.30 time · ×1.00 bytes | ×0.98 memory · ×0.88 time · ×1.00 bytes |
+| T3   | 7d     | ×1.00 memory · ×0.92 time · ×1.00 bytes | ×1.00 memory · ×1.70 time · ×1.00 bytes | ×1.00 memory · ×1.01 time · ×1.00 bytes | ×1.05 memory · ×1.23 time · ×1.00 bytes | ×1.01 memory · ×0.97 time · ×1.00 bytes |
+| T1   | 30d    | ×1.00 memory · ×1.87 time · ×1.00 bytes | ×1.00 memory · ×1.79 time · ×1.00 bytes | ×1.00 memory · ×1.06 time · ×1.00 bytes | ×0.99 memory · ×1.08 time · ×1.00 bytes | ×1.01 memory · ×1.19 time · ×1.00 bytes |
+| E4   | 30d    | ×1.01 memory · ×0.57 time · ×1.00 bytes | ×1.00 memory · ×0.84 time · ×1.00 bytes | ×1.00 memory · ×1.01 time · ×1.00 bytes | ×0.98 memory · ×1.16 time · ×1.00 bytes | ×1.03 memory · ×1.29 time · ×1.00 bytes |
+| T3   | 30d    | ×1.00 memory · ×1.19 time · ×1.00 bytes | ×0.99 memory · ×0.76 time · ×1.00 bytes | ×1.00 memory · ×0.98 time · ×1.00 bytes | ×0.98 memory · ×0.82 time · ×1.00 bytes | ×1.03 memory · ×1.14 time · ×1.00 bytes |
+
+#### t2: `max_threads = 2` vs 4
+
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| E4   | 1d     | ×1.00 memory · ×1.04 time · ×0.94 bytes | ×1.00 memory · ×1.33 time · ×1.01 bytes | ×1.00 memory · ×1.22 time · ×1.00 bytes | ×1.00 memory · ×1.20 time · ×1.00 bytes | ×0.97 memory · ×1.42 time · ×1.00 bytes |
+| E4   | 7d     | ×1.00 memory · ×1.14 time · ×1.00 bytes | ×1.00 memory · ×1.16 time · ×1.00 bytes | ×1.01 memory · ×1.09 time · ×1.00 bytes | ×0.98 memory · ×1.34 time · ×1.00 bytes | ×0.94 memory · ×0.82 time · ×1.00 bytes |
+| E4   | 30d    | ×1.00 memory · ×0.76 time · ×1.00 bytes | ×1.01 memory · ×1.15 time · ×1.00 bytes | ×1.00 memory · ×1.25 time · ×1.00 bytes | ×0.85 memory · ×1.35 time · ×1.00 bytes | ×0.97 memory · ×1.25 time · ×1.00 bytes |
+
+#### spill: external GROUP BY / sort above 256 MiB vs in-memory
+
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| E4   | 1d     | ×1.00 memory · ×0.65 time · ×0.94 bytes | ×1.00 memory · ×0.97 time · ×1.01 bytes | ×1.02 memory · ×1.04 time · ×1.00 bytes | ×1.00 memory · ×1.58 time · ×1.00 bytes | ×0.98 memory · ×0.83 time · ×1.00 bytes |
+| E4   | 7d     | ×1.01 memory · ×1.01 time · ×1.00 bytes | ×1.00 memory · ×0.95 time · ×1.00 bytes | ×1.00 memory · ×1.05 time · ×1.00 bytes | ×1.02 memory · ×1.17 time · ×1.00 bytes | ×0.88 memory · ×5.44 time · ×1.00 bytes |
+| E4   | 30d    | ×1.01 memory · ×0.56 time · ×1.00 bytes | ×1.00 memory · ×0.98 time · ×1.00 bytes | ×1.00 memory · ×1.00 time · ×1.00 bytes | ×1.03 memory · ×2.10 time · ×1.00 bytes | ×0.65 memory · ×3.55 time · ×1.00 bytes |
 
 #### Payload stage: org/project-scoped vs as compiled
 
-| case | window | small                    | mid                      | p90                      | p99                      | largest                  |
-| ---- | ------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ | ------------------------ |
-| Q0   | 1d     | ×1.03 time · ×0.91 bytes | –                        | ×0.69 time · ×0.90 bytes | ×0.96 time · ×0.88 bytes | ×0.94 time · ×0.89 bytes |
-| Q0   | 7d     | ×0.82 time · ×0.82 bytes | ×0.88 time · ×0.52 bytes | ×0.91 time · ×0.90 bytes | ×0.97 time · ×0.88 bytes | ×0.47 time · ×0.89 bytes |
-| Q1   | 7d     | ×0.81 time · ×0.73 bytes | ×0.89 time · ×0.64 bytes | ×0.73 time · ×0.90 bytes | ×0.87 time · ×0.88 bytes | ×0.91 time · ×0.97 bytes |
-| Q0   | 30d    | ×0.89 time · ×0.82 bytes | ×0.50 time · ×0.85 bytes | ×0.78 time · ×0.78 bytes | ×0.89 time · ×0.88 bytes | ×1.46 time · ×0.89 bytes |
-| Q1   | 30d    | ×0.83 time · ×0.73 bytes | ×0.87 time · ×0.87 bytes | ×0.94 time · ×0.90 bytes | ×0.93 time · ×0.88 bytes | ×0.68 time · ×0.97 bytes |
-| Q1   | 1d     | –                        | –                        | ×0.73 time · ×0.90 bytes | ×0.91 time · ×0.88 bytes | ×0.16 time · ×0.97 bytes |
-| Q3   | 1d     | –                        | –                        | ×0.72 time · ×0.90 bytes | ×1.05 time · ×0.87 bytes | ×0.85 time · ×0.93 bytes |
-| Q3   | 7d     | –                        | –                        | ×0.89 time · ×0.90 bytes | ×0.83 time · ×0.91 bytes | ×0.95 time · ×0.93 bytes |
-| Q3   | 30d    | –                        | –                        | ×0.73 time · ×0.90 bytes | ×0.88 time · ×0.91 bytes | ×0.78 time · ×0.93 bytes |
+| case | window | small                                   | mid                                     | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| Q0   | 1d     | ×0.62 memory · ×1.03 time · ×0.91 bytes | –                                       | ×0.80 memory · ×0.69 time · ×0.90 bytes | ×0.48 memory · ×0.96 time · ×0.88 bytes | ×0.88 memory · ×0.94 time · ×0.89 bytes |
+| Q0   | 7d     | ×0.55 memory · ×0.82 time · ×0.82 bytes | ×0.38 memory · ×0.88 time · ×0.52 bytes | ×0.80 memory · ×0.91 time · ×0.90 bytes | ×0.48 memory · ×0.97 time · ×0.88 bytes | ×0.88 memory · ×0.47 time · ×0.89 bytes |
+| Q1   | 7d     | ×0.45 memory · ×0.81 time · ×0.73 bytes | ×0.37 memory · ×0.89 time · ×0.64 bytes | ×0.80 memory · ×0.73 time · ×0.90 bytes | ×0.72 memory · ×0.87 time · ×0.88 bytes | ×0.88 memory · ×0.91 time · ×0.97 bytes |
+| Q0   | 30d    | ×0.71 memory · ×0.89 time · ×0.82 bytes | ×0.92 memory · ×0.50 time · ×0.85 bytes | ×0.44 memory · ×0.78 time · ×0.78 bytes | ×0.63 memory · ×0.89 time · ×0.88 bytes | ×0.88 memory · ×1.46 time · ×0.89 bytes |
+| Q1   | 30d    | ×0.45 memory · ×0.83 time · ×0.73 bytes | ×0.94 memory · ×0.87 time · ×0.87 bytes | ×0.80 memory · ×0.94 time · ×0.90 bytes | ×0.72 memory · ×0.93 time · ×0.88 bytes | ×0.88 memory · ×0.68 time · ×0.97 bytes |
+| Q1   | 1d     | –                                       | –                                       | ×0.80 memory · ×0.73 time · ×0.90 bytes | ×0.72 memory · ×0.91 time · ×0.88 bytes | ×0.88 memory · ×0.16 time · ×0.97 bytes |
+| Q3   | 1d     | –                                       | –                                       | ×0.80 memory · ×0.72 time · ×0.90 bytes | ×0.66 memory · ×1.05 time · ×0.87 bytes | ×0.82 memory · ×0.85 time · ×0.93 bytes |
+| Q3   | 7d     | –                                       | –                                       | ×0.80 memory · ×0.89 time · ×0.90 bytes | ×0.65 memory · ×0.83 time · ×0.91 bytes | ×0.83 memory · ×0.95 time · ×0.93 bytes |
+| Q3   | 30d    | –                                       | –                                       | ×0.80 memory · ×0.73 time · ×0.90 bytes | ×0.65 memory · ×0.88 time · ×0.91 bytes | ×0.83 memory · ×0.78 time · ×0.93 bytes |
+
+### Memory reduction, same-session base (`results/memory.jsonl`)
+
+#### W1: tenant-scoped `current_roots` re-read
+
+| case | window | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| F3   | 30d    | ×1.17 memory · ×0.60 time · ×0.13 bytes | ×1.38 memory · ×0.91 time · ×0.49 bytes | ×1.00 memory · ×0.86 time · ×0.83 bytes |
+| Q3   | 30d    | ×1.08 memory · ×0.73 time · ×0.15 bytes | ×1.16 memory · ×0.49 time · ×0.51 bytes | ×0.92 memory · ×0.86 time · ×0.84 bytes |
+| E3   | 30d    | ×1.15 memory · ×0.55 time · ×0.16 bytes | ×1.34 memory · ×0.43 time · ×0.51 bytes | ×1.05 memory · ×0.99 time · ×0.84 bytes |
+
+#### t2: `max_threads = 2` vs 4
+
+| case | window | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| F3   | 30d    | ×1.02 memory · ×1.25 time · ×1.00 bytes | ×1.00 memory · ×1.20 time · ×1.00 bytes | ×0.93 memory · ×1.28 time · ×1.00 bytes |
+| Q3   | 30d    | ×1.00 memory · ×1.56 time · ×1.00 bytes | ×1.00 memory · ×0.84 time · ×1.00 bytes | ×0.91 memory · ×1.17 time · ×1.00 bytes |
+| E3   | 30d    | ×1.02 memory · ×1.17 time · ×1.00 bytes | ×1.01 memory · ×0.84 time · ×1.00 bytes | ×0.92 memory · ×1.26 time · ×1.00 bytes |
+
+#### spill: external GROUP BY / sort above 256 MiB
+
+| case | window | p90                                     | p99                                     | largest                                 |
+| ---- | ------ | --------------------------------------- | --------------------------------------- | --------------------------------------- |
+| F3   | 30d    | ×1.00 memory · ×1.15 time · ×1.00 bytes | ×1.00 memory · ×1.13 time · ×1.00 bytes | ×0.99 memory · ×1.11 time · ×1.32 bytes |
+| Q3   | 30d    | ×1.00 memory · ×1.08 time · ×1.00 bytes | ×1.00 memory · ×0.64 time · ×1.00 bytes | ×1.11 memory · ×1.12 time · ×1.30 bytes |
+| E3   | 30d    | ×1.00 memory · ×0.97 time · ×1.00 bytes | ×1.00 memory · ×0.59 time · ×1.00 bytes | ×1.18 memory · ×1.41 time · ×1.30 bytes |
+| E4   | 30d    | –                                       | ×1.02 memory · ×1.87 time · ×1.00 bytes | ×0.65 memory · ×3.77 time · ×1.00 bytes |
+
+#### nocm (diagnostic): skip the `costMetadata` parse
+
+| case | window | p90 | p99                                     | largest                                 |
+| ---- | ------ | --- | --------------------------------------- | --------------------------------------- |
+| E4   | 30d    | –   | ×0.96 memory · ×0.93 time · ×0.95 bytes | ×0.98 memory · ×0.93 time · ×0.89 bytes |
+
+#### nodedupe (diagnostic): no `(traceId, metricId)` retry dedupe
+
+| case | window | p90 | p99                                     | largest                                 |
+| ---- | ------ | --- | --------------------------------------- | --------------------------------------- |
+| E4   | 30d    | –   | ×0.86 memory · ×0.81 time · ×0.92 bytes | ×0.47 memory · ×0.68 time · ×0.92 bytes |
+
+#### final: `FINAL` read instead of the GROUP BY dedupe
+
+| case | window | p90 | p99                                     | largest                                 |
+| ---- | ------ | --- | --------------------------------------- | --------------------------------------- |
+| E4   | 30d    | –   | ×1.78 memory · ×1.07 time · ×1.08 bytes | ×1.24 memory · ×0.97 time · ×1.07 bytes |
 
 <!-- report:end -->

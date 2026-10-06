@@ -23,7 +23,9 @@ describe('case catalogue', () => {
     (_label, { def, window, variant }) => {
       const compiled = compileCase(def, variant, LITERALS, timeRangeFor(window, TO), SCOPE);
       // Every tenant-scoped scan also carries the project, and the project is a bound parameter.
-      const expected = 2 + def.relations.length + (variant === 'w1' ? 1 : 0);
+      const usage = def.group === 'tokens' ? 1 : 0;
+      expect(compiled.query.includes('usage AS (')).toBe(usage === 1);
+      const expected = 2 + def.relations.length + usage + (variant === 'w1' ? 1 : 0);
       expect(scopedCount(compiled.query)).toBe(expected);
       expect(compiled.query).not.toContain('proj-test');
       expect(compiled.query).not.toContain('org-test');
@@ -31,6 +33,10 @@ describe('case catalogue', () => {
       expect(Object.values(compiled.query_params)).toContain('org-test');
       if (variant === 'exact') expect(compiled.query).toContain('quantileExact(');
       if (variant === 'uniq') expect(compiled.query).not.toContain('uniqExact(');
+      if (variant === 'mkey') {
+        expect(compiled.query).not.toContain('GROUP BY traceId, metricId');
+        expect(compiled.query).toContain('any(traceId) AS mkTraceId');
+      }
     },
   );
 
@@ -119,5 +125,40 @@ describe('injectProjectScope', () => {
     expect(() => applyVariant(scoped, 'uniq')).toThrow(RewriteError);
     expect(() => applyVariant(scoped, 'exact')).toThrow(RewriteError);
     expect(() => applyVariant(plan({}, 'o'), 'w1')).toThrow(/not project-scoped/);
+  });
+});
+
+describe('memory variants', () => {
+  const e4 = CASES.find(c => c.id === 'E4')!;
+  const tr = timeRangeFor({ id: '7d', ms: 7 * 86_400_000 }, TO);
+
+  it('settings-only variants leave the SQL unchanged', () => {
+    const base = compileCase(e4, 'base', LITERALS, tr, SCOPE);
+    for (const variant of ['t2', 'spill'] as const) {
+      expect(compileCase(e4, variant, LITERALS, tr, SCOPE).query).toBe(base.query);
+    }
+  });
+
+  it('mkey fails closed on a query without the usage CTE', () => {
+    const f0 = compileCase(
+      CASES.find(c => c.id === 'F0')!,
+      'base',
+      LITERALS,
+      tr,
+      SCOPE,
+    );
+    expect(() => applyVariant(f0, 'mkey')).toThrow(RewriteError);
+  });
+
+  it('rejects tenant fragments that bind different organizations', () => {
+    const base = compileCase(e4, 'base', LITERALS, tr, SCOPE);
+    const params = Object.keys(base.query_params).filter(k => base.query_params[k] === 'org-test');
+    expect(params.length).toBeGreaterThan(1);
+    const plan = planTraceAggregate(parseTraceAggregateRequest({ ...e4.request(LITERALS), timeRange: tr }), {
+      scope: { organizationId: 'org-test' },
+    });
+    const raw = compileClickHouseTraceAggregate(plan);
+    const tampered = { ...raw, query_params: { ...raw.query_params, [params.at(-1)!]: 'other-org' } };
+    expect(() => injectProjectScope(tampered, 'proj-test', [])).toThrow('same organization');
   });
 });
