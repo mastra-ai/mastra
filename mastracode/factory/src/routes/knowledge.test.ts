@@ -389,6 +389,44 @@ describe('KnowledgeRoutes', () => {
       `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${scopes['features:memory']}`,
     );
     expect(activity.status).toBe(200);
+    expect(tree.truncated).toBeUndefined();
+  });
+
+  it('reports truncation when an org has more scopes than the route reads, and still serves scopes past the cap', async () => {
+    // One page of up to 1,000 scopes stands in for the default ten.
+    const h = await createHarness({ limits: { maxOrgScopePages: 1 } });
+    const { scopes } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        ...Array.from({ length: 1001 }, (_, index) => ({
+          address: `thread:busy-${index}`,
+          name: `aaa session ${String(index).padStart(4, '0')}`,
+          parentAddresses: [`org:${ORG}`],
+        })),
+        // Sorts after every session scope, so it lies past the cap.
+        { address: 'features:memory', name: 'zzz Memory Systems', parentAddresses: [`org:${ORG}`] },
+      ],
+    });
+
+    const treeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(treeResponse.status).toBe(200);
+    const tree = (await treeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(tree.truncated).toBe(true);
+    expect(tree.scopeNodes?.some(scope => scope.id === scopes['features:memory'])).toBe(false);
+
+    const search = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=memory`);
+    expect(((await search.json()) as KnowledgeSearchPayload).truncated).toBe(true);
+
+    // A real scope past the cap is still in the caller's org: its lens and activity resolve.
+    const lens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${scopes['features:memory']}`,
+    );
+    expect(lens.status).toBe(200);
+    expect(((await lens.json()) as KnowledgeGraphPayload).truncated).toBe(true);
+    const activity = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${scopes['features:memory']}`,
+    );
+    expect(activity.status).toBe(200);
   });
 
   it('serves the reconciled structural scope tree and its selected members', async () => {
