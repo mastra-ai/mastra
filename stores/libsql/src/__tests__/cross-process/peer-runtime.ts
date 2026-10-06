@@ -5,11 +5,26 @@
  *
  * A fixture is a module that calls `runPeer(async peer => { ... })`. Whatever
  * the callback returns is reported to the test as the peer's result. The
- * callback must not exit the process itself: `runPeer` flushes the shared
- * pubsub before it reports and exits, which is what keeps the peer's last
- * publish from dying in flight.
+ * callback must not exit the process itself: `runPeer` reports the result (or
+ * the error) and exits 0 or 1.
+ *
+ * Startup: `runPeer` publishes one ping on `XPROC_SELFCHECK_TOPIC`, which the
+ * test process subscribed to before it forked anything. A peer that cannot
+ * reach the shared transport therefore fails at `spawnPeer` with its config,
+ * instead of showing up later as a test that waits for an event nobody delivers.
+ *
+ * Exit: it flushes the pubsub before it reports. That protects a *broker*'s
+ * queued fan-out to its clients; it does not protect a client's own outbound
+ * publish, which is never registered there (see the flush contract in
+ * ./peer-helper.ts). A fixture that calls a fire-and-forget API must await its
+ * publish or set its own delivery barrier — see fixtures/t79-peer.ts.
+ *
+ * A peer that declares `workers: true` but never boots them is failed on the
+ * way out (`workerBootMismatch`): nothing in `Mastra` can tell the difference.
  */
 import { UnixSocketPubSub } from '@mastra/core/events';
+
+import { workerBootMismatch } from './process-workers';
 
 /** Where one process in a cross-process test lives. Included in every failure message. */
 export interface XprocConfig {
@@ -48,6 +63,14 @@ export interface PeerEnv {
 }
 
 export const DEFAULT_HANG_GUARD_MS = 15_000;
+
+/**
+ * Topic the peer runtime pings on at startup. The test process subscribes to it
+ * before it forks anything, so the ping doubles as a transport self-check (the
+ * in-process equivalent of the harness's `xproc-selfcheck`): if the peer's first
+ * publish cannot reach the test process, `spawnPeer` fails there and then.
+ */
+export const XPROC_SELFCHECK_TOPIC = 'xproc.selfcheck';
 
 export interface Peer<TArgs = unknown> {
   readonly config: XprocConfig;
@@ -182,10 +205,28 @@ export function runPeer<TArgs = unknown>(main: (peer: Peer<TArgs>) => Promise<un
     await exitWith(message, code);
   };
 
+  /**
+   * Transport self-check: one awaited publish on a topic the test process is
+   * already listening to. Awaited rather than flushed — `flush()` on a client
+   * awaits an empty write queue (see ./peer-helper.ts), so it would prove
+   * nothing here.
+   */
+  const selfCheck = async () => {
+    await peer.pubsub().publish(XPROC_SELFCHECK_TOPIC, {
+      type: 'xproc-selfcheck',
+      runId: `xproc-selfcheck-${config.pid}`,
+      data: { pid: config.pid, role: config.role },
+    });
+  };
+
   void (async () => {
     await send({ kind: 'config', config });
     try {
+      await selfCheck();
       const value = await main(peer);
+      const mismatch = workerBootMismatch(config.workers);
+      // Last thing before reporting: the fixture has had its chance to boot.
+      if (mismatch) throw new Error(`peer ${config.role} (pid ${config.pid}): ${mismatch}`);
       await flushAndExit({ kind: 'result', value }, 0);
     } catch (error) {
       await flushAndExit({ kind: 'error', error: serializeError(error) }, 1);

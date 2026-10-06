@@ -21,9 +21,16 @@
  * - Every failure message carries each process's config (role, pid, socket,
  *   db, workers) and the peer's stderr, so a misconfigured peer is
  *   distinguishable from a real cross-process failure.
+ * - A transport self-check on every spawn: the test process subscribes to a
+ *   shared topic before it forks (which also makes it the broker of the
+ *   socket), and each peer publishes one ping on it at startup. A peer that
+ *   cannot reach the transport fails there instead of later as a mystery hang,
+ *   and `handle.selfCheck` records the round trip.
  * - A per-process worker setting (`env.workers`, `peer.workers`): pass it to
  *   `bootWorkers` (see ./process-workers.ts) and to `Mastra({ workers })` so a
  *   test can run a producer with workers off next to a separate worker process.
+ *   A peer that declares `workers: true` without booting them (or the reverse)
+ *   is failed by the peer runtime, because nothing in `Mastra` can tell.
  *
  * Coordination is explicit: IPC signals and gate promises, never sleeps. Every
  * wait takes a bounded `timeoutMs` that only exists as a hang guard and fails
@@ -57,7 +64,7 @@ import { promisify } from 'node:util';
 
 import { UnixSocketPubSub } from '@mastra/core/events';
 
-import { DEFAULT_HANG_GUARD_MS, XPROC_PEER_ENV } from './peer-runtime';
+import { DEFAULT_HANG_GUARD_MS, XPROC_PEER_ENV, XPROC_SELFCHECK_TOPIC } from './peer-runtime';
 import type { MainToPeer, PeerEnv, PeerToMain, SerializedError, XprocConfig } from './peer-runtime';
 
 export { DEFAULT_HANG_GUARD_MS };
@@ -70,11 +77,21 @@ export interface PeerExit {
   signal: NodeJS.Signals | null;
 }
 
+/** What the startup self-check observed about this peer. */
+export interface PeerSelfCheck {
+  /** Milliseconds from `fork()` to the peer's ping arriving in the test process. */
+  startupMs: number;
+  /** The broker's client count when the ping arrived (>= 1: the peer is connected). */
+  remoteClientCount: number;
+}
+
 export interface PeerHandle {
   readonly config: XprocConfig;
   readonly pid: number;
   /** This peer's worker setting. A peer with `workers: false` is a producer. */
   readonly workers: boolean;
+  /** Result of the startup transport self-check, once the peer has reached the socket. */
+  readonly selfCheck: PeerSelfCheck | undefined;
   /** Send a named signal to the peer's `peer.waitFor(name)`. */
   send(name: string, data?: unknown): void;
   /** Wait for a named signal from the peer. Rejects if the peer exits first or the hang guard fires. */
@@ -160,16 +177,64 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
   // Unix socket paths are capped at ~104 bytes on macOS; keep the prefix short.
   const dir = await mkdtemp(path.join(tmpdir(), 'xp-'));
   const socketPath = path.join(dir, 'events.sock');
+  if (socketPath.length > 100) {
+    throw new Error(
+      `createXprocEnv: socket path is ${socketPath.length} bytes, over the ~104 byte limit some platforms put on unix sockets: ${socketPath}`,
+    );
+  }
   const dbPath = path.join(dir, 'shared.db');
   const config: XprocConfig = { role: 'main', pid: process.pid, dir, socketPath, dbPath, workers };
   const peers: Array<{ handle: PeerHandle; child: ChildProcess; errors: string[] }> = [];
   let pubsub: UnixSocketPubSub | undefined;
-  const tsx = import.meta.resolve('tsx');
+  let tsx: string;
+  try {
+    // Peers are tsx fixtures: `--import` is the only reason tsx has to resolve
+    // from this package, so fail with that reason instead of an ENOENT later.
+    tsx = import.meta.resolve('tsx');
+  } catch (error) {
+    throw new Error(
+      `createXprocEnv: cannot resolve "tsx" from ${import.meta.url} (${(error as Error).message}); keep it a devDependency of stores/libsql`,
+    );
+  }
+
+  const selfChecks = new Map<number, (data: { pid: number; role: string }) => void>();
+  let selfCheckSubscription: Promise<void> | undefined;
+  const getPubsub = () => (pubsub ??= new UnixSocketPubSub(socketPath));
+
+  /**
+   * Subscribe to the self-check topic and prove this process is the broker of
+   * `socketPath`. Runs before the first fork: a peer spawned first would claim
+   * the broker role, and pausing or killing it would take the shared transport
+   * down for everyone. Whoever publishes or listens first becomes the broker,
+   * so this also makes main the side every peer connects to.
+   */
+  const ensureSelfCheckSubscription = () => {
+    selfCheckSubscription ??= (async () => {
+      const client = getPubsub();
+      await client.subscribe(XPROC_SELFCHECK_TOPIC, event => {
+        const data = event.data as { pid?: number; role?: string } | undefined;
+        if (data?.pid === undefined) return;
+        selfChecks.get(data.pid)?.({ pid: data.pid, role: String(data.role) });
+      });
+      if (!client.isBroker) {
+        throw new Error(
+          `the test process is not the broker of ${socketPath}: another process claimed it first, so pausing or killing that process takes the shared transport down\n${describe()}`,
+        );
+      }
+    })();
+    return selfCheckSubscription;
+  };
 
   const describe = () => {
     const lines = [`xproc-config ${JSON.stringify(config)}`];
     for (const { handle, errors } of peers) {
       lines.push(`xproc-config ${JSON.stringify(handle.config)}`);
+      const selfCheck = handle.selfCheck;
+      if (selfCheck) {
+        lines.push(
+          `xproc-selfcheck role=${handle.config.role} pid=${handle.pid} startupMs=${selfCheck.startupMs} remoteClientCount=${selfCheck.remoteClientCount}`,
+        );
+      }
       for (const error of errors) lines.push(`--- ${handle.config.role} (pid ${handle.pid}) child error ---\n${error}`);
       if (handle.stderr.trim())
         lines.push(`--- ${handle.config.role} (pid ${handle.pid}) stderr ---\n${handle.stderr}`);
@@ -185,6 +250,9 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     const fixturePath = fixture instanceof URL || fixture.startsWith('file:') ? fileURLToPath(fixture) : fixture;
     const peerRole = role ?? `peer-${peers.length + 1}`;
     const peerEnv: PeerEnv = { role: peerRole, dir, socketPath, dbPath, workers: peerWorkers, args };
+    // Before the fork: main listens first, so it is the broker this peer connects to.
+    await ensureSelfCheckSubscription();
+    const forkedAt = Date.now();
     const child = fork(fixturePath, [], {
       execArgv: ['--import', tsx],
       env: { ...process.env, [XPROC_PEER_ENV]: JSON.stringify(peerEnv) },
@@ -192,6 +260,8 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     });
     if (child.pid === undefined) throw new Error(`spawnPeer: fork of ${fixturePath} produced no pid\n${describe()}`);
     const pid = child.pid;
+    const selfCheckReceived = new Promise<void>(resolve => selfChecks.set(pid, () => resolve()));
+    let selfCheck: PeerSelfCheck | undefined;
 
     let stdout = '';
     let stderr = '';
@@ -256,6 +326,9 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
       pid,
       get workers() {
         return peerConfig.workers;
+      },
+      get selfCheck() {
+        return selfCheck;
       },
       get stdout() {
         return stdout;
@@ -328,6 +401,25 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
       DEFAULT_HANG_GUARD_MS,
       () => fail(`${label()} did not start within ${DEFAULT_HANG_GUARD_MS}ms (hang guard)`),
     );
+    // Prove the peer reached the shared transport before the fixture runs: a
+    // peer whose first publish never arrives (wrong socket path, a second
+    // broker) would otherwise surface later as a mystery hang in whatever the
+    // test happened to wait for.
+    await withHangGuard(
+      Promise.race([selfCheckReceived, exitedBefore('reaching the shared transport')]),
+      DEFAULT_HANG_GUARD_MS,
+      () =>
+        fail(
+          `${label()} did not reach the shared transport within ${DEFAULT_HANG_GUARD_MS}ms (hang guard): its first publish never arrived here. Check the socket path and that the test process is the broker`,
+        ),
+    );
+    const remoteClientCount = getPubsub().remoteClientCount;
+    if (remoteClientCount < 1) {
+      throw fail(
+        `${label()} reported reaching the transport but is not connected to this process's broker (remoteClientCount ${remoteClientCount})`,
+      );
+    }
+    selfCheck = { startupMs: Date.now() - forkedAt, remoteClientCount };
     return handle;
   };
 
@@ -338,7 +430,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     dbUrl: `file:${dbPath}`,
     config,
     workers,
-    pubsub: () => (pubsub ??= new UnixSocketPubSub(socketPath)),
+    pubsub: getPubsub,
     spawnPeer,
     describe,
     async cleanup() {

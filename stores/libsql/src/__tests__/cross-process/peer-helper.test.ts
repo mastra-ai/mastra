@@ -42,7 +42,11 @@ describe('cross-process peer helper', () => {
     await env.cleanup();
   });
 
-  const spawn = (args: SelfTestArgs) => env.spawnPeer(FIXTURE, args);
+  // Every fixture here except the workflow producer only talks to the
+  // transport, so none of them consumes workflow events and each declares
+  // `workers: false` — the peer runtime fails a peer whose declaration and boot
+  // state disagree.
+  const spawn = (args: SelfTestArgs) => env.spawnPeer(FIXTURE, args, { workers: false });
 
   it(
     'shares one socket: a publish in the peer is received in main',
@@ -55,6 +59,9 @@ describe('cross-process peer helper', () => {
       const peer = await spawn({ mode: 'publish', topic, payload: 'from-peer' });
       const result = await peer.result<{ pid: number }>();
 
+      // spawnPeer proves this before the fixture runs: the peer reached the
+      // shared transport and connected to this process's broker.
+      expect(peer.selfCheck?.remoteClientCount, env.describe()).toBeGreaterThanOrEqual(1);
       const event = await received.promise;
       expect(event.data, env.describe()).toEqual({ payload: 'from-peer' });
       expect(result.pid).toBe(peer.pid);
@@ -208,6 +215,26 @@ describe('cross-process peer helper', () => {
       await expect(peer.result(), `flush failure must not look like a clean result\n${env.describe()}`).rejects.toThrow(
         /flush\(\) before exit failed/,
       );
+      expect(await peer.exit()).toEqual({ code: 1, signal: null });
+    },
+    DEFAULT_HANG_GUARD_MS + 5_000,
+  );
+
+  it(
+    'fails a peer whose worker setting and boot state disagree',
+    async () => {
+      // Spawned with `workers: true` on purpose, which is the env default: the
+      // fixture only talks to the transport and never calls bootWorkers, so it
+      // declares workers it does not boot. Without this check the mistake
+      // surfaces later as a test waiting for an event this process never
+      // consumes.
+      const peer = await env.spawnPeer(FIXTURE, { mode: 'silent' }, { workers: true });
+      peer.send('finish');
+
+      await expect(
+        peer.result(),
+        `a peer that never boots workers must not report success\n${env.describe()}`,
+      ).rejects.toThrow(/declares workers: true but never called bootWorkers/);
       expect(await peer.exit()).toEqual({ code: 1, signal: null });
     },
     DEFAULT_HANG_GUARD_MS + 5_000,
