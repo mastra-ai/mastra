@@ -16,7 +16,7 @@ const ACTION_VERBS: Record<string, string> = {
 
 export function knowledgeActivityLabel(event: KnowledgeActivityEvent): string {
   const verb = ACTION_VERBS[event.action];
-  if (verb && (event.recordType === 'record' || event.recordType === 'node')) return `${verb} ${event.recordType}`;
+  if (verb && (event.targetType === 'record' || event.targetType === 'node')) return `${verb} ${event.targetType}`;
   return event.action.replaceAll('-', ' ');
 }
 
