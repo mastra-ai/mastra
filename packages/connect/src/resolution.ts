@@ -6,7 +6,7 @@ import { toNamedConnections } from './multi-connection.js';
 /** Identifies one provider's connection-resolution inputs. */
 export interface ConnectionRequest {
   integrationId: string;
-  /** Fallback connection-id environment variable when more than one active connection exists. */
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
   /** Pinned connection id from per-integration options. */
   connectionId?: string;
@@ -52,7 +52,7 @@ export type ProviderResolution =
 
 /**
  * Resolves how to configure one provider given its candidate connections:
- *   - An explicit pin (option or env var) forces `single` at that id.
+ *   - An explicit pin (`connectionId`) forces `single` at that id.
  *   - Exactly one active connection → `single`.
  *   - Two or more active connections → `multi`; the caller wraps tools with
  *     `connection_name` so the agent chooses per call at execute time.

@@ -8,7 +8,7 @@ import type { ProviderToolsOptions } from './toolset.js';
 interface ProviderRegistrationBase {
   /** Platform catalog id used to match project connections. */
   integrationId: string;
-  /** Fallback connection-id environment variable when more than one active connection exists. */
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
 }
 

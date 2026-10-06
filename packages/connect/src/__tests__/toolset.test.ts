@@ -27,7 +27,7 @@ describe('resolveConnectionId', () => {
     expect(resolveConnectionId('MASTRA_LINEAR_CONNECTION_ID')).toBe('c_env');
   });
 
-  it('throws missing_connection_id naming the env var', () => {
+  it('throws missing_connection_id directing the caller to pass connectionId', () => {
     vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', '');
     try {
       resolveConnectionId('MASTRA_LINEAR_CONNECTION_ID');
@@ -35,7 +35,7 @@ describe('resolveConnectionId', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MastraConnectError);
       expect((error as MastraConnectError).code).toBe('missing_connection_id');
-      expect((error as Error).message).toContain('MASTRA_LINEAR_CONNECTION_ID');
+      expect((error as Error).message).toContain('pass connectionId');
     }
   });
 });

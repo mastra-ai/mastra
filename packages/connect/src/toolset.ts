@@ -8,9 +8,9 @@ import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 
 interface ProviderToolsOptionsBase {
   /**
-   * Connection to use. `connect()` always supplies one (resolving the
-   * registration's env var itself); direct `create<Provider>Tools` callers
-   * must pass it or tool calls fail with `missing_connection_id`.
+   * Connection to use. `tools()` always supplies one; direct
+   * `create<Provider>Tools` callers must pass it or tool calls fail with
+   * `missing_connection_id`.
    */
   connectionId?: string;
   client?: ConnectClientOptions;
@@ -44,11 +44,11 @@ export type ProviderToolsOptions = ProviderToolsOptionsBase &
       }
   );
 
-/** Resolves a connection id lazily at execute time: option → env var → typed error naming the env var. */
+/** Resolves a connection id lazily at execute time: explicit option first, then a legacy env fallback. */
 export function resolveConnectionId(envVar: string, connectionId?: string): string {
   const resolved = connectionId?.trim() || process.env[envVar]?.trim();
   if (!resolved) {
-    throw new MastraConnectError('missing_connection_id', `Missing connection id: set ${envVar} or pass connectionId.`);
+    throw new MastraConnectError('missing_connection_id', 'Missing connection id: pass connectionId.');
   }
   return resolved;
 }
