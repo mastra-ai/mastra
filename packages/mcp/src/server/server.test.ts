@@ -288,7 +288,14 @@ describe('MCPServer', () => {
         const binary = await client.readResource({ uri: 'weather://binary' });
         expect(binary.contents[0]).toMatchObject({ blob: Buffer.from('bytes').toString('base64') });
         const widget = await client.readResource({ uri: 'ui://widget' });
-        expect(widget.contents[0]).toMatchObject({ uri: 'ui://widget', text: '<h1>hi</h1>' });
+        expect(widget.contents).toEqual([
+          {
+            uri: 'ui://widget',
+            mimeType: 'text/html;profile=mcp-app',
+            _meta: { ui: { csp: { resourceDomains: [] } } },
+            text: '<h1>hi</h1>',
+          },
+        ]);
         await expect(client.readResource({ uri: 'weather://missing' })).rejects.toThrow('Resource not found');
         expect((await client.listResourceTemplates()).resourceTemplates).toEqual([
           { uriTemplate: 'weather://{city}', name: 'By city' },
@@ -297,8 +304,16 @@ describe('MCPServer', () => {
         await client.close();
       }
       expect(await server.listResources()).toEqual({ resources: [expect.objectContaining({ uri: 'ui://widget' })] });
+      // The direct read (used by Studio) carries the same metadata as the protocol read.
       expect(await server.readResource('ui://widget')).toEqual({
-        contents: [{ uri: 'ui://widget', text: '<h1>hi</h1>' }],
+        contents: [
+          {
+            uri: 'ui://widget',
+            mimeType: 'text/html;profile=mcp-app',
+            _meta: { ui: { csp: { resourceDomains: [] } } },
+            text: '<h1>hi</h1>',
+          },
+        ],
       });
       await expect(server.readResource('weather://current')).rejects.toThrow('only readable through an MCP request');
     });
