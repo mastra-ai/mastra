@@ -1,10 +1,5 @@
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import {
-  TABLE_OBSERVATIONAL_MEMORY,
-  getObservationalMemoryGeneration0Id,
-  maxObservationCursor,
-  planReflectionGenerationText,
-} from '@mastra/core/storage';
+import { TABLE_OBSERVATIONAL_MEMORY, maxObservationCursor, planReflectionGenerationText } from '@mastra/core/storage';
 import type {
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
@@ -19,7 +14,6 @@ import type { Connection } from 'oracledb';
 import {
   asBindParameters,
   executeOptions,
-  isOracleErrorCode,
   jsonBind,
   nullableClobBind,
   nullableJsonBind,
@@ -228,10 +222,9 @@ export async function initializeObservationalMemory(
   const now = new Date();
   const lookupKey = getOMKey(input.threadId, input.resourceId);
   // Start with empty active observations; later calls append observations and reflection output transactionally.
-  // Deterministic generation-0 id: concurrent initializations of a key insert the same primary key,
-  // so exactly one creates the record and the others return it.
   const record: ObservationalMemoryRecord = {
-    id: getObservationalMemoryGeneration0Id(lookupKey),
+    // Never reused: a write addressed to a cleared record must not land on its successor.
+    id: globalThis.crypto.randomUUID(),
     scope: input.scope,
     threadId: input.threadId,
     resourceId: input.resourceId,
@@ -258,18 +251,25 @@ export async function initializeObservationalMemory(
   try {
     const existing = await getObservationalMemory(ctx, input.threadId, input.resourceId);
     if (existing) return existing;
-    try {
-      await ctx.db.tx(async (_client, connection) => {
-        await insertOMRecord(ctx, connection, record);
-      });
-      return record;
-    } catch (error) {
-      // ORA-00001: another caller inserted the same generation-0 record first.
-      if (!isOracleErrorCode(error, [-1])) throw error;
-      const head = await getObservationalMemory(ctx, input.threadId, input.resourceId);
-      if (!head) throw error;
-      return head;
-    }
+    // Oracle can't lock a row that doesn't exist yet, so concurrent initializers (any process)
+    // serialize on a table lock held only for this check-and-insert. It waits for in-flight
+    // observational memory writes and briefly blocks new ones; initialization happens once
+    // per thread/resource.
+    const inserted = await ctx.db.tx(async (_client, connection) => {
+      const omTable = table(ctx, TABLE_OBSERVATIONAL_MEMORY);
+      await connection.execute(`LOCK TABLE ${omTable} IN SHARE ROW EXCLUSIVE MODE`);
+      const live = await connection.execute(
+        `SELECT 1 FROM ${omTable} WHERE ${OM_LOOKUP_KEY} = :lookupKey AND ${OM_SUPERSEDED_BY} IS NULL FETCH FIRST 1 ROWS ONLY`,
+        { lookupKey },
+      );
+      if (live.rows?.length) return false;
+      await insertOMRecord(ctx, connection, record);
+      return true;
+    });
+    if (inserted) return record;
+    const head = await getObservationalMemory(ctx, input.threadId, input.resourceId);
+    if (!head) throw new Error(`Observational memory record not found after initialization: ${lookupKey}`);
+    return head;
   } catch (error) {
     throw storageError(
       'INITIALIZE_OBSERVATIONAL_MEMORY',

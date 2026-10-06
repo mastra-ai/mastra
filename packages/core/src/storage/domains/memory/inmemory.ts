@@ -40,7 +40,6 @@ import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 import {
   compareObservationalMemoryHeadOrder,
-  getObservationalMemoryGeneration0Id,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
@@ -859,7 +858,8 @@ export class InMemoryMemory extends MemoryStorage {
     const now = new Date();
 
     const record: ObservationalMemoryRecord = {
-      id: getObservationalMemoryGeneration0Id(key),
+      // Never reused: a write addressed to a cleared record must not land on its successor.
+      id: crypto.randomUUID(),
       scope,
       threadId,
       resourceId,
