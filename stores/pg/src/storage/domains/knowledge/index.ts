@@ -2367,16 +2367,20 @@ export class KnowledgePG extends KnowledgeStorage {
     scopeIds: KnowledgeScopeIds;
     approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
   }): Promise<KnowledgeProposal | null> {
-    const proposal = await this.getProposal(input.id);
-    return proposal && this.#isProposalVisible(proposal, input) ? proposal : null;
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) return null;
+    const args: QueryValues = [input.id];
+    const visibility = this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args);
+    const result = await this.#executor.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=? AND ${visibility}`,
+      args,
+    });
+    return result.rows[0] ? parseProposal(result.rows[0]) : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const hasApprovalScopeIds = Object.values(input.approvalScopeIds ?? {}).some(
-      authorizedScopeIds => authorizedScopeIds && authorizedScopeIds.length > 0,
-    );
-    if (scopeIds.length === 0 && !hasApprovalScopeIds) return { proposals: [] };
+    if (scopeIds.length === 0) return { proposals: [] };
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     if (input.cursor) {
       const cursor = await this.getVisibleProposal({
@@ -2416,6 +2420,8 @@ export class KnowledgePG extends KnowledgeStorage {
     approvalScopeIds: KnowledgeProposalApprovalScopeIds | undefined,
     args: QueryValues,
   ): string {
+    // Every proposal carries a payload that must be readable, so no read frontier means no visible proposals.
+    if (scopeIds.length === 0) return 'FALSE';
     const inScope = (expression: string, ids: string[]) => {
       args.push(...ids);
       return `${expression} IN (${ids.map(() => '?').join(',')})`;
@@ -2511,7 +2517,13 @@ export class KnowledgePG extends KnowledgeStorage {
       SELECT 1 FROM jsonb_array_elements(changes->'targets') AS target
       WHERE NOT (${capabilityBranches.join(' OR ')})
     )`;
-    return `(${readBranch} OR ${writeBranch})`;
+    if (writeBranch === 'FALSE' || writeBranch === '0') return readBranch;
+    // Approval authority is a visibility path, not an exemption: the complete payload must still be readable.
+    const payloadVisible = `NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(changes->'targets') AS target
+      WHERE NOT ${currentTargetVisible(scopeIds, true)}
+    )`;
+    return `(${readBranch} OR (${writeBranch} AND ${payloadVisible}))`;
   }
 
   async reviewProposal(input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
@@ -3148,25 +3160,6 @@ export class KnowledgePG extends KnowledgeStorage {
       reviewReason,
       reviewedAt,
     };
-  }
-
-  #isProposalVisible(
-    proposal: KnowledgeProposal,
-    input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
-  ): boolean {
-    const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const proposerContextScopeId = proposal.proposerContextScopeId;
-    if (
-      proposerContextScopeId !== undefined &&
-      readable.includes(proposerContextScopeId) &&
-      proposal.targets.every(target => isKnowledgeScopeVisible(target.scopeIds, readable))
-    ) {
-      return true;
-    }
-    return proposal.targets.every(target => {
-      const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
-      return Boolean(authorizedScopeIds?.some(scopeId => target.scopeIds.includes(scopeId)));
-    });
   }
 
   async #isSemanticOutboxEntryVisible(

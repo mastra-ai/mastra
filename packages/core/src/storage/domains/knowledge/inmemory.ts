@@ -2008,8 +2008,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   /**
    * Full proposal visibility disjunction: (proposer-context read AND every
-   * target readable) OR direct write authority — the caller can satisfy every
-   * target's approval capability on at least one of that target's scopes.
+   * target readable) OR (direct write authority — the caller can satisfy every
+   * target's approval capability on at least one of that target's scopes — AND
+   * every target, including record mention closure, readable).
    */
   #isProposalVisible(
     proposal: KnowledgeProposal,
@@ -2025,10 +2026,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     ) {
       return true;
     }
+    // Approval authority is a visibility path, not an exemption: the complete payload must still be readable.
     return proposal.targets.every(target => {
       const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
       const currentScopeIds = this.#proposalTargetScopeIds(target);
-      return Boolean(currentScopeIds && authorizedScopeIds?.some(scopeId => currentScopeIds.includes(scopeId)));
+      return Boolean(
+        currentScopeIds &&
+        authorizedScopeIds?.some(scopeId => currentScopeIds.includes(scopeId)) &&
+        this.#isProposalTargetVisible(target, readable),
+      );
     });
   }
 

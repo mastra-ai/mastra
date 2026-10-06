@@ -1770,9 +1770,14 @@ export function createKnowledgeStorageTests(
         proposals: [],
       });
 
-      // Direct write authority on the target's approval capability makes the
-      // proposal visible without proposer-context read.
-      const writeAuthority = { scopeIds: [] as string[], approvalScopeIds: { edit: [PROJECT_SCOPE_ID] } };
+      // Approval authority without payload read is not a visibility exemption.
+      const blindAuthority = { scopeIds: [] as string[], approvalScopeIds: { edit: [PROJECT_SCOPE_ID] } };
+      await expect(store.listProposals({ ...blindAuthority, limit: 10 })).resolves.toEqual({ proposals: [] });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...blindAuthority })).resolves.toBeNull();
+
+      // Direct write authority on the target's approval capability, plus read on
+      // the complete payload, makes the proposal visible without proposer-context read.
+      const writeAuthority = { scopeIds: [PROJECT_SCOPE_ID], approvalScopeIds: { edit: [PROJECT_SCOPE_ID] } };
       await expect(store.listProposals({ ...writeAuthority, limit: 10 })).resolves.toEqual({
         proposals: [expect.objectContaining({ id: proposal.id })],
         nextCursor: undefined,
@@ -1783,7 +1788,10 @@ export function createKnowledgeStorageTests(
 
       // Wrong capability set does not authorize: a manageAccess-only caller
       // cannot see an edit-approval proposal.
-      const wrongCapability = { scopeIds: [] as string[], approvalScopeIds: { manageAccess: [PROJECT_SCOPE_ID] } };
+      const wrongCapability = {
+        scopeIds: [PROJECT_SCOPE_ID],
+        approvalScopeIds: { manageAccess: [PROJECT_SCOPE_ID] },
+      };
       await expect(store.listProposals({ ...wrongCapability, limit: 10 })).resolves.toEqual({
         proposals: [],
       });
@@ -1796,6 +1804,61 @@ export function createKnowledgeStorageTests(
         nextCursor: undefined,
       });
       await expect(store.getVisibleProposal({ id: proposal.id, ...proposerView })).resolves.toMatchObject({
+        id: proposal.id,
+      });
+    });
+
+    it('withholds proposals whose embedded record mentions a node the caller cannot read', async () => {
+      const owner = await store.createNode({ name: 'Public proposal owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const secret = await store.createNode({ name: 'Private proposal mention', scopeIds: [OTHER_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'proposal-record-private-mention',
+        node: owner,
+        text: `Public prose citing [[${secret.name}]]`,
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      const proposal = await store.createProposal({
+        id: 'hidden-payload-proposal',
+        targets: [
+          {
+            type: 'record',
+            id: record.id,
+            expectedVersion: record.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'remove-record-scope',
+        payload: { kind: 'remove-record-scope', mutation: { id: record.id, version: record.version, scopeIds: [] } },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: await store.getAccessEpoch(),
+      });
+
+      // The public target and proposer context are readable, but the embedded
+      // record's mention target is not: neither the read path nor approval
+      // authority exposes the proposal, its cursor, or its existence.
+      for (const view of [
+        { scopeIds: [PROJECT_SCOPE_ID] },
+        { scopeIds: [PROJECT_SCOPE_ID], approvalScopeIds: { edit: [PROJECT_SCOPE_ID] } },
+      ]) {
+        await expect(store.listProposals({ ...view, limit: 10 })).resolves.toEqual({ proposals: [] });
+        await expect(store.getVisibleProposal({ id: proposal.id, ...view })).resolves.toBeNull();
+        await expect(store.listProposals({ ...view, cursor: proposal.id, limit: 10 })).resolves.toEqual({
+          proposals: [],
+        });
+      }
+
+      // A fully authorized reviewer sees the complete proposal.
+      const complete = {
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+        approvalScopeIds: { edit: [PROJECT_SCOPE_ID] },
+      };
+      await expect(store.listProposals({ ...complete, limit: 10 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: proposal.id })],
+        nextCursor: undefined,
+      });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...complete })).resolves.toMatchObject({
         id: proposal.id,
       });
     });
