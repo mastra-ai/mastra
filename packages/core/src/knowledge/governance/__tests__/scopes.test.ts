@@ -301,4 +301,137 @@ describe('Knowledge scope governance', () => {
     expect(retried.scopes['scope:target']).toBe(targetId);
     expect(retried.changed).toBe(false);
   });
+
+  async function childScope(knowledge: Knowledge, rootId: string, address: string) {
+    const created = await knowledge.createScope({
+      address,
+      name: address,
+      parentAddresses: ['scope:root'],
+      contextualScopeAddress: 'scope:root',
+      vouchedScopeIds: [rootId],
+    });
+    return created.scopes[address]!;
+  }
+
+  async function principal(knowledge: Knowledge, address: string) {
+    const created = await knowledge.createRootScope({ address, name: address, contextualScopeAddress: address });
+    return created.scopes[address]!;
+  }
+
+  // S2 — scope tombstone epoch invalidation.
+  it('invalidates warmed frontiers when a granted scope is deleted and recomputes retained grants on restore', async () => {
+    const { knowledge, storage, rootId } = await createFixture();
+    const readerId = await principal(knowledge, 'principal:reader');
+    const emptyId = await childScope(knowledge, rootId, 'scope:empty');
+    const otherId = await childScope(knowledge, rootId, 'scope:other-live');
+    for (const scopeId of [emptyId, otherId]) {
+      await knowledge.shareScope({ scopeId, granteeScopeId: readerId, role: 'readonly', vouchedScopeIds: [rootId] });
+    }
+
+    const warmed = await knowledge.evaluateAccess([readerId]);
+    expect(warmed.scopes[emptyId]?.read).toBe(true);
+    expect(warmed.scopes[otherId]?.read).toBe(true);
+    expect(await knowledge.evaluateAccess([readerId])).toBe(warmed);
+
+    const beforeDelete = await storage.getAccessEpoch();
+    const deleted = await knowledge.deleteNode({
+      id: emptyId,
+      version: 1,
+      deletedBy: rootId,
+      vouchedScopeIds: [rootId],
+    });
+    expect(await storage.getAccessEpoch()).toBe(beforeDelete + 1);
+    expect(
+      (await storage.listScopeGrants({ includeDeleted: true })).some(
+        grant => grant.scopeNodeId === emptyId && grant.scopeRefId === readerId,
+      ),
+    ).toBe(true);
+
+    const afterDelete = await knowledge.evaluateAccess([readerId]);
+    expect(afterDelete).not.toBe(warmed);
+    expect(afterDelete.accessEpoch).toBe(beforeDelete + 1);
+    expect(afterDelete.scopes[emptyId]).toBeUndefined();
+    expect(afterDelete.scopes[otherId]?.read).toBe(true);
+
+    await expect(
+      knowledge.restoreNode({ id: emptyId, version: deleted.version, vouchedScopeIds: [readerId] }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+    expect(await storage.getAccessEpoch()).toBe(beforeDelete + 1);
+
+    await knowledge.restoreNode({ id: emptyId, version: deleted.version, vouchedScopeIds: [rootId] });
+    expect(await storage.getAccessEpoch()).toBe(beforeDelete + 2);
+    const afterRestore = await knowledge.evaluateAccess([readerId]);
+    expect(afterRestore.accessEpoch).toBe(beforeDelete + 2);
+    expect(afterRestore.scopes[emptyId]?.read).toBe(true);
+    expect(afterRestore.scopes[otherId]?.read).toBe(true);
+  });
+
+  // S11 — private grants: suffixes, mirrors and extra memberships do not make content private.
+  it('keeps mirrored provisional scopes public and isolates private scopes only through restricted grants', async () => {
+    const { knowledge, rootId } = await createFixture();
+    const orgId = await principal(knowledge, 'principal:org');
+    const teamId = await principal(knowledge, 'principal:team');
+    const maintainerId = await principal(knowledge, 'principal:maintainer');
+    const publicId = await childScope(knowledge, rootId, 'feature:knowledge:public');
+    const provisionalId = await childScope(knowledge, rootId, 'feature:knowledge:provisional');
+    const privateId = await childScope(knowledge, rootId, 'feature:knowledge:internal');
+
+    await knowledge.shareScope({
+      scopeId: publicId,
+      granteeScopeId: orgId,
+      role: 'readonly',
+      canSuggest: true,
+      vouchedScopeIds: [rootId],
+    });
+    await knowledge.shareScope({
+      scopeId: provisionalId,
+      granteeScopeId: publicId,
+      role: 'mirror',
+      vouchedScopeIds: [rootId],
+    });
+    await knowledge.shareScope({ scopeId: privateId, granteeScopeId: teamId, role: 'edit', vouchedScopeIds: [rootId] });
+    await knowledge.shareScope({
+      scopeId: privateId,
+      granteeScopeId: maintainerId,
+      role: 'owner',
+      vouchedScopeIds: [rootId],
+    });
+
+    const org = await knowledge.evaluateAccess([orgId]);
+    expect(org.scopes[publicId]).toMatchObject({ read: true, suggest: true, edit: false });
+    expect(org.scopes[provisionalId]).toEqual(org.scopes[publicId]);
+    expect(org.scopes[privateId]).toBeUndefined();
+    expect(org.scopes[teamId]).toBeUndefined();
+
+    const team = await knowledge.evaluateAccess([orgId, teamId]);
+    expect(team.scopes[privateId]).toMatchObject({ read: true, edit: true, manageAccess: false });
+    const maintainer = await knowledge.evaluateAccess([maintainerId]);
+    expect(maintainer.scopes[privateId]).toMatchObject({ read: true, manageAccess: true });
+    expect(maintainer.scopes[publicId]).toBeUndefined();
+
+    const dual = await knowledge.createNode({
+      name: 'Dual membership',
+      scopeIds: [publicId, privateId],
+      vouchedScopeIds: [rootId],
+    });
+    const privateRecord = await knowledge.createRecord({
+      node: dual,
+      text: 'Private-only detail',
+      scopeIds: [privateId],
+      vouchedScopeIds: [rootId],
+    });
+    const copiedRecord = await knowledge.createRecord({
+      node: dual,
+      text: 'Private-only detail copied into public prose',
+      scopeIds: [publicId],
+      vouchedScopeIds: [rootId],
+    });
+
+    await expect(knowledge.getNode({ id: dual.id, scopeIds: [orgId] })).resolves.toMatchObject({ id: dual.id });
+    const orgRecords = await knowledge.listRecords({ node: dual, scopeIds: [orgId] });
+    expect(orgRecords.records.map(record => record.id)).toEqual([copiedRecord.id]);
+    expect(orgRecords.records[0]!.text).toContain('Private-only detail');
+    const teamRecords = await knowledge.listRecords({ node: dual, scopeIds: [orgId, teamId] });
+    expect(teamRecords.records.map(record => record.id).sort()).toEqual([copiedRecord.id, privateRecord.id].sort());
+  });
 });
