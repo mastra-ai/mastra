@@ -754,7 +754,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
         }
       }
     } catch (error) {
-      console.warn(`[factory] session backfill did not run: ${error instanceof Error ? error.message : error}`);
+      // Rows written before the failure keep their factory; the next init() resumes from the rest.
+      console.warn(`[factory] session backfill stopped early: ${error instanceof Error ? error.message : error}`);
       return;
     }
     if (unresolved > 0 || collisions > 0) {
@@ -1344,7 +1345,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
               user_id: args.userId,
               branch: args.branch,
             });
-            return row ? toSession(row) : null;
+            // Same integration scoping as `getBySessionId`: the tables are shared across providers.
+            return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
           }
           if (!(await getProjectRepositoryById(args.projectRepositoryId))) return null;
           const row = await db().findOne<SessionDbRow>(SESSIONS, {
@@ -1362,17 +1364,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
             throw new Error('Session factory does not match the repository link.');
           }
           const factoryProjectId = connection.factory_project_id;
+          // Reuse is still keyed by the link, as before this column existed. A
+          // branch the same user already holds on another link of the factory
+          // surfaces as the unique violation of the insert below.
           const findExisting = async () =>
-            (await db().findOne<SessionDbRow>(SESSIONS, {
-              factory_project_id: factoryProjectId,
-              user_id: input.userId,
-              branch: input.branch,
-            })) ??
-            (await db().findOne<SessionDbRow>(SESSIONS, {
+            db().findOne<SessionDbRow>(SESSIONS, {
               project_repository_id: input.projectRepositoryId,
               user_id: input.userId,
               branch: input.branch,
-            }));
+            });
           const existing = await findExisting();
           if (existing) return toSession(existing);
           const now = new Date();
