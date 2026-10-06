@@ -515,7 +515,8 @@ describe('ChatProvider', () => {
       );
       const emit = (chunks: ChunkType[]) =>
         act(() => {
-          for (const chunk of chunks) streams[0].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          for (const chunk of chunks)
+            streams[0].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
         });
 
       fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
@@ -536,16 +537,19 @@ describe('ChatProvider', () => {
 
     const expectSettledReasoning = async () => {
       await screen.findByText('Stopped');
-      expect(
-        screen.getAllByRole('group', { name: 'Reasoning' }).map(group => group.getAttribute('aria-busy')),
-      ).toEqual(['false']);
+      expect(screen.getAllByRole('group', { name: 'Reasoning' }).map(group => group.getAttribute('aria-busy'))).toEqual(
+        ['false'],
+      );
     };
 
-    it.each(['legacy', 'signals'] as const)('stops shimmering once Stop is pressed on the %s transport', async transport => {
-      await startReasoningRun(transport);
-      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-      await expectSettledReasoning();
-    });
+    it.each(['legacy', 'signals'] as const)(
+      'stops shimmering once Stop is pressed on the %s transport',
+      async transport => {
+        await startReasoningRun(transport);
+        fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+        await expectSettledReasoning();
+      },
+    );
 
     it('stops shimmering once Stop is pressed after a follow-up was sent mid-reasoning', async () => {
       const run = await startReasoningRun('signals');
@@ -900,8 +904,7 @@ describe('ChatProvider', () => {
     const omPart = latestMessages
       .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
       .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
-      | { state?: string; output?: { omData?: Record<string, unknown> } }
-      | undefined;
+      { state?: string; output?: { omData?: Record<string, unknown> } } | undefined;
 
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);

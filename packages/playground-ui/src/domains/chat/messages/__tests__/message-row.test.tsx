@@ -722,11 +722,14 @@ describe('MessageRow', () => {
       },
     ];
     const conversation = chunks.reduce<MastraDBMessage[]>(
-      (messages, chunk) => accumulateChunk({ chunk, conversation: messages, metadata: { mode: 'stream', runId: 'first-run' } }),
+      (messages, chunk) =>
+        accumulateChunk({ chunk, conversation: messages, metadata: { mode: 'stream', runId: 'first-run' } }),
       [],
     );
     const row = (isRunning: boolean, activeRunId: string) => (
-      <ChatRunningContext.Provider value={{ isRunning, activeRunId, cancelRun: () => {}, canSendWhileStreaming: false }}>
+      <ChatRunningContext.Provider
+        value={{ isRunning, activeRunId, cancelRun: () => {}, canSendWhileStreaming: false }}
+      >
         {conversation.map(message => (
           <MessageRow key={message.id} message={message} />
         ))}
