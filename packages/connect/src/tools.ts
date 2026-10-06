@@ -167,6 +167,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   const loadSnapshotInputs = async (): Promise<{
     connections: ProjectConnection[];
     catalog: IntegrationCatalogEntry[];
+    catalogAvailable: boolean;
   }> => {
     const [connectionsResult, catalogResult] = await Promise.allSettled([
       listProjectConnections(client, projectId),
@@ -174,7 +175,9 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     ]);
     if (connectionsResult.status === 'rejected') throw connectionsResult.reason;
     const connections = connectionsResult.value;
-    if (catalogResult.status === 'fulfilled') return { connections, catalog: catalogResult.value };
+    if (catalogResult.status === 'fulfilled') {
+      return { connections, catalog: catalogResult.value, catalogAvailable: true };
+    }
 
     const checkedIn = new Set(TOOLS.map(registration => registration.integrationId));
     const needsCatalog = connections.some(
@@ -189,7 +192,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     console.warn(
       `[@mastra/connect] Platform catalog unavailable (${reason instanceof Error ? reason.message : String(reason)}); resolving checked-in providers only.`,
     );
-    return { connections, catalog: [] };
+    return { connections, catalog: [], catalogAvailable: false };
   };
 
   /**
@@ -201,8 +204,8 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     if (!inflight) {
       inflight = (async () => {
         try {
-          const { connections, catalog } = await loadSnapshotInputs();
-          const requests = buildRequests(normalizedProviders, catalog);
+          const { connections, catalog, catalogAvailable } = await loadSnapshotInputs();
+          const requests = buildRequests(normalizedProviders, catalog, catalogAvailable);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
@@ -379,7 +382,11 @@ function rejectRemovedAutoApproveTools(providers: Record<string, ToolsProviderOp
   }
 }
 
-function buildRequests(providers: NormalizedProviders, catalog: IntegrationCatalogEntry[]): NormalizedRequest[] {
+function buildRequests(
+  providers: NormalizedProviders,
+  catalog: IntegrationCatalogEntry[],
+  catalogAvailable: boolean,
+): NormalizedRequest[] {
   const { overrides, only } = providers;
   const registrations = new Map(TOOLS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
@@ -391,9 +398,25 @@ function buildRequests(providers: NormalizedProviders, catalog: IntegrationCatal
       transport: 'mcp',
     });
   }
-  for (const integrationId of Object.keys(overrides)) {
-    if (!registrations.has(integrationId) && !catalogIds.has(integrationId)) {
-      console.warn(`[@mastra/connect] Ignoring unknown provider override '${integrationId}'.`);
+  // A provider id that is neither checked in nor in the platform catalog is a
+  // typo: silently resolving nothing would hide it forever, so fail the
+  // resolution. Excluded entries are harmless no-ops, and when the catalog is
+  // unreachable an unknown id could be a legitimate MCP provider, so both
+  // downgrade to the skip behavior.
+  const unknown = Object.keys(overrides).filter(
+    integrationId =>
+      !registrations.has(integrationId) && !catalogIds.has(integrationId) && !overrides[integrationId]?.disabled,
+  );
+  if (unknown.length > 0) {
+    if (catalogAvailable) {
+      throw new MastraConnectConfigError(
+        `Unknown provider${unknown.length > 1 ? 's' : ''} in the providers option: ${unknown.map(id => `'${id}'`).join(', ')}. Expected a checked-in provider id or a platform catalog integration id.`,
+      );
+    }
+    for (const integrationId of unknown) {
+      console.warn(
+        `[@mastra/connect] Platform catalog unavailable; cannot verify provider '${integrationId}'. Skipping it this resolution.`,
+      );
     }
   }
   const requests: NormalizedRequest[] = [];

@@ -774,6 +774,22 @@ describe('channels()', () => {
     expect(paths).not.toContain('/slack/webhook');
   });
 
+  it('rejects an unknown channel id in the providers option', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: { whatsapp: {} } })),
+    ).rejects.toThrow(/Unknown channel in the providers option: 'whatsapp'/);
+    await expect(channelsFn(options(platformFetch({ connections: [] }), { providers: ['whatsapp'] }))).rejects.toThrow(
+      /Unknown channel in the providers option: 'whatsapp'/,
+    );
+  });
+
+  it('allows excluding an unknown channel id (harmless no-op)', async () => {
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(platformFetch({ connections: [] }), { providers: { whatsapp: false } }));
+    expect(await resolver()).toEqual({});
+  });
+
   it('rejects a providers record value that is neither boolean nor object', async () => {
     const channelsFn = await importChannels();
     await expect(

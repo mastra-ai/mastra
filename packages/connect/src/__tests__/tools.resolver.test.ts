@@ -436,6 +436,36 @@ describe('providers option shapes', () => {
     const { options } = resolverOptions(() => []);
     expect(() => connect({ ...options, providers: ['linear', 'linear'] })).toThrow(/Duplicate provider 'linear'/);
   });
+
+  it('fails resolution for an unknown provider id when the catalog is available', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: ['linera'] });
+    await expect(tools()).rejects.toThrow(/Unknown provider in the providers option: 'linera'/);
+  });
+
+  it('allows excluding an unknown provider id (harmless no-op)', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const { options } = resolverOptions(() => [makeConnection()]);
+    const tools = connect({ ...options, providers: { linear: true, linera: false } });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
+  it('downgrades unknown-provider validation to warn-and-skip when the catalog is unavailable', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return new Response('nope', { status: 500 });
+      return Response.json({ connections: [makeConnection()] });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+      providers: { linear: true, 'maybe-mcp': {} },
+    });
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/cannot verify provider 'maybe-mcp'/));
+  });
 });
 
 describe('catalog availability', () => {

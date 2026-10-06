@@ -189,6 +189,19 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   }
   const { overrides: providerOverrides, only } = normalizeChannelProviders(options.providers);
   validateProviderIds(providerOverrides);
+  // A channel id that no registration ships for is a typo: silently mounting
+  // nothing would hide it forever, so throw at channels() time. Excluded
+  // entries are harmless no-ops and stay allowed.
+  const knownChannelIds = new Set(CHANNELS.map(registration => registration.integrationId));
+  const unknownChannelIds = Object.keys(providerOverrides).filter(
+    integrationId => !knownChannelIds.has(integrationId) && !providerOverrides[integrationId]?.disabled,
+  );
+  if (unknownChannelIds.length > 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Unknown channel${unknownChannelIds.length > 1 ? 's' : ''} in the providers option: ${unknownChannelIds.map(id => `'${id}'`).join(', ')}. Known channels: ${[...knownChannelIds].join(', ')}.`,
+    );
+  }
 
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   const client = resolveClient(options.client);
