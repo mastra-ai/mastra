@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import type { ProcessorContext } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -20,7 +21,10 @@ async function createStore() {
   await store.createNode({ id: resourceScope[1], name: 'User 42', isScope: true, scopeIds: [resourceScope[0]!] });
   await store.createNode({ id: alphaScope[2], name: 'Thread alpha', isScope: true, scopeIds: [resourceScope[1]!] });
   await store.createNode({ id: betaScope[2], name: 'Thread beta', isScope: true, scopeIds: [resourceScope[1]!] });
-  return store;
+  // Sessions read with ordinary authority: resource and thread rungs own themselves; the org rung is never vouched.
+  for (const scopeId of [resourceScope[1]!, alphaScope[2]!, betaScope[2]!])
+    await store.upsertScopeGrant({ scopeNodeId: scopeId, scopeRefId: scopeId, role: 'owner' });
+  return Object.assign(store, { knowledge: new Knowledge({ id: 'default', storage }) });
 }
 
 describe('Subconscious activity', () => {
@@ -60,7 +64,11 @@ describe('Subconscious activity', () => {
       contextScopeId: resourceScope.at(-1),
     });
 
-    const snapshot = await buildSubconsciousActivitySnapshot({ store, scopeIds: betaScope, recentUpdates: 10 });
+    const snapshot = await buildSubconsciousActivitySnapshot({
+      knowledge: store.knowledge,
+      scopeIds: betaScope,
+      recentUpdates: 10,
+    });
 
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
@@ -100,7 +108,11 @@ describe('Subconscious activity', () => {
       contextScopeId: alphaScope.at(-1),
     });
 
-    const snapshot = await buildSubconsciousActivitySnapshot({ store, scopeIds: betaScope, recentUpdates: 10 });
+    const snapshot = await buildSubconsciousActivitySnapshot({
+      knowledge: store.knowledge,
+      scopeIds: betaScope,
+      recentUpdates: 10,
+    });
 
     expect(snapshot.updates).toEqual([]);
     expect(snapshot.hot.map(record => record.name)).not.toContain('Moved secret');
@@ -109,6 +121,55 @@ describe('Subconscious activity', () => {
     expect(JSON.stringify(snapshot)).not.toContain(document.id);
     expect(renderSubconsciousActivity(snapshot)).not.toContain(secret.id);
     expect(renderSubconsciousActivity(snapshot)).not.toContain(document.id);
+  });
+
+  it('never names organization-rung or ungranted-scope activity the session cannot read', async () => {
+    const store = await createStore();
+    const orgNode = await store.createNode({
+      name: 'Org roadmap',
+      kind: 'note',
+      scopeIds: [resourceScope[0]!],
+      contextScopeId: resourceScope[0],
+    });
+    await store.createRecord({
+      node: orgNode.id,
+      text: 'Org-only plan.',
+      scopeIds: [resourceScope[0]!],
+      source: 'org',
+    });
+    const threadNode = await store.createNode({
+      name: 'Beta notes',
+      kind: 'note',
+      scopeIds: [betaScope[2]!],
+      contextScopeId: betaScope[2],
+    });
+
+    const before = await buildSubconsciousActivitySnapshot({
+      knowledge: store.knowledge,
+      scopeIds: betaScope,
+      recentUpdates: 10,
+    });
+    expect(before.updates.map(update => update.name)).toEqual(['Beta notes']);
+    expect(JSON.stringify(before)).not.toContain('Org roadmap');
+    expect(JSON.stringify(before)).not.toContain(orgNode.id);
+
+    // A vouched thread rung without a readable grant is not a readable scope (vouching seeds, it does not grant).
+    const gammaScope = [...resourceScope, '10000000-0000-4000-8000-000000000005'];
+    await store.createNode({ id: gammaScope[2], name: 'Thread gamma', isScope: true, scopeIds: [resourceScope[1]!] });
+    const ungranted = await store.createNode({
+      name: 'Gamma notes',
+      kind: 'note',
+      scopeIds: [gammaScope[2]!],
+      contextScopeId: gammaScope[2],
+    });
+    const gamma = await buildSubconsciousActivitySnapshot({
+      knowledge: store.knowledge,
+      scopeIds: gammaScope,
+      recentUpdates: 10,
+    });
+    expect(JSON.stringify(gamma)).not.toContain('Gamma notes');
+    expect(JSON.stringify(gamma)).not.toContain(ungranted.id);
+    expect(threadNode.name).toBe('Beta notes');
   });
 
   it('bounds updates and hot records, renders errors, and generates stable cache keys', async () => {
@@ -131,14 +192,14 @@ describe('Subconscious activity', () => {
     });
 
     const first = await publishSubconsciousActivity({
-      store,
+      knowledge: store.knowledge,
       scopeIds: alphaScope,
       recentUpdates: 3,
       sendStateSignal,
       errors: ['capture failed'],
     });
     const second = await publishSubconsciousActivity({
-      store,
+      knowledge: store.knowledge,
       scopeIds: alphaScope,
       recentUpdates: 3,
       sendStateSignal,
