@@ -7,7 +7,7 @@ packages:
 
 # Studio auth
 
-When you configure [authentication](/docs/auth/overview) on your Mastra server, Studio automatically displays a login screen and enforces access control. One configuration secures both the Studio UI and your API routes.
+Configure [authentication](/docs/auth/overview) to require users to sign in to Studio. By default, Studio uses `server.auth`, sharing the API's authentication provider. Set `studio.auth` to use a separate provider for Studio.
 
 Without authentication, Studio and all API routes are publicly accessible.
 
@@ -44,16 +44,67 @@ export const mastra = new Mastra({
 })
 ```
 
-Once configured, Studio shows a login screen and requires authentication for all API requests. Visit the [Auth docs](/docs/auth/overview) for a full list of supported providers.
+Once configured, Studio shows a login screen and protected API routes require authentication. Visit the [Auth docs](/docs/auth/overview) for a full list of supported providers.
 
 ## How it works
 
-Setting [`server.auth`](/reference/configuration#serverauth) does two things at once:
-
-- **Studio UI**: Displays a login screen. Depending on the provider, users sign in through SSO, email/password, or both.
-- **API routes**: Requires authentication for all built-in routes (`/api/agents/*`, `/api/workflows/*`, etc.) and custom routes. This applies whether requests come from Studio or direct API calls.
+When `studio.auth` isn't configured, [`server.auth`](/reference/configuration#serverauth) handles both Studio and API authentication. Studio renders the provider's available login options, and protected API routes require authentication regardless of whether requests come from Studio or direct API clients.
 
 Studio detects available capabilities by calling the `GET /api/auth/capabilities` endpoint. The response tells Studio which login methods to render and, if the user is already authenticated, includes their user info and permissions.
+
+### Separate Studio and API authentication
+
+Set `studio.auth` to configure Studio authentication independently of API authentication. For example, use a supported SSO provider for your team under `studio.auth` and token authentication for API clients under `server.auth`.
+
+:::note
+Separate request authentication doesn't provide two independent browser SSO flows. The shared `/api/auth/sso/callback` route prefers the Studio provider when it implements an SSO callback, falling back to the server provider otherwise. Don't configure two separate SSO login flows expecting the callback to select whichever provider initiated login.
+:::
+
+| Configuration | Studio requests | Ordinary API requests |
+| - | - | - |
+| Only `server.auth` | Use `server.auth` | Use `server.auth` |
+| Only `studio.auth` | Use `studio.auth` | No authentication |
+| Both | Use `studio.auth` | Use `server.auth` |
+| Neither | No authentication | No authentication |
+
+For example, this configuration uses built-in [Simple Auth](/docs/auth/simple-auth) for Studio and leaves ordinary API requests unauthenticated:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
+
+export const mastra = new Mastra({
+  studio: {
+    auth: new SimpleAuth({
+      users: {
+        'team-studio-key': {
+          id: 'team-member-1',
+          name: 'Alice',
+        },
+      },
+    }),
+  },
+})
+```
+
+Replace the example key with your own secret. To protect API requests too, add `server.auth` with the provider and credentials intended for API clients. To share one configuration between Studio and the API instead, use only `server.auth`, as in the quickstart.
+
+Studio sends the `x-mastra-client-type: studio` header on API requests. When `studio.auth` is configured, the server uses it for these requests without falling back to `server.auth` if authentication fails. Requests without the Studio header use `server.auth`.
+
+:::warning
+The header selects an auth provider. It isn't proof that a request came from Studio. If you leave `server.auth` unset, callers can omit the header and access the API without signing in. To protect data and operations available through the API, configure API authentication too.
+:::
+
+### Verify authentication
+
+Test both Studio and direct API access before exposing the deployment:
+
+1. Open Studio in a signed-out browser session. Confirm that it asks you to authenticate before using protected pages.
+1. Sign in using the configured provider. For SSO, confirm that the provider redirects back to Mastra and that subsequent Studio requests authenticate with the session cookie.
+1. Request a protected API endpoint with `x-mastra-client-type: studio`, but without an authorization header or session cookie. Confirm that it rejects the request.
+1. Request the same endpoint without the Studio header or credentials. If `server.auth` is configured, confirm that it rejects the request. If only `studio.auth` is configured, the request is unauthenticated and can access the API.
+
+These API checks must use an endpoint that hasn't been made public through route configuration, rather than relying on the login screen alone to verify protection.
 
 ## Pass a token through the URL
 
@@ -77,7 +128,7 @@ The token rides in a URL parameter, so the host application is responsible for h
 
 ## Role-based access control
 
-RBAC lets you control what each user can see and do inside Studio. It's separate from authentication: `server.auth` handles who the user is, while `server.rbac` handles what they can do.
+RBAC lets you control what each user can see and do inside Studio. It's separate from authentication: `server.auth` or `studio.auth` handles who the user is, while the RBAC provider handles what they can do. When using `studio.auth`, configure `studio.rbac` for Studio-specific permissions. If `studio.rbac` is unset, Studio requests fall back to `server.rbac`.
 
 ### Default roles
 
