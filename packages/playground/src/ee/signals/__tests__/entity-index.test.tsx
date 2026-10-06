@@ -87,9 +87,9 @@ describe('Trace Intelligence index route', () => {
 
       renderIndex('/intelligence?search=support&sort=entity-desc&view=compact');
 
-      expect(await screen.findByRole('link', { name: 'Open support-agent' })).not.toBeNull();
-      expect(screen.getByRole('searchbox', { name: 'Filter entities' }).getAttribute('value')).toBe('support');
-      expect(screen.getByRole('combobox', { name: 'Sort entities' }).textContent).toContain('Entity: Z–A');
+      expect(await screen.findByRole('link', { name: 'Open agent support-agent' })).not.toBeNull();
+      expect(screen.getByRole('searchbox', { name: 'Filter agents' }).getAttribute('value')).toBe('support');
+      expect(screen.getByRole('combobox', { name: 'Sort agents' }).textContent).toContain('Agent: Z–A');
       expect(screen.getByRole('button', { name: 'Compact view' }).getAttribute('aria-pressed')).toBe('true');
     });
 
@@ -100,10 +100,10 @@ describe('Trace Intelligence index route', () => {
 
       renderIndex();
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'support' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'support' } });
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
-      fireEvent.click(screen.getByRole('combobox', { name: 'Sort entities' }));
-      const option = await screen.findByRole('option', { name: 'Entity: A–Z' });
+      fireEvent.click(screen.getByRole('combobox', { name: 'Sort agents' }));
+      const option = await screen.findByRole('option', { name: 'Agent: A–Z' });
       fireEvent.pointerDown(option, { pointerType: 'mouse' });
       fireEvent.click(option, { detail: 1 });
 
