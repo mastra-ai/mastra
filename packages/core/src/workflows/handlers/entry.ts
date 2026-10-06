@@ -20,6 +20,7 @@ import type {
   WorkflowRunState,
 } from '../types';
 import { getSingleStepEntryId, isSingleStepEntry } from '../utils';
+import { scopeOperationId } from './operation-id';
 
 function publishStepEvent(
   engine: DefaultExecutionEngine,
@@ -186,7 +187,10 @@ export async function persistStepUpdate(
     recordResumedStepStart,
   } = params;
 
-  const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
+  const operationId = scopeOperationId(
+    `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`,
+    executionContext,
+  );
 
   // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
   // agent output processor, #19605) wins over the workflow-wide option and is always
@@ -607,7 +611,10 @@ export async function executeEntry(
   } else if (entry.type === 'sleep') {
     executionContext.stepExecutionPath?.push(entry.id);
     const startedAt = Date.now();
-    const sleepWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`;
+    const sleepWaitingOperationId = scopeOperationId(
+      `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`,
+      executionContext,
+    );
     await engine.wrapDurableOperation(sleepWaitingOperationId, async () => {
       await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
         type: 'watch',
@@ -684,7 +691,10 @@ export async function executeEntry(
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-      const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
+      const sleepResultOperationId = scopeOperationId(
+        `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`,
+        executionContext,
+      );
       await engine.wrapDurableOperation(sleepResultOperationId, async () => {
         await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
           type: 'watch',
@@ -716,7 +726,10 @@ export async function executeEntry(
   } else if (entry.type === 'sleepUntil') {
     executionContext.stepExecutionPath?.push(entry.id);
     const startedAt = Date.now();
-    const sleepUntilWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`;
+    const sleepUntilWaitingOperationId = scopeOperationId(
+      `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`,
+      executionContext,
+    );
     await engine.wrapDurableOperation(sleepUntilWaitingOperationId, async () => {
       await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
         type: 'watch',
@@ -796,7 +809,10 @@ export async function executeEntry(
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
 
-      const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
+      const sleepUntilResultOperationId = scopeOperationId(
+        `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`,
+        executionContext,
+      );
       await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
         await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
           type: 'watch',

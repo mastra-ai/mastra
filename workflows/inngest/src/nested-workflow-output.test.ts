@@ -132,6 +132,59 @@ describe('InngestExecutionEngine nested workflow output', () => {
     });
   });
 
+  it.each([
+    [{}, ''],
+    [{ loopIteration: 1 }, ''],
+    [{ loopIteration: 3 }, '.iter.3'],
+    [{ foreachIndex: 0 }, '.fe.0'],
+  ])('scopes the invoke and result ids to the occurrence %o', async (occurrence, suffix) => {
+    const invoke = vi.fn().mockResolvedValue({
+      result: { status: 'success', result: {}, state: {} },
+      runId: 'child-run',
+    });
+    const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
+    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+
+    await engine.executeWorkflowStep({
+      step: createNestedWorkflow('child'),
+      stepResults: {},
+      executionContext: { ...createExecutionContext(), ...occurrence },
+      prevOutput: {},
+      inputData: {},
+      pubsub: { publish: vi.fn() } as any,
+      startedAt: 100,
+    });
+
+    expect(invoke).toHaveBeenCalledWith(`workflow.parent.step.child${suffix}`, expect.anything());
+    expect(run).toHaveBeenCalledWith(`workflow.parent.step.child.nestedwf-results${suffix}`, expect.any(Function));
+  });
+
+  it.each([
+    [{}, 'parent-run'],
+    [{ loopIteration: 1 }, 'parent-run'],
+    [{ loopIteration: 3 }, 'parent-run-iter-3'],
+    [{ foreachIndex: 2 }, 'parent-run-foreach-2'],
+  ])('derives a distinct child run id per occurrence %o', async (occurrence, childRunId) => {
+    const invoke = vi.fn().mockResolvedValue({
+      result: { status: 'success', result: {}, state: {} },
+      runId: childRunId,
+    });
+    const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
+    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+
+    await engine.executeWorkflowStep({
+      step: createNestedWorkflow('child'),
+      stepResults: {},
+      executionContext: { ...createExecutionContext(), ...occurrence },
+      prevOutput: {},
+      inputData: {},
+      pubsub: { publish: vi.fn() } as any,
+      startedAt: 100,
+    });
+
+    expect(invoke.mock.calls[0]![1].data.runId).toBe(childRunId);
+  });
+
   it('constructs resume metadata from suspended compact output', async () => {
     const invoke = vi.fn().mockResolvedValue({
       result: {

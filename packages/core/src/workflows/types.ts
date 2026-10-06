@@ -1304,6 +1304,8 @@ export type ExecutionContext = {
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
+  /** 1-based iteration of the enclosing dountil/dowhile loop, used to scope durable operation ids */
+  loopIteration?: number;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,
