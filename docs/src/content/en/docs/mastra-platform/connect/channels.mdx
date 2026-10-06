@@ -11,7 +11,7 @@ packages:
 
 Each platform's connection holds a different credential:
 
-- **Slack**: An app configuration token, from which Mastra creates a Slack app for each agent. Slack tools use a different kind of credential (a workspace authorization), so Slack appears as two providers on the platform: **Slack channels** (`slack-channels`) for channels and **Slack** (`slack`) for [tools](/docs/mastra-platform/connect/tools).
+- **Slack**: An app configuration token, from which Mastra creates a Slack app for each agent. Slack tools use a different kind of credential (a workspace authorization). The platform therefore lists Slack as two providers: **Slack channels** (`slack-channels`) for channels and **Slack** (`slack`) for [tools](/docs/mastra-platform/connect/tools).
 - **Telegram**: A bot token from BotFather.
 - **Discord**: A bot token from a Discord application you create. The same connection also gives agents Discord [tools](/docs/mastra-platform/connect/tools).
 
