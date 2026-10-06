@@ -1,6 +1,12 @@
-import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
+import {
+  SETUP_FAILED_MARKER_PATH,
+  SETUP_MARKER_PATH,
+  WORKSPACE_SETUP_MARKER_PATH,
+  repoSetupMarkerPath,
+  setupMarkerContent,
+} from '@internal/workspace';
 import { Template } from 'e2b';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createRepoTemplate, refreshRepoTemplate, repoTemplateRef } from './repo-template';
 import type { RepoTemplateOptions } from './repo-template';
@@ -55,6 +61,15 @@ async function serializedSteps(spec: NamedTemplateSpec): Promise<string> {
   // string, env, and image reference that would reach the E2B build API.
   // (toDockerfile is unavailable for fromTemplate-based builders.)
   return await Template.toJSON(spec.template as never, false);
+}
+
+function runSteps(serialized: string): string[] {
+  const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+  return definition.steps.filter(step => step.type === 'RUN').map(step => step.args.join(' '));
+}
+
+function markerStep(path: string, ...commands: string[]): string {
+  return `mkdir -p "$(dirname "${path}")" && printf '%s' '${setupMarkerContent(commands)}' > "${path}"`;
 }
 
 /** Resolve the deferred spec every repo template now returns. */
@@ -164,8 +179,8 @@ describe('createRepoTemplate', () => {
     const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', '', '   '] }));
     const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
     const setupSteps = definition.steps.filter(step => step.type === 'RUN' && step.args.join(' ').includes('cd '));
-    expect(setupSteps).toHaveLength(1);
-    expect(setupSteps[0]!.args.join(' ')).toBe('cd "hello" && pnpm i');
+    // The one surviving command runs twice: before and after the pin.
+    expect(setupSteps.map(step => step.args.join(' '))).toEqual(['cd "hello" && pnpm i', 'cd "hello" && pnpm i']);
   });
 
   it('treats an all-blank setupCommand as absent, including for identity', async () => {
@@ -223,6 +238,26 @@ describe('createRepoTemplate', () => {
     const resolved = await resolve(BASE);
     expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
+  });
+
+  it('keeps the single-form name and tag byte-identical to the pre-list release', async () => {
+    // Computed at SEG1_SHA 19b98752b77 before `repos` existed: a drift here
+    // means every existing template silently loses its warm builds.
+    expect(repoTemplateRef(IDENTITY)).toBe('mastra-repo-octocat-hello-c93a3d90:sha-aaaaaaaaaaaa');
+    expect((await resolve(BASE)).ref).toBe('mastra-repo-octocat-hello-c93a3d90:sha-aaaaaaaaaaaa');
+  });
+
+  it('pins the commit after the first setup pass and runs setup again after it', async () => {
+    const steps = runSteps(await serializedSteps(await resolve(BASE)));
+    const clone = steps.findIndex(step => step.startsWith('git clone'));
+    expect(steps.slice(clone, clone + 6)).toEqual([
+      "git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'",
+      'cd "hello" && pnpm install',
+      `git -C "hello" fetch origin ${SHA}`,
+      `git -C "hello" checkout ${SHA}`,
+      'cd "hello" && pnpm install',
+      markerStep(SETUP_MARKER_PATH, SETUP),
+    ]);
   });
 
   it('always writes the setup marker beside the checkout as the last build step', async () => {
@@ -471,5 +506,145 @@ describe('refreshRepoTemplate', () => {
       ref: repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }),
       action: 'reused',
     });
+  });
+});
+
+describe('createRepoTemplate with repos', () => {
+  const PUBLIC = 'https://github.com/octocat/hello.git';
+  const PRIVATE = 'https://github.com/acme/widgets.git';
+  const TOKEN = 'ghs_private_token_0123456789';
+  const PRIVATE_SHA = 'b'.repeat(40);
+  const listOptions: RepoTemplateOptions = {
+    repos: [
+      {
+        getRepositoryAccess: async () => ({ cloneUrl: PRIVATE, authorization: { scheme: 'bearer', token: TOKEN } }),
+        setupCommand: 'npm ci',
+      },
+      { getRepositoryAccess: async () => ({ cloneUrl: PUBLIC }), setupCommand: ['pnpm i', 'pnpm build'] },
+    ],
+    workspaceSetupCommand: 'touch .ready',
+    continueOnSetupFailure: true,
+    workingDirectory: '/workspace',
+  };
+
+  function mockHeads(heads: Record<string, string | undefined>): void {
+    fetchMock.mockImplementation(async (url: string) => {
+      const sha = Object.entries(heads).find(([repo]) => url.includes(`/repos/${repo}/`))?.[1];
+      return sha ? new Response(sha, { status: 200 }) : new Response('', { status: 404 });
+    });
+  }
+
+  beforeEach(() => mockHeads({ 'acme/widgets': PRIVATE_SHA, 'octocat/hello': SHA }));
+
+  it('rejects both forms at once and the list-only options without repos', () => {
+    expect(() => createRepoTemplate({ ...BASE, repos: [] })).toThrow(TypeError);
+    expect(() => createRepoTemplate({ ...BASE, workspaceSetupCommand: 'x' })).toThrow(TypeError);
+    expect(() => createRepoTemplate({ ...BASE, continueOnSetupFailure: false })).toThrow(TypeError);
+  });
+
+  it('treats an empty list like no repository', () => {
+    expect(createRepoTemplate({ repos: [] })).toBeUndefined();
+  });
+
+  it('lays out public repositories before private ones, each around its own pin, then the workspace steps', async () => {
+    const spec = await resolve(listOptions);
+    const steps = runSteps(await serializedSteps(spec));
+    const start = steps.indexOf('mkdir -p "/workspace"');
+    const guard = (dir: string, command: string) =>
+      `( cd "${dir}" && sh -c '${command}' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- '${dir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' '${dir}' >> "${SETUP_FAILED_MARKER_PATH}"; }`;
+    const auth = `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)"`;
+    expect(steps.slice(start + 1)).toEqual([
+      "git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'",
+      guard('hello', 'pnpm i'),
+      guard('hello', 'pnpm build'),
+      `git -C "hello" fetch origin ${SHA}`,
+      `git -C "hello" checkout ${SHA}`,
+      guard('hello', 'pnpm i'),
+      guard('hello', 'pnpm build'),
+      markerStep(repoSetupMarkerPath('hello'), 'pnpm i', 'pnpm build'),
+      `git ${auth} clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`,
+      guard('widgets', 'npm ci'),
+      `git -C "widgets" ${auth} fetch origin ${PRIVATE_SHA}`,
+      `git -C "widgets" checkout ${PRIVATE_SHA}`,
+      guard('widgets', 'npm ci'),
+      markerStep(repoSetupMarkerPath('widgets'), 'npm ci'),
+      'touch .ready',
+      markerStep(WORKSPACE_SETUP_MARKER_PATH, 'touch .ready'),
+    ]);
+  });
+
+  it('numbers token envs by caller position and keeps the token out of every command', async () => {
+    const serialized = await serializedSteps(await resolve(listOptions));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const envStep = definition.steps.find(step => step.type === 'ENV' && step.args.includes('GH_TOKEN_0'));
+    expect(envStep?.args).toContain(TOKEN);
+    expect(runSteps(serialized).join('\n')).not.toContain(TOKEN);
+    expect(serialized).not.toContain('"GH_TOKEN"');
+  });
+
+  it('runs setup unguarded when continueOnSetupFailure is off', async () => {
+    const steps = runSteps(await serializedSteps(await resolve({ ...listOptions, continueOnSetupFailure: false })));
+    expect(steps).toContain('cd "widgets" && npm ci');
+    expect(steps.join('\n')).not.toContain('setup-failed');
+  });
+
+  it('writes the workspace marker even without a workspace command', async () => {
+    const steps = runSteps(await serializedSteps(await resolve({ ...listOptions, workspaceSetupCommand: undefined })));
+    expect(steps.at(-1)).toBe(markerStep(WORKSPACE_SETUP_MARKER_PATH));
+  });
+
+  it('names the list template apart from the single form of its first repo and tags it over every sha', async () => {
+    const list = await resolve(listOptions);
+    const single = await resolve({
+      getRepositoryAccess: listOptions.repos![0]!.getRepositoryAccess,
+      setupCommand: 'npm ci',
+    });
+    expect(list.ref.split(':')[0]).not.toBe(single.ref.split(':')[0]);
+    expect(list.ref).toMatch(/^mastra-repo-acme-widgets-[0-9a-f]{8}:sha-[0-9a-f]{12}$/);
+    expect(list.ref.split(':')[1]).not.toBe(`sha-${PRIVATE_SHA.slice(0, 12)}`);
+    mockHeads({ 'acme/widgets': PRIVATE_SHA, 'octocat/hello': 'd'.repeat(40) });
+    const moved = await resolve(listOptions);
+    expect(moved.ref.split(':')[0]).toBe(list.ref.split(':')[0]);
+    expect(moved.ref.split(':')[1]).not.toBe(list.ref.split(':')[1]);
+    // Membership and options change the name.
+    const reordered = await resolve({ ...listOptions, repos: [listOptions.repos![1]!, listOptions.repos![0]!] });
+    expect(reordered.ref.split(':')[0]).not.toBe(list.ref.split(':')[0]);
+    const guarded = await resolve({ ...listOptions, continueOnSetupFailure: false });
+    expect(guarded.ref.split(':')[0]).not.toBe(list.ref.split(':')[0]);
+  });
+
+  it('clones an unresolvable-head repository unpinned and degrades the tag to current', async () => {
+    mockHeads({ 'acme/widgets': PRIVATE_SHA });
+    const spec = await resolve(listOptions);
+    const steps = runSteps(await serializedSteps(spec));
+    expect(steps).toContain(`git -C "widgets" checkout ${PRIVATE_SHA}`);
+    expect(steps.some(step => step.includes('git -C "hello" checkout'))).toBe(false);
+    expect(spec.ref.endsWith(':current')).toBe(true);
+  });
+
+  it('rejects the whole list when any entry has no access', async () => {
+    const spec = createRepoTemplate({
+      repos: [listOptions.repos![0]!, { getRepositoryAccess: async () => undefined }],
+    });
+    await expect(spec!.resolveSpec()).rejects.toThrow(/repos\[1\]/);
+  });
+
+  it('rejects two entries that would clone into the same directory', async () => {
+    const spec = createRepoTemplate({
+      repos: [
+        { getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/a/hello.git' }) },
+        { getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/b/hello.git' }) },
+      ],
+    });
+    await expect(spec!.resolveSpec()).rejects.toThrow(/both clone into "hello"/);
+  });
+
+  it('refreshRepoTemplate reports the list sha', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    onTestFinished(() => vi.restoreAllMocks());
+    const result = await refreshRepoTemplate(listOptions);
+    expect(result.action).toBe('reused');
+    expect(result.sha).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.ref.endsWith(`:sha-${result.sha!.slice(0, 12)}`)).toBe(true);
   });
 });

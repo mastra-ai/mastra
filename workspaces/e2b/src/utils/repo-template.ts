@@ -30,7 +30,14 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
+import {
+  WORKSPACE_SETUP_MARKER_PATH,
+  guardedSetupCommand,
+  repoCloneCommand,
+  repoSetupMarkerPath,
+  setupMarkerCommand,
+  setupMarkerContent,
+} from '@internal/workspace';
 
 import { Template } from 'e2b';
 import type { ConnectionOpts, TemplateClass } from 'e2b';
@@ -114,6 +121,20 @@ export interface RepositoryAccess {
   authorization?: { scheme: 'bearer'; token: string };
 }
 
+/** One repository of a multi-repository template. */
+export interface RepoTemplateRepository {
+  /**
+   * Resolves this repository's clone URL and, for private repositories, a
+   * SHORT-LIVED credential, exactly as
+   * {@link RepoTemplateOptions.getRepositoryAccess} does for one repository.
+   * Each entry mints its own: installation tokens expire and one token
+   * rarely covers every repository.
+   */
+  getRepositoryAccess: () => Promise<RepositoryAccess | undefined>;
+  /** Setup command(s) run inside this repository's checkout; see {@link RepoTemplateOptions.setupCommand}. */
+  setupCommand?: string | string[];
+}
+
 export interface RepoTemplateOptions {
   /**
    * Resolves the clone URL and, for private repositories, a SHORT-LIVED
@@ -133,14 +154,54 @@ export interface RepoTemplateOptions {
    * The key is required so that passing a host context whose field was
    * renamed fails to compile instead of silently producing no template.
    * `undefined` means the session has no repository, and
-   * {@link createRepoTemplate} then returns undefined.
+   * {@link createRepoTemplate} then returns undefined (unless `repos` is set).
    */
-  getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
+  getRepositoryAccess?: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
    * Setup command(s) run inside the checkout and hashed into the template name.
-   * Array entries run as separate cached build steps.
+   * Array entries run as separate cached build steps. Each command runs
+   * twice: once right after the clone, so the install layer caches
+   * independently of the commit, and again after the checkout is pinned to
+   * the resolved head, so the image matches that commit. Commands must be
+   * safe to repeat in the same checkout.
    */
   setupCommand?: string | string[];
+  /**
+   * Several repositories in one template, each with its own access resolver
+   * and setup command, cloned to `<workingDirectory>/<repo>` in this order.
+   * Public repositories (no `authorization`) are built before private ones in
+   * caller order within each group, so their layers can outlive credential
+   * rotation. Each repository writes `.mastra-sandbox/repos/<repo>`
+   * (`setupMarkerContent` of its commands) once every step for it ran.
+   *
+   * Every credential enters the template definition as a build env visible to
+   * every build step (`GH_TOKEN_<n>`, `n` = position in this list), so any
+   * repository's setup command can read the other repositories' tokens: only
+   * list repositories whose setup commands are trusted together.
+   *
+   * Mutually exclusive with `getRepositoryAccess`. If any entry's access
+   * cannot be resolved the whole resolution rejects and the sandbox falls
+   * back to its default template, as the single form does: a sandbox missing
+   * one repository is worse than one missing all of them. Two entries that
+   * would clone into the same directory reject the same way. An empty array
+   * behaves like no repository.
+   */
+  repos?: RepoTemplateRepository[];
+  /**
+   * `repos` only. Command(s) run at the working directory after every
+   * repository is set up (install a shared toolchain, link packages). A
+   * failure fails the build. `.mastra-sandbox/workspace-setup` records the
+   * digest of the commands that ran, even when there were none.
+   */
+  workspaceSetupCommand?: string | string[];
+  /**
+   * `repos` only. When true a failing per-repository setup command records
+   * that repository's directory name in `.mastra-sandbox/setup-failed` (one
+   * line per repository, whichever passes failed) and the build continues;
+   * clone, pin, workspace and marker steps still fail the build. Default
+   * false: any failure fails the build.
+   */
+  continueOnSetupFailure?: boolean;
   /**
    * Extra environment for the build, available to every build step
    * including {@link RepoTemplateOptions.setupCommand}. Use it for the
@@ -196,6 +257,20 @@ export interface RepoTemplateIdentity {
   cpuCount?: number;
   memoryMB?: number;
   workingDirectory?: string;
+  /**
+   * Multi-repository form: every entry in caller order. `cloneUrl`/`sha`/
+   * `setupCommand` above then describe the first entry (the readable slug);
+   * the tag hashes every entry's sha.
+   */
+  repos?: RepoTemplateIdentityRepository[];
+  workspaceSetupCommand?: string | string[];
+  continueOnSetupFailure?: boolean;
+}
+
+export interface RepoTemplateIdentityRepository {
+  cloneUrl: string;
+  sha?: string;
+  setupCommand?: string | string[];
 }
 
 /**
@@ -212,7 +287,19 @@ export function repoTemplateRef(identity: RepoTemplateIdentity): string {
   // but creating from a bare name resolves its `default` tag — which
   // sha-tagged builds never assign — so an untagged ref could pass the
   // exists check and still 404 on create.
+  if (identity.repos) {
+    // Every repository must be pinned for the tag to name a commit set.
+    const shas = identity.repos.map(repo => repo.sha);
+    return shas.every(Boolean) ? `${name}:${shaTag(listSha(shas as string[]))}` : `${name}:${CURRENT_TAG}`;
+  }
   return identity.sha ? `${name}:${shaTag(identity.sha)}` : `${name}:${CURRENT_TAG}`;
+}
+
+/** One digest over every repository's pinned sha, in caller order. */
+function listSha(shas: string[]): string {
+  return createHash('sha256')
+    .update(shas.map(sha => sha.toLowerCase()).join(','))
+    .digest('hex');
 }
 
 // `sha` is excluded at the type level: the name is sha-independent by
@@ -238,6 +325,16 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // Appended only when set, so templates predating the option keep their
     // existing names (and warm builds) instead of all rebuilding.
     ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
+    // The list form appends its members (caller order) so it never collides
+    // with the single form of its first repository.
+    ...(identity.repos
+      ? [
+          'repos',
+          identity.repos.map(repo => [normalizeCloneUrl(repo.cloneUrl), repo.setupCommand ?? null]),
+          identity.workspaceSetupCommand ?? null,
+          identity.continueOnSetupFailure ?? false,
+        ]
+      : []),
   ];
   const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
@@ -288,7 +385,15 @@ function shaTag(sha: string): string {
  * setup performs the full clone, so a broken build never wedges a session.
  */
 export function createRepoTemplate(options: RepoTemplateOptions): DeferredNamedTemplateSpec | undefined {
-  if (!options.getRepositoryAccess) return undefined;
+  if (options.getRepositoryAccess && options.repos) {
+    throw new TypeError('createRepoTemplate: pass either getRepositoryAccess or repos, not both');
+  }
+  // The guard and the workspace steps have no meaning for one repository, and
+  // the single-form marker must keep meaning "every setup command succeeded".
+  if (!options.repos && (options.workspaceSetupCommand !== undefined || options.continueOnSetupFailure !== undefined)) {
+    throw new TypeError('createRepoTemplate: workspaceSetupCommand and continueOnSetupFailure require repos');
+  }
+  if (!options.getRepositoryAccess && !options.repos?.length) return undefined;
   return {
     resolveSpec: async () => (await resolveSpecAtHead(options)).spec,
   };
@@ -303,32 +408,96 @@ export function createRepoTemplate(options: RepoTemplateOptions): DeferredNamedT
  * turns into its default-template fallback rather than a failed start.
  */
 async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: NamedTemplateSpec; sha?: string }> {
-  const access = options.getRepositoryAccess ? await options.getRepositoryAccess().catch(() => undefined) : undefined;
-  const cloneUrl = access?.cloneUrl;
-  if (!cloneUrl) {
+  const isList = options.repos !== undefined;
+  const entries: RepoTemplateRepository[] = options.repos
+    ? options.repos
+    : options.getRepositoryAccess
+      ? [{ getRepositoryAccess: options.getRepositoryAccess, setupCommand: options.setupCommand }]
+      : [];
+  if (entries.length === 0) {
     throw new Error('Repo template has no clone URL: repository access returned none.');
   }
-  assertCloneUrl(cloneUrl);
-  const token = access?.authorization?.token;
   const buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv() : options.buildEnv;
 
-  const resolved = await resolveDefaultBranchHead(cloneUrl, token).catch(() => undefined);
-  const sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
+  const repos: ResolvedRepository[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const access = await entry.getRepositoryAccess().catch(() => undefined);
+    const cloneUrl = access?.cloneUrl;
+    if (!cloneUrl) {
+      throw new Error(
+        `Repo template has no clone URL: repository access returned none${isList ? ` (repos[${index}])` : ''}.`,
+      );
+    }
+    assertCloneUrl(cloneUrl);
+    const token = access?.authorization?.token;
+    const resolved = await resolveDefaultBranchHead(cloneUrl, token).catch(() => undefined);
+    const sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
+    repos.push({
+      cloneUrl,
+      repoDir: repoDirName(normalizeCloneUrl(cloneUrl)),
+      token,
+      // The single form keeps its historical env name; list entries are
+      // numbered by caller position so public/private reordering never
+      // renames one.
+      tokenEnv: token ? (isList ? `${BUILD_TOKEN_ENV}_${index}` : BUILD_TOKEN_ENV) : undefined,
+      sha,
+      setupCommand: entry.setupCommand,
+    });
+  }
 
+  const seenDirs = new Map<string, string>();
+  for (const repo of repos) {
+    const other = seenDirs.get(repo.repoDir);
+    if (other) {
+      throw new Error(
+        `Repo template: repositories ${other} and ${repo.cloneUrl} would both clone into "${repo.repoDir}"`,
+      );
+    }
+    seenDirs.set(repo.repoDir, repo.cloneUrl);
+  }
+
+  const first = repos[0]!;
   const identity: RepoTemplateIdentity = {
-    cloneUrl,
-    ...(sha ? { sha } : {}),
+    cloneUrl: first.cloneUrl,
+    ...(first.sha ? { sha: first.sha } : {}),
     // Kept in its original shape (string vs array) so existing string-form
     // templates keep their hashes; omitted entirely when nothing would run.
-    ...(normalizeSetupCommands(options.setupCommand).length > 0 ? { setupCommand: options.setupCommand } : {}),
+    ...(normalizeSetupCommands(first.setupCommand).length > 0 ? { setupCommand: first.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
     ...(options.workingDirectory !== undefined
       ? { workingDirectory: trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory)) }
       : {}),
+    ...(isList
+      ? {
+          repos: repos.map(repo => ({
+            cloneUrl: repo.cloneUrl,
+            ...(repo.sha ? { sha: repo.sha } : {}),
+            ...(normalizeSetupCommands(repo.setupCommand).length > 0 ? { setupCommand: repo.setupCommand } : {}),
+          })),
+          ...(options.workspaceSetupCommand !== undefined
+            ? { workspaceSetupCommand: options.workspaceSetupCommand }
+            : {}),
+          ...(options.continueOnSetupFailure !== undefined
+            ? { continueOnSetupFailure: options.continueOnSetupFailure }
+            : {}),
+        }
+      : {}),
   };
-  return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
+  const spec = buildRepoTemplateSpec(identity, repos, options.continueOnSetupFailure ?? false);
+  const sha = isList ? (repos.every(repo => repo.sha) ? listSha(repos.map(repo => repo.sha!)) : undefined) : first.sha;
+  return { spec, ...(sha ? { sha } : {}) };
+}
+
+/** One repository with its access resolved, ready to be laid into build steps. */
+interface ResolvedRepository {
+  cloneUrl: string;
+  repoDir: string;
+  token?: string;
+  tokenEnv?: string;
+  sha?: string;
+  setupCommand?: string | string[];
 }
 
 /** Result of a {@link refreshRepoTemplate} call. */
@@ -391,22 +560,21 @@ function assertCloneUrl(cloneUrl: string): void {
  * REFERENCE — the token value never appears in the command string, and no
  * credential is written to the build filesystem.
  */
-function gitAuthFlag(): string {
-  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
+function gitAuthFlag(tokenEnv: string): string {
+  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)"`;
 }
 
-function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
-  const { sha, setupCommand, buildEnv, workingDirectory } = identity;
-  const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  // Relative to the build cwd, which `setWorkdir` (or the base image) also
-  // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
-  const repoDir = repoDirName(cloneUrl);
-
-  const auth = token ? `${gitAuthFlag()} ` : '';
+function buildRepoTemplateSpec(
+  identity: RepoTemplateIdentity,
+  repos: ResolvedRepository[],
+  continueOnFailure: boolean,
+): NamedTemplateSpec {
+  const { buildEnv, workingDirectory } = identity;
+  const isList = identity.repos !== undefined;
 
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
-  if (token) env[BUILD_TOKEN_ENV] = token;
+  for (const repo of repos) if (repo.tokenEnv && repo.token) env[repo.tokenEnv] = repo.token;
   if (Object.keys(env).length > 0) {
     // Visible to build steps; probed to NOT persist into runtime sandbox
     // environments. Values must be short-lived — they stay in the template
@@ -420,26 +588,42 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     const dir = trimTrailingSlashes(workingDirectory);
     template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
   }
-  // Each command gets its own cached build layer. Same shallow clone Factory
-  // makes at session start when no image provided one, so both paths yield
-  // the same checkout.
-  template = template.runCmd(
-    repoCloneCommand({ cloneUrl, destination: repoDir, ...(token ? { tokenEnv: BUILD_TOKEN_ENV } : {}) }),
-  );
-  if (sha) {
-    // GitHub serves fetches of reachable shas, so pinning after a default
-    // clone is reliable without full-history flags.
-    template = template
-      .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
-      .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+  // Public repositories first so their layers sit below any credential
+  // layer; caller order within each group.
+  const ordered = [...repos.filter(repo => !repo.token), ...repos.filter(repo => repo.token)];
+  for (const repo of ordered) {
+    const { repoDir, sha, tokenEnv } = repo;
+    const cloneUrl = normalizeCloneUrl(repo.cloneUrl);
+    const auth = tokenEnv ? `${gitAuthFlag(tokenEnv)} ` : '';
+    // Build steps use fresh shells, so each setup command needs its own `cd`.
+    const setupCommands = normalizeSetupCommands(repo.setupCommand);
+    const setupSteps = setupCommands.map(command => guardedSetupCommand({ repoDir, command, continueOnFailure }));
+    // Each command gets its own cached build layer. Same shallow clone Factory
+    // makes at session start when no image provided one, so both paths yield
+    // the same checkout. The clone carries no commit, so it and the first
+    // setup pass cache across commits; the pin and the second pass are the
+    // only per-commit layers.
+    template = template.runCmd(repoCloneCommand({ cloneUrl, destination: repoDir, ...(tokenEnv ? { tokenEnv } : {}) }));
+    for (const step of setupSteps) template = template.runCmd(step);
+    if (sha) {
+      // GitHub serves fetches of reachable shas, so pinning after a default
+      // clone is reliable without full-history flags.
+      template = template
+        .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
+        .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+    }
+    for (const step of setupSteps) template = template.runCmd(step);
+    // Last for this repository, so it only exists once every step above ran.
+    const content = setupMarkerContent(setupCommands);
+    template = template.runCmd(
+      isList ? setupMarkerCommand(content, repoSetupMarkerPath(repoDir)) : setupMarkerCommand(content),
+    );
   }
-  // Build steps use fresh shells, so each setup command needs its own `cd`.
-  const setupCommands = normalizeSetupCommands(setupCommand);
-  for (const command of setupCommands) {
-    template = template.runCmd(`cd "${repoDir}" && ${command}`);
+  if (isList) {
+    const workspaceCommands = normalizeSetupCommands(identity.workspaceSetupCommand);
+    for (const command of workspaceCommands) template = template.runCmd(command);
+    template = template.runCmd(setupMarkerCommand(setupMarkerContent(workspaceCommands), WORKSPACE_SETUP_MARKER_PATH));
   }
-  // Last, so it only exists in images where every step above succeeded.
-  template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
 
   return {
     ref: repoTemplateRef(identity),
