@@ -1,7 +1,11 @@
 import { InMemoryStore } from '@mastra/core/storage';
+import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
-import type { KnowledgeAccessProfileResolver } from '../routes/knowledge.js';
+import type { KnowledgeAccessProfileResolver, KnowledgeSearchPayload } from '../routes/knowledge.js';
+import { KnowledgeRoutes } from '../routes/knowledge.js';
+import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { registerShipyardMaintenanceImporter, shipyardImportBinding } from './shipyard-importer.js';
 import { createShipyardKnowledge, createShipyardAccessProfile } from './shipyard.js';
 
@@ -120,5 +124,36 @@ describe('Shipyard-shaped Knowledge configuration', () => {
     expect(await reopened.knowledge.getNode({ id: privateNode.id, scopeIds: maintainer })).toMatchObject({
       id: privateNode.id,
     });
+  });
+
+  it('serves Factory Knowledge routes through the Shipyard profile without exposing maintainer-only scopes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org', userId: 'owner', input: { name: 'Shipyard' } });
+    const { knowledge, scopes } = await createShipyardKnowledge(new InMemoryStore());
+    const store = await knowledge.getStorageInternal();
+    await store.createNode({ name: 'Heron repo note', kind: 'note', scopeIds: [scopes['repo:mastra']!] });
+    await store.createNode({ name: 'Heron platform secret', kind: 'note', scopeIds: [scopes['feature:platform']!] });
+    const routes = new KnowledgeRoutes({
+      auth: fakeRouteAuth({}),
+      projects: seed.projects,
+      knowledge: async () => knowledge,
+      accessProfile: createShipyardAccessProfile({ organizationId: 'org', maintainerIds: ['owner'] }),
+    }).routes();
+    const request = async (userId: string, organizationId: string) => {
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: userId, organizationId } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, routes);
+      return app.request(`/web/factory/projects/${project.id}/knowledge/search?q=Heron`);
+    };
+    const names = async (response: Response) => {
+      expect(response.status).toBe(200);
+      return ((await response.json()) as KnowledgeSearchPayload).results.map(result => result.name).toSorted();
+    };
+
+    expect(await names(await request('owner', 'org'))).toEqual(['Heron platform secret', 'Heron repo note']);
+    expect(await names(await request('reader', 'org'))).toEqual(['Heron repo note']);
   });
 });
