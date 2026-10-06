@@ -15,6 +15,7 @@ export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: Pick<DatasetExperiment, 'datasetId' | 'status'>[];
   isLoading: boolean;
+  isExperimentsLoading?: boolean;
   search?: string;
   experimentFilter?: string;
   tagFilter?: string;
@@ -124,16 +125,24 @@ function SelectableDatasetRow({
  * link and the trailing experiments button stop propagation to avoid double
  * activation.
  */
-function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowProps: RowProps }) {
+function DatasetRow({
+  dataset: ds,
+  rowProps,
+  isExperimentsLoading,
+}: {
+  dataset: EnrichedDataset;
+  rowProps: RowProps;
+  isExperimentsLoading?: boolean;
+}) {
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
-  const hasExperimentsAction = ds.experimentCount > 0;
+  const hasExperimentsAction = !isExperimentsLoading && ds.experimentCount > 0;
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
       <DataList.RowLink
         ref={linkRef}
-        colEnd={hasExperimentsAction ? -2 : -1}
+        colEnd={hasExperimentsAction || isExperimentsLoading ? -2 : -1}
         to={paths.datasetLink(ds.id)}
         LinkComponent={Link}
         tabIndex={-1}
@@ -144,10 +153,17 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         <TagsCell tags={ds.tags} />
         <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
         <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
-        {hasExperimentsAction ? null : <DataList.Cell className="justify-center" />}
+        {hasExperimentsAction || isExperimentsLoading ? null : <DataList.Cell className="justify-center" />}
       </DataList.RowLink>
 
-      {hasExperimentsAction ? (
+      {isExperimentsLoading ? (
+        <DataList.Cell>
+          <span role="status" aria-label="Loading experiment summary">
+            …
+          </span>
+        </DataList.Cell>
+      ) : null}
+      {hasExperimentsAction && (
         <Button
           render={<Link href={`/experiments?dataset=${ds.id}`} />}
 
@@ -158,7 +174,7 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         >
           <ExperimentsBadge dataset={ds} />
         </Button>
-      ) : null}
+      )}
     </DataList.RowWrapper>
   );
 }
@@ -167,6 +183,7 @@ export function DatasetsList({
   datasets,
   experiments,
   isLoading,
+  isExperimentsLoading,
   search = '',
   experimentFilter = 'all',
   tagFilter = 'all',
@@ -251,7 +268,12 @@ export function DatasetsList({
             trailingCell={renderTrailingCell?.(ds) ?? null}
           />
         ) : (
-          <DatasetRow key={ds.id} dataset={ds} rowProps={getRowProps(index)} />
+          <DatasetRow
+            key={ds.id}
+            dataset={ds}
+            rowProps={getRowProps(index)}
+            isExperimentsLoading={isExperimentsLoading}
+          />
         ),
       )}
 

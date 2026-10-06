@@ -19,6 +19,7 @@ import type { IntakeLabelRoute, IntakeSourceBinding } from '../../services/intak
 import type { JiraIssue } from '../../services/jira';
 import type { LinearIssue } from '../../services/linear';
 import { useBoardIntake } from '../useBoardIntake';
+import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitlab } from './fixtures/query-loading';
 
 const repository = { projectRepositoryId: 'repo-1', slug: 'acme/app' } as LinkedRepositoryPayload;
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
@@ -271,6 +272,7 @@ describe('useBoardIntake GitLab routing', () => {
   });
 
   it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
+    stubIntake([]);
     let githubRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/gitlab/projects/repo-1/prs`, ({ request }) => {
@@ -664,5 +666,61 @@ describe('useBoardIntake Jira gating', () => {
       ),
     );
     expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
+  });
+});
+
+describe('useBoardIntake query loading', () => {
+  describe('when GitHub intake is ready and Linear status is still loading', () => {
+    it('keeps the active intake feed ready', async () => {
+      stubIntake([]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: githubWithLinearConfig })),
+        http.get(`${TEST_BASE_URL}/web/linear/status`, async () => {
+          await held;
+          return HttpResponse.json(connectedLinear);
+        }),
+      );
+      const { result, unmount } = renderIntake('factory-1');
+      try {
+        await waitFor(() => expect(result.current.isPending).toBe(false));
+        expect(result.current.active).toBe('github');
+        expect(result.current.isPending).toBe(false);
+      } finally {
+        release();
+        unmount();
+      }
+    });
+  });
+
+  describe('when intake configuration is still loading', () => {
+    it('starts GitLab status before configuration resolves', async () => {
+      stubIntake([]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let requested = false;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/intake/config`, async () => {
+          await held;
+          return HttpResponse.json({ config: gitlabOnlyConfig });
+        }),
+        http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
+          requested = true;
+          return HttpResponse.json(disabledGitlab);
+        }),
+      );
+      const { unmount } = renderIntake('factory-1');
+      try {
+        await waitFor(() => expect(requested).toBe(true));
+      } finally {
+        release();
+        unmount();
+      }
+    });
   });
 });

@@ -50,7 +50,7 @@ export default function Datasets() {
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
   const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
 
-  const isLoading = isLoadingDatasets || isLoadingExperiments;
+  const isLoading = isLoadingDatasets || (experimentFilter !== 'all' && isLoadingExperiments);
   const error = errorDatasets || errorExperiments;
 
   const navigate = useNavigate();
@@ -135,6 +135,7 @@ export default function Datasets() {
         datasets={datasets}
         experiments={experiments}
         isLoading={isLoading}
+        isExperimentsLoading={isLoadingExperiments}
         search={search}
         experimentFilter={experimentFilter}
         tagFilter={tagFilter}

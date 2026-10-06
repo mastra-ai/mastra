@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +7,7 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { WorkItemStageEntry } from '../../domains/factory/services/workItems';
 import { OverviewContent } from '../OverviewPage';
+import { emptyBoard, emptyCommits } from './fixtures/overview-loading';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY = { projectRepositoryId: 'repository-1', slug: 'acme/app' };
@@ -47,6 +48,7 @@ function stubBoard(workItems: unknown[], runningSessionIds: string[] = [], findi
     'label-drift': 0,
   };
   server.use(
+    http.get('*/web/github/projects/:id/commits', () => HttpResponse.json(emptyCommits)),
     http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds })),
     http.get('*/web/factory/projects/:id/supervisor/health', () =>
       HttpResponse.json({ checkedAt: new Date().toISOString(), findings, counts }),
@@ -137,6 +139,36 @@ describe('Overview', () => {
     renderOverview();
 
     expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
-    expect(screen.getByText('Nothing new in this window')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing new in this window')).toBeInTheDocument();
+  });
+});
+
+describe('Overview query loading', () => {
+  describe('when work items are still loading', () => {
+    it('starts the commits request before work items resolve', async () => {
+      stubBoard([]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let commitsRequested = false;
+      server.use(
+        http.get('*/web/factory/projects/:id/work-items', async () => {
+          await held;
+          return HttpResponse.json(emptyBoard);
+        }),
+        http.get('*/web/github/projects/:id/commits', () => {
+          commitsRequested = true;
+          return HttpResponse.json(emptyCommits);
+        }),
+      );
+      const { unmount } = renderOverview(REPOSITORY);
+      try {
+        await waitFor(() => expect(commitsRequested).toBe(true));
+      } finally {
+        release();
+        unmount();
+      }
+    });
   });
 });

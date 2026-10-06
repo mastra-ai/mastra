@@ -86,8 +86,6 @@ function CompareExperimentsPage() {
     );
   }
 
-  if (isLoading) return null;
-
   if (error && !is404NotFoundError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
@@ -103,7 +101,7 @@ function CompareExperimentsPage() {
   }
 
   // 404 (or no data): the experiment does not exist or belongs to another dataset.
-  if (error || !experimentA.data || !experimentB.data) {
+  if (!isLoading && (error || !experimentA.data || !experimentB.data)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Compare</h1>

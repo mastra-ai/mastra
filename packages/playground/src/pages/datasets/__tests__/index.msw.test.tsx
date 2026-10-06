@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import DatasetsPage from '..';
+import { emptyScorers } from './fixtures/query-loading';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { Link } from '@/lib/link';
@@ -46,6 +47,7 @@ const renderPage = (initialEntry = '/datasets') =>
 
 beforeEach(() => {
   listRequests = [];
+  server.use(http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)));
 });
 
 describe('Datasets page', () => {
@@ -111,6 +113,30 @@ describe('Datasets page', () => {
 
       const link = await screen.findByRole('link', { name: 'New dataset' });
       expect(link.getAttribute('href')).toBe('/datasets/new');
+    });
+  });
+});
+
+describe('Datasets page query loading', () => {
+  describe('when experiment summaries are still loading', () => {
+    it('shows the datasets before experiment summaries resolve', async () => {
+      useDatasets([buildDataset({ id: 'ds-1', name: 'Alpha' })]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, async () => {
+          await held;
+          return HttpResponse.json(buildListExperimentsResponse([]));
+        }),
+      );
+      try {
+        renderPage();
+        expect(await screen.findByText('Alpha')).not.toBeNull();
+      } finally {
+        release();
+      }
     });
   });
 });

@@ -80,12 +80,15 @@ export function OverviewContent({
     const message = itemsQuery.error instanceof Error ? itemsQuery.error.message : 'Failed to load the board';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  if (!items) return <OverviewLoading />;
 
   return (
     <div className="mt-6 flex flex-col gap-14 pb-16">
       <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
-        <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
+        {items ? (
+          <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
+        ) : (
+          <OverviewLoading />
+        )}
       </Block>
 
       <section className="grid grid-cols-1 gap-10 lg:grid-cols-2">
@@ -93,18 +96,28 @@ export function OverviewContent({
           title="Stalled"
           action={current.waiting.length > 0 ? <Count value={`${current.waiting.length} waiting`} /> : undefined}
         >
-          <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
 
         <Block
           title="Running now"
           action={
-            <Count
-              value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
-            />
+            items ? (
+              <Count
+                value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
+              />
+            ) : undefined
           }
         >
-          <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
       </section>
 
@@ -113,7 +126,11 @@ export function OverviewContent({
       </Block>
 
       <Block title="Activity" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/activity`} />}>
-        <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        {items ? (
+          <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        ) : (
+          <Skeleton className="h-24 w-full rounded-xl" />
+        )}
       </Block>
 
       <Block
@@ -204,10 +221,8 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
 
 function OverviewLoading() {
   return (
-    <div role="status" aria-label="Loading factory overview" className="mt-6 flex flex-col gap-10">
+    <div role="status" aria-label="Loading factory overview" className="flex flex-col">
       <Skeleton className="h-52 w-full rounded-xl" />
-      <Skeleton className="h-48 w-full rounded-xl" />
-      <Skeleton className="h-24 w-full rounded-xl" />
     </div>
   );
 }

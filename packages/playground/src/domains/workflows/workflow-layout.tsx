@@ -78,7 +78,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading && activeTab === 'graph') {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{workflowId}</h1>
