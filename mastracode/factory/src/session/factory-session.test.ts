@@ -262,7 +262,7 @@ describe('hydrateFactorySession', () => {
       reflectionThreshold: 7,
       observeAttachments: true,
     });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     for (const agentType of ['explore', 'plan', 'execute']) {
       expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5', agentType });
     }
@@ -284,7 +284,7 @@ describe('hydrateFactorySession', () => {
     expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(double.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(double.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(double.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
   });
 
   it('leaves the session on its default model when the project has none', async () => {
@@ -373,7 +373,7 @@ describe('hydrateFactorySession', () => {
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply observational-memory settings', {
       error: 'storage down',
     });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     warn.mockRestore();
   });
 });

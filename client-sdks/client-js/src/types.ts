@@ -2474,7 +2474,7 @@ export type BuilderRegistryInstallResponse = GeneratedResponse<'POST /editor/bui
 // Wire shapes derive from the published route contracts, vocabulary from core.
 // Event-stream types can't derive this way (SSE routes carry no response
 // schema) and stay hand-written in `resources/agent-controller`.
-export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { AgentControllerThinkingLevel, PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
 export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
 
 export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];
