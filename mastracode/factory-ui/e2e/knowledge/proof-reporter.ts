@@ -15,14 +15,6 @@ const proofGroups = [
     screenshots: ['explore.png', 'imports-completed.png', 'reader.png', 'suggester.png', 'reviewer.png'],
   },
   {
-    files: ['curation.spec.ts'],
-    tests: [
-      'knowledge/curation.spec.ts > Knowledge curation workflow > when an owner curates independent provisional items > applies refine, merge, retain, discard, and promote through real routes and LibSQL',
-      'knowledge/curation.spec.ts > Knowledge curation workflow > when a suggest-only curator requests promotion > creates a review proposal and opens it in Approvals',
-    ],
-    screenshots: ['curation-owner.png', 'curation-suggest.png'],
-  },
-  {
     files: ['canvas.spec.ts'],
     tests: [
       'knowledge/canvas.spec.ts > Knowledge graph canvas > when an authorized user explores a large scope lens > selects a bounded lens, preserves cycles and privacy, and navigates an adjacent scope',
