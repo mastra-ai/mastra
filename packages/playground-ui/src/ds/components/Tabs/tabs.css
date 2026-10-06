@@ -44,7 +44,7 @@
     [data-variant='pill'] [data-slot='tab'] {
       position: relative;
       z-index: 10;
-      padding: 4px 12px;
+      padding: 0 12px;
       border-radius: 9999px;
     }
 
