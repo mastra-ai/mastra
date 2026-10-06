@@ -345,6 +345,52 @@ describe('KnowledgeRoutes', () => {
     ]);
   });
 
+  it('reads one org correctly when other tenants hold more than 1000 scopes', async () => {
+    const h = await createHarness();
+    await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${OTHER_ORG}`, name: 'aaa other org' },
+        ...Array.from({ length: 1001 }, (_, index) => ({
+          address: `thread:noise-${index}`,
+          name: `aaa noise ${String(index).padStart(4, '0')}`,
+          parentAddresses: [`org:${OTHER_ORG}`],
+        })),
+      ],
+    });
+    const { scopes } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        { address: 'features:memory', name: 'Memory Systems', parentAddresses: [`org:${ORG}`] },
+      ],
+    });
+    const materialize = vi.spyOn(h.instance, 'materializeScope');
+
+    const first = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(first.status).toBe(200);
+    const tree = (await first.json()) as KnowledgeScopeTreePayload;
+    expect(tree.scopeNodes?.map(scope => scope.address)).toEqual(
+      expect.arrayContaining([`org:${ORG}`, `resource:${h.projectId}`, 'features:memory']),
+    );
+    expect(tree.scopeNodes?.some(scope => scope.address.startsWith('thread:noise-'))).toBe(false);
+    // Only the missing project rung is materialized, and only on the first read.
+    expect(materialize).toHaveBeenCalledTimes(1);
+    await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(materialize).toHaveBeenCalledTimes(1);
+
+    const lens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${scopes['features:memory']}`,
+    );
+    expect(lens.status).toBe(200);
+    const search = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=memory`);
+    expect(((await search.json()) as KnowledgeSearchPayload).results).toContainEqual(
+      expect.objectContaining({ id: scopes['features:memory'], type: 'scope' }),
+    );
+    const activity = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${scopes['features:memory']}`,
+    );
+    expect(activity.status).toBe(200);
+  });
+
   it('serves the reconciled structural scope tree and its selected members', async () => {
     const h = await createHarness();
     const { scopes: ids } = await h.knowledge.reconcileStructure({
