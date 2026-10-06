@@ -843,7 +843,7 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.model.switch({ modelId, thinkingLevel });
+      await session.model.switch(modelId, { thinkingLevel });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller model');

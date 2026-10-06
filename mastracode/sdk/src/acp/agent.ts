@@ -237,7 +237,7 @@ export class MastraCodeAcpAgent implements Agent {
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
       const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
-      if (defaultModelId) await runtime.session.model.switch({ modelId: defaultModelId });
+      if (defaultModelId) await runtime.session.model.switch(defaultModelId);
       const models: NewSessionResponse['models'] = {
         currentModelId: runtime.session.model.get() ?? '',
         availableModels: includeCurrentModel(
@@ -392,8 +392,7 @@ export class MastraCodeAcpAgent implements Agent {
       }
       if (params.configId === 'model') {
         const modelId = String(params.value);
-        await entry.session.model.switch({
-          modelId,
+        await entry.session.model.switch(modelId, {
           ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevel(entry, modelId) } : {}),
         });
       } else if (params.configId === 'mode') {
@@ -517,7 +516,7 @@ export class MastraCodeAcpAgent implements Agent {
           'Model is unavailable or its provider is not configured. Refresh the model list.',
         );
       }
-      await entry.session.model.switch({ modelId: params.modelId });
+      await entry.session.model.switch(params.modelId);
     });
   }
 }

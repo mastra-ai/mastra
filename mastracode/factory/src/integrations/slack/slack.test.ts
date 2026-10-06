@@ -1465,7 +1465,7 @@ describe('session start (onSessionStart)', () => {
         get: vi.fn(() => currentModel),
         // Real `switch` is what makes a model choice durable: it applies the
         // model and writes it to the thread's current model setting.
-        switch: vi.fn(async ({ modelId }: { modelId: string }) => {
+        switch: vi.fn(async (modelId: string) => {
           settings.set('currentModelId', modelId);
           settings.set('modelPersistenceVersion', 2);
         }),
@@ -1538,7 +1538,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     // Resolved from the session row, not from anything held in memory, so it
     // works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
@@ -1560,7 +1560,7 @@ describe('session start (onSessionStart)', () => {
     // Keyed by the org/user pair the source-control row resolved, not by
     // anything the Slack payload claimed.
     expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(session.model.switch).toHaveBeenLastCalledWith('openai/gpt-5.6');
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
     expect(session.subagents.model.set.mock.calls.slice(-3).map(([arg]) => arg)).toEqual([
       { modelId: 'openai/gpt-5.6', agentType: 'explore' },
@@ -1604,7 +1604,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
     expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-chat' });
+    expect(session.model.switch).toHaveBeenLastCalledWith('deepseek/deepseek-chat');
   });
 
   it('realigns observational memory when the sender model cannot be applied', async () => {
@@ -1657,7 +1657,7 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).toHaveBeenCalledTimes(1);
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6' });
+    expect(session.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
@@ -1671,7 +1671,7 @@ describe('session start (onSessionStart)', () => {
 
     await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
 
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
     expect(warn).toHaveBeenCalled();
   });
@@ -1772,7 +1772,7 @@ describe('session start (onSessionStart)', () => {
     expect(warn).toHaveBeenCalled();
     expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
   });
 
   // The durable record of a deliberate choice: either an earlier start or the
@@ -1901,7 +1901,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.5' });
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
     expect(session.restoredModel()).toBe('openai/gpt-5.5');
   });
 

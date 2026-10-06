@@ -118,7 +118,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
         }),
         ctx.state.session.thread.setSetting({ key: 'observerModelId', value: previousSessionState.observerModelId }),
         ctx.state.session.thread.setSetting({ key: 'reflectorModelId', value: previousSessionState.reflectorModelId }),
-        ctx.state.session.model.switch({ modelId: previousModelId }),
+        ctx.state.session.model.switch(previousModelId),
         ctx.state.session.state.set({
           modelRoute: previousSessionState.modelRoute,
           [MODEL_FALLBACK_STATE_KEY]: previousSessionState[MODEL_FALLBACK_STATE_KEY] ?? null,

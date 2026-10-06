@@ -13,12 +13,10 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
   const setState = vi.fn(async updates => {
     Object.assign(state, updates);
   });
-  const switchModel = vi.fn(
-    async ({ modelId: id, thinkingLevel }: { modelId: string; thinkingLevel?: ThinkingLevelSetting }) => {
-      modelId = id;
-      if (thinkingLevel !== undefined) state.thinkingLevel = thinkingLevel;
-    },
-  );
+  const switchModel = vi.fn(async (id: string, { thinkingLevel }: { thinkingLevel?: ThinkingLevelSetting } = {}) => {
+    modelId = id;
+    if (thinkingLevel !== undefined) state.thinkingLevel = thinkingLevel;
+  });
   const session = {
     subscribe: (listener: typeof emit) => {
       emit = listener;
@@ -113,7 +111,7 @@ describe('ACP session configuration', () => {
       configId: 'model',
       value: 'openai/gpt-5.5',
     });
-    expect(switchModel).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.5', thinkingLevel: 'xhigh' });
+    expect(switchModel).toHaveBeenLastCalledWith('openai/gpt-5.5', { thinkingLevel: 'xhigh' });
     expect(setState).toHaveBeenCalledExactlyOnceWith({ thinkingLevel: 'max' });
     expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });

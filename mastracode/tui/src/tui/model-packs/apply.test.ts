@@ -58,7 +58,7 @@ function makeSettings() {
 function makeContext(modelId = 'provider/old') {
   let currentModelId = modelId;
   let currentModeId = 'build';
-  const modelSwitch = vi.fn(async ({ modelId: nextModelId }: { modelId: string }) => {
+  const modelSwitch = vi.fn(async (nextModelId: string) => {
     currentModelId = nextModelId;
   });
   const modeSwitch = vi.fn(async ({ modeId }: { modeId: string }) => {
@@ -110,7 +110,7 @@ describe('model pack application', () => {
 
     await applyPackToSession(ctx, 'custom:Primary', { modeId: 'build' });
 
-    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({ modelId: 'provider/build-primary' });
+    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith('provider/build-primary', {});
     expect(ctx.state.session.subagents.model.set.mock.calls).toEqual([
       [{ modelId: 'provider/fast-primary', agentType: 'explore' }],
       [{ modelId: 'provider/plan-primary', agentType: 'plan' }],
@@ -150,10 +150,7 @@ describe('model pack application', () => {
 
     await applyPackToSession(ctx, 'custom:Primary', { modeId: 'build', thinkingLevel: 'xhigh' });
 
-    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'provider/build-primary',
-      thinkingLevel: 'xhigh',
-    });
+    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith('provider/build-primary', { thinkingLevel: 'xhigh' });
     expect(ctx.state.session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ thinkingLevel: 'xhigh' }));
   });
 
@@ -164,7 +161,7 @@ describe('model pack application', () => {
     await applyPackToSession(ctx, 'custom:Primary', { modeId: 'build' });
 
     expect(ctx.state.session.thread.setSetting).not.toHaveBeenCalled();
-    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-primary' });
+    expect(modelSwitch).toHaveBeenCalledWith('provider/build-primary', {});
   });
 
   it('falls back to the mode default when the active pack is incomplete', async () => {
@@ -179,7 +176,7 @@ describe('model pack application', () => {
 
     await expect(applyCurrentThreadPack(ctx, { packId: 'custom:Primary' })).resolves.toEqual({ applied: true });
 
-    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-default' });
+    expect(modelSwitch).toHaveBeenCalledWith('provider/build-default');
     expect(ctx.state.session.state.set).toHaveBeenCalledWith({
       modelRoute: undefined,
       mastracodePendingModelFallback: null,
@@ -206,7 +203,7 @@ describe('model pack application', () => {
     await switchModeWithPack(ctx, 'plan');
 
     expect(modeSwitch).toHaveBeenCalledWith({ modeId: 'plan' });
-    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/plan-primary' });
+    expect(modelSwitch).toHaveBeenCalledWith('provider/plan-primary', {});
   });
 
   it('uses the mode-change listener as a no-op safety net when already applied', async () => {
@@ -278,7 +275,7 @@ describe('model pack application', () => {
     await expect(primaryApplication).resolves.toMatchObject({ applied: false });
     await expect(fallbackApplication).resolves.toMatchObject({ applied: true });
     expect(modelSwitch).toHaveBeenCalledTimes(1);
-    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/plan-fallback' });
+    expect(modelSwitch).toHaveBeenCalledWith('provider/plan-fallback', {});
     expect(ctx.state.session.thread.setSetting).toHaveBeenLastCalledWith({
       key: MODEL_FALLBACK_STATE_KEY,
       value: undefined,

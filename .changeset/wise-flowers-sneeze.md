@@ -1,8 +1,8 @@
 ---
-'@mastra/core': minor
+'@mastra/core': major
 ---
 
-Added an optional `thinkingLevel` to `session.model.switch` so model and reasoning effort are applied and persisted together. The `model_changed` event includes the supplied level.
+Changed `session.model.switch` to accept a model ID followed by an optional options object. Pass `{ thinkingLevel }` to apply and persist model and reasoning effort together. Every `model_changed` event includes the current thinking level, even when it is unchanged.
 
 ```ts
 // Before
@@ -10,5 +10,5 @@ await session.model.switch({ modelId: 'openai/gpt-5.5' });
 await session.state.set({ thinkingLevel: 'high' });
 
 // After
-await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
 ```

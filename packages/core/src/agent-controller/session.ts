@@ -1949,12 +1949,19 @@ export class SessionModel {
   /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
   #trackModelUse: ModelUseCountTracker | undefined;
   readonly #setThinkingLevel: ThinkingLevelSwitch;
+  readonly #getThinkingLevel: () => AgentControllerThinkingLevel | undefined;
   #switchQueue: Promise<void> = Promise.resolve();
 
-  constructor(store: () => ThreadSettingsStore | undefined, bus: SessionBus, setThinkingLevel: ThinkingLevelSwitch) {
+  constructor(
+    store: () => ThreadSettingsStore | undefined,
+    bus: SessionBus,
+    setThinkingLevel: ThinkingLevelSwitch,
+    getThinkingLevel: () => AgentControllerThinkingLevel | undefined,
+  ) {
     this.#store = store;
     this.#bus = bus;
     this.#setThinkingLevel = setThinkingLevel;
+    this.#getThinkingLevel = getThinkingLevel;
   }
 
   /** Attach mode accessors and the optional model-use tracker. */
@@ -2013,7 +2020,7 @@ export class SessionModel {
       onResolved: modelId => {
         if (store.getThreadId() !== threadId || modelId === this.#id) return;
         this.#id = modelId;
-        this.#bus.emit({ type: 'model_changed', modelId });
+        this.#bus.emit({ type: 'model_changed', modelId, thinkingLevel: this.#getThinkingLevel() });
       },
       set: (key, value) => store.setOn(threadId, key, value),
       threadId,
@@ -2025,18 +2032,14 @@ export class SessionModel {
    * Switch to a different model at runtime.
    *
    * Persists the selection for the thread, reports it to the model-use tracker,
-   * and emits `model_changed`. When `thinkingLevel` is provided it is applied
-   * and persisted with the model (through the session-state preference, which
-   * also survives restarts) and reported on the same event, so model and
-   * reasoning effort move together.
+   * and emits `model_changed` with the current thinking level. When
+   * `thinkingLevel` is provided it is applied and persisted with the model
+   * (through the session-state preference, which also survives restarts).
    */
-  async switch({
-    modelId,
-    thinkingLevel,
-  }: {
-    modelId: string;
-    thinkingLevel?: AgentControllerThinkingLevel;
-  }): Promise<void> {
+  async switch(
+    modelId: string,
+    { thinkingLevel }: { thinkingLevel?: AgentControllerThinkingLevel } = {},
+  ): Promise<void> {
     const store = this.#store();
     const threadId = store?.getThreadId();
     const isActive = () => store?.getThreadId() === threadId;
@@ -2062,7 +2065,7 @@ export class SessionModel {
           this.#bus.emit({
             type: 'model_changed',
             modelId,
-            ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+            thinkingLevel: this.#getThinkingLevel(),
           });
         }
       }),
@@ -3440,6 +3443,21 @@ export class Session<TState = unknown> {
           isActive,
           applyModel,
         ),
+      () => {
+        const state = sessionState.get();
+        const level = state && typeof state === 'object' && 'thinkingLevel' in state ? state.thinkingLevel : undefined;
+        switch (level) {
+          case 'off':
+          case 'low':
+          case 'medium':
+          case 'high':
+          case 'xhigh':
+          case 'max':
+            return level;
+          default:
+            return undefined;
+        }
+      },
     );
 
     if (workspace !== undefined && !(workspace instanceof Workspace)) {

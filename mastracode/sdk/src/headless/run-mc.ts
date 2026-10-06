@@ -418,7 +418,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         await session.mode.switch({ modeId: options.mode });
       }
       if (modelIdToApply) {
-        await session.model.switch({ modelId: modelIdToApply });
+        await session.model.switch(modelIdToApply);
       }
       if (options.thinkingLevel) {
         await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);

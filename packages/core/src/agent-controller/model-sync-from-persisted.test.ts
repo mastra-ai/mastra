@@ -54,7 +54,7 @@ describe('SessionModel.syncFromPersisted', () => {
   it('restores currentModelId over a stale in-memory selection', async () => {
     const { session } = await buildController(storage);
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
 
     const { session: replica } = await buildController(storage, 'replica-session');
     await replica.thread.switch({ threadId: thread.id });
@@ -126,7 +126,7 @@ describe('SessionModel.syncFromPersisted', () => {
       .mockImplementation(originalGetById);
 
     const migration = replica.model.syncFromPersisted();
-    const modelSwitch = replica.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    const modelSwitch = replica.model.switch('openai/gpt-5.2-codex');
     releaseMetadata();
     await Promise.all([migration, modelSwitch]);
 
@@ -153,7 +153,7 @@ describe('SessionModel.syncFromPersisted', () => {
   it('emits model_changed only when the persisted value changes the selection', async () => {
     const { session } = await buildController(storage);
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
 
     const events: string[] = [];
     session.subscribe(event => {
@@ -165,7 +165,7 @@ describe('SessionModel.syncFromPersisted', () => {
 
     const { session: other } = await buildController(storage, 'other-session');
     await other.thread.switch({ threadId: thread.id });
-    await other.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    await other.model.switch('openai/gpt-5.2-codex');
 
     await session.model.syncFromPersisted();
     expect(events).toEqual(['openai/gpt-5.2-codex']);

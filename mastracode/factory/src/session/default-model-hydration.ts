@@ -3,7 +3,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export interface DefaultModelApplicableSession {
-  model: { switch(args: { modelId: string }): Promise<unknown> };
+  model: { switch(modelId: string): Promise<unknown> };
   subagents: { model: { set(args: { modelId: string; agentType: string }): Promise<unknown> } };
 }
 
@@ -17,7 +17,7 @@ export interface DefaultModelHydrationSession extends DefaultModelApplicableSess
 }
 
 async function applyDefaultModel(session: DefaultModelApplicableSession, modelId: string): Promise<void> {
-  await session.model.switch({ modelId });
+  await session.model.switch(modelId);
 
   for (const agentType of ['explore', 'plan', 'execute']) {
     await session.subagents.model.set({ modelId, agentType });

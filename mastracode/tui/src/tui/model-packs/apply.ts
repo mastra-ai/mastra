@@ -176,8 +176,7 @@ export async function applyPackToSession(
           if (!application.isCurrent()) return cancelled();
         }
       }
-      await ctx.state.session.model.switch({
-        modelId: selection.modelId,
+      await ctx.state.session.model.switch(selection.modelId, {
         ...(options.thinkingLevel !== undefined ? { thinkingLevel: options.thinkingLevel } : {}),
       });
       if (!application.isCurrent()) return cancelled();
@@ -247,7 +246,7 @@ export async function applyCurrentThreadPack(
       const mode = ctx.state.controller.listModes().find(item => item.id === modeId);
       const modelId = settings.models.modeDefaults[modeId] ?? mode?.defaultModelId;
       if (modelId && ctx.state.session.model.get() !== modelId) {
-        await ctx.state.session.model.switch({ modelId });
+        await ctx.state.session.model.switch(modelId);
         if (!application.isCurrent()) return { applied: false };
       }
     }

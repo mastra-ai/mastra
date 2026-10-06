@@ -813,10 +813,10 @@ export type AgentControllerEvent =
       type: 'model_changed';
       modelId: string;
       /**
-       * Present when the switch carried a thinking level, which was applied and
-       * persisted with the model. Absent for model-only switches.
+       * The current session thinking level, including for model-only switches.
+       * Undefined when the session has no thinking-level override.
        */
-      thinkingLevel?: AgentControllerThinkingLevel;
+      thinkingLevel: AgentControllerThinkingLevel | undefined;
     }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }

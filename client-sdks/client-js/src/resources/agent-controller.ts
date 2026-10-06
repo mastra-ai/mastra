@@ -692,7 +692,10 @@ export class AgentControllerSession extends BaseResource {
    * Switch the session model and persist it to the active thread. When
    * `thinkingLevel` is provided it is applied and persisted with the model.
    */
-  async switchModel(modelId: string, thinkingLevel?: AgentControllerThinkingLevel): Promise<void> {
+  async switchModel(
+    modelId: string,
+    { thinkingLevel }: { thinkingLevel?: AgentControllerThinkingLevel } = {},
+  ): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
       body: thinkingLevel !== undefined ? { modelId, thinkingLevel } : { modelId },

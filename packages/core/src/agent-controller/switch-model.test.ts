@@ -48,7 +48,7 @@ describe('session.model.switch', () => {
     const memory = (await storage.getStore('memory'))!;
     const save = vi.spyOn(memory, 'saveThread');
 
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
 
     expect(save).toHaveBeenCalledTimes(1);
     expect((await session.thread.getById({ threadId: thread.id }))?.metadata).toMatchObject({
@@ -73,20 +73,42 @@ describe('session.model.switch', () => {
     expect(restored.state.get().thinkingLevel).toBe('high');
   });
 
-  it('keeps the thinking level unchanged for model-only switches and set', async () => {
-    const { session } = await createSession();
-    await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });
-    const events: unknown[] = [];
-    session.subscribe(event => {
-      if (event.type === 'model_changed') events.push(event);
-    });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
-    session.model.set({ modelId: 'openai/gpt-4o' });
-    expect(session.state.get().thinkingLevel).toBe('off');
-    expect(events).toEqual([{ type: 'model_changed', modelId: 'anthropic/claude-opus-4-6' }]);
-    expect(await session.thread.getSetting({ key: 'currentModelId' })).toBe('anthropic/claude-opus-4-6');
-  });
+  it.each(['off', 'low', 'medium', 'high', 'xhigh', 'max', undefined] as const)(
+    'includes unchanged thinking level %s for model-only switches and keeps set ephemeral',
+    async thinkingLevel => {
+      const { session } = await createSession();
+      await session.thread.create();
+      await session.model.switch('openai/gpt-5.5', { thinkingLevel });
+      const events: unknown[] = [];
+      session.subscribe(event => {
+        if (event.type === 'model_changed') events.push(event);
+      });
+      await session.model.switch('anthropic/claude-opus-4-6');
+      session.model.set({ modelId: 'openai/gpt-4o' });
+      expect(session.state.get().thinkingLevel).toBe(thinkingLevel);
+      expect(events).toStrictEqual([{ type: 'model_changed', modelId: 'anthropic/claude-opus-4-6', thinkingLevel }]);
+      expect(await session.thread.getSetting({ key: 'currentModelId' })).toBe('anthropic/claude-opus-4-6');
+      expect(await session.thread.getSetting({ key: 'thinkingLevel' })).toBe(thinkingLevel);
+    },
+  );
+
+  it.each(['high', undefined] as const)(
+    'includes the current thinking level %s when re-syncing a changed persisted model',
+    async thinkingLevel => {
+      const { session } = await createSession();
+      await session.thread.create();
+      await session.model.switch('openai/gpt-5.5', { thinkingLevel });
+      session.model.set({ modelId: 'openai/gpt-4o' });
+      const events: unknown[] = [];
+      session.subscribe(event => {
+        if (event.type === 'model_changed') events.push(event);
+      });
+
+      await session.model.syncFromPersisted();
+
+      expect(events).toStrictEqual([{ type: 'model_changed', modelId: 'openai/gpt-5.5', thinkingLevel }]);
+    },
+  );
 
   it('serializes concurrent model and thinking selections as pairs', async () => {
     const { session } = await createSession();
@@ -97,8 +119,8 @@ describe('session.model.switch', () => {
         pairs.push([event.modelId, event.thinkingLevel, session.state.get().thinkingLevel]);
     });
     await Promise.all([
-      session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' }),
-      session.model.switch({ modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'low' }),
+      session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' }),
+      session.model.switch('anthropic/claude-opus-4-6', { thinkingLevel: 'low' }),
     ]);
     expect(pairs).toEqual([
       ['openai/gpt-5.5', 'high', 'high'],
@@ -112,12 +134,12 @@ describe('session.model.switch', () => {
     const storage = new InMemoryStore();
     const { session } = await createSession(undefined, storage);
     await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'low' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'low' });
     const memory = (await storage.getStore('memory'))!;
     vi.spyOn(memory, 'saveThread').mockRejectedValueOnce(new Error('write failed'));
     const listener = vi.fn();
     session.subscribe(listener);
-    await expect(session.model.switch({ modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' })).rejects.toThrow(
+    await expect(session.model.switch('anthropic/claude-opus-4-6', { thinkingLevel: 'high' })).rejects.toThrow(
       'write failed',
     );
     expect(session.model.get()).toBe('openai/gpt-5.5');
@@ -133,7 +155,7 @@ describe('session.model.switch', () => {
       session.model.set({ modelId: 'openai/gpt-4o' });
       const listener = vi.fn();
       session.subscribe(listener);
-      await expect(session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' })).rejects.toThrow();
+      await expect(session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' })).rejects.toThrow();
       expect(session.model.get()).toBe('openai/gpt-4o');
       expect(await session.thread.getSetting({ key: 'currentModelId' })).toBeUndefined();
       expect(listener).not.toHaveBeenCalled();
@@ -142,7 +164,7 @@ describe('session.model.switch', () => {
 
   it('applies a pair without a bound thread', async () => {
     const { session } = await createSession();
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'off' });
     expect(session.model.get()).toBe('openai/gpt-5.5');
     expect(session.state.get().thinkingLevel).toBe('off');
   });
@@ -165,7 +187,7 @@ describe('session.model.switch', () => {
     const { session } = await createSession(undefined, new InMemoryStore(), schema);
     const listener = vi.fn();
     session.subscribe(listener);
-    const switching = session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     await validationStarted;
     session.thread.set({ threadId: 'newly-bound-thread' });
     release();
@@ -179,7 +201,7 @@ describe('session.model.switch', () => {
     const storage = new InMemoryStore();
     const { session } = await createSession(undefined, storage);
     await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-4o', thinkingLevel: 'low' });
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
     const memory = (await storage.getStore('memory'))!;
     const read = memory.getThreadById.bind(memory);
     let release = () => {};
@@ -198,7 +220,7 @@ describe('session.model.switch', () => {
     });
     const restoring = session.thread.loadMetadata();
     await readStarted;
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     release();
     await restoring;
     expect(session.model.get()).toBe('openai/gpt-5.5');
@@ -212,7 +234,7 @@ describe('session.model.switch', () => {
       const storage = new InMemoryStore();
       const { session } = await createSession(undefined, storage);
       await session.thread.create();
-      await session.model.switch({ modelId: 'openai/gpt-4o', thinkingLevel: 'low' });
+      await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
       const memory = (await storage.getStore('memory'))!;
       const save = memory.saveThread.bind(memory);
       let release = () => {};
@@ -228,7 +250,7 @@ describe('session.model.switch', () => {
         await saveGate;
         return save(args);
       });
-      const switching = session.model.switch({ modelId: 'openai/gpt-5.5' });
+      const switching = session.model.switch('openai/gpt-5.5');
       await saveStarted;
       const thinking = session.state.set({ thinkingLevel });
       release();
@@ -244,7 +266,7 @@ describe('session.model.switch', () => {
     const storage = new InMemoryStore();
     const { session } = await createSession(undefined, storage);
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     await session.thread.setSetting({ key: 'observerModelId', value: 'openai/gpt-4o' });
     const schema = z
       .object({
@@ -262,7 +284,7 @@ describe('session.model.switch', () => {
     const storage = new InMemoryStore();
     const { session } = await createSession(undefined, storage);
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     await session.thread.setSetting({ key: 'observerModelId', value: 'openai/gpt-4o' });
     const schema = z
       .object({ thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional() })
@@ -277,7 +299,7 @@ describe('session.model.switch', () => {
     const storage = new InMemoryStore();
     const { controller, session } = await createSession(undefined, storage);
     await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-4o', thinkingLevel: 'low' });
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
     session.setTokenUsage({ promptTokens: 10, completionTokens: 5, totalTokens: 15 });
     const memory = (await storage.getStore('memory'))!;
     const save = memory.saveThread.bind(memory);
@@ -296,7 +318,7 @@ describe('session.model.switch', () => {
     });
     const persisting = controller['persistTokenUsage'](session);
     await saveStarted;
-    const switching = session.model.switch({ modelId: 'openai/gpt-5.5', thinkingLevel: 'high' });
+    const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     try {
       await new Promise<void>(resolve => setImmediate(resolve));
       expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -313,7 +335,7 @@ describe('session.model.switch', () => {
     const trackModelUse = vi.fn<(modelId: string) => void>();
     const { session } = await createSession(trackModelUse);
 
-    await session.model.switch({ modelId: 'openai/gpt-5.3-codex' });
+    await session.model.switch('openai/gpt-5.3-codex');
 
     expect(trackModelUse).toHaveBeenCalledTimes(1);
     expect(trackModelUse).toHaveBeenCalledWith('openai/gpt-5.3-codex');
@@ -331,7 +353,7 @@ describe('session.model.displayName', () => {
   it('returns the last segment of a provider-prefixed model id', async () => {
     const { session } = await createSession();
 
-    await session.model.switch({ modelId: 'anthropic/claude-sonnet-4' });
+    await session.model.switch('anthropic/claude-sonnet-4');
 
     expect(session.model.displayName()).toBe('claude-sonnet-4');
   });
@@ -339,7 +361,7 @@ describe('session.model.displayName', () => {
   it('returns the whole id when there is no provider prefix', async () => {
     const { session } = await createSession();
 
-    await session.model.switch({ modelId: 'gpt-4o' });
+    await session.model.switch('gpt-4o');
 
     expect(session.model.displayName()).toBe('gpt-4o');
   });

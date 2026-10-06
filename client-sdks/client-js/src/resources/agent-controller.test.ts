@@ -231,7 +231,7 @@ describe('AgentController Resource', () => {
 
   it('switches a model and thinking level in one request', async () => {
     mockJson({ ok: true });
-    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-5.5', 'off');
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-5.5', { thinkingLevel: 'off' });
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
     expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });

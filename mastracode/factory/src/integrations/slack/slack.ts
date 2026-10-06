@@ -623,7 +623,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // and persists it as the thread's current model in one step — which is
         // what makes the choice outlive this process.
         try {
-          await session.model.switch({ modelId: selectedModelId });
+          await session.model.switch(selectedModelId);
         } catch (error) {
           console.warn("[slack] Failed to apply the sender's default model", {
             modelId: selectedModelId,
@@ -640,7 +640,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
           });
           if (currentModelId && !factoryModelId) {
             try {
-              await session.model.switch({ modelId: currentModelId });
+              await session.model.switch(currentModelId);
             } catch (saveError) {
               console.warn("[slack] Failed to persist the sender's default model", {
                 modelId: currentModelId,
@@ -655,7 +655,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // that default must not silently retarget a thread that already started.
         const currentModelId = session.model.get();
         if (currentModelId) {
-          await session.model.switch({ modelId: currentModelId });
+          await session.model.switch(currentModelId);
         }
       }
 

@@ -9,5 +9,5 @@ Added an optional thinking level to controller session `switchModel` calls.
 await session.switchModel('openai/gpt-5.5');
 
 // After
-await session.switchModel('openai/gpt-5.5', 'high');
+await session.switchModel('openai/gpt-5.5', { thinkingLevel: 'high' });
 ```

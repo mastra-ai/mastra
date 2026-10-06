@@ -92,7 +92,7 @@ describe('scenario: apply-default-model reaches a live run', () => {
     const controller = await buildController(storage, 'code');
     const session = await controller.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    await session.model.switch('openai/gpt-5.2-codex');
 
     await bindRun({
       seed,
@@ -128,11 +128,11 @@ describe('scenario: apply-default-model reaches a live run', () => {
 
     await session.mode.switch({ modeId: 'plan' });
     const boundThread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    await session.model.switch('openai/gpt-5.2-codex');
 
     const siblingThread = await session.thread.create();
     await session.mode.switch({ modeId: 'build' });
-    await session.model.switch({ modelId: 'openai/gpt-5.5' });
+    await session.model.switch('openai/gpt-5.5');
 
     await bindRun({
       seed,

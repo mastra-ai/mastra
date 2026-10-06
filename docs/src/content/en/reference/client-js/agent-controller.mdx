@@ -193,9 +193,15 @@ Merges key-value pairs into the session state. Existing keys not in the payload 
 
 Switches the active mode.
 
-### `switchModel(modelId)`
+### `switchModel(modelId, options?)`
 
-Switches the session's active model and persists it as the current model for the active thread. Switching modes doesn't change it.
+Switches the session's active model and persists it as the current model for the active thread. Switching modes doesn't change it. Pass `{ thinkingLevel }` as the second argument to apply and persist a thinking level with the model.
+
+```typescript
+await session.switchModel('__GATEWAY_ANTHROPIC_MODEL_SONNET__', {
+  thinkingLevel: 'high',
+})
+```
 
 ### `listThreads(options?)`
 
