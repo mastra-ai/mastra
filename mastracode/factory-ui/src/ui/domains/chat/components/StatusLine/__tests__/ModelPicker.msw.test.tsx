@@ -122,6 +122,15 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
   });
 
+  it('hides reset when the saved default is unavailable', async () => {
+    const user = userEvent.setup();
+    renderPicker({ defaultModelId: 'google/gemini-unavailable' });
+
+    await user.click(await screen.findByLabelText('Session model'));
+
+    expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
+  });
+
   it('keeps factory sessions model-only with no personal reset', async () => {
     const user = userEvent.setup();
     renderPicker({ kind: 'factory' });

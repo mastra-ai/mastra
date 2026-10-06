@@ -93,7 +93,11 @@ export function ModelPicker() {
   const notConfigured =
     Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
   const switchable = kind === 'user' ? Boolean(draftSessionId) || sessionEnabled : kind === 'factory' && sessionEnabled;
-  const canReset = kind === 'user' && Boolean(defaultModelId) && selectedModelId !== defaultModelId;
+  const canReset =
+    kind === 'user' &&
+    Boolean(defaultModelId) &&
+    selectedModelId !== defaultModelId &&
+    modelsQuery.data?.some(model => model.id === defaultModelId);
 
   if (!switchable || !modelsQuery.data?.length) {
     return (
