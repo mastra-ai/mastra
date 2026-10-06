@@ -4144,8 +4144,12 @@ export class DurableAgent<
         // per-agent singleton. Without this, every run's events would be
         // unresolvable and the run would hang. Uses the resolved engine so
         // this stays consistent with the workflow instance just created.
+        //
+        // `distributed`: every process sharing this Mastra setup registers the
+        // same loop, so a dedicated worker process can run it. Keeping its
+        // events local would strand runs started in a process without workers.
         if (this.resolveWorkflowEngine() === 'evented') {
-          this.#mastra.__registerInternalWorkflow(this.#workflow);
+          this.#mastra.__registerInternalWorkflow(this.#workflow, undefined, { distributed: true });
         }
       }
     }
