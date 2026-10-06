@@ -43,7 +43,7 @@ const Wrapper = ({ headers, children }: { headers: Record<string, string>; child
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <StudioConfigContext.Provider value={{ baseUrl: BASE_URL, headers, isLoading: false, setConfig: () => {} }}>
-      <MastraReactProvider baseUrl={BASE_URL}>
+      <MastraReactProvider baseUrl={BASE_URL} headers={headers}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <BrowserSessionProvider agentId="support-bot" threadId="thread-1">
@@ -71,6 +71,14 @@ describe('BrowserSessionProvider', () => {
 
   describe('when studio authenticates every request with an Authorization header', () => {
     it('presents that token as the apiKey query parameter on the stream socket', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/agents/:agentId/browser/session`, ({ request }) =>
+          request.headers.has('authorization')
+            ? HttpResponse.json(liveBrowserSession)
+            : new HttpResponse(null, { status: 401 }),
+        ),
+      );
+
       render(<Wrapper headers={{ Authorization: 'Bearer abc123' }}>{null}</Wrapper>);
 
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
