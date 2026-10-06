@@ -1,3 +1,4 @@
+import type { Knowledge } from '@mastra/core/knowledge';
 import type {
   KnowledgeRecord,
   KnowledgeNode,
@@ -23,7 +24,25 @@ export type KnowledgeStoreMemory = {
   };
 };
 
-type KnowledgeToolsMemory = KnowledgeStoreMemory & {
+export type GovernedKnowledgeReader = Pick<
+  Knowledge,
+  | 'search'
+  | 'getNode'
+  | 'getKnowledge'
+  | 'resolveNode'
+  | 'listNodes'
+  | 'listKnowledgeAbout'
+  | 'listKnowledgeMentioning'
+  | 'listKnowledgeRelatedTo'
+  | 'listActivity'
+>;
+
+export type GovernedKnowledgeMemory = {
+  getKnowledgeInstance?: () => Knowledge | undefined;
+};
+
+type KnowledgeToolsMemory = KnowledgeStoreMemory &
+  GovernedKnowledgeMemory & {
   getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
 };
 
@@ -49,6 +68,12 @@ export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<K
   const store = await memory.storage?.getStore('knowledge');
   if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
   return store;
+}
+
+export function getGovernedKnowledge(memory: GovernedKnowledgeMemory): GovernedKnowledgeReader {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Subconscious Knowledge reads require a configured Knowledge instance.');
+  return knowledge;
 }
 
 function normalizeLimit(limit: number | undefined): number {
@@ -80,7 +105,7 @@ function serializeNode(node: KnowledgeNode) {
 }
 
 async function loadSemanticResult(
-  store: KnowledgeStorage,
+  store: GovernedKnowledgeReader,
   scope: KnowledgeScope,
   candidate: { id: string; score: number; metadata?: Record<string, unknown> },
 ): Promise<(SearchKnowledgeResult & { semanticScore: number }) | null> {
@@ -169,7 +194,7 @@ export function createKnowledgeTools(
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
       const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
-      const store = await getKnowledgeStore(memory);
+      const store = getGovernedKnowledge(memory);
       const semanticIndex = await memory.getKnowledgeSemanticIndex();
       const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scope, limit * 2) : [];
       const lexical = await store.search({ query, scope, limit: limit * 2 });
@@ -214,7 +239,7 @@ export function createKnowledgeTools(
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
       const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
-      const store = await getKnowledgeStore(memory);
+      const store = getGovernedKnowledge(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
       const query =
@@ -271,7 +296,7 @@ export function createKnowledgeTools(
       };
       const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
-      const store = await getKnowledgeStore(memory);
+      const store = getGovernedKnowledge(memory);
       if (nodeReference) {
         const node = await store.getNode(nodeReference);
         if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };

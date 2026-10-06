@@ -9,6 +9,8 @@ import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 
 export const SUBCONSCIOUS_ACTIVITY_STATE_ID = 'subconscious-activity';
 
+type ActivityKnowledgeReader = Pick<KnowledgeStorage, 'getNode' | 'getKnowledge' | 'listActivity'>;
+
 async function hashContents(contents: string): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(contents));
   return Buffer.from(digest).toString('hex');
@@ -28,7 +30,7 @@ export interface SubconsciousActivitySnapshot {
 }
 
 async function getActivityTarget(
-  store: KnowledgeStorage,
+  store: ActivityKnowledgeReader,
   event: KnowledgeActivityEvent,
   scope: KnowledgeScope,
 ): Promise<{ id: string; name?: string; type: 'node' }> {
@@ -44,7 +46,7 @@ async function getActivityTarget(
 }
 
 export async function buildSubconsciousActivitySnapshot(input: {
-  store: KnowledgeStorage;
+  store: ActivityKnowledgeReader;
   scope: KnowledgeScope;
   recentUpdates: number;
   errors?: string[];
@@ -130,7 +132,7 @@ export async function publishSubconsciousError(input: {
 }
 
 export async function publishSubconsciousActivity(input: {
-  store: KnowledgeStorage;
+  store: ActivityKnowledgeReader;
   scope: KnowledgeScope;
   recentUpdates: number;
   sendStateSignal?: ProcessorContext['sendStateSignal'];
