@@ -8,9 +8,10 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
+import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const adapter = process.env.KNOWLEDGE_ADAPTER === 'pg' ? 'pg' : 'libsql';
@@ -132,7 +133,24 @@ async function createStorage(id: string): Promise<{ storage: MastraCompositeStor
   return { storage, location };
 }
 
-function createRuntime(storage: MastraCompositeStore) {
+const embedder: EmbeddingModel<string> = {
+  specificationVersion: 'v1',
+  provider: 'aimock',
+  modelId: 'deterministic-embedding',
+  maxEmbeddingsPerCall: 128,
+  supportsParallelCalls: true,
+  async doEmbed({ values }) {
+    return { embeddings: values.map(() => [0.1, 0.2, 0.3, 0.4]) };
+  },
+};
+
+async function createVector() {
+  const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-vector-'));
+  temporaryDirectories.push(directory);
+  return new LibSQLVector({ id: `wave-1-vector-${randomUUID()}`, url: `file:${join(directory, 'vector.db')}` });
+}
+
+function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
   const knowledge = new Knowledge({
     id: 'mastra',
     name: 'Mastra Knowledge',
@@ -144,6 +162,8 @@ function createRuntime(storage: MastraCompositeStore) {
   const curator = deterministicObservationModel(true);
   const memory = new Memory({
     storage,
+    vector,
+    embedder,
     knowledge: 'mastra',
     options: {
       observationalMemory: {
@@ -222,7 +242,8 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     expect(resolvedPackages.adapter).toContain(adapter === 'pg' ? '/stores/pg/dist/' : '/stores/libsql/dist/');
 
     const { storage, location } = await createStorage(`wave-1-${adapter}`);
-    const first = createRuntime(storage);
+    const vector = await createVector();
+    const first = createRuntime(storage, vector);
     const reconciled = await first.knowledge.reconcile();
     expect(Object.keys(reconciled.scopes)).toEqual(
       expect.arrayContaining(structure.scopes.map(scope => scope.address)),
@@ -288,7 +309,7 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
           })
         : new LibSQLStore({ id: `wave-1-${adapter}-restart`, url: `file:${location}` });
     stores.push(restartedStorage);
-    const restarted = createRuntime(restartedStorage);
+    const restarted = createRuntime(restartedStorage, vector);
     const replay = await restarted.knowledge.reconcile();
     expect(replay.createdScopeIds).toEqual([]);
     const persisted = await restarted.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
