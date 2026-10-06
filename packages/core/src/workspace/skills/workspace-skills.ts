@@ -793,7 +793,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         skillName: skill.name,
         skillPath: skill.path,
         source,
-        content: result.content,
+        // The metadata document starts with the name, which the result already carries
+        content: isMetadataHit ? skill.description : result.content,
         score: result.score,
         lineRange: isMetadataHit ? undefined : result.lineRange,
         scoreDetails: result.scoreDetails,
@@ -1571,7 +1572,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     // Words found in the name or description count double: they say what the
     // skill is for. Words of one or two letters ("a", "do") appear in almost
     // every skill, so they're ignored unless the query has nothing longer.
-    const allTerms = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
+    const allTerms = [
+      ...new Set(
+        query
+          .toLowerCase()
+          .split(/\s+/)
+          // "review," or "(test)" should match "review" and "test"
+          .map(word => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+          .filter(Boolean),
+      ),
+    ];
     const longTerms = allTerms.filter(term => term.length > 2);
     const terms = longTerms.length > 0 ? longTerms : allTerms;
 

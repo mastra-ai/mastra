@@ -79,7 +79,9 @@ interface SkillsProcessorBaseOptions {
    * the catalog costs too many tokens. The hint is injected whenever the
    * `skill_search` tool is available, so it also covers skills configured on
    * the agent; `skills` and `workspace` become optional. Without them, the
-   * `skillCount` span attribute is 0.
+   * `skillCount` span attribute is 0. With them, the hint is skipped when the
+   * source discovered no skills, and `format` and `formatLocation` have no
+   * effect because no catalog is rendered.
    *
    * The model finds skills only through `skill_search`, so configure BM25 or
    * vector search on the workspace. Agent-level skills are always indexed.
@@ -92,12 +94,20 @@ interface SkillsProcessorBaseOptions {
 /**
  * Configuration options for SkillsProcessor.
  * Provide either `skills` (WorkspaceSkills directly) or `workspace` (skills resolved via workspace.skills), not both.
- * With `injectCatalog: false`, neither is required.
+ * With `injectCatalog: false`, neither is required; without a source there is
+ * nothing to format or refresh, so only `injectCatalog` applies.
  */
 export type SkillsProcessorOptions =
   | ({ skills: WorkspaceSkills; workspace?: never } & SkillsProcessorBaseOptions)
   | ({ workspace: Workspace; skills?: never } & SkillsProcessorBaseOptions)
-  | ({ injectCatalog: false; skills?: never; workspace?: never } & Omit<SkillsProcessorBaseOptions, 'injectCatalog'>);
+  | {
+      injectCatalog: false;
+      skills?: never;
+      workspace?: never;
+      format?: never;
+      formatLocation?: never;
+      blockingRefresh?: never;
+    };
 
 /**
  * Injected instead of the catalog when `injectCatalog` is false. Without a list,
@@ -384,8 +394,12 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // rather than this processor's own skills: the agent builds the skill tools
     // from agent-level and workspace skills together, and drops them when an
     // on-demand discovery processor takes over, or when `activeTools` excludes it.
+    // A skills source that discovered nothing (e.g. a path that doesn't resolve)
+    // gets no hint either: the tool exists, but there is nothing to find.
     if (!this._injectCatalog) {
-      if (tools && 'skill_search' in tools && (!activeTools || activeTools.includes('skill_search'))) {
+      const hasSearchTool = tools && 'skill_search' in tools && (!activeTools || activeTools.includes('skill_search'));
+      const sourceIsEmpty = skills !== undefined && !hasSkills;
+      if (hasSearchTool && !sourceIsEmpty) {
         messageList.addSystem({ role: 'system', content: SKILL_SEARCH_HINT });
       }
       return;

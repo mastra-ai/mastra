@@ -1,0 +1,157 @@
+---
+title: "Reference: SkillsProcessor | Processors"
+description: "The SkillsProcessor is an input processor that lists the available skills in the system message, or points the agent at skill_search instead."
+packages:
+  - "@mastra/core"
+---
+
+# SkillsProcessor
+
+The `SkillsProcessor` is an **input processor** that adds the available skills to the system message as an `<available_skills>` list, so the model knows which skills exist and can load one with the `skill` tool. The agent adds it automatically when its workspace or its own `skills` option provides skills, so you only configure it yourself to change how skills are presented.
+
+With `injectCatalog: false`, it replaces the list with a short instruction to find skills with `skill_search` and load them with `skill`. Use this when the list costs too many tokens. See [Turn off the skills list](/docs/sandbox/skills#turn-off-the-skills-list).
+
+The `skill`, `skill_search`, and `skill_read` tools come from the agent, not from this processor, and stay available in both modes. To replace them with on-demand `search_skills` and `load_skill` tools instead, use [`SkillSearchProcessor`](/reference/processors/skill-search-processor). Configure one or the other, not both.
+
+## Usage example
+
+```typescript
+import { SkillsProcessor } from '@mastra/core/processors'
+
+const skills = new SkillsProcessor({
+  workspace,
+  format: 'markdown',
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'SkillsProcessorOptions',
+    description:
+      'Configuration options. Provide either `skills` or `workspace`, not both. With `injectCatalog: false`, both are optional.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'SkillsProcessorOptions',
+        parameters: [
+          {
+            name: 'workspace',
+            type: 'Workspace',
+            description: 'Workspace whose skills are listed. Skills are read from `workspace.skills`.',
+            isOptional: true,
+          },
+          {
+            name: 'skills',
+            type: 'WorkspaceSkills',
+            description: 'Skills registry to list, instead of a workspace.',
+            isOptional: true,
+          },
+          {
+            name: 'injectCatalog',
+            type: 'boolean',
+            description:
+              'When false, injects an instruction to find skills with `skill_search` and load them with `skill` instead of listing every skill. The instruction is added whenever the agent exposes the `skill_search` tool, so it also covers skills configured on the agent. When a `skills` or `workspace` source is given but discovered no skills, nothing is injected.',
+            isOptional: true,
+            default: 'true',
+          },
+          {
+            name: 'format',
+            type: "'xml' | 'json' | 'markdown'",
+            description: 'Format of the skills list in the system message. Has no effect with `injectCatalog: false`.',
+            isOptional: true,
+            default: "'xml'",
+          },
+          {
+            name: 'formatLocation',
+            type: '(skill: Skill) => string',
+            description:
+              'Renders the `location` of each listed skill. Defaults to `${skill.path}/SKILL.md`, a path on the server running the agent. Override it when the model works in a different filesystem, such as a sandbox. Rendered locations are registered as aliases, so the `skill` and `skill_read` tools still resolve them. Has no effect with `injectCatalog: false`.',
+            isOptional: true,
+          },
+          {
+            name: 'blockingRefresh',
+            type: 'boolean',
+            description:
+              'When true, awaits the skills staleness check before the first step of each request so skill changes appear in the same turn. When false, the cached skills are served and revalidated in the background, so changes can lag by one turn plus the staleness cooldown.',
+            isOptional: true,
+            default: 'false',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "Processor identifier set to 'skills-processor'. An agent that finds a configured input processor with this id doesn't add its own SkillsProcessor.",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'Skills Processor'",
+    isOptional: false,
+  },
+  {
+    name: 'listSkills',
+    type: '() => Promise<Array<{ name: string; description: string; license?: string }>>',
+    description: 'Lists the skills from the configured source. Returns an empty array without a source.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Refreshes the skills on the first step, then adds the skills list or the `skill_search` instruction to the system message.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/skill-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { SkillsProcessor } from '@mastra/core/processors'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './project' }),
+  skills: ['skills'],
+  bm25: true,
+})
+
+const agent = new Agent({
+  id: 'skill-agent',
+  name: 'skill-agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace,
+  inputProcessors: [new SkillsProcessor({ injectCatalog: false })],
+})
+```
+
+With the list turned off, the agent finds skills only by searching, so configure [BM25 or vector search](/docs/sandbox/search) on the workspace. The agent workflow is:
+
+1. Agent receives a user message
+1. Agent calls `skill_search` with keywords (e.g., "release notes")
+1. Agent reviews results and calls `skill` with the skill name
+1. Agent follows the loaded skill's instructions
+
+## Related
+
+- [SkillSearchProcessor](/reference/processors/skill-search-processor)
+- [Processors](/docs/agents/processors)
+- [Workspace Skills](/docs/sandbox/skills)

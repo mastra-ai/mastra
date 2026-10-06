@@ -814,6 +814,17 @@ Read the diff carefully.
         expect((await createSkills().search('pr'))[0]?.skillName).toBe('pr-review');
       });
 
+      it('simple search ignores punctuation around query words', async () => {
+        const results = await createSkills().search('"correctness", (style).');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+        expect(results[0]?.score).toBe(1);
+      });
+
+      it('simple search respects the skillNames filter when ranking', async () => {
+        const results = await createSkills().search('review api', { skillNames: ['api-skill'] });
+        expect(results.map(r => r.skillName)).toEqual(['api-skill']);
+      });
+
       describe('reference files', () => {
         const DIFF_TOOL_SKILL_MD = `---\nname: diff-tool\ndescription: Compares files\n---\n\nRun it on two files.\n`;
 
@@ -921,7 +932,12 @@ Read the diff carefully.
         });
 
         const [first] = await skills.search('correctness');
-        expect(first).toMatchObject({ skillName: 'pr-review', source: 'SKILL.md' });
+        expect(first).toMatchObject({
+          skillName: 'pr-review',
+          source: 'SKILL.md',
+          // The preview is the description alone, not the indexed "name\ndescription" text
+          content: 'Review pull requests for correctness and style',
+        });
         expect(first?.lineRange).toBeUndefined();
 
         const [bodyHit] = await skills.search('diff carefully');

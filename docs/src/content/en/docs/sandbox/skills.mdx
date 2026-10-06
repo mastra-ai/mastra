@@ -106,7 +106,7 @@ The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both fil
 
 Keep the default list when you have a few dozen skills: the agent sees every option at once, and the list is a stable prefix that providers can cache. Turn it off when you have around a hundred skills or more, or when the size of the system message matters. The search instruction stays the same size however many skills you add.
 
-[`SkillSearchProcessor`](/reference/processors/skill-search-processor) also hides the list, but replaces the standard tools with its own `search_skills` and `load_skill` tools and only covers workspace skills.
+[`SkillSearchProcessor`](/reference/processors/skill-search-processor) also hides the list, but replaces the standard tools with its own `search_skills` and `load_skill` tools and only covers workspace skills. Configure one or the other, not both: together, the agent gets both sets of tools. See the [`SkillsProcessor`](/reference/processors/skills-processor) reference for all options.
 
 ## Configure skill paths
 

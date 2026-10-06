@@ -387,6 +387,27 @@ describe('SkillsProcessor', () => {
         expect(mockMessageList.addSystem).not.toHaveBeenCalled();
       });
 
+      it('injects nothing when its skills source discovered no skills', async () => {
+        const emptyWorkspace = createMockWorkspace({
+          ...createMockWorkspaceSkills(),
+          list: vi.fn().mockResolvedValue([]),
+        });
+        const searchFirst = new SkillsProcessor({ workspace: emptyWorkspace, injectCatalog: false });
+
+        await searchFirst.processInputStep({ messageList: mockMessageList as any, tools: skillTools } as any);
+
+        expect(mockMessageList.addSystem).not.toHaveBeenCalled();
+      });
+
+      it('rejects catalog options without a skills source', () => {
+        // @ts-expect-error format only applies to a rendered catalog
+        new SkillsProcessor({ injectCatalog: false, format: 'markdown' });
+        // @ts-expect-error blockingRefresh needs a source to refresh
+        new SkillsProcessor({ injectCatalog: false, blockingRefresh: true });
+        // A source makes them valid again
+        new SkillsProcessor({ workspace: mockWorkspace, injectCatalog: false, blockingRefresh: true });
+      });
+
       it('respects activeTools', async () => {
         const searchFirst = new SkillsProcessor({ injectCatalog: false });
         const run = (activeTools: string[]) =>
