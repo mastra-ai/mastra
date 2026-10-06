@@ -1,5 +1,6 @@
 import { releaseSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { DEFAULT_COMMAND_TIMEOUT_MS, runTeardownCommand } from '../integrations/github/sandbox.js';
+import { peekSessionEnvironmentTeardown } from '../session/environment-state-processor.js';
 import type {
   ProjectRepository,
   SourceControlSession,
@@ -136,6 +137,30 @@ export class SessionRetirementCoordinator {
     const entry = peekSessionSandbox(session.id);
     if (!entry) return;
 
+    // A session booted from its factory environment tears every repository
+    // down in position order, each in its own directory; a failure is logged
+    // and the next repository still runs.
+    const environmentTeardown = peekSessionEnvironmentTeardown(session.sessionId);
+    if (environmentTeardown.length > 0) {
+      for (const repo of environmentTeardown) {
+        try {
+          await runTeardownCommand(requireExec(entry.sandbox), repo.dir, repo.command, {
+            timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+          });
+        } catch (error) {
+          this.#warn('Factory teardown command failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: session.projectRepositoryId,
+            repository: repo.slug,
+            error: boundedError(error),
+          });
+        }
+      }
+      await this.#releaseSandbox(input, session);
+      return;
+    }
+
     let projectRepository: ProjectRepository | null | undefined;
     try {
       projectRepository = session.projectRepositoryId
@@ -167,6 +192,10 @@ export class SessionRetirementCoordinator {
       }
     }
 
+    await this.#releaseSandbox(input, session);
+  }
+
+  async #releaseSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
     try {
       await releaseSessionSandbox({ sessionId: session.id, destroy: input.deleteSession });
     } catch (error) {

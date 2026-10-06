@@ -25,6 +25,7 @@ import {
   runTeardownCommand,
   shellQuote,
   SetupCommandError,
+  syncEnvironmentRepository,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
 
@@ -669,6 +670,108 @@ describe('checkoutSessionBranch', () => {
     const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
+  });
+});
+
+describe('syncEnvironmentRepository', () => {
+  const opts = { branch: 'factory/issue-7', defaultBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/docs' };
+  const authEnvOf = (sandbox: FakeSandbox, fragment: string) =>
+    sandbox.executions.find(execution => execution.args.join(' ').includes(fragment))?.options?.env;
+
+  it('resumes the session branch from the remote when the remote has it, authenticated with the repo token', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return OK; // detached template pin
+      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      return OK;
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'resumed',
+      branch: 'factory/issue-7',
+    });
+
+    expect(sandbox.calls).toContain('git -C /workspace/docs fetch origin factory/issue-7');
+    expect(sandbox.calls).toContain('git -C /workspace/docs checkout -B factory/issue-7 FETCH_HEAD');
+    expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
+    const env = authEnvOf(sandbox, 'ls-remote');
+    expect(env?.GIT_CONFIG_KEY_0).toBe('http.https://github.com/octocat/docs.git.extraHeader');
+    expect(env?.GIT_CONFIG_VALUE_0).toBe(
+      `Authorization: Basic ${Buffer.from('x-access-token:tok-secret').toString('base64')}`,
+    );
+    expect(authEnvOf(sandbox, 'fetch origin factory/issue-7')).toEqual(env);
+  });
+
+  it('moves only a detached HEAD to the default tip when the remote lacks the branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return OK;
+      if (script.includes('ls-remote')) return OK;
+      return OK;
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'default',
+      branch: 'main',
+    });
+
+    expect(sandbox.calls).toContain('git -C /workspace/docs fetch origin main');
+    expect(sandbox.calls).toContain('git -C /workspace/docs checkout -B main FETCH_HEAD');
+    expect(sandbox.calls.join('\n')).not.toContain('checkout -B factory/issue-7');
+  });
+
+  it('leaves a checkout that sits on a branch alone when the remote lacks the session branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'local-work\n', stderr: '' };
+      if (script.includes('ls-remote')) return OK;
+      return OK;
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'kept',
+      branch: 'local-work',
+    });
+
+    expect(sandbox.calls.join('\n')).not.toMatch(/checkout|reset|fetch origin main/);
+  });
+
+  it('skips the fetch when HEAD is already on the session branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/issue-7\n', stderr: '' };
+      return OK;
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'kept',
+      branch: 'factory/issue-7',
+    });
+    expect(sandbox.calls).toHaveLength(1);
+  });
+
+  it('keeps local work when the resume checkout is blocked by uncommitted changes', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'scratch\n', stderr: '' };
+      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      if (script.includes('checkout -B')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr: 'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'kept',
+      branch: 'scratch',
+    });
+  });
+
+  it('rejects an invalid branch name before running git', async () => {
+    const sandbox = new FakeSandbox();
+    await expect(
+      syncEnvironmentRepository(sandbox, '/workspace/docs', { ...opts, branch: 'bad name' }),
+    ).rejects.toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
   });
 });
 
