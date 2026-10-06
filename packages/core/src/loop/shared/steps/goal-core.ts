@@ -36,6 +36,11 @@ export type GoalOutcome =
    */
   | { evaluated: true; kind: 'budget-guard'; shouldContinue: false }
   /**
+   * The objective was paused, cleared, or replaced while the judge ran. The
+   * verdict is discarded (nothing persisted, no signal sent) and the loop stops.
+   */
+  | { evaluated: true; kind: 'superseded'; shouldContinue: false }
+  /**
    * The judge ran (or failed and was converted into a paused verdict). The
    * transcript gained the goal feedback signal and the response message id may
    * have rotated — callers must project `shouldContinue` + `messageId` back
@@ -523,8 +528,16 @@ export async function evaluateGoal(deps: {
     pausedReason = formatGoalBudgetPausedReason(effective.maxRuns);
   }
 
+  // The judge can take a while; the user may have paused, cleared, or replaced
+  // the objective meanwhile. Writing back the stale `record` would undo that,
+  // so discard the verdict unless the same objective is still active.
+  const current = await readObjective(store, threadId);
+  if (!current || current.status !== 'active' || current.id !== record.id || current.objective !== record.objective) {
+    return { evaluated: true, kind: 'superseded', shouldContinue: false };
+  }
+
   const updated: GoalObjectiveRecord = {
-    ...record,
+    ...current,
     runsUsed,
     status,
     // Only persist a pause reason while parked; clear it otherwise so a

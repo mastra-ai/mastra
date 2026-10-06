@@ -56,9 +56,23 @@ async function runGoalStep(
     judge?: any;
     tools?: any;
     outputWriter?: (data: any, options: any) => Promise<void>;
+    /** Mutates the stored objective right after the step's first read, i.e. while the judge runs. */
+    mutateDuringJudge?: (states: Map<string, GoalObjectiveRecord>) => void;
   },
 ) {
   const store = createStore(record);
+  if (opts?.mutateDuringJudge) {
+    const getState = store.getState;
+    let mutated = false;
+    store.getState = async args => {
+      const value = await getState(args);
+      if (!mutated && args.type === GOAL_STATE_TYPE) {
+        mutated = true;
+        opts.mutateDuringJudge!(store.states);
+      }
+      return value;
+    };
+  }
   const chunks: any[] = [];
   const messages: any[] = [];
   const dataParts: any[] = [];
@@ -487,6 +501,52 @@ describe('goal step waiting semantics', () => {
     expect(pendingChunk.payload.results).toEqual([]);
     // The final chunk should not be pending.
     expect(chunk.payload.pending).toBeUndefined();
+  });
+});
+
+describe('goal step concurrent objective changes', () => {
+  const key = `${THREAD_ID}:${GOAL_STATE_TYPE}`;
+
+  it('does not resume an objective paused while the judge runs', async () => {
+    const { record, stepResult, goalChunks, messages } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, status: 'paused', pausedReason: 'user' }),
+    });
+
+    expect(record.status).toBe('paused');
+    expect(record.pausedReason).toBe('user');
+    expect(record.runsUsed).toBe(0);
+    expect(stepResult.isContinued).toBe(false);
+    expect(goalChunks.every(c => c.payload.pending)).toBe(true);
+    expect(messages.some(m => JSON.stringify(m).includes('goal-judge'))).toBe(false);
+  });
+
+  it('does not recreate an objective cleared while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.delete(key),
+    });
+
+    expect(record).toBeUndefined();
+    expect(stepResult.isContinued).toBe(false);
+  });
+
+  it('does not overwrite an objective replaced while the judge runs', async () => {
+    const replacement = makeRecord({ id: 'g2', objective: 'something else' });
+    const { record, stepResult } = await runGoalStep('done', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, replacement),
+    });
+
+    expect(record).toEqual(replacement);
+    expect(stepResult.isContinued).toBe(false);
+  });
+
+  it('keeps option changes made while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 20 }),
+    });
+
+    expect(record.maxRuns).toBe(20);
+    expect(record.runsUsed).toBe(1);
+    expect(stepResult.isContinued).toBe(true);
   });
 });
 
