@@ -18,6 +18,7 @@ import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { getLineageHead } from '../record-lineage';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import { resolveThreadTitleUpdate } from './thread-title';
@@ -226,13 +227,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
   async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
     const { record, threadId, resourceId, messages } = this.opts;
 
-    // `Memory.deleteThread` clears the observational-memory record along with the
-    // thread, so a cycle that finishes after the delete would persist into a removed
-    // row and index vectors that the already-finished cleanup will never delete.
+    // `Memory.deleteThread` and `om.clear` delete the record, so a cycle that finishes
+    // afterwards must not persist: not into a removed row (indexing vectors the finished
+    // cleanup will never delete), and not into a record created for the thread since.
     // Keying off the record rather than the thread row matters: `observe()` is a
     // public entry point that legitimately runs for a thread that was never
     // persisted, in which case `getOrCreateRecord` has already created the record.
-    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const liveRecord = await getLineageHead(this.storage, record);
     if (!liveRecord) {
       omDebug(`[OM:sync-obs] skipping persist for thread ${threadId}: observational memory record is gone`);
       return;
