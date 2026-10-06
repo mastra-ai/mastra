@@ -39,6 +39,7 @@ import type {
   KnowledgeNode,
   KnowledgeNodeAddress,
   KnowledgeProposal,
+  KnowledgeProposalTarget,
   KnowledgeProposalApprovalCapability,
   KnowledgeProposalMutation,
   KnowledgeProposalApprovalScopeIds,
@@ -577,6 +578,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async deleteRecordBySource(input: {
     id: string;
     source: string;
+    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
@@ -1663,11 +1665,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
-      if (
-        !input.verifiedMutation &&
-        proposal.operation !== mutation.kind &&
-        !(proposal.operation === 'promote-node' && mutation.kind === 'curate-node')
-      ) {
+      if (!input.verifiedMutation && proposal.operation !== mutation.kind) {
         throw new KnowledgeConflictError('Proposal operation does not match its payload');
       }
       assertKnowledgeProposalMutationSemantics(mutation, targets);

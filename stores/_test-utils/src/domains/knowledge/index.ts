@@ -2094,7 +2094,12 @@ export function createKnowledgeStorageTests(
       await apply(
         {
           kind: 'merge-nodes',
-          mutation: { sourceId: created.id, targetId: target.id, sourceVersion: created.version },
+          mutation: {
+            sourceId: created.id,
+            targetId: target.id,
+            sourceVersion: created.version,
+            targetVersion: target.version,
+          },
         },
         [await nodeTarget(created.id, 'manageAccess'), await nodeTarget(target.id, 'edit')],
       );

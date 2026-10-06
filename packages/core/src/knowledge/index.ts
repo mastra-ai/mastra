@@ -357,7 +357,12 @@ export class Knowledge extends MastraBase {
 
   async #getProposalLifecycle(): Promise<KnowledgeProposalLifecycle> {
     const storage = await this.#getStorage();
-    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(storage, scopeIds => this.evaluateAccess(scopeIds));
+    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(
+      storage,
+      scopeIds => this.evaluateAccess(scopeIds),
+      input => this.getNode(input),
+      input => this.getRecord(input),
+    );
     return this.#proposalLifecycle;
   }
 

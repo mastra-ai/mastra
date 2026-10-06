@@ -283,26 +283,6 @@ export class KnowledgeGapQueueWorker {
       case 'delete-scope':
         await assertNode(mutation.mutation.id, mutation.mutation.version, 'manageAccess');
         return [...targets.values()];
-      case 'curate-node': {
-        const node = await this.storage.getNodeIncludingDeleted(mutation.mutation.id);
-        await assertNode(mutation.mutation.id, mutation.mutation.version, 'manageAccess');
-        if (!node || node.deletedAt) throw new KnowledgeConflictError(mutation.mutation.id);
-        await assertScopeTarget(mutation.mutation.sourceScopeId, 'manageAccess');
-        await assertScopeTarget(mutation.mutation.destinationScopeId, 'manageAccess');
-        let cursor: string | undefined;
-        do {
-          const page = await this.storage.listRecords({
-            node,
-            scopeIds: getKnowledgeReadableScopeIds(frontier),
-            membershipScopeIds: [mutation.mutation.sourceScopeId],
-            after: cursor,
-            limit: 100,
-          });
-          for (const record of page.records) await assertRecord(record.id, record.version);
-          cursor = page.nextCursor;
-        } while (cursor);
-        return [...targets.values()];
-      }
       case 'restore-node':
       case 'restore-scope':
       case 'restore-record':
