@@ -56,7 +56,13 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   // JudgeDisplayComponent *after* the new streaming text. Without this the
   // reused component stays at the position of the previous turn's evaluation,
   // causing the new turn's text to visually overwrite the old text + judge.
-  state.activeGoalJudge = undefined;
+  // A final goal chunk already clears this reference, so a judge still active
+  // here never got a verdict (e.g. the objective changed mid-evaluation) and
+  // would otherwise stay stuck on "evaluating…".
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
   state.followUpComponents = [];
   for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
   state.idleCounter?.setThinking(false);
