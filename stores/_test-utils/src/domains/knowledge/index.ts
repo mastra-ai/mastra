@@ -5,6 +5,7 @@ import {
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
 } from '@mastra/core/storage';
+import { evaluateKnowledgeAccessFrontier } from '@mastra/core/knowledge';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -983,6 +984,44 @@ export function createKnowledgeStorageTests(
           canSuggest: true,
         },
       ]);
+    });
+
+    it('keeps persisted readonly shares of self-owned scopes at the arriving role', async () => {
+      const structure = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:suggester', name: 'Suggester' },
+          {
+            address: 'resource:self-owned',
+            name: 'Self-owned resource',
+            grants: [
+              { scopeRefAddress: 'resource:self-owned', role: 'owner' },
+              { scopeRefAddress: 'principal:suggester', role: 'readonly', canSuggest: true },
+            ],
+          },
+        ],
+      });
+      const resourceId = structure.scopes['resource:self-owned']!;
+      const grants = await store.listScopeGrants();
+
+      const shared = evaluateKnowledgeAccessFrontier({
+        vouchedScopeIds: [structure.scopes['principal:suggester']!],
+        grants,
+        accessEpoch: structure.accessEpoch,
+      });
+      expect(shared.scopes[resourceId]).toMatchObject({
+        read: true,
+        suggest: true,
+        append: false,
+        edit: false,
+        manageAccess: false,
+      });
+
+      const owner = evaluateKnowledgeAccessFrontier({
+        vouchedScopeIds: [resourceId],
+        grants,
+        accessEpoch: structure.accessEpoch,
+      });
+      expect(owner.scopes[resourceId]).toMatchObject({ read: true, edit: true, manageAccess: true });
     });
 
     it('rolls back failed structure reconciliation without advancing the access epoch', async () => {
