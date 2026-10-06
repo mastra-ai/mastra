@@ -11,7 +11,10 @@ export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<
   }
   const inspector = ctx.knowledgeInspector;
   if (!inspector) {
-    ctx.showError('Knowledge inspection is unavailable. Configure the default Knowledge runtime for this session.');
+    ctx.showError(
+      ctx.knowledgeInspectorUnavailableReason ??
+        'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1.',
+    );
     return;
   }
 

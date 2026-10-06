@@ -845,6 +845,37 @@ describe('createMastraCode', () => {
     ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
+  it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '');
+    try {
+      const { createMastraCode } = await import('../index.js');
+
+      const code = await createMastraCode();
+
+      expect(code.knowledge).toBeUndefined();
+      expect(createKnowledgeInspectorMock).not.toHaveBeenCalled();
+      expect(code.knowledgeInspector).toBeUndefined();
+      expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { createMastraCode } = await import('../index.js');
+    createKnowledgeInspectorMock.mockRejectedValueOnce(
+      new Error('Knowledge schema reset required: Missing Knowledge v2 tables.'),
+    );
+
+    const code = await createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } });
+
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBe(
+      'Knowledge is unavailable: Knowledge schema reset required: Missing Knowledge v2 tables.',
+    );
+  });
+
   it('passes an injected vector to dynamic memory', async () => {
     const vector = { id: 'custom-vector' };
     const { createMastraCode } = await import('../index.js');
