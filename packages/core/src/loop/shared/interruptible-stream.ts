@@ -21,14 +21,13 @@ export function startsResponseContent(chunk: { type: string }): boolean {
 
 /**
  * Reads a provider stream before output processors can hold or drop its chunks: reports
- * the first response content and which reasoning blocks are open, and ends the stream
- * cleanly when `interruption` aborts so in-flight processing finishes normally.
+ * the first response content, and ends the stream cleanly when `interruption` aborts so
+ * in-flight processing finishes normally.
  */
 export function watchInterruptibleStream<OUTPUT>(
   stream: ReadableStream<ChunkType<OUTPUT>>,
   interruption: AbortSignal,
   onResponseContent: () => void,
-  openReasoningIds: Set<string>,
 ): ReadableStream<ChunkType<OUTPUT>> {
   return stream.pipeThrough(
     new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
@@ -37,10 +36,16 @@ export function watchInterruptibleStream<OUTPUT>(
       },
       transform(chunk, controller) {
         if (startsResponseContent(chunk)) onResponseContent();
-        if (chunk.type === 'reasoning-start') openReasoningIds.add(chunk.payload.id);
-        if (chunk.type === 'reasoning-end') openReasoningIds.delete(chunk.payload.id);
         controller.enqueue(chunk);
       },
     }),
   );
+}
+
+/** Tracks reasoning blocks a client has seen open, so an interruption closes exactly those. */
+export function trackOpenReasoning(chunk: { type: string; payload?: unknown }, openReasoningIds: Set<string>): void {
+  const id = (chunk.payload as { id?: string } | undefined)?.id;
+  if (id === undefined) return;
+  if (chunk.type === 'reasoning-start') openReasoningIds.add(id);
+  else if (chunk.type === 'reasoning-end') openReasoningIds.delete(id);
 }

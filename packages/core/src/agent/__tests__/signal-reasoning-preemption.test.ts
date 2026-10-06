@@ -839,4 +839,71 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(JSON.stringify(prompts[1])).not.toContain('BATCH_DISCARDED');
     expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain('BATCH_DISCARDED');
   });
+  it.each(['transformed', 'suppressed'] as const)(
+    'closes only reasoning the client saw open when a processor %s it',
+    async outcome => {
+      const started = deferred<void>();
+      let calls = 0;
+      let endInvocations = 0;
+      let processedDelta = false;
+      const model = new MockLanguageModelV2({
+        doStream: async ({ abortSignal }) => {
+          if (++calls > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
+          return {
+            warnings: [],
+            stream: new ReadableStream<LanguageModelV2StreamPart>({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'reasoning-start', id: 'raw' });
+                controller.enqueue({ type: 'reasoning-delta', id: 'raw', delta: 'discarded' });
+                abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+                started.resolve();
+              },
+            }),
+          };
+        },
+      });
+      const reasoningProcessor: Processor = {
+        id: 'reasoning-visibility',
+        processOutputStream({ part }) {
+          if (part.type === 'reasoning-end') {
+            endInvocations++;
+            return null;
+          }
+          if (part.type !== 'reasoning-start' && part.type !== 'reasoning-delta') return part;
+          if (part.type === 'reasoning-delta') processedDelta = true;
+          if (outcome === 'suppressed') return null;
+          return { ...part, payload: { ...part.payload, id: `visible:${part.payload.id}` } } as typeof part;
+        },
+      };
+      const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+      const agent = new Agent({
+        id: crypto.randomUUID(),
+        name: 'Visible reasoning test',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+        outputProcessors: [reasoningProcessor],
+      });
+      const stream = await agent.stream('initial question', {
+        memory: { thread: scope.threadId, resource: scope.resourceId },
+      });
+      const chunks: ChunkType[] = [];
+      const consumption = (async () => {
+        for await (const chunk of stream.fullStream) chunks.push(chunk);
+      })();
+      await started.promise;
+      await vi.waitFor(() => expect(processedDelta).toBe(true));
+      const signal = await agent.sendSignal({ type: 'user-message', contents: 'SYNTHETIC_SIGNAL_MARKER' }, scope);
+      await expect(signal.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      await consumption;
+      await stream._waitUntilFinished();
+      expect(calls).toBe(2);
+      const starts = chunks.filter(chunk => chunk.type === 'reasoning-start');
+      const ends = chunks.filter(chunk => chunk.type === 'reasoning-end');
+      expect(ends.map(chunk => chunk.payload.id)).toEqual(starts.map(chunk => chunk.payload.id));
+      expect(starts).toHaveLength(outcome === 'transformed' ? 1 : 0);
+      expect(endInvocations).toBe(0);
+    },
+  );
 });
