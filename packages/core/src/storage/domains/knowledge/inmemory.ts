@@ -157,6 +157,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       createdScopeIds.push(id);
     }
 
+    const scopeById = new Map([...this.#structureScopes.values()].map(scope => [scope.id, scope]));
     try {
       for (const scope of plan.scopes) {
         if (
@@ -173,17 +174,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
             throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
           }
           if (parent.deletedAt || this.#structureParents.has(edge!)) continue;
+          const name = scope.name.trim().toLocaleLowerCase();
           const sibling = [...this.#structureParents]
             .map(edge => edge.split('\u0000'))
             .find(
               ([nodeId, parentId]) =>
                 parentId === parent.id &&
                 nodeId !== scopeNodeId &&
-                [...this.#structureScopes.values()].some(
-                  candidate =>
-                    candidate.id === nodeId &&
-                    candidate.name.trim().toLocaleLowerCase() === scope.name.trim().toLocaleLowerCase(),
-                ),
+                scopeById.get(nodeId!)?.name.trim().toLocaleLowerCase() === name,
             );
           if (sibling) throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
           this.#structureParents.add(edge!);
