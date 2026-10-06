@@ -14,6 +14,8 @@ import { loadSettings, saveSettings } from './settings.js';
  * No longer called inside this repo — auto selection replaced the "seed a pack
  * at login" flow — but part of the documented `@mastra/code-sdk/onboarding/om-settings`
  * surface since 1.1.0, so it stays for external callers.
+ *
+ * @deprecated Observer and Reflector default to Auto; there is no default left to seed.
  */
 export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
   const {
@@ -44,6 +46,8 @@ export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
  *
  * The TUI stopped calling this when auto became the default; kept exported for
  * external callers alongside {@link hasExplicitOMConfiguration}.
+ *
+ * @deprecated Seeding pins both roles to a fixed model. Leave them on Auto instead.
  */
 export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMPack): boolean {
   if (hasExplicitOMConfiguration(settings)) return false;
@@ -54,6 +58,12 @@ export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMP
   return true;
 }
 
+/**
+ * Seed the provider's built-in OM pack into saved settings unless the user already chose one.
+ *
+ * @deprecated Signing in no longer seeds memory models; seeding pins both roles instead of
+ * leaving them on Auto.
+ */
 export function seedProviderOMDefault(providerId: string): OMPack | undefined {
   const pack = resolveProviderOMDefault(providerId);
   // No cheap OM pack for this provider — leave OM open for a later login rather

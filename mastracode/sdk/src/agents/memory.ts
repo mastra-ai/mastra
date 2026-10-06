@@ -54,7 +54,8 @@ function resolveRouteMemoryModels(
  * The authoritative per-caller Factory memory-settings row, placed on the request
  * context before Factory's model-dependent processors run. `null` means the row
  * exists but is empty (every role auto). An unavailable sentinel or a missing
- * value on a Factory-owned session disables model-driven memory work.
+ * value on a Factory-owned session falls back to Auto roles and default
+ * thresholds/attachments, so memory keeps working while Factory reports the error.
  */
 interface FactoryMemorySettings {
   observerModelId: string | null;

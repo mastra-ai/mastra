@@ -86,7 +86,9 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onObserverAuto: async () => {
           await ctx.state.session.om.observer.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('observer');
-          ctx.showInfo(`Observer model → Auto (${ctx.state.session.om.observer.modelId() ?? 'unavailable'})`);
+          ctx.showInfo(
+            `Observer model → Auto (${getEffectiveOMRoleModelId(ctx.state.session, 'observer') ?? 'unavailable'})`,
+          );
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
@@ -97,7 +99,9 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onReflectorAuto: async () => {
           await ctx.state.session.om.reflector.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('reflector');
-          ctx.showInfo(`Reflector model → Auto (${ctx.state.session.om.reflector.modelId() ?? 'unavailable'})`);
+          ctx.showInfo(
+            `Reflector model → Auto (${getEffectiveOMRoleModelId(ctx.state.session, 'reflector') ?? 'unavailable'})`,
+          );
         },
         onObservationThresholdChange: async value => {
           await ctx.state.session.state.set({ observationThreshold: value } as any);
