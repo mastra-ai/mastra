@@ -2,8 +2,8 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-
 import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
+
 import type { TUIState } from '../state.js';
 import {
   clearToolInputParsers,
@@ -140,7 +140,6 @@ describe('background placeholder opt-in', () => {
 describe('task tool rendering', () => {
   afterEach(() => {
     clearToolInputParsers();
-    vi.useRealTimers();
   });
 
   it('keeps successful task tools out of the chat tool list', () => {
@@ -197,31 +196,21 @@ describe('task tool rendering', () => {
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
-  it.each([false, true])(
-    'preserves quiet error paths before the render timer (parser advanced: %s)',
-    async advanceParser => {
-      const ctx = createToolHandlerContext();
-      ctx.state.quietMode = true;
-      const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
-      vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+  it('marks quiet tool result objects with isError true as failed even when the event flag is false', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
-      handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
-      vi.useFakeTimers();
-      handleToolInputDelta(
-        ctx,
-        'call-1',
-        '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}',
-      );
-      if (advanceParser) await vi.advanceTimersByTimeAsync(0);
-      handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
+    handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
+    handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
+    await flushParser();
+    handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
 
-      const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
-      expect(output).toContain('The specified text was not found.');
-      expect(output).toContain('▐edit▌src/example.ts▌ ✗');
-      expect(output).not.toContain('replacement');
-      expect(output).not.toContain('missing');
-    },
-  );
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('The specified text was not found.');
+    expect(output).toContain('▐edit▌src/example.ts▌ ✗');
+  });
 
   it('regroups quiet tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();

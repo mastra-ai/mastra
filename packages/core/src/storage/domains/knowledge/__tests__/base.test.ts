@@ -42,7 +42,8 @@ describe('InMemoryKnowledgeStorage', () => {
     };
     const { scopes } = await store.reconcileStructure(plan);
 
-    const nodes = await store.listScopeNodes();
+    const { scopes: nodes, nextCursor } = await store.listScopeNodes();
+    expect(nextCursor).toBeNull();
     expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'memory']);
     const features = nodes.find(node => node.name === 'features')!;
     const mastra = nodes.find(node => node.name === 'mastra')!;
@@ -56,6 +57,46 @@ describe('InMemoryKnowledgeStorage', () => {
     await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
   });
 
+  it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+    const store = createStore();
+    const { scopes: ids } = await store.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'Acme' },
+        { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+        { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+        { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+        { address: 'org:other', name: 'Other' },
+        { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+      ],
+    });
+
+    const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+    expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+    expect(within.nextCursor).toBeNull();
+    expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds.sort()).toEqual(
+      [ids['team:a'], ids['team:b']].sort(),
+    );
+
+    const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+    expect(first.scopes).toHaveLength(3);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+    expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+    expect(second.nextCursor).toBeNull();
+    await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+      'does not match this query',
+    );
+
+    expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+      'team:b',
+      'project:p',
+    ]);
+    expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+      ids['team:o'],
+    ]);
+    expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+  });
+
   it('throws a typed capability error for adapters without the structural scope read', async () => {
     const bare = {} as KnowledgeStorage;
     await expect(KnowledgeStorage.prototype.listScopeNodes.call(bare)).rejects.toBeInstanceOf(
@@ -64,36 +105,6 @@ describe('InMemoryKnowledgeStorage', () => {
     await expect(
       KnowledgeStorage.prototype.listScopeMembers.call(bare, { scopeNodeId: crypto.randomUUID() }),
     ).rejects.toBeInstanceOf(KnowledgeUnsupportedCapabilityError);
-  });
-
-  it('enriches existing scopes with new parents and grants idempotently', async () => {
-    const store = createStore();
-    const initial = await store.reconcileStructure({
-      scopes: [
-        { address: 'org:acme', name: 'Acme' },
-        { address: 'org:partner', name: 'Partner' },
-        { address: 'resource:mastra', name: 'Mastra', parentAddresses: ['org:acme'] },
-      ],
-    });
-
-    const enrichedPlan = {
-      scopes: [
-        { address: 'org:acme', name: 'Acme' },
-        { address: 'org:partner', name: 'Partner' },
-        {
-          address: 'resource:mastra',
-          name: 'Mastra',
-          parentAddresses: ['org:acme', 'org:partner'],
-          grants: [{ scopeRefAddress: 'org:partner', role: 'readonly' as const }],
-        },
-      ],
-    };
-    const enriched = await store.reconcileStructure(enrichedPlan);
-    const replayed = await store.reconcileStructure(enrichedPlan);
-
-    expect(initial).toMatchObject({ changed: true, accessEpoch: 1 });
-    expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
-    expect(replayed).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: 2 });
   });
 
   it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {
@@ -133,7 +144,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(snapshot.tableNames).toBe(tableNames);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(KnowledgeSchemaResetRequiredError);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(
-      'Knowledge schema reset required: experimental v1 columns detected',
+      'Knowledge schema reset required: experimental v1 columns detected. Existing Knowledge data is not migrated. To replace it, call `await storage.stores.knowledge.dangerouslyReset()`, which deletes every Knowledge row and nothing else.',
     );
     expect(inspectKnowledgeSchema({ available: true, tableNames: [] })).toEqual({
       status: 'uninitialized',

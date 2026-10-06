@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,17 +8,31 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
+import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const adapter = process.env.KNOWLEDGE_ADAPTER === 'pg' ? 'pg' : 'libsql';
+type Adapter = 'libsql' | 'pg';
+// CI provides DB_URL for this package, so the PostgreSQL variant runs there alongside LibSQL.
+// KNOWLEDGE_ADAPTER pins a single adapter for local runs.
+const adapters: Adapter[] = process.env.KNOWLEDGE_ADAPTER
+  ? [process.env.KNOWLEDGE_ADAPTER === 'pg' ? 'pg' : 'libsql']
+  : process.env.DB_URL
+    ? ['libsql', 'pg']
+    : ['libsql'];
 const outputPath = process.env.KNOWLEDGE_PROOF_OUTPUT;
 const temporaryDirectories: string[] = [];
 const stores: MastraCompositeStore[] = [];
 const memories: Memory[] = [];
 const postgresSchemas: string[] = [];
+// Same default as with-pg-storage.test.ts: this package's docker-compose.yml PostgreSQL.
+const postgresConnectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
+const publishedKnowledgeV1Fixture = new URL(
+  '../../../../stores/libsql/src/storage/domains/knowledge/fixtures/published-1.21.1.sql',
+  import.meta.url,
+);
 
 const structure = {
   scopes: [
@@ -107,17 +121,16 @@ function deterministicObservationModel(curate = false) {
   };
 }
 
-async function createStorage(id: string): Promise<{ storage: MastraCompositeStore; location: string }> {
+async function createStorage(
+  id: string,
+  adapter: Adapter,
+): Promise<{ storage: MastraCompositeStore; location: string }> {
   if (adapter === 'pg') {
     const schemaName = `knowledge_w1_${randomUUID().replaceAll('-', '')}`;
     postgresSchemas.push(schemaName);
     const storage = new PostgresStore({
       id,
-      host: process.env.POSTGRES_HOST || 'localhost',
-      port: Number(process.env.POSTGRES_PORT) || 5434,
-      database: process.env.POSTGRES_DB || 'postgres',
-      user: process.env.POSTGRES_USER || 'postgres',
-      password: process.env.POSTGRES_PASSWORD || 'postgres',
+      connectionString: postgresConnectionString,
       schemaName,
     });
     stores.push(storage);
@@ -132,7 +145,24 @@ async function createStorage(id: string): Promise<{ storage: MastraCompositeStor
   return { storage, location };
 }
 
-function createRuntime(storage: MastraCompositeStore) {
+const embedder: EmbeddingModel<string> = {
+  specificationVersion: 'v1',
+  provider: 'aimock',
+  modelId: 'deterministic-embedding',
+  maxEmbeddingsPerCall: 128,
+  supportsParallelCalls: true,
+  async doEmbed({ values }) {
+    return { embeddings: values.map(() => [0.1, 0.2, 0.3, 0.4]) };
+  },
+};
+
+async function createVector() {
+  const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-vector-'));
+  temporaryDirectories.push(directory);
+  return new LibSQLVector({ id: `wave-1-vector-${randomUUID()}`, url: `file:${join(directory, 'vector.db')}` });
+}
+
+function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
   const knowledge = new Knowledge({
     id: 'mastra',
     name: 'Mastra Knowledge',
@@ -144,6 +174,8 @@ function createRuntime(storage: MastraCompositeStore) {
   const curator = deterministicObservationModel(true);
   const memory = new Memory({
     storage,
+    vector,
+    embedder,
     knowledge: 'mastra',
     options: {
       observationalMemory: {
@@ -204,7 +236,7 @@ afterEach(async () => {
   if (cleanupErrors.length) throw cleanupErrors[0];
 });
 
-describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
+describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapter => {
   it('rejects obsolete observation-agent configuration with migration guidance', () => {
     expect(() => new Subconscious(JSON.parse('{"observation":["capture"]}'))).toThrow(
       'Unknown Subconscious observation agent: capture. Use "curate" for observation-time ingestion or "remind" for retrieval.',
@@ -221,8 +253,9 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     expect(resolvedPackages.memory).toContain('/packages/memory/dist/');
     expect(resolvedPackages.adapter).toContain(adapter === 'pg' ? '/stores/pg/dist/' : '/stores/libsql/dist/');
 
-    const { storage, location } = await createStorage(`wave-1-${adapter}`);
-    const first = createRuntime(storage);
+    const { storage, location } = await createStorage(`wave-1-${adapter}`, adapter);
+    const vector = await createVector();
+    const first = createRuntime(storage, vector);
     const reconciled = await first.knowledge.reconcile();
     expect(Object.keys(reconciled.scopes)).toEqual(
       expect.arrayContaining(structure.scopes.map(scope => scope.address)),
@@ -279,16 +312,12 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       adapter === 'pg'
         ? new PostgresStore({
             id: `wave-1-${adapter}-restart`,
-            host: process.env.POSTGRES_HOST || 'localhost',
-            port: Number(process.env.POSTGRES_PORT) || 5434,
-            database: process.env.POSTGRES_DB || 'postgres',
-            user: process.env.POSTGRES_USER || 'postgres',
-            password: process.env.POSTGRES_PASSWORD || 'postgres',
+            connectionString: postgresConnectionString,
             schemaName: location,
           })
         : new LibSQLStore({ id: `wave-1-${adapter}-restart`, url: `file:${location}` });
     stores.push(restartedStorage);
-    const restarted = createRuntime(restartedStorage);
+    const restarted = createRuntime(restartedStorage, vector);
     const replay = await restarted.knowledge.reconcile();
     expect(replay.createdScopeIds).toEqual([]);
     const persisted = await restarted.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
@@ -340,4 +369,64 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       });
     },
   );
+
+  it.skipIf(adapter !== 'libsql')('upgrades a database written by the published v1 Knowledge release', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-upgrade-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'upgrade.db');
+    const seed = new DatabaseSync(databasePath);
+    seed.exec(await readFile(publishedKnowledgeV1Fixture, 'utf8'));
+    seed
+      .prepare(
+        'INSERT INTO mastra_knowledge_nodes (id, type, name, canonicalName, scope, scopeKey, version, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        'v1-node',
+        'entity',
+        'Atlas',
+        'atlas',
+        '["shipyard"]',
+        'shipyard',
+        1,
+        '2026-01-01T00:00:00.000Z',
+        '2026-01-01T00:00:00.000Z',
+      );
+    seed.close();
+
+    // Ordinary memory keeps working on the upgraded database while Knowledge is unused.
+    const storage = new LibSQLStore({ id: 'wave-1-upgrade', url: `file:${databasePath}` });
+    stores.push(storage);
+    const plainMemory = new Memory({ storage });
+    new Mastra({ memory: { default: plainMemory }, logger: false });
+    await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
+    await plainMemory.saveMessages({ messages: [message('kept-thread')] });
+
+    // Turning Knowledge on refuses to reinterpret v1 rows and names the explicit reset.
+    const vector = await createVector();
+    const blocked = createRuntime(storage, vector);
+    await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores.knowledge.dangerouslyReset()');
+    const v1Rows = new DatabaseSync(databasePath, { readOnly: true });
+    expect(v1Rows.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get()).toEqual({ count: 1 });
+    v1Rows.close();
+
+    await storage.stores!.knowledge!.dangerouslyReset();
+    const upgraded = createRuntime(storage, vector);
+    await upgraded.knowledge.reconcile();
+    const threadId = `upgrade-${randomUUID()}`;
+    await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
+    await upgraded.memory.saveMessages({ messages: [message(threadId)] });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    await (await upgraded.memory.omEngine)!.observe({
+      threadId,
+      resourceId: 'shipyard',
+      requestContext,
+      sendStateSignal: async () => ({ skipped: false }) as never,
+    });
+    await upgraded.memory.settled();
+    expect(
+      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:shipyard'] }),
+    ).toMatchObject({ kind: 'feature' });
+    expect(await upgraded.memory.getThreadById({ threadId: 'kept-thread' })).toMatchObject({ title: 'Kept' });
+  });
 });

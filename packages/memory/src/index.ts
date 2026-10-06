@@ -634,6 +634,15 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    // Every Knowledge write queues semantic-index work; only a vector store and embedder drain it.
+    if (omConfig?.experimental_subconscious) {
+      if (!this.vector) {
+        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
+      }
+      if (!this.embedder) {
+        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
+      }
+    }
   }
 
   /** Returns the configured Knowledge v2 instance, or undefined for the v1 storage-domain path. */

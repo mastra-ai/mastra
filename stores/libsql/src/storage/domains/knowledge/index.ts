@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
-import type { KnowledgeScopeNodeSummary } from '@internal/core/knowledge-compat';
+import type { ListKnowledgeScopeNodesInput, ListKnowledgeScopeNodesOutput } from '@internal/core/knowledge-compat';
 import {
-  MAX_KNOWLEDGE_SCOPE_NODES,
+  pageKnowledgeScopeNodes,
+  parseListKnowledgeScopeNodesInput,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -16,6 +17,8 @@ import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   createKnowledgeV2CoreLoader,
   KNOWLEDGE_V2_ACTIVITY_SCHEMA,
@@ -346,7 +349,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async #initializeSchema(tx: Executor): Promise<void> {
     const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
-    const inspection = await this.#inspectSchema(tx);
+    let inspection = await this.#inspectSchema(tx);
+    if (inspection.status === 'incompatible-reset-required' && (await this.#isEmptyPublishedV1Layout(tx))) {
+      // Earlier releases created empty Knowledge tables for every app. Replacing them loses nothing.
+      for (const table of [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]) {
+        await tx.execute(`DROP TABLE IF EXISTS "${table}"`);
+      }
+      inspection = await this.#inspectSchema(tx);
+    }
     assertKnowledgeSchemaCompatible(inspection);
 
     const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
@@ -413,6 +423,33 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
+  /**
+   * True when the only Knowledge objects are the empty tables and indexes published v1 adapters
+   * created for every app. Anything else (rows, v2 tables, unknown tables, views, triggers) needs an
+   * explicit reset.
+   */
+  async #isEmptyPublishedV1Layout(executor: Executor): Promise<boolean> {
+    const objects = await executor.execute(
+      "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+    );
+    const tables: string[] = [];
+    for (const row of objects.rows) {
+      const type = String(row.type);
+      const name = String(row.name);
+      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) {
+        tables.push(name);
+        continue;
+      }
+      const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
+      if (type !== 'index' || !knownIndex) return false;
+    }
+    for (const table of tables) {
+      const rows = await executor.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
+      if (rows.rows.length > 0) return false;
+    }
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.#transaction(async tx => {
       for (const table of [
@@ -456,8 +493,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch WHERE id='global'`);
         const scopes: Record<string, string> = {};
         const createdScopeIds: string[] = [];
-        const deletedScopeAddresses = new Set<string>();
+        const createdAddresses = new Set<string>();
+        const retrofit = plan.retrofit ?? true;
         let structureChanged = false;
+        const deletedScopeAddresses = new Set<string>();
         const resolveAddress = async (address: string): Promise<string | undefined> => {
           if (scopes[address]) return scopes[address];
           const result = await tx.execute({
@@ -495,12 +534,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             args: [scope.address, id],
           });
           scopes[scope.address] = id;
+          createdAddresses.add(scope.address);
           createdScopeIds.push(id);
           structureChanged = true;
         }
 
         for (const scope of plan.scopes) {
-          if (deletedScopeAddresses.has(scope.address)) continue;
+          if (!createdAddresses.has(scope.address) && (!retrofit || deletedScopeAddresses.has(scope.address))) continue;
           const scopeNodeId = scopes[scope.address]!;
           for (const parentAddress of scope.parentAddresses ?? []) {
             const parentId = await resolveAddress(parentAddress);
@@ -564,14 +604,37 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     );
   }
 
-  override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+  override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    if (input.addresses?.length === 0) return { scopes: [], nextCursor: null };
+    const args: Array<string | number> = [];
+    const where = [`n.isScope`, `n.deletedAt IS NULL`];
+    let within = '';
+    if (input.withinAddress !== undefined) {
+      // The subtree follows parent edges transitively; UNION dedupes scopes reachable through several parents.
+      within = `WITH RECURSIVE within_scope(id) AS (SELECT r.id FROM "${TABLE_KNOWLEDGE_NODES}" r JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" ra ON ra.scopeNodeId=r.id WHERE ra.address=? AND r.isScope AND r.deletedAt IS NULL UNION SELECT ns.nodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN within_scope w ON ns.scopeNodeId=w.id JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns.nodeId WHERE c.isScope AND c.deletedAt IS NULL) `;
+      args.push(input.withinAddress);
+      where.push('n.id IN (SELECT id FROM within_scope)');
+    }
+    if (input.addresses) {
+      where.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
+      args.push(...input.addresses);
+    }
+    if (after) {
+      where.push('(n.name > ? OR (n.name = ? AND n.id > ?))');
+      args.push(after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
     const scopes = await this.#client.execute({
-      sql: `SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a.scopeNodeId=n.id WHERE n.isScope AND n.deletedAt IS NULL ORDER BY n.name LIMIT ?`,
-      args: [MAX_KNOWLEDGE_SCOPE_NODES],
+      sql: `${within}SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a.scopeNodeId=n.id WHERE ${where.join(' AND ')} ORDER BY n.name, n.id LIMIT ?`,
+      args,
     });
-    if (scopes.rows.length === 0) return [];
+    const rows = scopes.rows;
+    if (rows.length === 0) return { scopes: [], nextCursor: null };
+    // Parent edges for this page only, so the read stays bounded by the page size.
     const parents = await this.#client.execute({
-      sql: `SELECT ns.nodeId,ns.scopeNodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns.nodeId WHERE c.isScope AND c.deletedAt IS NULL`,
+      sql: `SELECT ns.nodeId,ns.scopeNodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns.nodeId IN (${rows.map(() => '?').join(',')}) ORDER BY ns.scopeNodeId`,
+      args: rows.map(row => String(row.id)),
     });
     const parentsByScopeId = new Map<string, string[]>();
     for (const row of parents.rows) {
@@ -581,14 +644,18 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (existing) existing.push(parentId);
       else parentsByScopeId.set(scopeId, [parentId]);
     }
-    return scopes.rows.map(row => ({
-      id: String(row.id),
-      address: String(row.address),
-      name: String(row.name),
-      ...(row.kind == null ? {} : { kind: String(row.kind) }),
-      ...(row.description == null ? {} : { description: String(row.description) }),
-      parentIds: parentsByScopeId.get(String(row.id)) ?? [],
-    }));
+    return pageKnowledgeScopeNodes(
+      rows.map(row => ({
+        id: String(row.id),
+        address: String(row.address),
+        name: String(row.name),
+        ...(row.kind == null ? {} : { kind: String(row.kind) }),
+        ...(row.description == null ? {} : { description: String(row.description) }),
+        parentIds: parentsByScopeId.get(String(row.id)) ?? [],
+      })),
+      limit,
+      input,
+    );
   }
 
   override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
@@ -782,8 +849,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,nodeId=?,version=version+1,updatedAt=? WHERE node=?`,
-        args: [target.id, target.id, new Date().toISOString(), source.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,version=version+1,updatedAt=? WHERE node=?`,
+        args: [target.id, new Date().toISOString(), source.id],
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
@@ -861,10 +928,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,nodeId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,createdAt,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,version,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),?,?,NULL,NULL)`,
         args: [
           record.id,
-          record.node,
           record.node,
           record.text,
           JSON.stringify(scope),
@@ -875,7 +941,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           record.maxScope ?? null,
           record.metadata ? JSON.stringify(record.metadata) : null,
           1,
-          record.capturedAt.toISOString(),
           record.capturedAt.toISOString(),
         ],
       });

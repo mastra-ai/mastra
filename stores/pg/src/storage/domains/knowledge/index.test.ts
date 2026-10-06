@@ -7,6 +7,7 @@ import {
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_TABLE_NAMES,
   KnowledgeSchemaResetRequiredError,
+  MastraCompositeStore,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
@@ -18,6 +19,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from '../../client';
 import { generateTableSQL } from '../../db';
+import { PostgresStore } from '../../index';
 import { connectionString } from '../../test-utils';
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
@@ -198,6 +200,64 @@ describe('PostgreSQL knowledge schema reset dependents', () => {
 });
 
 describe('PostgreSQL knowledge legacy schema boundary', () => {
+  it('replaces the empty v1 tables every published PostgreSQL store created', async () => {
+    const schemaName = `knowledge_empty_v1_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await seedPublishedKnowledgeV1(schemaName);
+
+      const store = createStore(schemaName);
+      await store.init();
+
+      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      const tables = await pool.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_name LIKE 'mastra_knowledge_%'`,
+        [schemaName],
+      );
+      expect(new Set(tables.rows.map(row => String(row.table_name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('keeps ordinary store init independent of Knowledge', async () => {
+    const schemaName = `knowledge_store_init_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const store = new PostgresStore({ id: 'knowledge-store-init', connectionString, schemaName });
+    try {
+      await seedPublishedKnowledgeV1(schemaName);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+      );
+      // Published Core releases without the knowledge-v2 feature init every domain from super.init().
+      const preV2CoreInit = vi
+        .spyOn(MastraCompositeStore.prototype, 'init')
+        .mockImplementation(async function (this: MastraCompositeStore) {
+          await Promise.all(Object.values(this.stores ?? {}).map(domain => domain?.init()));
+        });
+      const knowledgeInit = vi.spyOn(store.stores.knowledge!, 'init');
+
+      await store.init();
+      await store.stores.memory!.saveThread({
+        thread: {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          title: 'kept',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      expect(knowledgeInit).not.toHaveBeenCalled();
+      preV2CoreInit.mockRestore();
+      await expect(store.getStore('knowledge')).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      await store.close();
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
   it('rejects an unrecognized v1 layout without mutation', async () => {
     const schemaName = `knowledge_unknown_${Date.now()}`;
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
@@ -332,7 +392,7 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
       };
       const { scopes } = await store.reconcileStructure(plan);
 
-      const nodes = await store.listScopeNodes();
+      const { scopes: nodes } = await store.listScopeNodes();
       expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
       const mastra = nodes.find(node => node.name === 'mastra')!;
       const features = nodes.find(node => node.name === 'features')!;

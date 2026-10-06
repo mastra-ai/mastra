@@ -144,6 +144,7 @@ export function materializeKnowledgeScopePlan(
         grants,
       },
     ],
+    retrofit: false,
   });
 }
 
