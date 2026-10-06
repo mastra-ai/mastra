@@ -9,3 +9,5 @@ Fixed observational memory losing context for the agent when background bufferin
 - A reflection that was superseded by another one no longer marks itself as completed.
 - Messages saved by another agent or process while an observation runs are no longer marked as observed, and an observation that finds nothing new no longer skips messages saved with earlier timestamps.
 - Overlapping background buffering calls for the same thread now run one after another, so the same messages are no longer sent to the Observer and stored more than once.
+- An observation or buffered observation that finishes after its thread's observational memory was cleared (or the thread deleted) is discarded instead of being saved into the thread's new record.
+- Copying a thread while a reflection replaces its observational memory no longer gives the copy a record that rejects writes.
