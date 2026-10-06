@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { compileClickHouseTraceAggregate } from '../../src/storage/domains/observability/v-next/trace-aggregate';
 import { anchorTo, CASES, compileCase, compilePayloadStage, DOC_LITERALS, timeRangeFor } from './cases';
+import { stageQuery } from './floor';
 import { applyVariant, injectProjectScope, PROJECT_PARAM, RewriteError } from './scope';
 
 const SCOPE = { organizationId: 'org-test', projectId: 'proj-test' };
@@ -160,5 +161,56 @@ describe('memory variants', () => {
     const raw = compileClickHouseTraceAggregate(plan);
     const tampered = { ...raw, query_params: { ...raw.query_params, [params.at(-1)!]: 'other-org' } };
     expect(() => injectProjectScope(tampered, 'proj-test', [])).toThrow('same organization');
+  });
+});
+
+describe('query-shape variants', () => {
+  const tr = timeRangeFor({ id: '30d', ms: 30 * 86_400_000 }, TO);
+  const compile = (id: string, variant: Parameters<typeof compileCase>[1]) =>
+    compileCase(
+      CASES.find(c => c.id === id)!,
+      variant,
+      LITERALS,
+      tr,
+      SCOPE,
+    );
+
+  it('rs scopes and time-bounds the outer re-read and partition-bounds the seed', () => {
+    const q = compile('F0', 'rs').query;
+    const outer = /SELECT \*\s+FROM mastra_trace_roots\s+WHERE ([\s\S]*?)traceId IN \(/.exec(q)?.[1] ?? '';
+    expect(outer).toMatch(/organizationId = \{trace_query_\d+:String\} AND projectId = \{bench_project_id:String\}/);
+    expect(outer).toMatch(/startedAt >= .*startedAt < .*endedAt >= /s);
+    expect(q).toMatch(
+      /FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_\d+:DateTime64\(3, 'UTC'\)\} AND endedAt >= /,
+    );
+  });
+
+  it('r1 leaves a single LIMIT BY in current_roots', () => {
+    const q = compile('F0', 'r1').query;
+    expect(q).not.toContain('LIMIT 1 BY dedupeKey');
+    expect(q).toContain('LIMIT 1 BY traceId');
+  });
+
+  it('sp drops the span dedupe only, and needs a span relation', () => {
+    const q = compile('F3', 'sp').query;
+    const spans = /current_spans AS \(([\s\S]*?)\n {2}\),/.exec(q)?.[1] ?? '';
+    expect(spans).not.toContain('LIMIT 1 BY dedupeKey');
+    expect(spans).toMatch(/endedAt >= \{trace_query_\d+:DateTime64/);
+    expect(q).toContain('LIMIT 1 BY dedupeKey'); // current_roots keeps its dedupe
+    expect(() => compile('F0', 'sp')).toThrow(RewriteError);
+  });
+
+  it('shape composes the rewrites, including the usage dedupe for token cases', () => {
+    const q = compile('E4', 'shape').query;
+    expect(q).not.toContain('GROUP BY traceId, metricId');
+    expect(q).not.toContain('LIMIT 1 BY dedupeKey');
+    expect(compile('F3', 'shape').query).not.toContain('LIMIT 1 BY dedupeKey');
+  });
+
+  it('stageQuery ends the WITH chain at the named CTE', () => {
+    const q = compile('E4', 'base').query;
+    expect(stageQuery(q, 'usage')).toMatch(/\nSELECT count\(\) AS n, sum\(cityHash64\(\*\)\) AS h FROM usage$/);
+    expect(stageQuery(q, 'current_roots')).toMatch(/cityHash64\(traceId\)\) AS h FROM current_roots$/);
+    expect(() => stageQuery(q, 'nope')).toThrow(/no CTE/);
   });
 });

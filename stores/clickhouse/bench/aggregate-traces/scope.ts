@@ -84,7 +84,21 @@ export function scopePayloadQuery(
   );
 }
 
-export type Variant = 'base' | 'uniq' | 'exact' | 'w1' | 't2' | 'spill' | 'mkey' | 'nocm' | 'nodedupe' | 'final';
+export type Variant =
+  | 'base'
+  | 'uniq'
+  | 'exact'
+  | 'w1'
+  | 't2'
+  | 'spill'
+  | 'mkey'
+  | 'nocm'
+  | 'nodedupe'
+  | 'final'
+  | 'rs'
+  | 'r1'
+  | 'sp'
+  | 'shape';
 
 /** Variants that only change per-query settings. They may only tighten the tier's limits. */
 export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | number>>> = {
@@ -106,6 +120,14 @@ export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | n
  * - `nocm` (diagnostic): skip the per-row `costMetadata` JSON parse (`hasError` = 0)
  * - `nodedupe` (diagnostic): drop the `(traceId, metricId)` retry dedupe and aggregate raw rows
  * - `final`: replace that dedupe with a `FINAL` read, letting ReplacingMergeTree collapse retried rows
+ *
+ * Query-shape candidates (memory track 2):
+ * - `rs`: scope the outer `current_roots` re-read to the tenant and time window, and add `endedAt >= from` to it and
+ *   to the seed so `PARTITION BY toDate(endedAt)` prunes (a trace that starts in the window ends after `from`)
+ * - `r1`: one `LIMIT 1 BY traceId` over `ORDER BY traceId, dedupeKey` instead of a dedupeKey pass then a traceId pass
+ * - `sp`: span relation as a plain semi-join: no `LIMIT 1 BY dedupeKey` (it only feeds `traceId IN`), plus
+ *   `endedAt >= from` for partition pruning
+ * - `shape`: all of the above, plus `nodedupe` when the query has token/cost usage
  */
 export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Variant): CompiledClickHouseTraceQuery {
   switch (variant) {
@@ -161,6 +183,18 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       if (query.includes('quantileDeterministic')) throw new RewriteError('Variant exact: unrewritten quantile left');
       return { ...compiled, query };
     }
+    case 'rs':
+      return scopedReread(compiled);
+    case 'r1':
+      return singleRootDedupe(compiled);
+    case 'sp':
+      return spanSemiJoin(compiled);
+    case 'shape': {
+      let out = singleRootDedupe(scopedReread(compiled));
+      if (out.query.includes('current_spans AS (')) out = spanSemiJoin(out);
+      if (out.query.includes('usage AS (')) out = applyVariant(out, 'nodedupe');
+      return out;
+    }
     case 'w1': {
       const tenantParam = /AND organizationId = (\{trace_query_\d+:String\}) AND projectId/.exec(compiled.query)?.[1];
       if (!tenantParam) throw new RewriteError('Variant w1: query is not project-scoped');
@@ -203,4 +237,42 @@ function rewriteEach(
     query = query.replace(pattern, replacement);
   }
   return { ...compiled, query };
+}
+
+function windowParams(query: string): { from: string; to: string } {
+  const from = /startedAt >= (\{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/.exec(query)?.[1];
+  const to = /startedAt < (\{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/.exec(query)?.[1];
+  if (!from || !to) throw new RewriteError('query has no startedAt window');
+  return { from, to };
+}
+
+function scopedReread(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const tenantParam = /AND organizationId = (\{trace_query_\d+:String\}) AND projectId/.exec(compiled.query)?.[1];
+  if (!tenantParam) throw new RewriteError('Variant rs: query is not project-scoped');
+  const { from, to } = windowParams(compiled.query);
+  return rewriteEach(compiled, 'rs', [
+    [
+      /(SELECT \*\s+FROM mastra_trace_roots\s+WHERE )(traceId IN \()/g,
+      `$1organizationId = ${tenantParam} AND projectId = {${PROJECT_PARAM}:String}
+        AND startedAt >= ${from} AND startedAt < ${to} AND endedAt >= ${from} AND $2`,
+    ],
+    [
+      /(FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/g,
+      `$1 AND endedAt >= ${from}`,
+    ],
+  ]);
+}
+
+function singleRootDedupe(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  return rewriteEach(compiled, 'r1', [
+    [/\n\s*ORDER BY dedupeKey\n\s*LIMIT 1 BY dedupeKey\n(\s*\)\n\s*ORDER BY traceId, dedupeKey)/g, '\n$1'],
+  ]);
+}
+
+function spanSemiJoin(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const { from } = windowParams(compiled.query);
+  return rewriteEach(compiled, 'sp', [
+    [/(FROM mastra_span_events\n[\s\S]*?)\n\s*ORDER BY dedupeKey\n\s*LIMIT 1 BY dedupeKey\n(\s*\),)/g, '$1\n$2'],
+    [/(AND traceId IN \(SELECT traceId FROM root_scope\))/g, `$1\n      AND endedAt >= ${from}`],
+  ]);
 }

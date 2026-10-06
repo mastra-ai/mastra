@@ -41,6 +41,24 @@ npx tsx bench/aggregate-traces/leak-check.ts [pr-body.md]
 
 `run` is resumable: it skips case keys already in `results/runs.jsonl`. `--dry-run` lists what would run.
 
+### Memory experiments
+
+[EXPERIMENTS.md](./EXPERIMENTS.md) logs the follow-up work on per-query memory (experiment IDs, environment, result).
+
+```sh
+# Probes on the replica (floor, prefetch settings, CTE stages, query-shape variants), results/floor.jsonl
+npx tsx bench/aggregate-traces/floor.ts --buckets small,p99 --probes F0,F0-shape,F0-shape-pf8 [--cold] [--reps 3]
+
+# Local lab: ClickHouse 26.4 in docker with synthetic data shaped like the replica (aggregate stats only)
+npx tsx bench/aggregate-traces/lab.ts calibrate   # read-only, aggregate-only queries on the replica
+npx tsx bench/aggregate-traces/lab.ts up && npx tsx bench/aggregate-traces/lab.ts load
+npx tsx bench/aggregate-traces/lab.ts equiv       # shape variants return the same rows as compiled
+npx tsx bench/aggregate-traces/floor.ts --lab --buckets small,p99 --probes F3,F3-shape
+npx tsx bench/aggregate-traces/lab.ts down
+```
+
+Query-shape variants (`rs`, `r1`, `sp`, `shape`, plus the diagnostic `nodedupe`/`nocm`/`final`) are string rewrites in [scope.ts](./scope.ts) that fail closed when their anchor is missing; see EXPERIMENTS.md X17 for what each does.
+
 ## Safety model
 
 - **Host guard** ([env.ts](./env.ts)), before any network I/O: `https`, host `gyiixsk9we.us-central1.gcp.clickhouse.cloud`, port `8443`, no path. Any URL mentioning the production primary is refused. The client is built from the bare origin plus separate credentials.

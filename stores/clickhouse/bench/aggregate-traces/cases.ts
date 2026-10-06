@@ -560,6 +560,9 @@ export const CASES: CaseDef[] = [
   },
 ];
 
+/** Query-shape candidates apply to any case; their rewrites fail closed when the query lacks the anchor. */
+export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>(['rs', 'r1', 'sp', 'shape']);
+
 export interface ProjectScope {
   organizationId: string;
   projectId: string;
@@ -584,7 +587,9 @@ export function compileCase(
   timeRange: { from: string; to: string },
   scope: ProjectScope,
 ): CompiledClickHouseTraceQuery {
-  if (!def.variants.includes(variant)) throw new Error(`Case ${def.id} has no variant ${variant}`);
+  if (!def.variants.includes(variant) && !SHAPE_VARIANTS.has(variant)) {
+    throw new Error(`Case ${def.id} has no variant ${variant}`);
+  }
   const body = { timeRange, ...def.request(def.docLiterals ? DOC_LITERALS : literals) };
   const planScope = { scope: { organizationId: scope.organizationId } };
   const compiled =
