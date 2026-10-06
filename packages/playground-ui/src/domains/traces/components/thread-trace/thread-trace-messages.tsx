@@ -46,7 +46,7 @@ export type ThreadTraceTabListProps = Omit<TabListProps, 'variant' | 'size'> & {
   size?: TabListProps['size'];
 };
 
-export function ThreadTraceTabList({ variant = 'pill-ghost', size = 'md', ...props }: ThreadTraceTabListProps) {
+export function ThreadTraceTabList({ variant = 'pill-ghost', size = 'sm', ...props }: ThreadTraceTabListProps) {
   return <TabList variant={variant} size={size} {...props} />;
 }
 

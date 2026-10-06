@@ -59,14 +59,11 @@ export const Tab = ({
   // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
   // aria/data attributes Base UI sets.
   const size = list?.size ?? 'md';
-  // `sm` is the compact tab for card toolbars: 24px tall with 12px labels, a rung under the `sm`
-  // control (28px), which is taller than the default pill tab.
-  const small = size === 'sm' && 'h-6 px-2.5 py-0 text-column';
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
+          // A ghost tab is the control itself: the button box at the list's rung.
           buttonVariants({ variant: 'ghost', size }),
-          small,
           'relative z-10 whitespace-nowrap',
           'data-[active]:text-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
@@ -74,7 +71,7 @@ export const Tab = ({
           className,
         )
       : cn(
-          size === 'sm' ? small : 'text-label',
+          'text-label',
           quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',

@@ -7,6 +7,7 @@ import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 beforeEach(() => {
@@ -562,51 +563,60 @@ describe('Tab', () => {
     });
   });
 
+  // jsdom has no layout, so these pin the shared rung token: the one Button and Input use too.
   describe('size', () => {
-    it('when size="sm" on pill-ghost, then tabs use the compact 24px box', () => {
+    it.each(['sm', 'md'] as const)('when size="%s" on pill-ghost, then each tab takes that control rung', size => {
       render(
         <Tabs defaultTab="first">
-          <TabList variant="pill-ghost" size="sm">
+          <TabList variant="pill-ghost" size={size}>
             <Tab value="first">First</Tab>
           </TabList>
           <TabContent value="first">First content</TabContent>
         </Tabs>,
       );
 
-      const tabClasses = screen.getByRole('tab', { name: 'First' }).className.split(/\s+/);
-      for (const token of ['h-6', 'px-2.5', 'text-column']) expect(tabClasses).toContain(token);
-      expect(tabClasses).not.toContain('h-control-sm');
+      expect(screen.getByRole('tab', { name: 'First' }).className.split(/\s+/)).toContain(controlHeight[size]);
     });
 
-    it('when size="sm" on pill, then tabs take the compact height and the list is tagged with the size', () => {
+    it.each(['sm', 'md'] as const)('when size="%s" on pill, then the track takes that control rung', size => {
       render(
         <Tabs defaultTab="first">
-          <TabList variant="pill" size="sm">
+          <TabList variant="pill" size={size}>
             <Tab value="first">First</Tab>
           </TabList>
           <TabContent value="first">First content</TabContent>
         </Tabs>,
       );
 
-      const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).toContain('h-6');
-      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
+      const list = screen.getByRole('tablist');
+      expect(list.className.split(/\s+/)).toContain(controlHeight[size]);
+      expect(list.getAttribute('data-size')).toBe(size);
     });
 
-    it('when size is omitted, then tabs keep the md box', () => {
+    it('when size is omitted, then the pill track takes the md rung', () => {
       render(
         <Tabs defaultTab="first">
-          <TabList variant="pill">
+          <TabList>
             <Tab value="first">First</Tab>
           </TabList>
           <TabContent value="first">First content</TabContent>
         </Tabs>,
       );
 
-      const tab = screen.getByRole('tab', { name: 'First' });
-      expect(tab.className).toContain('text-label');
-      expect(tab.className).not.toContain('h-control-sm');
-      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('md');
+      expect(screen.getByRole('tablist').className.split(/\s+/)).toContain(controlHeight.md);
+    });
+
+    it('when the tabs are contained, then the pill track keeps its own height', () => {
+      render(
+        <Tabs defaultTab="first" appearance="contained">
+          <TabList>
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      expect(screen.getByRole('tablist').className).not.toContain('h-control-');
     });
   });
 });

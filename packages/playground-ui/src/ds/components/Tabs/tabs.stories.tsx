@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Activity, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
+import { Button } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
@@ -276,20 +277,24 @@ export const PillGhostVariant: Story = {
 };
 
 /** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
-export const SmallSize: Story = {
+/**
+ * Tabs take the shared control rung: a `pill` track and a `pill-ghost` tab are as tall as a
+ * Button of the same size, so they line up in one toolbar row. See Foundations/Control sizes.
+ */
+export const Sizes: Story = {
   render: () => (
-    <div className="flex flex-col gap-6">
-      {(['pill', 'pill-ghost'] as const).map(variant => (
-        <div key={variant} className="flex flex-col gap-3">
-          {(['md', 'sm'] as const).map(size => (
-            <Tabs key={size} defaultTab="busiest">
+    <div className="flex flex-col gap-4">
+      {(['sm', 'md'] as const).map(size => (
+        <div key={size} className="flex items-center gap-3">
+          {(['pill', 'pill-ghost'] as const).map(variant => (
+            <Tabs key={variant} defaultTab="busiest">
               <TabList variant={variant} size={size}>
                 <Tab value="busiest">Busiest</Tab>
                 <Tab value="time">Time spent</Tab>
-                <Tab value="failing">Failing</Tab>
               </TabList>
             </Tabs>
           ))}
+          <Button size={size}>Button {size}</Button>
         </div>
       ))}
     </div>

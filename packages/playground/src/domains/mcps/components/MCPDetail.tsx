@@ -91,7 +91,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border">
             <CardTitle className="shrink-0">Connect</CardTitle>
             <div className="min-w-0">
-              <TabList variant="pill-ghost" size="md">
+              <TabList variant="pill-ghost" size="sm">
                 {endpoints.map(endpoint => (
                   <Tab key={endpoint.value} value={endpoint.value}>
                     {endpoint.label}
