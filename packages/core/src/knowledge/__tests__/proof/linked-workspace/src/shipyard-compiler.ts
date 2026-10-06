@@ -86,8 +86,8 @@ Only importer/governed authorities write public source/feature collections; team
 For team:mastra on subject:mastra, its features collection and public feature scopes, use role readonly
 with canSuggest true, NOT append/edit/owner. Areas and internal companions allow team edit/owner.
 Instantiate the explicitly illustrated memory feature at feature:memory (name Memory), beneath
-subject:mastra:features, with companions feature:memory:internal and feature:memory:uncurated
-both directly beneath feature:memory.
+subject:mastra:features, with its private companion feature:memory:internal directly beneath
+feature:memory. Do not create provisional or capture companions.
 Do not invent individual issue/PR numbers or create literal parameterized work/thread scopes: those require
 later host materialization. Do not create records, aliases, legacy types or grants based on user IDs.
 Compile the structure and permissions stated in the description; do not claim enforcement of provenance,
@@ -142,13 +142,15 @@ capture routing, promotion or future-template policies merely by creating these 
   );
   assert(memory, 'the description must compile the illustrated memory feature');
   const memoryAddress = memory.address;
-  for (const suffix of [':internal', ':uncurated']) {
-    assert.deepEqual(
-      goal.plan.scopes.find(scope => scope.address === `${memoryAddress}${suffix}`)?.parentAddresses,
-      [memoryAddress],
-      `memory companion missing or misplaced: ${suffix}`,
-    );
-  }
+  assert.deepEqual(
+    goal.plan.scopes.find(scope => scope.address === `${memoryAddress}:internal`)?.parentAddresses,
+    [memoryAddress],
+    'memory private companion missing or misplaced',
+  );
+  assert(
+    !goal.plan.scopes.some(scope => scope.address.endsWith(':uncurated')),
+    'v2.1 has no automatic capture companions',
+  );
   const publicScopeIds = [ids['principal:public']!];
   const teamScopeIds = [ids['team:mastra']!];
   for (const address of [
