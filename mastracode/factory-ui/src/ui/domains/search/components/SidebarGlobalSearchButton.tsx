@@ -1,5 +1,5 @@
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Search } from 'lucide-react';
 
 import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';

@@ -1,5 +1,5 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,

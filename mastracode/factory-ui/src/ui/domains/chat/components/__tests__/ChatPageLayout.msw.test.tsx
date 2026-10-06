@@ -1,4 +1,4 @@
-import { SidebarProvider, useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';

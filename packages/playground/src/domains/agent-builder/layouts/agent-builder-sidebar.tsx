@@ -1,8 +1,8 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
-import type { SidebarLink } from '@mastra/playground-ui/new/sidebar';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';

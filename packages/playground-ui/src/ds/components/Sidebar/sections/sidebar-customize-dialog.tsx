@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import type { RefObject } from 'react';
 import type { SidebarSection } from './sidebar-sections';
 import {
   getSidebarLinkKey,
@@ -21,6 +22,7 @@ import { Txt } from '@/ds/components/Txt';
 export type SidebarCustomizeDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
   sections: SidebarSection[];
   placementOf: (sectionKey: string, link: OptionalSidebarLink, optionalLinkCount: number) => SidebarLinkPlacement;
   onPlacementChange: (sectionKey: string, link: OptionalSidebarLink, placement: SidebarLinkPlacement) => void;
@@ -29,6 +31,7 @@ export type SidebarCustomizeDialogProps = {
 export function SidebarCustomizeDialog({
   open,
   onOpenChange,
+  returnFocusRef,
   sections,
   placementOf,
   onPlacementChange,
@@ -38,7 +41,7 @@ export function SidebarCustomizeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
+      <DialogContent size="md" finalFocus={returnFocusRef}>
         <DialogHeader>
           <DialogTitle>Customize sidebar</DialogTitle>
           <DialogDescription>

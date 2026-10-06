@@ -1,7 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
-import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
-import type { SidebarLink } from '@mastra/playground-ui/new/sidebar';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useWorkspaces } from '@mastra/react/hooks/workspace';

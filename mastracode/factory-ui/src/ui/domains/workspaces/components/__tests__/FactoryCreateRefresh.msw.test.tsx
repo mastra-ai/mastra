@@ -3,7 +3,7 @@
  * switcher must list it right away — the factories query is invalidated before
  * the wizard hands over to the new Factory.
  */
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

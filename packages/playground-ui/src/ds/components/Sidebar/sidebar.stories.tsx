@@ -40,7 +40,7 @@ import { useKeydown } from '@/lib/keyboard/use-keydown';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Sidebar> = {
-  title: 'New/Sidebar',
+  title: 'Layout/Sidebar',
   component: Sidebar,
   decorators: [
     (Story, context) => (

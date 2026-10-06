@@ -1,4 +1,4 @@
-import { useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 
 /**

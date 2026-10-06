@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

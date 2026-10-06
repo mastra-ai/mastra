@@ -125,6 +125,18 @@ describe('Sidebar.Sections', () => {
     await waitFor(() => expect(document.activeElement).toBe(more));
   });
 
+  it('returns focus to the right-clicked link when the Customize dialog closes', async () => {
+    localStorage.setItem(storageKey, JSON.stringify({ 'primitives:Tools': 'sidebar' }));
+    renderSections();
+    const tools = navigation().getByRole('link', { name: 'Tools' });
+    fireEvent.contextMenu(tools);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Customize sidebar…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Customize sidebar' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(tools));
+  });
+
   it('saves each placement across remounts', async () => {
     const first = renderSections();
     await choosePlacement('Tools', 'Always show');

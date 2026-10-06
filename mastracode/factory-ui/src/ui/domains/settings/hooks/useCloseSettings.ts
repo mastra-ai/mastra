@@ -1,4 +1,4 @@
-import { useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { Location } from 'react-router';
 

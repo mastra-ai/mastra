@@ -67,21 +67,16 @@ export function SidebarProvider({
   mobileWidth = 360,
   LinkComponent,
 }: SidebarProviderProps) {
-  // Normalize props so bad inputs (defaultWidth < minWidth, min > max, etc.) never produce a broken layout.
   const safeMin = Math.max(0, Math.min(minWidth, maxWidth));
   const safeMax = Math.max(safeMin, maxWidth);
   const safeCollapsed = Math.max(0, Math.min(collapsedWidth, safeMax));
   const safeDefault = clamp(defaultWidth, safeMin, safeMax);
-  // Default snap-zone = minWidth: dragging below the expanded min snaps to collapsed,
-  // since below min the sidebar cannot render its expanded layout anyway.
-  // Pass `collapseBelow={0}` to disable snap.
   const safeCollapseBelow = collapseBelow ?? safeMin;
 
   const stateStorageKey = storageKey ? `${storageKey}:${SIDEBAR_STATE_KEY}` : SIDEBAR_STATE_KEY;
   const widthStorageKey = storageKey ? `${storageKey}:${SIDEBAR_WIDTH_KEY}` : SIDEBAR_WIDTH_KEY;
 
-  // Hydrate synchronously from localStorage so first paint is already at the correct width.
-  // Falls back to clamped defaults during SSR or when storage is unavailable.
+  // Read storage during render so the first paint already has the stored width.
   const readInitial = (): InitialSidebarState => {
     if (typeof window === 'undefined') return { state: defaultState, width: safeDefault };
     try {
@@ -116,7 +111,6 @@ export function SidebarProvider({
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
 
-  // Watch viewport for mobile breakpoint.
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia(`(max-width: ${mobileBreakpoint - 1}px)`);
@@ -132,7 +126,6 @@ export function SidebarProvider({
     setOpenMobileState(open);
   }, []);
 
-  // Close mobile drawer when crossing back to desktop.
   React.useEffect(() => {
     if (!isMobile && openMobile) {
       setOpenMobile(false);
@@ -145,7 +138,6 @@ export function SidebarProvider({
     if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
   }, []);
 
-  // Keep the CSS var in sync with collapsed state transitions.
   useIsoLayoutEffect(() => {
     writeCssVar(state === 'collapsed' ? safeCollapsed : widthRef.current);
   }, [state, safeCollapsed, writeCssVar]);
@@ -166,8 +158,7 @@ export function SidebarProvider({
     }
     setState(prev => {
       const next = prev === 'default' ? 'collapsed' : 'default';
-      // Sync ref so a synchronous follow-up `commit()` (e.g. keyboard handler)
-      // persists the new state instead of the stale render-time value.
+      // Sync ref: a same-tick `commit()` must persist this state, not the render-time one.
       stateRef.current = next;
       persistState(next);
       return next;
@@ -209,7 +200,6 @@ export function SidebarProvider({
     else el.removeAttribute('data-sidebar-gesture');
   }, []);
 
-  // Global ⌘B / Ctrl+B toggle. Skip when typing.
   React.useEffect(() => {
     if (disableKeyboardShortcut) return;
     const onKeyDown = (ev: KeyboardEvent) => {
@@ -273,8 +263,6 @@ export function SidebarProvider({
     [openMobile, setOpenMobile],
   );
 
-  // CSS var owned exclusively by writeCssVar (single source of truth).
-  // SSR seeds the initial value here; post-mount writeCssVar takes over.
   const scopeStyle: SidebarScopeStyle = {
     [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : initial.width}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,

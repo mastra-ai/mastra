@@ -1,4 +1,4 @@
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 
 /** Desktop sidebar trigger shown while the sidebar is collapsed. */
 export function ChatHeaderSidebarTrigger() {

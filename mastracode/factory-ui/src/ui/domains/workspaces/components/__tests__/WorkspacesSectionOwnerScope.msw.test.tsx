@@ -4,7 +4,7 @@
  * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
  * undifferentiated list, and the reader had no way to cut it down to their own work.
  */
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

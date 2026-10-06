@@ -1,20 +1,13 @@
 import { MoreHorizontalIcon, Settings2Icon } from 'lucide-react';
-import { Fragment } from 'react';
+import { Fragment, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { SidebarNavLabel } from '../nav/sidebar-nav-label';
 import type { SidebarLink } from '../nav/sidebar-nav-link';
 import { SidebarNavLink } from '../nav/sidebar-nav-link';
 import { useMaybeSidebarState } from '../root/sidebar-context';
-import { SidebarSectionLink } from './sidebar-section-link';
+import { SidebarOptionalLink } from './sidebar-optional-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
-import {
-  getDefaultPlacement,
-  getSidebarLinkKey,
-  isSidebarLinkPlacement,
-  sidebarLinkPlacementLabels,
-  sidebarLinkPlacements,
-} from './sidebar-visibility';
-import { ContextMenu } from '@/ds/components/ContextMenu';
+import { getDefaultPlacement, getSidebarLinkKey } from './sidebar-visibility';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 export type SidebarMoreLinksProps = {
@@ -23,7 +16,7 @@ export type SidebarMoreLinksProps = {
   isActive?: (link: SidebarLink, activeCandidates: SidebarLink[]) => boolean;
   placementOf: (link: OptionalSidebarLink) => SidebarLinkPlacement;
   onPlacementChange: (link: OptionalSidebarLink, placement: SidebarLinkPlacement) => void;
-  onCustomize: () => void;
+  onCustomize: (returnFocusTo: HTMLElement | null) => void;
 };
 
 export function SidebarMoreLinks({
@@ -41,6 +34,7 @@ export function SidebarMoreLinks({
   const moreMenuLinks = links.filter(link => !shownLinks.includes(link) && placementOf(link) === 'more');
   const isCustomized = links.some(link => placementOf(link) !== getDefaultPlacement(link, links.length));
   const hasMoreRow = links.length > 1 || moreMenuLinks.length > 0 || isCustomized;
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
 
   function renderMenuLink(link: SidebarLink, nested = false): ReactNode {
     return (
@@ -67,34 +61,22 @@ export function SidebarMoreLinks({
   return (
     <>
       {shownLinks.map(link => (
-        <ContextMenu key={getSidebarLinkKey(link)}>
-          <ContextMenu.Trigger
-            render={<SidebarSectionLink link={link} activeCandidates={activeCandidates} isActive={isActive} />}
-          />
-          <ContextMenu.Content aria-label={`${link.name} options`}>
-            <ContextMenu.RadioGroup
-              value={placementOf(link)}
-              onValueChange={placement => {
-                if (isSidebarLinkPlacement(placement)) onPlacementChange(link, placement);
-              }}
-            >
-              {sidebarLinkPlacements.map(placement => (
-                <ContextMenu.RadioItem key={placement} value={placement}>
-                  {sidebarLinkPlacementLabels[placement]}
-                </ContextMenu.RadioItem>
-              ))}
-            </ContextMenu.RadioGroup>
-            <ContextMenu.Separator />
-            <ContextMenu.Item onClick={onCustomize}>Customize sidebar…</ContextMenu.Item>
-          </ContextMenu.Content>
-        </ContextMenu>
+        <SidebarOptionalLink
+          key={getSidebarLinkKey(link)}
+          link={link}
+          activeCandidates={activeCandidates}
+          isActive={isActive}
+          placement={placementOf(link)}
+          onPlacementChange={placement => onPlacementChange(link, placement)}
+          onCustomize={onCustomize}
+        />
       ))}
       {hasMoreRow ? (
         <DropdownMenu modal={false}>
           <SidebarNavLink
             link={{ name: 'More', url: '', icon: <MoreHorizontalIcon /> }}
             render={
-              <DropdownMenu.Trigger render={<button type="button" />} aria-label="More">
+              <DropdownMenu.Trigger ref={moreTriggerRef} render={<button type="button" />} aria-label="More">
                 <MoreHorizontalIcon aria-hidden="true" />
                 <SidebarNavLabel>More</SidebarNavLabel>
               </DropdownMenu.Trigger>
@@ -103,7 +85,7 @@ export function SidebarMoreLinks({
           <DropdownMenu.Content align="start" aria-label="More navigation" className="min-w-44">
             {moreMenuLinks.map(link => renderMenuLink(link))}
             {moreMenuLinks.length > 0 && <DropdownMenu.Separator />}
-            <DropdownMenu.Item onClick={onCustomize}>
+            <DropdownMenu.Item onClick={() => onCustomize(moreTriggerRef.current)}>
               <Settings2Icon />
               Customize sidebar
             </DropdownMenu.Item>

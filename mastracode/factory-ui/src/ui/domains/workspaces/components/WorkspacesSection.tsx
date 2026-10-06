@@ -1,4 +1,4 @@
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {

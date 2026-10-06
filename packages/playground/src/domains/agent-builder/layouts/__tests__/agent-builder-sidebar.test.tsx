@@ -1,4 +1,4 @@
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';

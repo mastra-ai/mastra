@@ -90,8 +90,6 @@ describe('SidebarSections', () => {
     const titled = screen.getByRole('region', { name: 'Workspace' });
     const untitled = screen.getByRole('region', { name: 'observability' });
 
-    // The titled section points at its own heading; the untitled one falls
-    // back to naming itself, so neither is left unlabelled.
     expect(titled.getAttribute('aria-labelledby')).toBeTruthy();
     expect(titled.hasAttribute('aria-label')).toBe(false);
     expect(untitled.hasAttribute('aria-labelledby')).toBe(false);
@@ -177,7 +175,6 @@ describe('SidebarSections', () => {
     const item = screen.getByRole('link', { name: 'Workflows' }).closest('li');
 
     expect(item?.querySelector('ul, ol')).toBeNull();
-    // One list for the section itself, and no empty one nested under the leaf.
     expect(container.querySelectorAll('ul, ol')).toHaveLength(1);
   });
 
@@ -201,7 +198,6 @@ describe('SidebarSections', () => {
       />,
     );
 
-    // Each level takes the next indent step in the shared nav row scale.
     expect(screen.getByRole('link', { name: 'Agents' }).className).toContain('px-3');
     expect(screen.getByRole('link', { name: 'Templates' }).className).toContain('pl-8');
     expect(screen.getByRole('link', { name: 'Drafts' }).className).toContain('pl-10');

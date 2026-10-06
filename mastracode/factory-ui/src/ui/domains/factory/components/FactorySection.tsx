@@ -1,4 +1,4 @@
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';

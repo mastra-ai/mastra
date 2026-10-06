@@ -1,4 +1,4 @@
-import { useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { PageLayoutProps } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 

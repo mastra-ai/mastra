@@ -3,7 +3,7 @@
  * and agent-controller reads are driven through MSW so the card exercises the
  * same joins used by the live sidebar without adding a hover-time request.
  */
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

@@ -1,4 +1,4 @@
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import {
   MessageScrollerContent,
   MessageScrollerProvider,

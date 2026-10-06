@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMaybeSidebarState } from '@mastra/playground-ui/new/sidebar';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { Link } from 'react-router';
 
 import { AXIS, band, WIDTH } from '../funnelGeometry';

@@ -9,7 +9,7 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
-import { useMaybeSidebarState } from '@mastra/playground-ui/new/sidebar';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';

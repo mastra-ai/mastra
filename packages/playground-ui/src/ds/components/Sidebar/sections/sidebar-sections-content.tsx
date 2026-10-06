@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { SidebarNavHeader } from '../nav/sidebar-nav-header';
 import { SidebarNavList } from '../nav/sidebar-nav-list';
 import { SidebarNavSection } from '../nav/sidebar-nav-section';
@@ -24,6 +24,7 @@ export function SidebarSectionsContent({
 }: SidebarSectionsProps & { visibilityStorageKey: string }) {
   const baseId = useId();
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const customizeReturnFocusRef = useRef<HTMLElement | null>(null);
   const [placements, setPlacements] = useLocalStorageState({
     initialKey: visibilityStorageKey,
     defaultValue: {},
@@ -32,6 +33,11 @@ export function SidebarSectionsContent({
 
   function placementOf(sectionKey: string, link: OptionalSidebarLink, optionalLinkCount: number) {
     return placements[getSidebarVisibilityKey(sectionKey, link)] ?? getDefaultPlacement(link, optionalLinkCount);
+  }
+
+  function openCustomize(returnFocusTo: HTMLElement | null) {
+    customizeReturnFocusRef.current = returnFocusTo;
+    setCustomizeOpen(true);
   }
 
   function changePlacement(sectionKey: string, link: OptionalSidebarLink, placement: SidebarLinkPlacement) {
@@ -75,7 +81,7 @@ export function SidebarSectionsContent({
                   isActive={isActive}
                   placementOf={link => placementOf(section.key, link, moreLinks.length)}
                   onPlacementChange={(link, placement) => changePlacement(section.key, link, placement)}
-                  onCustomize={() => setCustomizeOpen(true)}
+                  onCustomize={openCustomize}
                 />
               ) : null}
             </SidebarNavList>
@@ -85,6 +91,7 @@ export function SidebarSectionsContent({
       <SidebarCustomizeDialog
         open={customizeOpen}
         onOpenChange={setCustomizeOpen}
+        returnFocusRef={customizeReturnFocusRef}
         sections={sections}
         placementOf={placementOf}
         onPlacementChange={changePlacement}

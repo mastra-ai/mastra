@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

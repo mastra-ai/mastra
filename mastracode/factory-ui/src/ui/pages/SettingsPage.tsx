@@ -1,4 +1,4 @@
-import { useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useEffect, useId } from 'react';

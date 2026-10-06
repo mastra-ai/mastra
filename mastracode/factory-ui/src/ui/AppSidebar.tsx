@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 

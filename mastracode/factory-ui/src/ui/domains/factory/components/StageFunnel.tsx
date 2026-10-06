@@ -1,4 +1,4 @@
-import { useMaybeSidebarState } from '@mastra/playground-ui/new/sidebar';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   Ban,

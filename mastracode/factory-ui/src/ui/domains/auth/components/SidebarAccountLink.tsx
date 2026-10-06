@@ -1,4 +1,4 @@
-import { Sidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';

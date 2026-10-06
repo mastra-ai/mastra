@@ -7,8 +7,8 @@ import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { PageLayout } from '@/ds/components/PageLayout';
+import { Sidebar, SidebarProvider, useSidebar } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
-import { Sidebar, SidebarProvider, useSidebar } from '@/ds/new/sidebar';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 

@@ -298,7 +298,7 @@ const StudioSidebarBody = () => {
 };
 
 const meta: Meta<typeof Sidebar> = {
-  title: 'Layout/Sidebar',
+  title: 'Layout/SidebarParts',
   component: Sidebar,
   decorators: [withProvider()],
   parameters: {

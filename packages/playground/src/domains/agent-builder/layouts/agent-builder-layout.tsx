@@ -1,4 +1,4 @@
-import { SidebarProvider } from '@mastra/playground-ui/new/sidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { Outlet } from 'react-router';
 import { AgentBuilderMobileBottomBar } from './agent-builder-mobile-bottom-bar';
 import { AgentBuilderSidebar } from './agent-builder-sidebar';

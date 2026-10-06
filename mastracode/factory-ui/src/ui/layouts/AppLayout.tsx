@@ -1,4 +1,4 @@
-import { Sidebar, useSidebar } from '@mastra/playground-ui/new/sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
 

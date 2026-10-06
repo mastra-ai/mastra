@@ -38,7 +38,7 @@ const colorMixEffects = [
   'packages/playground-ui/src/ds/components/Activity/activity.css',
   'packages/playground-ui/src/ds/components/Composer/composer-ring.css',
   'packages/playground-ui/src/ds/components/Composer/composer.css',
-  'packages/playground-ui/src/ds/new/sidebar/footer/sidebar-meter.tsx',
+  'packages/playground-ui/src/ds/components/Sidebar/footer/sidebar-meter.tsx',
 ];
 
 // Masks, brand marks, generated palettes, and surfaces that render before the theme loads.
@@ -47,7 +47,7 @@ const rawColorExceptions = [
   'packages/playground-ui/src/ds/components/Activity/activity.css',
   'packages/playground-ui/src/ds/components/Composer/composer.css',
   'packages/playground-ui/src/ds/components/ChatShell/chat-shell.tsx',
-  'packages/playground-ui/src/ds/new/sidebar/footer/sidebar-meter.tsx',
+  'packages/playground-ui/src/ds/components/Sidebar/footer/sidebar-meter.tsx',
   'packages/playground/src/domains/agents/components/agent-channels/platform-icons.tsx',
   'packages/playground/src/startup-error.ts',
   'mastracode/factory-ui/src/ui/ui/icons.tsx',
