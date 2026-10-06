@@ -43,7 +43,7 @@ export const EntityHeader = ({ className, ...props }: HTMLAttributes<HTMLDivElem
 );
 
 export const EntityBody = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('border-t border-border bg-background p-4', className)} {...props} />
+  <div className={cn('border-t border-border p-4', className)} {...props} />
 );
 
 export const EntityIcon = ({ children, className, style }: Pick<EntityProps, 'children' | 'className' | 'style'>) => (
