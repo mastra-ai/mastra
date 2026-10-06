@@ -72,6 +72,27 @@ describe('cross-process peer helper', () => {
   );
 
   it(
+    'passes the startup self-check when the peer is gone again immediately',
+    async () => {
+      // One peer at a time on purpose: what is under test is this peer's own
+      // receipt. A peer that returns as soon as its ping lands can be gone
+      // before the spawn wait resumes, which a check that read the broker's
+      // client count afterwards could get wrong.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const peer = await spawn({ mode: 'instant' });
+        const selfCheck = peer.selfCheck;
+        expect(selfCheck, `no self-check recorded for ${peer.pid}\n${env.describe()}`).toBeDefined();
+        expect(selfCheck!.remoteClientCount, `peer ${peer.pid}\n${env.describe()}`).toBeGreaterThanOrEqual(1);
+        expect(selfCheck!.startupMs).toBeGreaterThanOrEqual(0);
+        expect(await peer.result<{ pid: number }>()).toEqual({ pid: peer.pid });
+        expect(await peer.exit()).toEqual({ code: 0, signal: null });
+        expect(peer.pid).not.toBe(process.pid);
+      }
+    },
+    DEFAULT_HANG_GUARD_MS * 2 + 10_000,
+  );
+
+  it(
     'shares one LibSQL file: a row written by the peer is readable by main',
     async () => {
       const threadId = `xproc-thread-${randomUUID()}`;

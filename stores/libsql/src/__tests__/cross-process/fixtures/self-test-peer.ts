@@ -13,6 +13,7 @@ export type SelfTestArgs =
   | { mode: 'publish'; topic: string; payload: string }
   | { mode: 'db-write'; threadId: string }
   | { mode: 'silent' }
+  | { mode: 'instant' }
   | { mode: 'heard'; topic: string }
   | { mode: 'registry'; runId: string }
   | { mode: 'workflow-producer'; workflowId: string; logPath: string }
@@ -46,6 +47,13 @@ runPeer<SelfTestArgs>(async peer => {
     case 'silent': {
       // Never signals; only finishes when the test says so.
       await peer.waitFor('finish');
+      return { pid: process.pid };
+    }
+
+    case 'instant': {
+      // Returns as soon as the runtime lets it: the peer is gone again almost
+      // as soon as its startup ping lands, which is the case the self-check has
+      // to survive without sampling the broker's client count after the fact.
       return { pid: process.pid };
     }
 

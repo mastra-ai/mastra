@@ -33,7 +33,15 @@ runPeer<T79PeerArgs>(async peer => {
   const { agent } = createStepAgent({ id: agentId, steps: 0 });
   const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new LibSQLStore({ id: `t79-peer-${process.pid}`, url: peer.dbUrl });
-  const mastra = new Mastra({ agents: { t79: runner }, storage, pubsub: peer.pubsub(), logger: false });
+  // `workers` matches this peer's declared setting (see ../process-workers.ts).
+  // This peer never boots workers, which is what makes it a pure abort source.
+  const mastra = new Mastra({
+    agents: { t79: runner },
+    storage,
+    pubsub: peer.pubsub(),
+    logger: false,
+    workers: peer.workers ? undefined : false,
+  });
   if ((mastra.getAgent('t79') as unknown) !== runner) throw new Error('Mastra replaced the registered agent');
 
   const echoed = gate<void>();

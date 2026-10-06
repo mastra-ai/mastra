@@ -25,13 +25,21 @@ import type { Gate, StepToolEvent } from './step-agent';
 const PEER_FIXTURE = new URL('./fixtures/t79-peer.ts', import.meta.url);
 
 /**
- * A failing cell can wait out two hang guards before it reports: one for the
- * step the case is built on (the parked tool, or the abort reaching this
- * process) and one for teardown, which releases the parked tool and gives the
- * run a bounded chance to settle so a failure can say whether the run was still
- * live. A passing cell only ever waits for the first, and normally for neither.
+ * A failing cell can wait out two hang guards before it reports: one in the
+ * body (at most one can expire — the first guard to time out throws, so the
+ * guards after it are never awaited) and one in teardown, which releases the
+ * parked tool and gives the run a bounded chance to settle so a failure can say
+ * whether the run was still live. A passing cell waits for neither.
+ *
+ * The budget is three guards: the two a failure can burn plus the setup before
+ * the first guard (fork, peer startup, the run reaching step 2, the peer
+ * aborting and exiting) and the margin a loaded runner needs on top. Measured
+ * against the widest failure path (see the mutation proofs in the plan's proof
+ * directory, where a cell reports its own hang-guard error at ~36s): if the
+ * runner's timeout wins instead, the cell reports a bare "Test timed out" and
+ * loses exactly the diagnostics the guards exist to produce.
  */
-const CELL_TIMEOUT_MS = DEFAULT_HANG_GUARD_MS * 2 + 5_000;
+const CELL_TIMEOUT_MS = DEFAULT_HANG_GUARD_MS * 3;
 
 function hangGuard<T>(promise: Promise<T>, what: string, describeEnv: () => string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -56,15 +64,16 @@ function hangGuard<T>(promise: Promise<T>, what: string, describeEnv: () => stri
  */
 async function drainRun(release: Gate, settled: Promise<void>): Promise<string> {
   release.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const drained = await Promise.race([
     settled.then(
       () => ({ settled: true as const, streamError: undefined }),
       (streamError: unknown) => ({ settled: false as const, streamError }),
     ),
-    new Promise<{ settled: false; streamError: undefined }>(resolve =>
-      setTimeout(() => resolve({ settled: false, streamError: undefined }), DEFAULT_HANG_GUARD_MS),
-    ),
-  ]);
+    new Promise<{ settled: false; streamError: undefined }>(resolve => {
+      timer = setTimeout(() => resolve({ settled: false, streamError: undefined }), DEFAULT_HANG_GUARD_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
   if (drained.settled) return '';
   if (drained.streamError) {
     return `\n(teardown: the run's stream rejected instead of completing: ${String(

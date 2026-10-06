@@ -23,14 +23,19 @@
  *   distinguishable from a real cross-process failure.
  * - A transport self-check on every spawn: the test process subscribes to a
  *   shared topic before it forks (which also makes it the broker of the
- *   socket), and each peer publishes one ping on it at startup. A peer that
- *   cannot reach the transport fails there instead of later as a mystery hang,
- *   and `handle.selfCheck` records the round trip.
+ *   socket), and each peer publishes one ping on it at startup. The ping is
+ *   one-way — the peer sends, this process receives — so receiving it proves
+ *   the peer reached *this* process's broker; that is why a peer which cannot
+ *   reach the transport fails there instead of later as a mystery hang.
+ *   `handle.selfCheck` records the receipt as observed inside the subscription
+ *   callback, not as observed after the spawn wait.
  * - A per-process worker setting (`env.workers`, `peer.workers`): pass it to
  *   `bootWorkers` (see ./process-workers.ts) and to `Mastra({ workers })` so a
  *   test can run a producer with workers off next to a separate worker process.
  *   A peer that declares `workers: true` without booting them (or the reverse)
- *   is failed by the peer runtime, because nothing in `Mastra` can tell.
+ *   is failed by the peer runtime, because nothing in `Mastra` can tell. That
+ *   check is peer-side only: `env.workers` describes the test process, whose
+ *   `Mastra` the helper does not build, so main's setting is never verified.
  *
  * Coordination is explicit: IPC signals and gate promises, never sleeps. Every
  * wait takes a bounded `timeoutMs` that only exists as a hang guard and fails
@@ -81,7 +86,12 @@ export interface PeerExit {
 export interface PeerSelfCheck {
   /** Milliseconds from `fork()` to the peer's ping arriving in the test process. */
   startupMs: number;
-  /** The broker's client count when the ping arrived (>= 1: the peer is connected). */
+  /**
+   * The broker's client count at the instant the ping arrived (>= 1: the peer
+   * was connected then). Sampled in the subscription callback rather than after
+   * the spawn wait: a fixture that returns immediately can have exited — and
+   * been dropped from the broker's client list — by the time the caller resumes.
+   */
   remoteClientCount: number;
 }
 
@@ -197,7 +207,10 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     );
   }
 
-  const selfChecks = new Map<number, (data: { pid: number; role: string }) => void>();
+  // Each entry resolves with the observation made inside the subscription
+  // callback itself: the ping is received there, and by the time the caller of
+  // `spawnPeer` resumes, a short-lived peer can already be gone.
+  const selfChecks = new Map<number, (receipt: { at: number; remoteClientCount: number }) => void>();
   let selfCheckSubscription: Promise<void> | undefined;
   const getPubsub = () => (pubsub ??= new UnixSocketPubSub(socketPath));
 
@@ -214,7 +227,7 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
       await client.subscribe(XPROC_SELFCHECK_TOPIC, event => {
         const data = event.data as { pid?: number; role?: string } | undefined;
         if (data?.pid === undefined) return;
-        selfChecks.get(data.pid)?.({ pid: data.pid, role: String(data.role) });
+        selfChecks.get(data.pid)?.({ at: Date.now(), remoteClientCount: client.remoteClientCount });
       });
       if (!client.isBroker) {
         throw new Error(
@@ -260,7 +273,9 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     });
     if (child.pid === undefined) throw new Error(`spawnPeer: fork of ${fixturePath} produced no pid\n${describe()}`);
     const pid = child.pid;
-    const selfCheckReceived = new Promise<void>(resolve => selfChecks.set(pid, () => resolve()));
+    const selfCheckReceived = new Promise<{ at: number; remoteClientCount: number }>(resolve =>
+      selfChecks.set(pid, resolve),
+    );
     let selfCheck: PeerSelfCheck | undefined;
 
     let stdout = '';
@@ -405,21 +420,25 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
     // peer whose first publish never arrives (wrong socket path, a second
     // broker) would otherwise surface later as a mystery hang in whatever the
     // test happened to wait for.
-    await withHangGuard(
-      Promise.race([selfCheckReceived, exitedBefore('reaching the shared transport')]),
-      DEFAULT_HANG_GUARD_MS,
-      () =>
-        fail(
-          `${label()} did not reach the shared transport within ${DEFAULT_HANG_GUARD_MS}ms (hang guard): its first publish never arrived here. Check the socket path and that the test process is the broker`,
-        ),
-    );
-    const remoteClientCount = getPubsub().remoteClientCount;
-    if (remoteClientCount < 1) {
+    let receipt: { at: number; remoteClientCount: number };
+    try {
+      receipt = await withHangGuard(
+        Promise.race([selfCheckReceived, exitedBefore('reaching the shared transport')]),
+        DEFAULT_HANG_GUARD_MS,
+        () =>
+          fail(
+            `${label()} did not reach the shared transport within ${DEFAULT_HANG_GUARD_MS}ms (hang guard): its first publish never arrived here. Check the socket path and that the test process is the broker`,
+          ),
+      );
+    } finally {
+      selfChecks.delete(pid);
+    }
+    if (receipt.remoteClientCount < 1) {
       throw fail(
-        `${label()} reported reaching the transport but is not connected to this process's broker (remoteClientCount ${remoteClientCount})`,
+        `${label()} reported reaching the transport but this process's broker did not count it as a client when its ping arrived (remoteClientCount ${receipt.remoteClientCount})`,
       );
     }
-    selfCheck = { startupMs: Date.now() - forkedAt, remoteClientCount };
+    selfCheck = { startupMs: receipt.at - forkedAt, remoteClientCount: receipt.remoteClientCount };
     return handle;
   };
 
