@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Merged `MainSidebar` and `SidebarNew` into a single `Sidebar` component, imported from `@mastra/playground-ui/new/sidebar`. Products composed one sidebar from two overlapping components with different spacing; they now share one API and one look.
