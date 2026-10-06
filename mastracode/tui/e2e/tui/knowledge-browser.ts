@@ -36,10 +36,25 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const foreignAddress = 'resource:foreign-project';
         const reconciliation = await knowledge.reconcileStructure({
           scopes: [
-            { address: orgAddress, name: 'organization' },
-            { address: resourceAddress, name: resourceId, parentAddresses: [orgAddress] },
-            { address: primaryAddress, name: PRIMARY_TITLE, parentAddresses: [resourceAddress] },
-            { address: secondaryAddress, name: SECONDARY_TITLE, parentAddresses: [resourceAddress] },
+            { address: orgAddress, name: 'organization', grants: [{ scopeRefAddress: orgAddress, role: 'owner' }] },
+            {
+              address: resourceAddress,
+              name: resourceId,
+              parentAddresses: [orgAddress],
+              grants: [{ scopeRefAddress: resourceAddress, role: 'owner' }],
+            },
+            {
+              address: primaryAddress,
+              name: PRIMARY_TITLE,
+              parentAddresses: [resourceAddress],
+              grants: [{ scopeRefAddress: primaryAddress, role: 'owner' }],
+            },
+            {
+              address: secondaryAddress,
+              name: SECONDARY_TITLE,
+              parentAddresses: [resourceAddress],
+              grants: [{ scopeRefAddress: secondaryAddress, role: 'owner' }],
+            },
             { address: foreignAddress, name: 'foreign-project', parentAddresses: [orgAddress] },
           ],
         });
