@@ -52,9 +52,17 @@ describe('AgentController Resource', () => {
   });
 
   it('lists agent controllers via the canonical route', async () => {
-    mockJson({ agentControllers: [{ id: 'code' }, { id: 'docs' }] });
+    mockJson({
+      agentControllers: [
+        { id: 'code', key: 'code' },
+        { id: 'docs', key: 'docs' },
+      ],
+    });
     const controllers = await client.listAgentControllers();
-    expect(controllers).toEqual([{ id: 'code' }, { id: 'docs' }]);
+    expect(controllers).toEqual([
+      { id: 'code', key: 'code' },
+      { id: 'docs', key: 'docs' },
+    ]);
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller');
   });

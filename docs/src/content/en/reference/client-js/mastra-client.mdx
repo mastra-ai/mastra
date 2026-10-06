@@ -107,13 +107,14 @@ You can also pass `requestContext` as a `Record<string, any>`.
   {
     name: 'listAgentControllers()',
     type: 'Promise<AgentControllerInfo[]>',
-    description: 'Returns the agent controllers hosted on the connected Mastra instance.',
+    description:
+      'Returns the agent controllers hosted on the connected Mastra instance. Each entry has the controller `id` and the `key` it is registered under.',
   },
   {
     name: 'getAgentController(controllerId)',
     type: 'AgentController',
     description:
-      'Retrieves a specific agent controller by ID. `.session(resourceId)` returns a session client; call `await session.create()` to create or resume the server session.',
+      'Retrieves a specific agent controller by its `id`. The registration key is also accepted. `.session(resourceId)` returns a session client; call `await session.create()` to create or resume the server session.',
   },
   {
     name: 'listMemoryThreads(params)',

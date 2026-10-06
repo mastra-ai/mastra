@@ -13,7 +13,7 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
-// resolution at runtime goes through mastra.getAgentController?.(), never a
+// resolution at runtime goes through mastra.getAgentControllerById?.(), never a
 // value import.
 import { z } from 'zod/v4';
 
@@ -62,16 +62,17 @@ function isReservedThreadMetadataKey(key: string): boolean {
 }
 
 /**
- * Resolves a controller by id via the canonical `mastra.getAgentController`
- * accessor, throwing a 404 if no controller is registered under that id.
+ * Resolves a controller by its `id` via `mastra.getAgentControllerById`, which
+ * falls back to the registration key in `new Mastra({ agentControllers })`.
+ * Throws a 404 if neither matches.
  */
 function getAgentControllerOrThrow(
   mastra: {
-    getAgentController?: (id: string) => AgentController<any> | undefined;
+    getAgentControllerById?: (id: string) => AgentController<any> | undefined;
   },
   controllerId: string,
 ): AgentController<any> {
-  const controller = mastra.getAgentController?.(controllerId);
+  const controller = mastra.getAgentControllerById?.(controllerId);
   if (!controller) {
     throw new HTTPException(404, { message: `agent controller "${controllerId}" not found` });
   }
@@ -278,7 +279,7 @@ const sendNotificationBodySchema = z.object({
 });
 
 const listAgentControllersResponseSchema = z.object({
-  agentControllers: z.array(z.object({ id: z.string() })),
+  agentControllers: z.array(z.object({ id: z.string(), key: z.string() })),
 });
 const createSessionResponseSchema = z.object({
   controllerId: z.string(),
@@ -452,11 +453,10 @@ export const LIST_AGENT_CONTROLLERS_ROUTE = createRoute({
   requiresPermission: 'agent-controller:read',
   handler: async ({ mastra }) => {
     try {
-      const ids = new Set<string>();
-      if (mastra.listAgentControllers) {
-        for (const id of Object.keys(mastra.listAgentControllers())) ids.add(id);
-      }
-      return { agentControllers: Array.from(ids).map(id => ({ id })) };
+      const controllers = mastra.listAgentControllers?.() ?? {};
+      return {
+        agentControllers: Object.entries(controllers).map(([key, controller]) => ({ id: controller.id, key })),
+      };
     } catch (error) {
       return handleError(error, 'error listing agent controllers');
     }

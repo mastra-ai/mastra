@@ -42,9 +42,11 @@ Retrieve the agent controllers hosted on the connected Mastra instance:
 const controllers = await client.listAgentControllers()
 ```
 
+Each entry has the controller's `id` and the `key` it's registered under in `new Mastra({ agentControllers })`.
+
 ## Working with a specific agent controller
 
-Get an instance of an agent controller by the ID it's registered under:
+Get an instance of an agent controller by its `id`. The key it's registered under in `new Mastra({ agentControllers })` also works:
 
 ```typescript
 const controller = client.getAgentController('coding-controller')

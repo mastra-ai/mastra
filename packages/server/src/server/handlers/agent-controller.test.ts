@@ -60,15 +60,55 @@ describe('agent-controller routes', () => {
   });
 
   describe('LIST_AGENT_CONTROLLERS_ROUTE', () => {
-    it('lists registered agent controllers by id', async () => {
+    it('lists registered agent controllers by id and registration key', async () => {
       const res = await LIST_AGENT_CONTROLLERS_ROUTE.handler({ mastra } as any);
-      expect(res).toEqual({ agentControllers: [{ id: 'code' }] });
+      expect(res).toEqual({ agentControllers: [{ id: 'code', key: 'code' }] });
     });
 
     it('returns an empty list when none registered', async () => {
       const empty = new Mastra({ storage: new InMemoryStore() });
       const res = await LIST_AGENT_CONTROLLERS_ROUTE.handler({ mastra: empty } as any);
       expect(res).toEqual({ agentControllers: [] });
+    });
+  });
+
+  describe('controller id differs from registration key', () => {
+    function makeKeyedMastra() {
+      const storage = new InMemoryStore();
+      const controller = new AgentController({
+        id: 'support-controller',
+        storage,
+        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+      });
+      return new Mastra({ agentControllers: { controller }, storage });
+    }
+
+    it('lists the controller id and its registration key', async () => {
+      const res = await LIST_AGENT_CONTROLLERS_ROUTE.handler({ mastra: makeKeyedMastra() } as any);
+      expect(res).toEqual({ agentControllers: [{ id: 'support-controller', key: 'controller' }] });
+    });
+
+    it.each(['support-controller', 'controller'])('resolves the controller by %s', async controllerId => {
+      const res = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: makeKeyedMastra(),
+        controllerId,
+        resourceId: 'user-1',
+      } as any)) as { controllerId: string; resourceId: string };
+
+      expect(res.controllerId).toBe(controllerId);
+      expect(res.resourceId).toBe('user-1');
+    });
+
+    it('returns 404 for an unknown controller', async () => {
+      const error = await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: makeKeyedMastra(),
+        controllerId: 'missing',
+        resourceId: 'user-1',
+      } as any).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect(error.message).toBe('agent controller "missing" not found');
     });
   });
 

@@ -329,7 +329,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists the agent controllers hosted on the connected Mastra instance.
-   * @returns Promise containing one record per agent controller, carrying its id
+   * @returns Promise containing one record per agent controller, carrying its `id` and registration `key`
    */
   public async listAgentControllers(): Promise<AgentControllerInfo[]> {
     const body = await this.request<RouteResponse<'GET /agent-controller'>>('/agent-controller');
@@ -340,7 +340,7 @@ export class MastraClient extends BaseResource {
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
    * `getAgentController(id).session(resourceId)` to create/resume a session,
    * stream its events, and send messages.
-   * @param controllerId - The id the agent controller is registered under on Mastra
+   * @param controllerId - The agent controller's `id`. Its registration key on Mastra is also accepted
    */
   public getAgentController(controllerId: string) {
     return new AgentController(this.options, controllerId);

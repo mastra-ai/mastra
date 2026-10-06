@@ -22395,6 +22395,7 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
 export type GetAgentController_Response = {
   agentControllers: {
     id: string;
+    key: string;
   }[];
 };
 
