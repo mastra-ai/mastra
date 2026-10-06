@@ -1150,6 +1150,65 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(body)).not.toContain(expected.id);
   });
 
+  it('shows imports bound to project-owned scopes the access profile vouches for', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'github',
+          triggers: {
+            cron: {
+              schedule: '0 9 * * *',
+              bindings: [{ source: 'github:repo', scope: 'resource:placeholder:github:repo' }],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    let repositoryAddress = '';
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      accessProfile: async ({ builtInScopes }) => {
+        const repository = {
+          address: repositoryAddress,
+          parentAddresses: [builtInScopes.resource.address],
+          contextualScopeAddress: builtInScopes.resource.address,
+        };
+        return {
+          id: 'project',
+          rootScopeAddress: builtInScopes.resource.address,
+          baselineScopes: [builtInScopes.org, builtInScopes.resource, repository],
+        };
+      },
+    });
+    repositoryAddress = `resource:${h.projectId}:github:repo`;
+    const createRun = (id: string, scope: string) =>
+      runtime.createImportRunInternal({
+        id,
+        importerId: 'github',
+        binding: knowledgeImporterBindingKey({ source: `github:${id}`, scope }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+      });
+    const visible = await createRun('run-repository', repositoryAddress);
+    const unvouched = await createRun('run-unvouched', `resource:${h.projectId}:github:other`);
+
+    const runs = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/github/runs`);
+    expect(runs.status).toBe(200);
+    const runsBody = await runs.json();
+    expect(runsBody.runs).toHaveLength(1);
+    expect(runsBody.runs[0]).toMatchObject({ source: `github:${visible.id}` });
+    expect(JSON.stringify(runsBody)).not.toContain(unvouched.id);
+
+    const importers = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(importers.status).toBe(200);
+    await expect(importers.json()).resolves.toMatchObject({
+      importers: [{ id: 'github', lastRun: { source: `github:${visible.id}` } }],
+    });
+  });
+
   it('filters proposals by the project perspective and applies admin review actions', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
