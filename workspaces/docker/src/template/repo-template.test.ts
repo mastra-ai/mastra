@@ -8,12 +8,24 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SETUP_MARKER_PATH } from '@internal/workspace';
+import {
+  SETUP_FAILED_MARKER_PATH,
+  SETUP_MARKER_PATH,
+  WORKSPACE_SETUP_MARKER_PATH,
+  repoSetupMarkerPath,
+  setupMarkerContent,
+} from '@internal/workspace';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildRepoTemplate, createDockerRepoTemplate, resolveHead } from './repo-template';
+import { buildMultiRepoTemplate, buildRepoTemplate, createDockerRepoTemplate, resolveHead } from './repo-template';
 
 const cloneUrl = 'https://example.com/acme/app.git';
 const sha = '0123456789abcdef0123456789abcdef01234567';
+const otherSha = 'f'.repeat(40);
+
+const markerLine = (path: string, ...commands: string[]) =>
+  `RUN mkdir -p "$(dirname "${path}")" && printf '%s' '${setupMarkerContent(commands)}' > "${path}"`;
+const guarded = (dir: string, command: string) =>
+  `RUN ( cd "${dir}" && sh -c '${command}' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- '${dir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || printf '%s\\n' '${dir}' >> "${SETUP_FAILED_MARKER_PATH}"; }`;
 
 describe('buildRepoTemplate', () => {
   it('clones under /workspace/<repo>, installs git first, and sets the workdir', () => {
@@ -65,16 +77,38 @@ describe('buildRepoTemplate', () => {
     expect(a.templateId).not.toBe(b.templateId);
   });
 
-  it('runs setup commands and writes the completion marker last', () => {
+  it('runs setup commands around the pin and writes the completion marker last', () => {
     const dockerfile = buildRepoTemplate({
       cloneUrl,
       sha,
       setupCommand: ['npm ci', 'npm run build'],
       workingDirectory: '/workspace',
     }).dockerfile;
-    expect(dockerfile).toContain('RUN npm ci');
-    expect(dockerfile).toContain('RUN npm run build');
-    expect(dockerfile.indexOf(SETUP_MARKER_PATH)).toBeGreaterThan(dockerfile.indexOf('npm run build'));
+    // The whole file is pinned: the clone and first setup pass carry no commit
+    // so they cache across commits; the pin and second pass follow.
+    expect(dockerfile.trimEnd()).toBe(
+      [
+        'FROM node:22-slim AS mastra-main-0',
+        'RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/apt/lists/*',
+        'FROM mastra-main-0 AS mastra-secret-1',
+        "RUN git clone 'https://example.com/acme/app.git' '/workspace/app'",
+        'FROM mastra-main-0 AS mastra-main-1',
+        'COPY --from=mastra-secret-1 /workspace/app /workspace/app',
+        'WORKDIR /workspace/app',
+        'RUN npm ci',
+        'RUN npm run build',
+        `RUN git -C '/workspace/app' checkout --detach '${sha}'`,
+        'RUN npm ci',
+        'RUN npm run build',
+        markerLine(SETUP_MARKER_PATH, 'npm ci', 'npm run build'),
+      ].join('\n'),
+    );
+  });
+
+  it('writes no marker without setup commands', () => {
+    expect(buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' }).dockerfile).not.toContain(
+      SETUP_MARKER_PATH,
+    );
   });
 
   it('supports a custom base image and working directory', () => {
@@ -89,9 +123,97 @@ describe('buildRepoTemplate', () => {
   });
 });
 
+describe('buildMultiRepoTemplate', () => {
+  const privateRepo = {
+    cloneUrl: 'https://example.com/acme/private.git',
+    sha,
+    token: 'tok-1',
+    tokenEnv: 'GH_TOKEN_0',
+    setupCommand: 'npm ci',
+  };
+  const publicRepo = { cloneUrl, sha: otherSha, setupCommand: "echo it's # note" };
+
+  it('lays every repository out under the workspace, public first, each around its own pin', () => {
+    const dockerfile = buildMultiRepoTemplate({
+      workingDirectory: '/workspace',
+      continueOnSetupFailure: true,
+      workspaceSetupCommand: 'touch .ready',
+      repos: [privateRepo, publicRepo],
+    }).dockerfile;
+    expect(dockerfile.trimEnd()).toBe(
+      [
+        'FROM node:22-slim AS mastra-main-0',
+        'RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/apt/lists/*',
+        "RUN mkdir -p '/workspace'",
+        'WORKDIR /workspace',
+        'FROM mastra-main-0 AS mastra-secret-3',
+        "RUN git clone 'https://example.com/acme/app.git' '/workspace/app'",
+        'FROM mastra-main-0 AS mastra-main-1',
+        'COPY --from=mastra-secret-3 /workspace/app /workspace/app',
+        guarded('app', "echo it'\\''s # note"),
+        `RUN git -C '/workspace/app' checkout --detach '${otherSha}'`,
+        guarded('app', "echo it'\\''s # note"),
+        markerLine(repoSetupMarkerPath('app'), "echo it's # note"),
+        'FROM mastra-main-1 AS mastra-secret-8',
+        `RUN --mount=type=secret,id=GH_TOKEN_0,mode=0444 export GH_TOKEN_0="$(cat /run/secrets/GH_TOKEN_0)" && git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)" clone 'https://example.com/acme/private.git' '/workspace/private'`,
+        'FROM mastra-main-1 AS mastra-main-2',
+        'COPY --from=mastra-secret-8 /workspace/private /workspace/private',
+        guarded('private', 'npm ci'),
+        `RUN git -C '/workspace/private' checkout --detach '${sha}'`,
+        guarded('private', 'npm ci'),
+        markerLine(repoSetupMarkerPath('private'), 'npm ci'),
+        'RUN touch .ready',
+        markerLine(WORKSPACE_SETUP_MARKER_PATH, 'touch .ready'),
+      ].join('\n'),
+    );
+    // Every RUN is one line: a Dockerfile instruction cannot span lines.
+    expect(dockerfile).not.toContain('tok-1');
+  });
+
+  it('leaves setup steps unguarded and still writes the workspace marker when the guard is off', () => {
+    const dockerfile = buildMultiRepoTemplate({
+      workingDirectory: '/workspace',
+      continueOnSetupFailure: false,
+      repos: [publicRepo],
+    }).dockerfile;
+    expect(dockerfile).toContain(`RUN cd "app" && echo it's # note`);
+    expect(dockerfile).not.toContain(SETUP_FAILED_MARKER_PATH);
+    expect(dockerfile.trimEnd().endsWith(markerLine(WORKSPACE_SETUP_MARKER_PATH))).toBe(true);
+  });
+
+  it('keeps the credential out of the identity and the main stages', () => {
+    const a = buildMultiRepoTemplate({ workingDirectory: '/w', continueOnSetupFailure: false, repos: [privateRepo] });
+    const b = buildMultiRepoTemplate({
+      workingDirectory: '/w',
+      continueOnSetupFailure: false,
+      repos: [{ ...privateRepo, token: 'tok-2' }],
+    });
+    expect(a.templateId).toBe(b.templateId);
+    const mainStages = a.dockerfile.split('\nFROM ').filter(stage => !stage.includes('AS mastra-secret-'));
+    expect(mainStages.join('\n')).not.toContain('GH_TOKEN');
+  });
+});
+
 describe('createDockerRepoTemplate', () => {
   it('returns undefined when there is no repository access', () => {
     expect(createDockerRepoTemplate({ getRepositoryAccess: undefined })).toBeUndefined();
+    expect(createDockerRepoTemplate({ repos: [] })).toBeUndefined();
+  });
+
+  it('rejects both forms together and the list-only options without repos', () => {
+    const getRepositoryAccess = async () => ({ cloneUrl });
+    expect(() => createDockerRepoTemplate({ getRepositoryAccess, repos: [{ getRepositoryAccess }] })).toThrow(
+      TypeError,
+    );
+    expect(() => createDockerRepoTemplate({ getRepositoryAccess, workspaceSetupCommand: 'x' })).toThrow(TypeError);
+    expect(() => createDockerRepoTemplate({ getRepositoryAccess, continueOnSetupFailure: false })).toThrow(TypeError);
+  });
+
+  it('validates every entry ref up front', () => {
+    const getRepositoryAccess = async () => ({ cloneUrl });
+    expect(() =>
+      createDockerRepoTemplate({ repos: [{ getRepositoryAccess }, { getRepositoryAccess, ref: 'x; rm -rf /' }] }),
+    ).toThrow(/Invalid ref/);
   });
 
   it('rejects unsafe refs and relative working directories up front', () => {
@@ -240,6 +362,50 @@ describe('createDockerRepoTemplate', () => {
       await withFakeGit('exit 128', async () => {
         const resolver = createDockerRepoTemplate({ getRepositoryAccess: async () => ({ cloneUrl }) })!;
         await expect(resolver()).rejects.toThrow(/Could not resolve HEAD of https:\/\/example\.com/);
+      });
+    });
+
+    it('resolves each list entry by its own ref, numbers secrets by position, and rejects a duplicate dir', async () => {
+      const script = `case "$*" in *v1*) printf '${sha}\\tv1\\n';; *) printf '${headSha}\\tHEAD\\n';; esac`;
+      await withFakeGit(script, async () => {
+        const resolver = createDockerRepoTemplate({
+          repos: [
+            {
+              getRepositoryAccess: async () => ({
+                cloneUrl: 'https://example.com/acme/private.git',
+                authorization: { token: 'tok-1' },
+              }),
+              ref: 'v1',
+            },
+            { getRepositoryAccess: async () => ({ cloneUrl }) },
+          ],
+          continueOnSetupFailure: true,
+        })!;
+        const template = await resolver();
+        expect(template.dockerfile).toContain(`git -C '/workspace/private' checkout --detach '${sha}'`);
+        expect(template.dockerfile).toContain(`git -C '/workspace/app' checkout --detach '${headSha}'`);
+        expect(template.dockerfile).toContain('id=GH_TOKEN_0');
+        expect(template.dockerfile.indexOf("clone 'https://example.com/acme/app.git'")).toBeLessThan(
+          template.dockerfile.indexOf("clone 'https://example.com/acme/private.git'"),
+        );
+        expect(template.dockerfile).not.toContain('tok-1');
+
+        const getRepositoryAccess = async () => ({ cloneUrl });
+        await expect(
+          createDockerRepoTemplate({ repos: [{ getRepositoryAccess }, { getRepositoryAccess }] })!(),
+        ).rejects.toThrow(/both clone into/);
+      });
+    });
+
+    it('rejects the whole list when one head cannot be resolved', async () => {
+      await withFakeGit(`case "$*" in *private*) exit 128;; *) printf '${headSha}\\tHEAD\\n';; esac`, async () => {
+        const resolver = createDockerRepoTemplate({
+          repos: [
+            { getRepositoryAccess: async () => ({ cloneUrl }) },
+            { getRepositoryAccess: async () => ({ cloneUrl: 'https://example.com/acme/private.git' }) },
+          ],
+        })!;
+        await expect(resolver()).rejects.toThrow(/Could not resolve HEAD of https:\/\/example\.com\/acme\/private/);
       });
     });
 

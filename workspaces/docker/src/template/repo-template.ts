@@ -10,7 +10,11 @@
  * the template identity. A moved branch therefore yields a fresh image on the
  * next new sandbox, and an unmoved one reuses the cached image. When the head
  * cannot be resolved the resolver rejects: an unpinned clone cached under a
- * stable tag would otherwise serve stale repository state forever.
+ * stable tag would otherwise serve stale repository state forever. This holds
+ * for every entry of the `repos` form too, where the platform and E2B
+ * templates clone such a repository unpinned instead: those use a shallow
+ * clone whose tip the session fetches past, while this template clones full
+ * history and pins by `checkout`, so there is no cheap unpinned mode here.
  *
  * The clone runs in a throwaway build stage; the credential is passed by value
  * to that stage only and never enters the template identity or the image.
@@ -28,7 +32,14 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { normalizeSetupCommands, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
+import {
+  WORKSPACE_SETUP_MARKER_PATH,
+  guardedSetupCommand,
+  normalizeSetupCommands,
+  repoSetupMarkerPath,
+  setupMarkerCommand,
+  setupMarkerContent,
+} from '@internal/workspace';
 import type { DockerOptions } from 'dockerode';
 import { normalizeAbortError, throwIfAborted } from '../abort';
 import { DockerTemplate } from './template';
@@ -61,6 +72,16 @@ export interface RepositoryAccess {
   authorization?: { scheme: 'bearer'; token: string };
 }
 
+/** One repository of a multi-repository template. */
+export interface DockerRepoTemplateRepository {
+  /** Resolves this repository's clone URL and credential, as {@link DockerRepoTemplateOptions.getRepositoryAccess} does for one. */
+  getRepositoryAccess: (options?: DockerRepoTemplateResolveOptions) => Promise<RepositoryAccess | undefined>;
+  /** Branch, tag, or commit to prepare for this repository; see {@link DockerRepoTemplateOptions.ref}. */
+  ref?: string;
+  /** Setup command(s) run inside this repository's checkout. */
+  setupCommand?: string | string[];
+}
+
 export interface DockerRepoTemplateOptions {
   /**
    * Resolves the clone URL and, for private repositories, a short-lived
@@ -71,10 +92,11 @@ export interface DockerRepoTemplateOptions {
    *
    * Pass `undefined` for the function itself to mean "no repository":
    * {@link createDockerRepoTemplate} then returns undefined so
-   * `template: createDockerRepoTemplate(ctx)` needs no conditional. If the
-   * function resolves to `undefined` at start time, the resolver rejects.
+   * `template: createDockerRepoTemplate(ctx)` needs no conditional (unless
+   * `repos` is set). If the function resolves to `undefined` at start time,
+   * the resolver rejects.
    */
-  getRepositoryAccess:
+  getRepositoryAccess?:
     | ((options?: DockerRepoTemplateResolveOptions) => Promise<RepositoryAccess | undefined>)
     | undefined;
   /**
@@ -83,8 +105,48 @@ export interface DockerRepoTemplateOptions {
    * @default the remote's default branch
    */
   ref?: string;
-  /** Setup command(s) run inside the checkout as separate cached build steps. */
+  /**
+   * Setup command(s) run inside the checkout as separate cached build steps.
+   * Each command runs twice: once right after the clone, so the install layer
+   * caches independently of the commit, and again after the checkout is
+   * pinned to the resolved head, so the image matches that commit. Commands
+   * must be safe to repeat in the same checkout.
+   */
   setupCommand?: string | string[];
+  /**
+   * Several repositories in one image, each with its own access resolver,
+   * `ref` and setup command, cloned to `<workingDirectory>/<repo>` in this
+   * order; the working directory itself becomes the build and runtime cwd.
+   * Public repositories (no `authorization`) are built before private ones in
+   * caller order within each group. Each repository writes
+   * `.mastra-sandbox/repos/<repo>` (`setupMarkerContent` of its commands)
+   * once every step for it ran.
+   *
+   * Each credential is passed to that repository's clone and pin steps only,
+   * as the secret `GH_TOKEN_<n>` (`n` = position in this list); setup
+   * commands never see it.
+   *
+   * Mutually exclusive with `getRepositoryAccess`. Any entry whose access or
+   * head cannot be resolved rejects the whole resolution, as the single form
+   * does. Two entries that would clone into the same directory reject the
+   * same way. An empty array behaves like no repository.
+   */
+  repos?: DockerRepoTemplateRepository[];
+  /**
+   * `repos` only. Command(s) run at the working directory after every
+   * repository is set up (install a shared toolchain, link packages). A
+   * failure fails the build. `.mastra-sandbox/workspace-setup` records the
+   * digest of the commands that ran, even when there were none.
+   */
+  workspaceSetupCommand?: string | string[];
+  /**
+   * `repos` only. When true a failing per-repository setup command records
+   * that repository's directory name in `.mastra-sandbox/setup-failed` (one
+   * line per repository, whichever passes failed) and the build continues;
+   * clone, pin, workspace and marker steps still fail the build. Default
+   * false: any failure fails the build.
+   */
+  continueOnSetupFailure?: boolean;
   /**
    * Extra environment for every build step, including `setupCommand`. Baked
    * into the image via `ENV` and hashed into the identity (keys and values),
@@ -95,6 +157,7 @@ export interface DockerRepoTemplateOptions {
   /**
    * Absolute parent for the checkout; the repo lands at
    * `<workingDirectory>/<repo>`, which becomes the build and runtime cwd.
+   * With `repos` the working directory itself is the cwd.
    * @default '/workspace'
    */
   workingDirectory?: string;
@@ -117,37 +180,83 @@ export interface DockerRepoTemplateResolveOptions {
 export type DockerRepoTemplateResolver = (options?: DockerRepoTemplateResolveOptions) => Promise<DockerTemplate>;
 
 export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): DockerRepoTemplateResolver | undefined {
-  if (!options.getRepositoryAccess) return undefined;
-  if (options.ref !== undefined && !REF_PATTERN.test(options.ref)) {
-    throw new Error(`Invalid ref '${options.ref}': expected a git ref name`);
+  if (options.getRepositoryAccess && options.repos) {
+    throw new TypeError('createDockerRepoTemplate: pass either getRepositoryAccess or repos, not both');
+  }
+  // The guard and the workspace steps have no meaning for one repository, and
+  // the single-form marker must keep meaning "every setup command succeeded".
+  if (!options.repos && (options.workspaceSetupCommand !== undefined || options.continueOnSetupFailure !== undefined)) {
+    throw new TypeError('createDockerRepoTemplate: workspaceSetupCommand and continueOnSetupFailure require repos');
+  }
+  if (!options.getRepositoryAccess && !options.repos?.length) return undefined;
+  const entries: DockerRepoTemplateRepository[] = options.repos ?? [
+    { getRepositoryAccess: options.getRepositoryAccess!, ref: options.ref, setupCommand: options.setupCommand },
+  ];
+  for (const entry of entries) {
+    if (entry.ref !== undefined && !REF_PATTERN.test(entry.ref)) {
+      throw new Error(`Invalid ref '${entry.ref}': expected a git ref name`);
+    }
   }
   const workingDirectory = trimTrailingSlashes(options.workingDirectory ?? DEFAULT_WORKING_DIRECTORY);
   if (!workingDirectory.startsWith('/')) {
     throw new Error(`workingDirectory must be an absolute path, got '${options.workingDirectory}'`);
   }
-  return resolveOptions => resolveRepoTemplate(options, workingDirectory, resolveOptions);
+  return resolveOptions => resolveRepoTemplate(options, entries, workingDirectory, resolveOptions);
 }
 
 async function resolveRepoTemplate(
   options: DockerRepoTemplateOptions,
+  entries: DockerRepoTemplateRepository[],
   workingDirectory: string,
   resolveOptions: DockerRepoTemplateResolveOptions = {},
 ): Promise<DockerTemplate> {
   const { abortSignal } = resolveOptions;
+  const isList = options.repos !== undefined;
   throwIfAborted(abortSignal, 'resolve Docker repository template');
-  let access: RepositoryAccess | undefined;
-  try {
-    access = await options.getRepositoryAccess!(resolveOptions);
-  } catch (error) {
-    throw normalizeAbortError(error, 'resolve Docker repository template');
+  const repos: ResolvedRepository[] = [];
+  const seenDirs = new Map<string, string>();
+  for (const [index, entry] of entries.entries()) {
+    let access: RepositoryAccess | undefined;
+    try {
+      access = await entry.getRepositoryAccess(resolveOptions);
+    } catch (error) {
+      throw normalizeAbortError(error, 'resolve Docker repository template');
+    }
+    throwIfAborted(abortSignal, 'resolve Docker repository template');
+    const cloneUrl = access?.cloneUrl;
+    if (!cloneUrl) {
+      throw new Error(
+        `Repo template has no clone URL: repository access returned none${isList ? ` (repos[${index}])` : ''}.`,
+      );
+    }
+    assertCloneUrl(cloneUrl);
+    const repoDir = repoDirName(cloneUrl);
+    const previous = seenDirs.get(repoDir);
+    if (previous) {
+      throw new Error(
+        `createDockerRepoTemplate: repositories ${previous} and ${cloneUrl} would both clone into "${repoDir}"`,
+      );
+    }
+    seenDirs.set(repoDir, cloneUrl);
+    const token = access?.authorization?.token;
+    const sha = await resolveHead(cloneUrl, entry.ref, token, abortSignal);
+    throwIfAborted(abortSignal, 'resolve Docker repository template');
+    if (!sha) {
+      throw new Error(
+        `Could not resolve ${entry.ref ?? 'HEAD'} of ${cloneUrl} with git ls-remote; check the ref, the credential and network access`,
+      );
+    }
+    repos.push({
+      cloneUrl,
+      sha,
+      token,
+      // The single form keeps its historical secret name; list entries are
+      // numbered by caller position so public/private reordering never
+      // renames one.
+      tokenEnv: token ? (isList ? `${BUILD_TOKEN_ENV}_${index}` : BUILD_TOKEN_ENV) : undefined,
+      setupCommand: entry.setupCommand,
+    });
   }
-  throwIfAborted(abortSignal, 'resolve Docker repository template');
-  const cloneUrl = access?.cloneUrl;
-  if (!cloneUrl) {
-    throw new Error('Repo template has no clone URL: repository access returned none.');
-  }
-  assertCloneUrl(cloneUrl);
-  const token = access?.authorization?.token;
   let buildEnv: Record<string, string> | undefined;
   try {
     buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv(resolveOptions) : options.buildEnv;
@@ -155,24 +264,33 @@ async function resolveRepoTemplate(
     throw normalizeAbortError(error, 'resolve Docker repository template');
   }
   throwIfAborted(abortSignal, 'resolve Docker repository template');
-  const sha = await resolveHead(cloneUrl, options.ref, token, abortSignal);
-  throwIfAborted(abortSignal, 'resolve Docker repository template');
-  if (!sha) {
-    throw new Error(
-      `Could not resolve ${options.ref ?? 'HEAD'} of ${cloneUrl} with git ls-remote; check the ref, the credential and network access`,
-    );
-  }
 
-  return buildRepoTemplate({
-    cloneUrl,
-    sha,
-    token,
-    buildEnv,
-    setupCommand: options.setupCommand,
-    workingDirectory,
-    baseImage: options.baseImage,
-    dockerOptions: options.dockerOptions,
+  const shared = { buildEnv, workingDirectory, baseImage: options.baseImage, dockerOptions: options.dockerOptions };
+  if (!isList) {
+    const [repo] = repos as [ResolvedRepository];
+    return buildRepoTemplate({
+      ...shared,
+      cloneUrl: repo.cloneUrl,
+      sha: repo.sha,
+      token: repo.token,
+      setupCommand: repo.setupCommand,
+    });
+  }
+  return buildMultiRepoTemplate({
+    ...shared,
+    repos,
+    workspaceSetupCommand: options.workspaceSetupCommand,
+    continueOnSetupFailure: options.continueOnSetupFailure ?? false,
   });
+}
+
+/** One repository with its access and head resolved. */
+interface ResolvedRepository {
+  cloneUrl: string;
+  sha: string;
+  token?: string;
+  tokenEnv?: string;
+  setupCommand?: string | string[];
 }
 
 interface RepoTemplateInputs {
@@ -211,18 +329,23 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
   }
 
   const tokenEnv = token ? BUILD_TOKEN_ENV : undefined;
-  const clone = [
-    // Full clone so an arbitrary commit is reachable, then pin to it. The
-    // sha is in the command, so it is part of the template identity.
-    cloneFull({ cloneUrl, destination, tokenEnv }),
-    `git -C ${shellQuote(destination)} checkout --detach ${shellQuote(sha)}`,
-  ];
-
+  // Full clone so an arbitrary commit is reachable. The clone step carries no
+  // commit, so it and the first setup pass cache across commits; the pin (its
+  // sha is in the command, so it is part of the template identity) and the
+  // second pass are the only per-commit layers.
   template = template
-    .runWithSecrets(clone, { secrets: tokenEnv ? [tokenEnv] : [], output: destination })
+    .runWithSecrets(cloneFull({ cloneUrl, destination, tokenEnv }), {
+      secrets: tokenEnv ? [tokenEnv] : [],
+      output: destination,
+    })
     .setWorkdir(destination);
 
   const setupCommands = normalizeSetupCommands(inputs.setupCommand);
+  for (const command of setupCommands) {
+    template = template.runCmd(command);
+  }
+  // A full clone already has the commit, so the pin needs no credential.
+  template = template.runCmd(pinCommand(destination, sha));
   for (const command of setupCommands) {
     template = template.runCmd(command);
   }
@@ -231,6 +354,73 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
     template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
   }
   return template;
+}
+
+interface MultiRepoTemplateInputs {
+  repos: ResolvedRepository[];
+  workspaceSetupCommand?: string | string[];
+  continueOnSetupFailure: boolean;
+  buildEnv?: Record<string, string>;
+  workingDirectory: string;
+  baseImage?: string;
+  dockerOptions?: DockerOptions;
+}
+
+/**
+ * List-form assembly: the working directory is the cwd, every repository is
+ * laid out under it (public first) around its own pin, then the workspace
+ * steps and marker. Exported for tests.
+ * @internal
+ */
+export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerTemplate {
+  const { repos, buildEnv, continueOnSetupFailure } = inputs;
+  const workingDirectory = trimTrailingSlashes(inputs.workingDirectory);
+  const secretValues: Record<string, string> = {};
+  for (const repo of repos) if (repo.tokenEnv && repo.token) secretValues[repo.tokenEnv] = repo.token;
+
+  let template = new DockerTemplate({
+    baseImage: inputs.baseImage ?? DEFAULT_BASE_IMAGE,
+    dockerOptions: inputs.dockerOptions,
+    ...(Object.keys(secretValues).length > 0 ? { secrets: secretValues } : {}),
+  });
+  if (inputs.baseImage === undefined) {
+    template = template.aptInstall(['git', 'ca-certificates']);
+  }
+  if (buildEnv && Object.keys(buildEnv).length > 0) {
+    template = template.setEnvs(buildEnv);
+  }
+  template = template.runCmd(`mkdir -p ${shellQuote(workingDirectory)}`).setWorkdir(workingDirectory);
+
+  // Public repositories first so their layers sit below any credential
+  // layer; caller order within each group.
+  const ordered = [...repos.filter(repo => !repo.token), ...repos.filter(repo => repo.token)];
+  for (const repo of ordered) {
+    const repoDir = repoDirName(repo.cloneUrl);
+    const destination = `${workingDirectory}/${repoDir}`;
+    const secrets = repo.tokenEnv ? [repo.tokenEnv] : [];
+    const setupCommands = normalizeSetupCommands(repo.setupCommand);
+    // Setup steps run at the workspace cwd and `cd` into the checkout.
+    const setupSteps = setupCommands.map(command =>
+      guardedSetupCommand({ repoDir, command, continueOnFailure: continueOnSetupFailure }),
+    );
+    template = template.runWithSecrets(cloneFull({ cloneUrl: repo.cloneUrl, destination, tokenEnv: repo.tokenEnv }), {
+      secrets,
+      output: destination,
+    });
+    for (const step of setupSteps) template = template.runCmd(step);
+    template = template.runCmd(pinCommand(destination, repo.sha));
+    for (const step of setupSteps) template = template.runCmd(step);
+    // Last for this repository, so it only exists once every step above ran.
+    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands), repoSetupMarkerPath(repoDir)));
+  }
+  const workspaceCommands = normalizeSetupCommands(inputs.workspaceSetupCommand);
+  for (const command of workspaceCommands) template = template.runCmd(command);
+  template = template.runCmd(setupMarkerCommand(setupMarkerContent(workspaceCommands), WORKSPACE_SETUP_MARKER_PATH));
+  return template;
+}
+
+function pinCommand(destination: string, sha: string): string {
+  return `git -C ${shellQuote(destination)} checkout --detach ${shellQuote(sha)}`;
 }
 
 /**
