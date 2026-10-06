@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import {
   categorizeFileData,
@@ -12,12 +14,13 @@ import type {
   ProcessInputArgs,
   ProcessInputStepArgs,
   ProcessLLMRequestArgs,
+  ProcessLLMRequestResult,
   Processor,
   ProcessorMessageContext,
 } from '../index';
 import { describeError, FILE_UPLOAD_ERROR_CODES, FileUploadError } from './file-upload-errors';
 import type { FileUploadFailureDetails, FileUploadTripwireMetadata } from './file-upload-errors';
-import { resolveWritableSandbox, writeFilesToSandbox } from './file-upload-writer';
+import { resolveWritableSandbox, uploadFiles } from './file-upload-writer';
 
 export { FILE_UPLOAD_ERROR_CODES } from './file-upload-errors';
 export type { FileUploadErrorCode, FileUploadTripwireMetadata } from './file-upload-errors';
@@ -40,38 +43,33 @@ export type FileUploadFilter = (file: FileUploadFileInfo) => boolean | Promise<b
 /** Returns the largest accepted size, in bytes, for a file. */
 export type FileUploadMaxFileSize = (file: FileUploadFileInfo) => number;
 
-/** What is recorded in the message metadata about an uploaded file. */
-export interface FileUploadRecord {
-  /** Name the file was sent with; absent when it had none. */
-  name?: string;
-  /** Path of the file in the sandbox, relative to its working directory. */
-  path: string;
-  mimeType: string;
-  /** Size in bytes. */
-  size: number;
-}
-
 export interface FileUploadProcessorOptions {
   /** Workspace whose sandbox receives the uploaded files. Pass the same workspace as the agent's. */
   workspace: AnyWorkspace;
   /**
-   * Called for each file of a new user message: `true` uploads it, `false` leaves it to the model.
-   * Without a filter, every file is uploaded. It can run more than once for the same file, so keep it pure.
+   * Called for each file sent by the user: `true` uploads it, `false` leaves it to the model.
+   * Without a filter, every file is uploaded. It runs more than once for the same file, so keep it pure.
    */
   filter?: FileUploadFilter;
-  /** Returns the largest accepted size, in bytes, for a file. Defaults to 10 MB for every file. */
+  /**
+   * Returns the largest accepted size, in bytes, for a file. Defaults to 10 MB for every file.
+   * It runs more than once for the same file, so keep it pure.
+   */
   maxFileSize?: FileUploadMaxFileSize;
 }
 
 type Abort = ProcessInputArgs<FileUploadTripwireMetadata>['abort'];
 
 /**
- * Uploads files found in new user messages to the workspace sandbox and
- * replaces each one with a text reference to its sandbox path, so the model
- * never receives the bytes.
+ * Uploads the files a user sends to the workspace sandbox, and gives the model
+ * a note with the sandbox path in place of each file, so the model never
+ * receives the bytes. Only the prompt sent to the model changes: the stored
+ * messages keep their files.
  *
- * Every failure stops the turn through `abort()`: read the reason from
- * `result.tripwire.metadata.code` and compare it to `FILE_UPLOAD_ERROR_CODES`.
+ * A file of the current turn that can't be uploaded stops the turn through
+ * `abort()`: read the reason from `result.tripwire.metadata.code` and compare
+ * it to `FILE_UPLOAD_ERROR_CODES`. A file of the thread history that can't be
+ * uploaded is replaced by a note saying why, and the turn goes on.
  *
  * @example
  * ```typescript
@@ -79,7 +77,6 @@ type Abort = ProcessInputArgs<FileUploadTripwireMetadata>['abort'];
  *
  * const agent = new Agent({
  *   // ...
- *   memory,
  *   workspace,
  *   inputProcessors: [
  *     new FileUploadProcessor({ workspace, filter: ({ mimeType }) => !mimeType.startsWith('image/') }),
@@ -103,91 +100,101 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
   }
 
   async processInput(args: ProcessInputArgs<FileUploadTripwireMetadata>): Promise<MessageList> {
-    await this.uploadNewFiles(args);
+    await this.checkNewFiles(args);
     return args.messageList;
   }
 
   // A signal delivered to a run that is already active only shows up here, never in `processInput`.
   async processInputStep(args: ProcessInputStepArgs<FileUploadTripwireMetadata>): Promise<void> {
-    await this.uploadNewFiles(args);
+    await this.checkNewFiles(args);
   }
 
-  // Scorers, agent networks and calls without a thread run input processors too,
-  // so a turn without a file to upload is left alone: nothing is checked.
-  private async uploadNewFiles({
+  /**
+   * Checks the files of the new messages, as they were sent, before the prompt
+   * is built: a file of this turn that can't be uploaded stops the turn here,
+   * before anything is written. Nothing is changed.
+   */
+  private async checkNewFiles({ messageList, abort }: ProcessorMessageContext<FileUploadTripwireMetadata>) {
+    try {
+      const accepted = await selectFiles(newFiles(messageList), this.filter);
+      const planned = accepted.map(candidate => planFile(candidate, this.maxFileSize));
+      planned.forEach(loadPlannedFile);
+    } catch (error) {
+      return this.failOn(error, abort);
+    }
+  }
+
+  /**
+   * Uploads every file of the prompt the filter accepts, history included,
+   * and replaces it with a note in this call's prompt only. Runs before each
+   * model call, so it also sees files that reached the prompt without going
+   * through the hooks above, like the signals a durable run receives before its
+   * first model call, or links Mastra downloads for the model.
+   */
+  async processLLMRequest({
+    prompt,
     messageList,
     requestContext = new RequestContext(),
     abort,
     abortSignal,
-  }: ProcessorMessageContext<FileUploadTripwireMetadata>): Promise<void> {
-    const files = newFiles(messageList);
-    // A failing filter rejects every file of the turn; a later failure only the files it accepted.
-    let affected: FileCandidate[] = files;
+    state,
+  }: ProcessLLMRequestArgs<FileUploadTripwireMetadata>): Promise<ProcessLLMRequestResult> {
     try {
-      const accepted = await selectFiles(files, this.filter);
-      if (accepted.length === 0) return;
-      affected = accepted;
-      assertWritableMemory(requestContext);
-      await this.upload(accepted, requestContext, abortSignal);
+      const files = await selectFiles(
+        promptFiles(prompt, () => namesByContent(messageList)),
+        this.filter,
+      );
+      if (files.length === 0) return;
+      const notes = await this.uploadPromptFiles(files, requestContext, cacheOf(state), abortSignal);
+      return { prompt: replaceParts(prompt, notes) };
     } catch (error) {
-      return this.failOn(error, abort, affected);
+      return this.failOn(error, abort);
     }
   }
 
-  // Last line of defense: a file of this request that the filter accepts but that is still in a
-  // message stops the call here. On a durable agent, the signals queued before the first model
-  // call are added after the hooks above ran, so this is the only place that sees them. Files of the
-  // thread history are left alone, so threads from before the processor keep working. Without a
-  // message list, new files can't be told from the history, so nothing is checked.
-  async processLLMRequest({ messageList, abort }: ProcessLLMRequestArgs<FileUploadTripwireMetadata>): Promise<void> {
-    if (!messageList) return;
-    const files = newFiles(messageList);
-    let leaked: InlineFileCandidate[];
-    try {
-      leaked = await selectFiles(files, this.filter);
-    } catch (error) {
-      return this.failOn(error, abort, files);
-    }
-    const [file] = leaked;
-    if (!file) return;
-    return this.fail(
-      abort,
-      leaked,
-      new FileUploadError(
-        FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
-        `${describeFile(file.fileName)} is accepted by the filter but was not uploaded, so the model call was stopped.`,
-        { fileName: file.fileName, mimeType: file.mimeType },
-      ),
-    );
-  }
-
-  private async upload(
-    candidates: InlineFileCandidate[],
+  private async uploadPromptFiles(
+    files: PromptFile[],
     requestContext: RequestContext,
+    cache: UploadCache,
+    abortSignal?: AbortSignal,
+  ): Promise<Map<PromptFilePart, string>> {
+    const directory = uploadDirectoryOf(requestContext);
+    const notes = new Map<PromptFilePart, string>();
+    const ready: ReadyFile[] = [];
+    for (const file of files) {
+      const loaded = loadPromptFile(file, this.maxFileSize, cache);
+      if ('rejection' in loaded) notes.set(file.part, rejectedNote(file.fileName, loaded.rejection));
+      else ready.push({ file, ...loaded, relativePath: buildUploadPath({ ...file, directory, hash: loaded.hash }) });
+    }
+    await this.placeFiles(ready, requestContext, cache, abortSignal);
+    for (const { file, relativePath, size } of ready) {
+      notes.set(file.part, uploadedNote({ ...file, path: cache.paths.get(relativePath)!, size }));
+    }
+    return notes;
+  }
+
+  // Each path is named after the content, so a path already placed during this request needs nothing more.
+  private async placeFiles(
+    ready: ReadyFile[],
+    requestContext: RequestContext,
+    cache: UploadCache,
     abortSignal?: AbortSignal,
   ): Promise<void> {
+    const pending = new Map<string, { path: string; content: Buffer }>();
+    for (const { file, relativePath } of ready) {
+      if (cache.paths.has(relativePath) || pending.has(relativePath)) continue;
+      pending.set(relativePath, { path: relativePath, content: decodePromptData(file) });
+    }
+    if (pending.size === 0) return;
     const sandbox = await resolveWritableSandbox(this.workspace, requestContext);
-    const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
-    if (!threadId) throw memoryRequired();
-    const prepared = prepareFiles(candidates, this.maxFileSize, threadId);
-    const written = await writeFilesToSandbox(sandbox, prepared, abortSignal);
-    written.forEach(applyUploadedNote);
+    const placed = await uploadFiles(sandbox, [...pending.values()], abortSignal);
+    [...pending.keys()].forEach((relativePath, index) => cache.paths.set(relativePath, placed[index]!.path));
   }
 
   // Only a `FileUploadError` is a reason to stop the turn; anything else is a bug and propagates.
-  private failOn(error: unknown, abort: Abort, candidates: FileCandidate[]): never {
-    if (error instanceof FileUploadError) return this.fail(abort, candidates, error);
-    throw error;
-  }
-
-  /**
-   * The only place the processor stops a turn. Every file of the turn is
-   * replaced by a note first: an aborted turn can still be stored, and a raw
-   * file left in the thread would reach the model on the next turn.
-   */
-  private fail(abort: Abort, candidates: FileCandidate[], { code, message, details }: FileUploadError): never {
-    candidates.forEach(candidate => markRejected(candidate, message));
-    return abort(message, { metadata: { processorId: this.id, code, ...details } });
+  private failOn(error: unknown, abort: Abort): never {
+    if (!(error instanceof FileUploadError)) throw error;
+    return abort(error.message, { metadata: { processorId: this.id, code: error.code, ...error.details } });
   }
 }
 
@@ -203,33 +210,24 @@ function assertSandboxConfigured(workspace: AnyWorkspace | undefined): void {
   });
 }
 
-// Without a writable thread the replaced message is not stored, and the client
-// would send the original file again on the next turn.
-function assertWritableMemory(requestContext: RequestContext): void {
-  const memory = parseMemoryRequestContext(requestContext);
-  if (!memory?.thread?.id || memory.memoryConfig?.readOnly) throw memoryRequired();
-}
+const SHARED_DIRECTORY = 'shared';
 
-const memoryRequired = () =>
-  new FileUploadError(
-    FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED,
-    'FileUploadProcessor requires an agent with memory and a thread that is not read-only.',
-  );
+// Each thread gets its own directory, so identical bytes from two threads never share a path.
+function uploadDirectoryOf(requestContext: RequestContext): string {
+  const memory = parseMemoryRequestContext(requestContext);
+  return memory?.thread?.id ?? memory?.resourceId ?? SHARED_DIRECTORY;
+}
 
 const describeFile = (fileName: string | undefined): string =>
   fileName ? `File "${toDisplayName(fileName)}"` : 'An unnamed file';
 
 // ---------------------------------------------------------------------------
-// Files of the new messages
+// Files of the new messages, as they were sent
 // ---------------------------------------------------------------------------
-
-type MessagePart = MastraDBMessage['content']['parts'][number];
 
 /** A file found in a new user or signal message. */
 interface FileCandidate {
   message: MastraDBMessage;
-  /** The file part to replace; absent when the file only exists as an attachment. */
-  part?: MessagePart;
   data: unknown;
   mimeType: string;
   fileName?: string;
@@ -241,7 +239,7 @@ type InlineFileCandidate = FileCandidate & { data: string };
 const UPLOAD_ROLES = new Set<string>(['user', 'signal']);
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
 
-// Only files sent inline are handled; links stay in the message for the model.
+// Only files sent inline are checked here; a link is only known once Mastra downloads it for the model.
 const newFiles = (messageList: MessageList): InlineFileCandidate[] =>
   collectCandidates(listNewMessages(messageList)).filter(isInline);
 
@@ -265,7 +263,6 @@ function candidatesFromParts(message: MastraDBMessage): FileCandidate[] {
     return [
       {
         message,
-        part,
         data,
         mimeType: mediaType ?? DEFAULT_MIME_TYPE,
         fileName: typeof fileName === 'string' ? fileName : undefined,
@@ -286,22 +283,164 @@ function candidatesFromAttachments(message: MastraDBMessage, alreadyInParts: Set
     }));
 }
 
-/**
- * The processor only handles files sent inline. A URL or a provider file ID is
- * never fetched, so a server-side request can't be pointed at an internal
- * address: the file stays in the message and the model receives it as usual.
- */
 function isInline(candidate: FileCandidate): candidate is InlineFileCandidate {
-  if (typeof candidate.data !== 'string') return false;
-  const { type } = categorizeFileData(candidate.data);
+  return typeof candidate.data === 'string' && isInlineData(candidate.data);
+}
+
+/**
+ * The processor never downloads anything, so a server-side request can't be
+ * pointed at an internal address: a link or a provider file ID is left to the
+ * model.
+ */
+function isInlineData(data: string): boolean {
+  const { type } = categorizeFileData(data);
   return type === 'dataUri' || type === 'raw';
+}
+
+// ---------------------------------------------------------------------------
+// Files of the prompt
+// ---------------------------------------------------------------------------
+
+type PromptUserMessage = Extract<LanguageModelV2Prompt[number], { role: 'user' }>;
+type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'file' }>;
+
+/** A file the user sent, as the model is about to receive it. */
+interface PromptFile {
+  part: PromptFilePart;
+  /** Base64 text, or the bytes of a link Mastra downloaded for the model. */
+  data: string | Uint8Array;
+  mimeType: string;
+  fileName?: string;
+}
+
+interface ReadyFile {
+  file: PromptFile;
+  hash: string;
+  size: number;
+  relativePath: string;
+}
+
+/** What one request remembers between its model calls. */
+interface UploadCache {
+  /** Upload path relative to the command directory, mapped to the path the file was placed at. */
+  paths: Map<string, string>;
+  /** Hash and size of the data of a prompt file, so later calls don't decode it again. */
+  digests: Map<string | Uint8Array, { hash: string; size: number }>;
+}
+
+function cacheOf(state: Record<string, unknown>): UploadCache {
+  state.uploads ??= { paths: new Map(), digests: new Map() } satisfies UploadCache;
+  return state.uploads as UploadCache;
+}
+
+// Files produced by the assistant or returned by tools are the agent's own; only the user's are uploaded.
+function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Map<string, string>): PromptFile[] {
+  let names: Map<string, string> | undefined;
+  const nameOf = (data: string | Uint8Array) =>
+    typeof data === 'string' ? (names ??= lookUpNames()).get(data.replace(/\s+/g, '')) : undefined;
+  return prompt.flatMap(message =>
+    message.role !== 'user'
+      ? []
+      : message.content.flatMap(part => {
+          if (part.type !== 'file') return [];
+          const { data } = part;
+          if (!(data instanceof Uint8Array) && !(typeof data === 'string' && isInlineData(data))) return [];
+          return [{ part, data, mimeType: part.mediaType, fileName: part.filename ?? nameOf(data) }];
+        }),
+  );
+}
+
+/**
+ * Names of the files of the messages, by their base64 content. The prompt
+ * drops the name of a file sent as an attachment (AI SDK v4 UI messages), and
+ * `filter` must see the same name it saw when the file was checked.
+ */
+function namesByContent(messageList: MessageList | undefined): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const { data, fileName } of collectCandidates(messageList?.get.all.db() ?? [])) {
+    if (!fileName || typeof data !== 'string' || !isInlineData(data)) continue;
+    const { isDataUri, base64Content } = parseDataUri(data);
+    // A percent-encoded data URL reaches the prompt re-encoded, so its text can't be matched.
+    if (isDataUri && !BASE64_DATA_URI.test(data)) continue;
+    names.set(base64Content.replace(/\s+/g, ''), fileName);
+  }
+  return names;
+}
+
+/**
+ * Checks a prompt file and reads its hash and size. A file that is too large or
+ * can't be decoded is turned into a rejection instead of stopping the turn:
+ * stored in the thread, it would stop every turn after this one. A file of
+ * this turn never gets here in that state, `checkNewFiles` stopped the turn.
+ */
+function loadPromptFile(
+  file: PromptFile,
+  maxFileSize: FileUploadMaxFileSize,
+  cache: UploadCache,
+): { hash: string; size: number } | { rejection: string } {
+  const limit = resolveMaxFileSize(file, maxFileSize);
+  const cached = cache.digests.get(file.data);
+  if (cached) return cached.size > limit ? { rejection: tooLarge(file, cached.size, limit).message } : cached;
+  const encodedSize = typeof file.data === 'string' ? decodedSizeOf(file.data) : file.data.byteLength;
+  if (encodedSize > limit) return { rejection: tooLarge(file, encodedSize, limit).message };
+  let content: Buffer;
+  try {
+    content = decodePromptData(file);
+  } catch (error) {
+    if (error instanceof FileUploadError) return { rejection: error.message };
+    throw error;
+  }
+  if (content.byteLength > limit) return { rejection: tooLarge(file, content.byteLength, limit).message };
+  const digest = { hash: createHash('sha256').update(content).digest('hex'), size: content.byteLength };
+  cache.digests.set(file.data, digest);
+  return digest;
+}
+
+function decodePromptData({ data, fileName, mimeType }: PromptFile): Buffer {
+  if (typeof data === 'string') return decodeInline(data, { fileName, mimeType });
+  return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+}
+
+/** Swaps each replaced file part for a text part; the original prompt is left untouched. */
+function replaceParts(prompt: LanguageModelV2Prompt, notes: Map<PromptFilePart, string>): LanguageModelV2Prompt {
+  return prompt.map(message =>
+    message.role !== 'user'
+      ? message
+      : {
+          ...message,
+          content: message.content.map(part => {
+            const note = part.type === 'file' ? notes.get(part) : undefined;
+            return note === undefined ? part : { type: 'text' as const, text: note };
+          }),
+        },
+  );
+}
+
+// The path comes first: it is the line the model has to copy exactly.
+function uploadedNote({ path, fileName, mimeType, size }: PromptFile & { path: string; size: number }): string {
+  return [
+    '[File uploaded to the sandbox]',
+    `path: ${path}`,
+    `name: ${toDisplayName(fileName)}`,
+    `type: ${normalizeMimeType(mimeType)}`,
+    `size: ${size} bytes`,
+  ].join('\n');
+}
+
+function rejectedNote(fileName: string | undefined, reason: string): string {
+  return ['[File not uploaded]', `name: ${toDisplayName(fileName)}`, `reason: ${reason}`].join('\n');
 }
 
 // ---------------------------------------------------------------------------
 // Filter
 // ---------------------------------------------------------------------------
 
-function fileInfoOf({ fileName, mimeType }: { fileName?: string; mimeType: string }): FileUploadFileInfo {
+interface DescribedFile {
+  fileName?: string;
+  mimeType: string;
+}
+
+function fileInfoOf({ fileName, mimeType }: DescribedFile): FileUploadFileInfo {
   return { fileName, mimeType: normalizeMimeType(mimeType), extension: extensionOf(fileName) };
 }
 
@@ -321,7 +460,7 @@ function normalizeMimeType(mimeType: string): string {
  * Keeps the files the filter accepts; without a filter, every file is kept.
  * Every answer is awaited, and an invalid one reports the first file in order.
  */
-async function selectFiles<T extends FileCandidate>(files: T[], filter?: FileUploadFilter): Promise<T[]> {
+async function selectFiles<T extends DescribedFile>(files: T[], filter?: FileUploadFilter): Promise<T[]> {
   if (!filter || files.length === 0) return files;
   const verdicts = await Promise.allSettled(files.map(file => askFilter(filter, file)));
   const invalid = verdicts.find(verdict => verdict.status === 'rejected');
@@ -330,7 +469,7 @@ async function selectFiles<T extends FileCandidate>(files: T[], filter?: FileUpl
 }
 
 // `filter` is user code: an answer that is not a boolean must stop the turn, not decide for it.
-async function askFilter(filter: FileUploadFilter, { fileName, mimeType }: FileCandidate): Promise<boolean> {
+async function askFilter(filter: FileUploadFilter, { fileName, mimeType }: DescribedFile): Promise<boolean> {
   const invalid = (cause: string) =>
     new FileUploadError(
       FILE_UPLOAD_ERROR_CODES.INVALID_FILTER,
@@ -354,32 +493,15 @@ async function askFilter(filter: FileUploadFilter, { fileName, mimeType }: FileC
 const BASE64 = /^[A-Za-z0-9+/_-]*={0,2}$/;
 const BASE64_DATA_URI = /^data:[^,]*;base64,/i;
 
-/** A file whose bytes are loaded, checked, and ready to be written to the sandbox. */
-interface PreparedFile {
-  candidate: FileCandidate;
-  path: string;
-  content: Buffer;
-}
-
 interface PlannedFile {
   candidate: InlineFileCandidate;
   maxFileSize: number;
 }
 
 /**
- * Checks and decodes every file before the first write: one bad file stops the
- * whole turn. Nothing is decoded until every file has a limit, and a file over
- * its limit is refused from its encoded form, without being decoded.
+ * Nothing is decoded until every file has a limit, and a file over its limit
+ * is refused from its encoded form, without being decoded.
  */
-function prepareFiles(
-  candidates: InlineFileCandidate[],
-  maxFileSize: FileUploadMaxFileSize,
-  threadId: string,
-): PreparedFile[] {
-  const planned = candidates.map(candidate => planFile(candidate, maxFileSize));
-  return planned.map(file => loadPlannedFile(file, threadId));
-}
-
 function planFile(candidate: InlineFileCandidate, maxFileSize: FileUploadMaxFileSize): PlannedFile {
   const limit = resolveMaxFileSize(candidate, maxFileSize);
   const size = decodedSizeOf(candidate.data);
@@ -388,17 +510,16 @@ function planFile(candidate: InlineFileCandidate, maxFileSize: FileUploadMaxFile
 }
 
 // `maxFileSize` is user code: a wrong value must stop the turn, not silently lift the limit.
-function resolveMaxFileSize(candidate: FileCandidate, maxFileSize: FileUploadMaxFileSize): number {
-  const { fileName, mimeType } = candidate;
+function resolveMaxFileSize(file: DescribedFile, maxFileSize: FileUploadMaxFileSize): number {
   const invalid = (cause: string) =>
     new FileUploadError(
       FILE_UPLOAD_ERROR_CODES.INVALID_MAX_FILE_SIZE,
-      `maxFileSize must return a non-negative number of bytes; it did not for ${describeFile(fileName)}.`,
-      { ...fileDetails(candidate), cause },
+      `maxFileSize must return a non-negative number of bytes; it did not for ${describeFile(file.fileName)}.`,
+      { ...fileDetails(file), cause },
     );
   let limit: unknown;
   try {
-    limit = maxFileSize(fileInfoOf({ fileName, mimeType }));
+    limit = maxFileSize(fileInfoOf(file));
   } catch (error) {
     throw invalid(describeError(error));
   }
@@ -407,22 +528,20 @@ function resolveMaxFileSize(candidate: FileCandidate, maxFileSize: FileUploadMax
   return limit;
 }
 
-function loadPlannedFile({ candidate, maxFileSize }: PlannedFile, threadId: string): PreparedFile {
+function loadPlannedFile({ candidate, maxFileSize }: PlannedFile): Buffer {
   const content = decodeInline(candidate.data, fileDetails(candidate));
-  const size = content.byteLength;
-  if (size > maxFileSize) throw tooLarge(candidate, size, maxFileSize);
-  const path = buildUploadPath({ ...fileDetails(candidate), threadId, uuid: globalThis.crypto.randomUUID() });
-  return { candidate, path, content };
+  if (content.byteLength > maxFileSize) throw tooLarge(candidate, content.byteLength, maxFileSize);
+  return content;
 }
 
-const tooLarge = (candidate: FileCandidate, size: number, maxFileSize: number) =>
+const tooLarge = (file: DescribedFile, size: number, maxFileSize: number) =>
   new FileUploadError(
     FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE,
-    `${describeFile(candidate.fileName)} is ${size} bytes, over the ${maxFileSize} byte limit.`,
-    { ...fileDetails(candidate), size, maxFileSize },
+    `${describeFile(file.fileName)} is ${size} bytes, over the ${maxFileSize} byte limit.`,
+    { ...fileDetails(file), size, maxFileSize },
   );
 
-const fileDetails = ({ fileName, mimeType }: FileCandidate) => ({ fileName, mimeType });
+const fileDetails = ({ fileName, mimeType }: DescribedFile) => ({ fileName, mimeType });
 
 /**
  * Decoded size of inline data, computed from its encoded form without decoding
@@ -482,7 +601,6 @@ const invalidData = (file: FileUploadFailureDetails) =>
 
 const UPLOADS_DIRECTORY = 'uploads';
 
-const FALLBACK_THREAD_DIRECTORY = 'thread';
 const FALLBACK_DISPLAY_NAME = 'unnamed file';
 const MAX_DIRECTORY_LENGTH = 100;
 const MAX_EXTENSION_LENGTH = 16;
@@ -514,23 +632,25 @@ const EXTENSIONS_BY_MIME_TYPE: Record<string, string> = {
 };
 
 interface UploadPathInput {
-  /** Thread the file was sent in; each thread gets its own directory. */
-  threadId: string;
-  uuid: string;
+  /** Thread, resource, or shared directory the file is filed under. */
+  directory: string;
+  /** SHA-256 of the content, in hex. */
+  hash: string;
   fileName?: string;
   mimeType: string;
 }
 
 /**
- * `uploads/<thread>/<uuid>.<ext>`. Nothing of the original name is kept but its
- * extension: a model shown a path that looks like the name can retype one from
- * the other, and ask the sandbox for a file that does not exist.
+ * `uploads/<directory>/<sha256>.<ext>`. Nothing of the original name is kept
+ * but its extension: a model shown a path that looks like the name can retype
+ * one from the other, and ask the sandbox for a file that does not exist. The
+ * hash makes the same bytes land on the same path, so they are written once.
  *
  * @internal Exported for its unit tests.
  */
-export function buildUploadPath({ threadId, uuid, fileName, mimeType }: UploadPathInput): string {
+export function buildUploadPath({ directory, hash, fileName, mimeType }: UploadPathInput): string {
   const extension = safeExtensionOf(fileName, mimeType);
-  return `${UPLOADS_DIRECTORY}/${toSafeDirectory(threadId)}/${uuid}${extension ? `.${extension}` : ''}`;
+  return `${UPLOADS_DIRECTORY}/${toSafeDirectory(directory)}/${hash}${extension ? `.${extension}` : ''}`;
 }
 
 /**
@@ -555,8 +675,8 @@ function stripUnprintable(value: string): string {
 
 // Only `[A-Za-z0-9._-]` survives, so the result is safe in a path and in a shell
 // command. Path separators and `..` become `_`, which keeps the files in `uploads/`.
-function toSafeDirectory(threadId: string): string {
-  const safe = threadId
+function toSafeDirectory(directory: string): string {
+  const safe = directory
     .normalize('NFKD')
     .replace(DIACRITICS, '')
     .replace(/[^A-Za-z0-9._-]/g, '_')
@@ -564,83 +684,9 @@ function toSafeDirectory(threadId: string): string {
     .replace(/_+/g, '_')
     .replace(/^[._-]+|[._-]+$/g, '')
     .slice(0, MAX_DIRECTORY_LENGTH);
-  return safe || FALLBACK_THREAD_DIRECTORY;
+  return safe || SHARED_DIRECTORY;
 }
 
 function toSafeExtension(extension: string | undefined): string {
   return (extension ?? '').replace(/[^a-z0-9]/g, '').slice(0, MAX_EXTENSION_LENGTH);
-}
-
-// ---------------------------------------------------------------------------
-// Notes that replace the files
-// ---------------------------------------------------------------------------
-
-/** Notes that stand in for attachment-only files; they keep their order at the start of the message. */
-const attachmentNotes = new WeakSet<MessagePart>();
-
-function applyUploadedNote({ candidate, path, content }: PreparedFile): void {
-  const { fileName, mimeType } = candidate;
-  markUploaded(candidate, { ...(fileName ? { name: fileName } : {}), path, mimeType, size: content.byteLength });
-}
-
-/** Replaces the file with a note for the model and records the upload for clients. */
-function markUploaded(candidate: FileCandidate, upload: FileUploadRecord): void {
-  replaceCandidate(candidate, formatUploadedNote(upload));
-  const content = candidate.message.content;
-  const previous = Array.isArray(content.metadata?.fileUploads) ? content.metadata.fileUploads : [];
-  content.metadata = { ...content.metadata, fileUploads: [...previous, upload] };
-}
-
-/** Replaces the file with a note saying why it was not uploaded. */
-function markRejected(candidate: FileCandidate, reason: string): void {
-  const note = ['[File not uploaded]', `name: ${toDisplayName(candidate.fileName)}`, `reason: ${reason}`].join('\n');
-  replaceCandidate(candidate, note);
-}
-
-// The path comes first: it is the line the model has to copy exactly.
-function formatUploadedNote(file: FileUploadRecord): string {
-  return [
-    '[File uploaded to the sandbox]',
-    `path: ${file.path}`,
-    `name: ${toDisplayName(file.name)}`,
-    `type: ${file.mimeType}`,
-    `size: ${file.size} bytes`,
-  ].join('\n');
-}
-
-/** Swaps the file for a text part, so the bytes can no longer reach the model. */
-function replaceCandidate(candidate: FileCandidate, text: string): void {
-  const { parts } = candidate.message.content;
-  if (candidate.part) replacePart(parts, candidate.part, text);
-  else insertAttachmentNote(parts, text);
-  removeAttachmentsFor(candidate);
-  syncTextMirror(candidate.message);
-}
-
-function replacePart(parts: MessagePart[], part: MessagePart, text: string): void {
-  const index = parts.indexOf(part);
-  if (index === -1) return;
-  const createdAt = (part as { createdAt?: number }).createdAt;
-  parts[index] = { type: 'text', text, ...(createdAt === undefined ? {} : { createdAt }) };
-}
-
-// An attachment has no position among the parts; the prompt puts attachments first, so do the notes.
-function insertAttachmentNote(parts: MessagePart[], text: string): void {
-  const note: MessagePart = { type: 'text', text };
-  const firstOtherPart = parts.findIndex(part => !attachmentNotes.has(part));
-  parts.splice(firstOtherPart === -1 ? parts.length : firstOtherPart, 0, note);
-  attachmentNotes.add(note);
-}
-
-// The same bytes are mirrored in `experimental_attachments`; left in place they
-// are turned back into a file part when the prompt is built.
-function removeAttachmentsFor({ message, data }: FileCandidate): void {
-  const attachments = message.content.experimental_attachments;
-  if (!attachments) return;
-  message.content.experimental_attachments = attachments.filter(attachment => attachment.url !== data);
-}
-
-function syncTextMirror(message: MastraDBMessage): void {
-  if (typeof message.content.content !== 'string') return;
-  message.content.content = message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n');
 }

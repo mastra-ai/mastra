@@ -1,18 +1,18 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import * as fs from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { globalRunRegistry } from '../../agent/durable/run-registry';
-import { MessageList } from '../../agent/message-list';
 import { createSignal } from '../../agent/signals';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -20,6 +20,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
 import type { SandboxFileInput, WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
@@ -30,13 +31,18 @@ import { FILE_UPLOAD_ERROR_CODES, FileUploadProcessor } from './file-upload';
 import type { FileUploadFileInfo, FileUploadProcessorOptions } from './file-upload';
 
 const MEMORY = { thread: 'file-upload-thread', resource: 'file-upload-resource' };
-const UUID = '[0-9a-f-]{36}';
-const uploadedPath = (extension: string) => new RegExp(`uploads/${MEMORY.thread}/${UUID}${extension}`);
+const HASH = '[0-9a-f]{64}';
+/** Temporary name a file is written under before it is moved into place. */
+const TEMP = '\\.[0-9a-f]{8}\\.part';
+const uploadedPath = (extension: string, directory = MEMORY.thread) =>
+  new RegExp(`uploads/${directory}/${HASH}${extension}`);
+const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 /** `holdFirstStream` keeps the first response open, so a signal can be sent while the run is active. */
-function createModel(holdFirstStream?: Promise<void>) {
+function createModel(holdFirstStream?: Promise<void>, supportedUrls?: LanguageModelV2['supportedUrls']) {
   const prompts: LanguageModelV2Prompt[] = [];
   const model = new MockLanguageModelV2({
+    ...(supportedUrls ? { supportedUrls } : {}),
     doGenerate: async ({ prompt }) => {
       prompts.push(prompt);
       return {
@@ -111,9 +117,15 @@ function createHarness(
     withMemory = true,
     dynamicProcessors = false,
     holdFirstStream,
-  }: { withMemory?: boolean; dynamicProcessors?: boolean; holdFirstStream?: Promise<void> } = {},
+    supportedUrls,
+  }: {
+    withMemory?: boolean;
+    dynamicProcessors?: boolean;
+    holdFirstStream?: Promise<void>;
+    supportedUrls?: LanguageModelV2['supportedUrls'];
+  } = {},
 ) {
-  const { model, prompts } = createModel(holdFirstStream);
+  const { model, prompts } = createModel(holdFirstStream, supportedUrls);
   const memory = new MockMemory();
   const workspace = new Workspace({ sandbox });
   const agent = new Agent({
@@ -158,7 +170,6 @@ const notedPathIn = (prompt: LanguageModelV2Prompt | undefined) =>
 describe('FILE_UPLOAD_ERROR_CODES', () => {
   it('lists every reason the processor can stop a turn', () => {
     expect(FILE_UPLOAD_ERROR_CODES).toEqual({
-      MEMORY_REQUIRED: 'MEMORY_REQUIRED',
       NO_SANDBOX: 'NO_SANDBOX',
       NO_WRITE_CAPABILITY: 'NO_WRITE_CAPABILITY',
       INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
@@ -166,14 +177,13 @@ describe('FILE_UPLOAD_ERROR_CODES', () => {
       INVALID_FILE_DATA: 'INVALID_FILE_DATA',
       FILE_TOO_LARGE: 'FILE_TOO_LARGE',
       UPLOAD_FAILED: 'UPLOAD_FAILED',
-      FILE_NOT_UPLOADED: 'FILE_NOT_UPLOADED',
     });
   });
 });
 
 describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an agent (LocalSandbox)', () => {
   let tempDir: string;
-  const readUploaded = (relativePath: string) => fs.readFile(path.join(tempDir, relativePath));
+  const readUploaded = (uploadedPath: string) => fs.readFile(path.resolve(tempDir, uploadedPath));
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'file-upload-'));
@@ -183,8 +193,10 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  const createLocalHarness = (harnessOptions: Parameters<typeof createHarness>[2] = {}) =>
-    createHarness(new LocalSandbox({ workingDirectory: tempDir }), {}, harnessOptions);
+  const createLocalHarness = (harnessOptions: Parameters<typeof createHarness>[2] = {}) => {
+    const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+    return { sandbox, ...createHarness(sandbox, {}, harnessOptions) };
+  };
 
   it('uploads a file sent to generate() and gives the model its sandbox path instead of the bytes', async () => {
     const { agent, prompts } = createLocalHarness();
@@ -215,7 +227,8 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const uploaded = JSON.stringify(prompt).match(uploadedPath('\\.txt'))?.[0];
     expect(await readUploaded(uploaded!)).toEqual(bytes);
   });
-  it('uploads a binary file larger than one shell chunk without altering a byte', async () => {
+
+  it('uploads a binary file larger than one shell chunk without altering a byte, and leaves nothing else behind', async () => {
     const { agent, prompts } = createLocalHarness();
     const bytes = randomBytes(250_000);
 
@@ -225,8 +238,9 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
 
     const uploaded = JSON.stringify(prompts.at(-1)).match(uploadedPath('\\.bin'))![0];
     expect((await readUploaded(uploaded)).equals(bytes)).toBe(true);
-    expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual([path.basename(uploaded)]);
+    expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual([`${sha256(bytes)}.bin`]);
   });
+
   it('keeps a file with a hostile name inside the uploads directory', async () => {
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('root:x:0:0');
@@ -239,6 +253,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     expect(await fs.readdir(path.join(tempDir, 'uploads'))).toEqual([MEMORY.thread]);
     expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual([path.basename(uploaded)]);
   });
+
   it('gives the model the absolute path of the file, under the directory where commands run', async () => {
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('found by the command tool');
@@ -252,6 +267,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     );
     expect(await fs.readFile(noted)).toEqual(bytes);
   });
+
   it('keeps the uploads of a thread with a hostile id inside the uploads directory', async () => {
     const { agent } = createLocalHarness();
 
@@ -262,6 +278,56 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     expect(await fs.readdir(tempDir)).toEqual(['uploads']);
     expect(await fs.readdir(path.join(tempDir, 'uploads'))).toEqual(['outside_rm_-rf']);
   });
+
+  describe('on a later turn', () => {
+    const writesIn = (scripts: string[]) => scripts.filter(script => script.startsWith(': >'));
+
+    it('does not write a file again when the sandbox already has it', async () => {
+      const { sandbox, agent, prompts } = createLocalHarness();
+      const execute = vi.spyOn(sandbox, 'executeCommand');
+      const bytes = Buffer.from('written once');
+
+      await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+      const firstTurn = execute.mock.calls.map(call => call[1]?.at(-1) ?? '');
+      execute.mockClear();
+      await agent.generate('Second', { memory: MEMORY });
+      const secondTurn = execute.mock.calls.map(call => call[1]?.at(-1) ?? '');
+
+      expect(writesIn(firstTurn)).toHaveLength(1);
+      expect(writesIn(secondTurn)).toEqual([]);
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(notedPathIn(prompts.at(-1))).toBe(notedPathIn(prompts[0]));
+    });
+
+    it('writes the file again when it is gone from the sandbox', async () => {
+      const { agent, prompts } = createLocalHarness();
+      const bytes = Buffer.from('deleted by the agent');
+
+      await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+      await fs.rm(notedPathIn(prompts[0])!);
+      await agent.generate('Second', { memory: MEMORY });
+
+      expect(await fs.readFile(notedPathIn(prompts.at(-1))!)).toEqual(bytes);
+    });
+
+    it('uploads a file sent on a later turn and keeps pointing the model at the earlier one', async () => {
+      const { agent, prompts } = createLocalHarness();
+      const first = Buffer.from('sent on the first turn');
+      const second = Buffer.from('sent on the second turn');
+
+      await agent.generate([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generate([userMessage(text('Two'), file(second, 'second.txt', 'text/plain'))], { memory: MEMORY });
+
+      const lastPrompt = JSON.stringify(prompts.at(-1));
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(lastPrompt).toContain('name: first.txt');
+      expect(lastPrompt).toContain('name: second.txt');
+      expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual(
+        [`${sha256(first)}.txt`, `${sha256(second)}.txt`].sort(),
+      );
+    });
+  });
+
   describe('files sent by a signal', () => {
     const SIGNAL_TARGET = { resourceId: MEMORY.resource, threadId: MEMORY.thread };
 
@@ -322,10 +388,10 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       expect(await readUploaded(uploaded)).toEqual(bytes);
     });
 
-    it('aborts the run and keeps the thread usable when a file from a signal is too large', async () => {
+    it('aborts the run when a file from a signal is too large, and the next turn runs without it', async () => {
       let release!: () => void;
       const holdFirstStream = new Promise<void>(resolve => (release = resolve));
-      const { agent, prompts, recall } = createHarness(
+      const { agent, prompts } = createHarness(
         new LocalSandbox({ workingDirectory: tempDir }),
         { maxFileSize: () => 4 },
         { holdFirstStream },
@@ -349,13 +415,13 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       expect(next.tripwire).toBeUndefined();
       expect(prompts).toHaveLength(2);
       expect(filePartsIn(prompts[1])).toEqual([]);
-      expect(JSON.stringify(await recall())).not.toContain(big.toString('base64'));
+      expect(JSON.stringify(prompts[1])).not.toContain(big.toString('base64'));
     });
   });
 });
 
 describe('FileUploadProcessor through an agent (fake sandbox)', () => {
-  it('replaces the file in place with a note and records the upload in the message metadata', async () => {
+  it('replaces the file with a note in the prompt only, and keeps the file in the stored message', async () => {
     const { sandbox } = createFakeSandbox();
     const { agent, prompts, recall } = createHarness(sandbox);
     const bytes = Buffer.from('%PDF-1.7 report');
@@ -364,26 +430,25 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       memory: MEMORY,
     });
 
-    const [before, note, after] = textsIn(prompts.at(-1));
-    expect([before, after]).toEqual(['Before', 'After']);
-    const uploaded = note!.match(uploadedPath('\\.pdf'))![0];
-    expect(note).toBe(
+    expect(textsIn(prompts.at(-1))).toEqual([
+      'Before',
       [
         '[File uploaded to the sandbox]',
-        `path: ${uploaded}`,
+        `path: uploads/${MEMORY.thread}/${sha256(bytes)}.pdf`,
         'name: report.pdf',
         'type: application/pdf',
         `size: ${bytes.byteLength} bytes`,
       ].join('\n'),
-    );
-
-    const stored = (await recall()).find(message => message.role === 'user');
-    expect(stored?.content.metadata?.fileUploads).toEqual([
-      { name: 'report.pdf', path: uploaded, mimeType: 'application/pdf', size: bytes.byteLength },
+      'After',
     ]);
+    const stored = (await recall()).find(message => message.role === 'user');
+    expect(stored?.content.parts.map(part => part.type)).toEqual(['text', 'file', 'text']);
+    expect(JSON.stringify(stored)).toContain(bytes.toString('base64'));
+    expect(JSON.stringify(stored)).not.toContain('[File uploaded to the sandbox]');
+    expect(stored?.content.metadata?.fileUploads).toBeUndefined();
   });
 
-  it('writes every file of a turn in one writeFiles call, after creating the uploads directory', async () => {
+  it('checks which files the sandbox already has, writes the others in one writeFiles call, then moves them into place', async () => {
     const { sandbox, writes, commands, events } = createFakeSandbox();
     const { agent } = createHarness(sandbox);
     const first = Buffer.from('first');
@@ -394,46 +459,85 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       { memory: MEMORY },
     );
 
-    expect(commands).toEqual([`mkdir -p uploads/${MEMORY.thread} && pwd`]);
-    expect(events).toEqual(['executeCommand', 'writeFiles']);
+    const dir = `uploads/${MEMORY.thread}`;
+    const [firstPath, secondPath] = [`${dir}/${sha256(first)}.txt`, `${dir}/${sha256(second)}.txt`];
+    expect(commands[0]).toBe(
+      `mkdir -p ${dir} && pwd && for f in ${firstPath} ${secondPath}; do if [ -e "$f" ]; then printf '%s\\n' "$f"; fi; done`,
+    );
+    expect(events).toEqual(['executeCommand', 'writeFiles', 'executeCommand']);
     expect(writes).toHaveLength(1);
     expect(writes[0]!.map(written => written.content)).toEqual([first, second]);
-    expect(writes[0]![0]!.path).toMatch(uploadedPath('\\.txt'));
-    expect(writes[0]![1]!.path).toMatch(uploadedPath('\\.txt'));
+    expect(writes[0]!.map(written => written.path)).toEqual([
+      expect.stringMatching(new RegExp(`^${firstPath}${TEMP}$`)),
+      expect.stringMatching(new RegExp(`^${secondPath}${TEMP}$`)),
+    ]);
+    expect(commands[1]).toBe(`mv -f ${writes[0]![0]!.path} ${firstPath} && mv -f ${writes[0]![1]!.path} ${secondPath}`);
   });
 
-  it('persists the reference instead of the file, so the next turn does not upload again', async () => {
-    const { sandbox, writes } = createFakeSandbox();
-    const { agent, prompts, recall } = createHarness(sandbox);
-    const bytes = Buffer.from('persist me, but only once');
-
-    await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
-    await agent.generate('Second', { memory: MEMORY });
-
-    const stored = JSON.stringify(await recall());
-    expect(stored).not.toContain(bytes.toString('base64'));
-    expect(stored).not.toContain('"type":"file"');
-    expect(writes).toHaveLength(1);
-    expect(prompts).toHaveLength(2);
-    expect(filePartsIn(prompts.at(-1))).toEqual([]);
-    expect(JSON.stringify(prompts.at(-1))).toMatch(uploadedPath('\\.txt'));
-  });
-
-  it('uploads a file sent on a later turn without uploading the earlier one again', async () => {
+  it('names a file by its content, so the same bytes sent twice are written once', async () => {
     const { sandbox, writes } = createFakeSandbox();
     const { agent, prompts } = createHarness(sandbox);
-    const first = Buffer.from('sent on the first turn');
-    const second = Buffer.from('sent on the second turn');
+    const bytes = Buffer.from('same bytes');
 
-    await agent.generate([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
-    await agent.generate([userMessage(text('Two'), file(second, 'second.txt', 'text/plain'))], { memory: MEMORY });
+    await agent.generate(
+      [userMessage(file(bytes, 'copy-1.txt', 'text/plain'), file(bytes, 'copy-2.txt', 'text/plain'))],
+      { memory: MEMORY },
+    );
 
-    expect(writes.map(batch => batch.map(written => written.content))).toEqual([[first], [second]]);
-    const lastPrompt = JSON.stringify(prompts.at(-1));
-    expect(filePartsIn(prompts.at(-1))).toEqual([]);
-    expect(lastPrompt).toContain('name: first.txt');
-    expect(lastPrompt).toContain('name: second.txt');
-    expect(lastPrompt.match(new RegExp(uploadedPath('\\.txt'), 'g'))).toHaveLength(2);
+    expect(writes.flat()).toHaveLength(1);
+    const paths = textsIn(prompts.at(-1)).map(note => note.match(/^path: (.+)$/m)?.[1]);
+    expect(paths).toEqual([
+      `uploads/${MEMORY.thread}/${sha256(bytes)}.txt`,
+      `uploads/${MEMORY.thread}/${sha256(bytes)}.txt`,
+    ]);
+  });
+
+  it('writes a file once per request, even when the model is called again after a tool call', async () => {
+    const { sandbox, writes, commands } = createFakeSandbox();
+    const prompts: LanguageModelV2Prompt[] = [];
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const model = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        prompts.push(prompt);
+        return prompts.length === 1
+          ? {
+              content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' }],
+              finishReason: 'tool-calls',
+              usage,
+              warnings: [],
+            }
+          : { content: [{ type: 'text', text: 'done' }], finishReason: 'stop', usage, warnings: [] };
+      },
+    });
+    const workspace = new Workspace({ sandbox });
+    const agent = new Agent({
+      id: 'file-upload-tool-agent',
+      name: 'file-upload-tool-agent',
+      instructions: 'Use the tool, then answer.',
+      model,
+      memory: new MockMemory(),
+      workspace,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Looks something up.',
+          inputSchema: z.object({}),
+          execute: async () => ({ found: true }),
+        }),
+      },
+      inputProcessors: [new FileUploadProcessor({ workspace })],
+    });
+
+    await agent.generate([userMessage(text('Look it up'), file(Buffer.from('once'), 'notes.txt', 'text/plain'))], {
+      memory: MEMORY,
+      maxSteps: 3,
+    });
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts.map(prompt => filePartsIn(prompt))).toEqual([[], []]);
+    expect(notedPathIn(prompts[1])).toBe(notedPathIn(prompts[0]));
+    expect(writes).toHaveLength(1);
+    expect(commands).toHaveLength(2);
   });
 
   it('asks filter about each file, uploads the ones it accepts and leaves the others to the model', async () => {
@@ -695,7 +799,10 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         memory: MEMORY,
       });
 
-      expect(received).toEqual([{ fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf' }]);
+      expect(received.length).toBeGreaterThan(0);
+      expect(new Set(received.map(info => JSON.stringify(info)))).toEqual(
+        new Set([JSON.stringify({ fileName: 'Report.PDF', mimeType: 'application/pdf', extension: 'pdf' })]),
+      );
     });
 
     it.each([
@@ -743,9 +850,14 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
   });
 
   const withoutWritableMemory = [
-    ['the agent has no memory', { withMemory: false }, { memory: MEMORY }],
-    ['the call has no thread', { withMemory: true }, {}],
-    ['memory is read-only', { withMemory: true }, { memory: { ...MEMORY, options: { readOnly: true } } }],
+    ['the agent has no memory', { withMemory: false }, { memory: MEMORY }, 'shared'],
+    ['the call has no thread', { withMemory: true }, {}, 'shared'],
+    [
+      'memory is read-only',
+      { withMemory: true },
+      { memory: { ...MEMORY, options: { readOnly: true } } },
+      MEMORY.thread,
+    ],
   ] as const;
   const withoutUsableSandbox = (): Array<[string, WorkspaceSandbox | WorkspaceSandboxResolver]> => [
     ['the workspace resolves no sandbox', (() => undefined) as unknown as WorkspaceSandboxResolver],
@@ -784,19 +896,17 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const withFile = () => [userMessage(text('Read this'), file(Buffer.from('a,b'), 'data.csv', 'text/csv'))];
 
     it.each(withoutWritableMemory)(
-      'abort with MEMORY_REQUIRED, before writing anything, when %s',
-      async (_label, harnessOptions, callOptions) => {
-        const { sandbox, writes, commands } = createFakeSandbox();
+      'upload the file when %s, under the directory of the thread or a shared one',
+      async (_label, harnessOptions, callOptions, directory) => {
+        const { sandbox, writes } = createFakeSandbox();
         const { agent, prompts } = createHarness(sandbox, {}, harnessOptions);
 
         const result = await agent.generate(withFile(), callOptions);
 
-        expect(result.tripwire?.metadata).toEqual({
-          processorId: 'file-upload',
-          code: FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED,
-        });
-        expect(prompts).toEqual([]);
-        expect([...writes, ...commands]).toEqual([]);
+        expect(result.tripwire).toBeUndefined();
+        expect(filePartsIn(prompts.at(-1))).toEqual([]);
+        expect(notedPathIn(prompts.at(-1))).toBe(`uploads/${directory}/${sha256(Buffer.from('a,b'))}.csv`);
+        expect(writes.flat().map(written => written.content)).toEqual([Buffer.from('a,b')]);
       },
     );
 
@@ -864,6 +974,13 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       await new Promise<void>(resolve => server.close(() => resolve()));
     });
 
+    const askedFor = (asked: Array<string | undefined>) => ({
+      filter: ({ fileName }: FileUploadFileInfo) => {
+        asked.push(fileName);
+        return true;
+      },
+    });
+
     it('uploads a file sent as a data URI', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox);
@@ -875,22 +992,14 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes[0]![0]!.content).toEqual(bytes);
     });
 
-    it.each([
-      ['an http URL', () => new URL(`${baseUrl}/report.pdf`)],
-      ['a provider file ID', () => 'file-abc123'],
-    ])('leaves a file sent as %s to the model, without asking the filter or uploading it', async (_label, data) => {
+    it('leaves a provider file ID to the model, without asking the filter or uploading it', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const asked: Array<string | undefined> = [];
-      const { agent } = createHarness(sandbox, {
-        filter: ({ fileName }) => {
-          asked.push(fileName);
-          return true;
-        },
-      });
+      const { agent } = createHarness(sandbox, askedFor(asked));
       const bytes = Buffer.from('inline bytes');
 
       const result = await agent.generate(
-        [userMessage(file(bytes, 'inline.txt', 'text/plain'), file(data(), 'report.pdf', 'application/pdf'))],
+        [userMessage(file(bytes, 'inline.txt', 'text/plain'), file('file-abc123', 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
 
@@ -898,6 +1007,40 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(asked).toContain('inline.txt');
       expect(asked).not.toContain('report.pdf');
       expect(writes.flat().map(written => written.content)).toEqual([bytes]);
+    });
+
+    it('leaves a link the model fetches itself, without asking the filter or downloading it', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const asked: Array<string | undefined> = [];
+      const { agent, prompts } = createHarness(sandbox, askedFor(asked), {
+        supportedUrls: { 'application/pdf': [/^http:/] },
+      });
+
+      const result = await agent.generate(
+        [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
+        { memory: MEMORY },
+      );
+
+      expect(result.tripwire).toBeUndefined();
+      expect(asked).toEqual([]);
+      expect(writes).toEqual([]);
+      expect(filePartsIn(prompts.at(-1))).toMatchObject([{ data: new URL(`${baseUrl}/report.pdf`) }]);
+    });
+
+    it('uploads the bytes of a link that Mastra downloads for the model', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const asked: Array<string | undefined> = [];
+      const { agent, prompts } = createHarness(sandbox, askedFor(asked));
+
+      const result = await agent.generate(
+        [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
+        { memory: MEMORY },
+      );
+
+      expect(result.tripwire).toBeUndefined();
+      expect(asked).toContain('report.pdf');
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(writes.flat().map(written => written.content)).toEqual([remoteBytes]);
     });
 
     it('aborts with INVALID_FILE_DATA when inline data is not base64', async () => {
@@ -924,7 +1067,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     it('takes the extension from the MIME type and tells maxFileSize the name is missing', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const received: unknown[] = [];
-      const { agent, prompts, recall } = createHarness(sandbox, {
+      const { agent, prompts } = createHarness(sandbox, {
         maxFileSize: file => {
           received.push(file);
           return 1024;
@@ -934,14 +1077,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       await agent.generate([userMessage(file(bytes, undefined, 'application/pdf'))], { memory: MEMORY });
 
-      const uploaded = writes[0]![0]!.path;
-      expect(uploaded).toMatch(uploadedPath('\\.pdf'));
-      expect(received).toEqual([{ fileName: undefined, mimeType: 'application/pdf', extension: undefined }]);
+      expect(writes[0]![0]!.path).toMatch(uploadedPath('\\.pdf'));
+      expect(received).toContainEqual({ fileName: undefined, mimeType: 'application/pdf', extension: undefined });
       expect(textsIn(prompts.at(-1))[0]).toContain('name: unnamed file');
-      const stored = (await recall()).find(message => message.role === 'user');
-      expect(stored?.content.metadata?.fileUploads).toEqual([
-        { path: uploaded, mimeType: 'application/pdf', size: bytes.byteLength },
-      ]);
     });
 
     it('uploads an image part, which can never carry a name', async () => {
@@ -971,17 +1109,17 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         return { success: true, exitCode: 0, stdout: `${directory}\n`, stderr: '', executionTimeMs: 0 };
       }) as WorkspaceSandbox['executeCommand'];
 
-    it('writes under the directory where commands run, and gives that absolute path to the model and the metadata', async () => {
-      const { sandbox, writes } = createFakeSandbox({ executeCommand: runsIn(COMMAND_DIRECTORY) });
-      const { agent, prompts, recall } = createHarness(sandbox);
+    it('writes under the directory where commands run, and gives that absolute path to the model', async () => {
+      const scripts: string[] = [];
+      const { sandbox, writes } = createFakeSandbox({ executeCommand: runsIn(COMMAND_DIRECTORY, scripts) });
+      const { agent, prompts } = createHarness(sandbox);
 
       await agent.generate(notesFile(), { memory: MEMORY });
 
-      const written = writes[0]![0]!.path;
-      expect(written).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/${MEMORY.thread}/${UUID}\\.txt$`));
-      expect(notedPathIn(prompts.at(-1))).toBe(written);
-      const stored = (await recall()).find(message => message.role === 'user');
-      expect(stored?.content.metadata?.fileUploads).toEqual([expect.objectContaining({ path: written })]);
+      const noted = notedPathIn(prompts.at(-1))!;
+      expect(noted).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/${MEMORY.thread}/${HASH}\\.txt$`));
+      expect(writes[0]![0]!.path).toMatch(new RegExp(`^${noted}${TEMP}$`));
+      expect(scripts.at(-1)).toBe(`mv -f ${writes[0]![0]!.path} ${noted}`);
     });
 
     it('writes through commands to that absolute path when the sandbox has no writeFiles', async () => {
@@ -996,7 +1134,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       const noted = notedPathIn(prompts.at(-1))!;
       expect(noted).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/`));
-      expect(scripts.find(script => script.startsWith('base64 -d'))).toContain(`> ${noted} `);
+      expect(scripts.find(script => script.startsWith('base64 -d'))).toMatch(
+        new RegExp(` > ${noted}${TEMP} && mv -f ${noted}${TEMP} ${noted} && rm -f `),
+      );
     });
 
     it('uses the sandbox working directory when the sandbox cannot run commands', async () => {
@@ -1005,7 +1145,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       await agent.generate(notesFile(), { memory: MEMORY });
 
-      expect(writes[0]![0]!.path).toMatch(new RegExp(`^/srv/app/uploads/${MEMORY.thread}/${UUID}\\.txt$`));
+      expect(writes[0]![0]!.path).toMatch(new RegExp(`^/srv/app/uploads/${MEMORY.thread}/${HASH}\\.txt$`));
       expect(notedPathIn(prompts.at(-1))).toBe(writes[0]![0]!.path);
     });
 
@@ -1015,7 +1155,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       await agent.generate(notesFile(), { memory: MEMORY });
 
-      expect(writes[0]![0]!.path).toMatch(new RegExp(`^uploads/${MEMORY.thread}/${UUID}\\.txt$`));
+      expect(writes[0]![0]!.path).toMatch(new RegExp(`^uploads/${MEMORY.thread}/${HASH}\\.txt$`));
     });
   });
 
@@ -1049,9 +1189,10 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       expect(prompts).toEqual([]);
       expect(commands).toHaveLength(2);
+      const leftovers = (name: string) => `${DIR}/${name} ${DIR}/${name}${TEMP} ${DIR}/${name}\\.[0-9a-f]{8}\\.b64`;
       expect(commands[1]).toMatch(
         new RegExp(
-          `^rm -f ${DIR}/${UUID}\\.txt ${DIR}/${UUID}\\.txt\\.b64 ${DIR}/${UUID}\\.csv ${DIR}/${UUID}\\.csv\\.b64$`,
+          `^rm -f ${leftovers(`${sha256(Buffer.from('a'))}\\.txt`)} ${leftovers(`${sha256(Buffer.from('b'))}\\.csv`)}$`,
         ),
       );
     });
@@ -1071,7 +1212,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         processorId: 'file-upload',
         code: FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED,
         cause: 'disk full',
-        orphanPaths: [expect.stringMatching(uploadedPath('\\.txt')), expect.stringMatching(uploadedPath('\\.csv'))],
+        orphanPaths: [expect.stringMatching(uploadedPath('\\.txt$')), expect.stringMatching(uploadedPath('\\.csv$'))],
       });
     });
 
@@ -1089,7 +1230,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(result.tripwire?.metadata).toMatchObject({
         code: FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED,
         cause: 'quota exceeded',
-        orphanPaths: [expect.stringMatching(uploadedPath('\\.txt')), expect.stringMatching(uploadedPath('\\.csv'))],
+        orphanPaths: [expect.stringMatching(uploadedPath('\\.txt$')), expect.stringMatching(uploadedPath('\\.csv$'))],
       });
     });
 
@@ -1115,7 +1256,10 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       expect(prompts).toEqual([]);
       expect(scripts.at(-1)).toMatch(/^rm -f /);
-      expect(scripts.filter(script => script.includes('.csv') && !script.startsWith('rm -f'))).toHaveLength(3);
+      const csvWrites = scripts.filter(
+        script => script.includes('.csv') && !script.startsWith('rm -f') && !script.startsWith('mkdir'),
+      );
+      expect(csvWrites).toHaveLength(3);
     });
 
     it('aborts with UPLOAD_FAILED when the uploads directory cannot be created', async () => {
@@ -1145,9 +1289,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       ),
     ];
 
-    it('leaves the thread usable: no file is stored and the next turn runs', async () => {
+    it('runs the next turn, and the file that was too large never reaches the model', async () => {
       const { sandbox } = createFakeSandbox();
-      const { agent, prompts, recall } = createHarness(sandbox, { maxFileSize: () => 4 });
+      const { agent, prompts } = createHarness(sandbox, { maxFileSize: () => 4 });
 
       const rejected = await agent.generate(rejectedTurn(), { memory: MEMORY });
       const next = await agent.generate('Never mind, just say hi', { memory: MEMORY });
@@ -1155,10 +1299,11 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(rejected.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE });
       expect(next.tripwire).toBeUndefined();
       expect(prompts).toHaveLength(1);
-      expect(JSON.stringify(await recall())).not.toContain(big.toString('base64'));
+      expect(filePartsIn(prompts[0])).toEqual([]);
+      expect(JSON.stringify(prompts[0])).not.toContain(big.toString('base64'));
     });
 
-    it('leaves the thread usable on a durable agent too', async () => {
+    it('runs the next turn on a durable agent too, which stores the stopped turn with its files', async () => {
       const { sandbox } = createFakeSandbox();
       const { agent, prompts, recall } = createHarness(sandbox, { maxFileSize: () => 4 });
       void new Mastra({ agents: { 'file-upload-agent': agent }, storage: new InMemoryStore() });
@@ -1176,16 +1321,16 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         await pubsub.close();
       }
 
-      const stored = JSON.stringify(await recall());
       expect(prompts).toHaveLength(1);
       expect(filePartsIn(prompts[0])).toEqual([]);
-      expect(stored).not.toContain(big.toString('base64'));
-      expect(stored).not.toContain('"type":"file"');
-      expect(stored).toContain('[File not uploaded]');
+      expect(JSON.stringify(prompts[0])).not.toContain(big.toString('base64'));
+      const stored = (await recall()).find(message => message.role === 'user');
+      expect(stored?.content.parts.map(part => part.type)).toEqual(['text', 'file', 'file']);
     });
   });
 
-  describe('safety net before the model call', () => {
+  describe('files of the thread history', () => {
+    const storedPdf = Buffer.from('%PDF stored raw');
     const storedFileRow = (role: 'user' | 'assistant', secondsAgo: number) => ({
       id: globalThis.crypto.randomUUID(),
       role,
@@ -1198,7 +1343,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         parts: [
           {
             type: 'file' as const,
-            data: `data:application/pdf;base64,${Buffer.from('%PDF stored raw').toString('base64')}`,
+            data: `data:application/pdf;base64,${storedPdf.toString('base64')}`,
             mimeType: 'application/pdf',
             filename: 'old.pdf',
           },
@@ -1215,7 +1360,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       await memory.saveMessages({ messages });
     }
 
-    it('lets a raw file of the thread history reach the model on every turn, as before the processor', async () => {
+    it('uploads a raw file of the thread history instead of sending it to the model, on every turn', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts, memory } = createHarness(sandbox, {
         filter: ({ mimeType }) => mimeType === 'application/pdf',
@@ -1229,17 +1374,16 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(second.tripwire).toBeUndefined();
       expect(prompts).toHaveLength(2);
       for (const prompt of prompts) {
-        expect(filePartsIn(prompt)).toMatchObject([{ mediaType: 'application/pdf', filename: 'old.pdf' }]);
+        expect(filePartsIn(prompt)).toEqual([]);
+        expect(notedPathIn(prompt)).toBe(`uploads/${MEMORY.thread}/${sha256(storedPdf)}.pdf`);
       }
-      expect(writes).toEqual([]);
+      expect(writes.flat().map(written => written.content)).toEqual([storedPdf, storedPdf]);
     });
 
-    it('never asks the filter about a file of the thread history', async () => {
+    it('stops the turn with INVALID_FILTER when the filter fails on a file of the thread history', async () => {
       const { sandbox } = createFakeSandbox();
-      const asked: Array<string | undefined> = [];
       const { agent, prompts, memory } = createHarness(sandbox, {
-        filter: ({ fileName }) => {
-          asked.push(fileName);
+        filter: () => {
           throw new Error('rule lookup failed');
         },
       });
@@ -1247,21 +1391,45 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       const result = await agent.generate('What was in that file?', { memory: MEMORY });
 
-      expect(result.tripwire).toBeUndefined();
-      expect(asked).toEqual([]);
-      expect(prompts).toHaveLength(1);
+      expect(result.tripwire?.metadata).toEqual({
+        processorId: 'file-upload',
+        code: FILE_UPLOAD_ERROR_CODES.INVALID_FILTER,
+        fileName: 'old.pdf',
+        mimeType: 'application/pdf',
+        cause: 'rule lookup failed',
+      });
+      expect(prompts).toEqual([]);
     });
 
-    // The durable loop adds the signals queued before its first model call after the input hooks ran,
-    // so only the check before the model call sees their files.
-    it('stops a durable run with FILE_NOT_UPLOADED when a signal queued before the first model call holds a file', async () => {
+    it('replaces a file of the thread history that is too large with a note, and the turn goes on', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts, memory } = createHarness(sandbox, { maxFileSize: () => 4 });
+      await seedHistory(memory, [storedFileRow('user', 10)]);
+
+      const result = await agent.generate('What was in that file?', { memory: MEMORY });
+
+      expect(result.tripwire).toBeUndefined();
+      expect(writes).toEqual([]);
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(textsIn(prompts.at(-1))[0]).toBe(
+        [
+          '[File not uploaded]',
+          'name: old.pdf',
+          `reason: File "old.pdf" is ${storedPdf.byteLength} bytes, over the 4 byte limit.`,
+        ].join('\n'),
+      );
+    });
+
+    // The durable loop adds the signals queued before its first model call after the input hooks ran.
+    it('uploads a file from a signal queued before the first model call of a durable run', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox);
       void new Mastra({ agents: { 'file-upload-agent': agent }, storage: new InMemoryStore() });
       const pubsub = new EventEmitterPubSub();
+      const early = Buffer.from('%PDF early');
       const earlySignal = createSignal({
         type: 'user',
-        contents: [text('And this'), file(Buffer.from('%PDF early'), 'early.pdf', 'application/pdf')],
+        contents: [text('And this'), file(early, 'early.pdf', 'application/pdf')],
       });
       const getEntry = globalRunRegistry.get.bind(globalRunRegistry);
       let queued = false;
@@ -1275,7 +1443,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         return entry;
       });
 
-      const chunks: Array<{ type: string; payload?: { metadata?: unknown } }> = [];
+      const chunks: Array<{ type: string }> = [];
       try {
         const result = await createDurableAgent({ agent, pubsub }).stream('Hello', { memory: MEMORY, maxSteps: 1 });
         for await (const chunk of result.fullStream) chunks.push(chunk);
@@ -1284,18 +1452,15 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         await pubsub.close();
       }
 
-      expect(prompts).toEqual([]);
-      expect(chunks.find(chunk => chunk.type === 'tripwire')?.payload?.metadata).toEqual({
-        processorId: 'file-upload',
-        code: FILE_UPLOAD_ERROR_CODES.FILE_NOT_UPLOADED,
-        fileName: 'early.pdf',
-        mimeType: 'application/pdf',
-      });
-      expect(writes).toEqual([]);
+      expect(chunks.find(chunk => chunk.type === 'tripwire')).toBeUndefined();
+      expect(prompts).toHaveLength(1);
+      expect(filePartsIn(prompts[0])).toEqual([]);
+      expect(textsIn(prompts[0]).join('\n')).toContain('name: early.pdf');
+      expect(writes.flat().map(written => written.content)).toEqual([early]);
     });
 
     it('lets a file produced by the assistant through', async () => {
-      const { sandbox } = createFakeSandbox();
+      const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts, memory } = createHarness(sandbox, {
         filter: ({ mimeType }) => mimeType === 'application/pdf',
       });
@@ -1305,6 +1470,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       expect(result.tripwire).toBeUndefined();
       expect(prompts).toHaveLength(1);
+      expect(writes).toEqual([]);
     });
   });
 
@@ -1324,7 +1490,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
     it('uploads them and replaces them with notes placed before the text, in order', async () => {
       const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts, recall } = createHarness(sandbox);
+      const { agent, prompts } = createHarness(sandbox);
       const first = Buffer.from('first attachment');
       const second = Buffer.from('second attachment');
 
@@ -1342,7 +1508,18 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(texts[1]).toMatch(uploadedPath('\\.txt'));
       expect(texts[1]).toContain('name: two.txt');
       expect(texts[2]).toBe('Read the attachments');
-      expect(JSON.stringify(await recall())).not.toContain(first.toString('base64'));
+    });
+
+    it('gives the filter the name of an attachment, which the prompt no longer carries', async () => {
+      const { sandbox, writes } = createFakeSandbox();
+      const { agent, prompts } = createHarness(sandbox, { filter: ({ extension }) => extension === 'csv' });
+
+      await agent.generate([uiMessage(attachment(Buffer.from('a,b'), 'data.csv', 'application/octet-stream'))], {
+        memory: MEMORY,
+      });
+
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(writes.flat().map(written => written.path)).toEqual([expect.stringMatching(uploadedPath('\\.csv'))]);
     });
 
     it('leaves an attachment the filter rejects where it is', async () => {
@@ -1359,56 +1536,45 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
   });
 });
 
-describe('FileUploadProcessor.processInputStep', () => {
-  it('aborts with MEMORY_REQUIRED, before writing anything, when memory is read-only', async () => {
-    const { sandbox, writes, commands } = createFakeSandbox();
-    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
-    const messageList = new MessageList({ threadId: MEMORY.thread, resourceId: MEMORY.resource });
-    messageList.add(userMessage(file(Buffer.from('a'), 'a.txt', 'text/plain')), 'input');
-    const requestContext = new RequestContext();
-    requestContext.set('MastraMemory', {
-      thread: { id: MEMORY.thread },
-      resourceId: MEMORY.resource,
-      memoryConfig: { readOnly: true },
-    });
-    const abort = vi.fn((reason: string) => {
-      throw new Error(reason);
-    });
-    const args = { messageList, requestContext, abort } as unknown as Parameters<
-      FileUploadProcessor['processInputStep']
-    >[0];
-
-    await expect(processor.processInputStep(args)).rejects.toThrow('read-only');
-
-    expect(abort).toHaveBeenCalledWith(expect.any(String), {
-      metadata: { processorId: 'file-upload', code: FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED },
-    });
-    expect(writes).toEqual([]);
-    expect(commands).toEqual([]);
-  });
-});
-
 describe('FileUploadProcessor.processLLMRequest', () => {
-  const createAbort = () =>
-    vi.fn((reason: string) => {
-      throw new Error(reason);
-    });
   const callArgs = (args: Record<string, unknown>) =>
-    args as unknown as Parameters<FileUploadProcessor['processLLMRequest']>[0];
+    ({
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      abort: vi.fn((reason: string) => {
+        throw new Error(reason);
+      }),
+      ...args,
+    }) as unknown as Parameters<FileUploadProcessor['processLLMRequest']>[0];
+  const promptWith = (bytes: Buffer): LanguageModelV2Prompt => [
+    {
+      role: 'user',
+      content: [{ type: 'file', data: bytes.toString('base64'), mediaType: 'text/plain', filename: 'notes.txt' }],
+    },
+  ];
 
-  it('checks nothing without a message list, since it cannot tell new files from the history', async () => {
+  it('uploads the files of the prompt without a message list, under a shared directory', async () => {
+    const { sandbox, writes } = createFakeSandbox();
+    const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
+    const bytes = Buffer.from('no message list');
+
+    const { prompt } = (await processor.processLLMRequest(callArgs({ prompt: promptWith(bytes) }))) ?? {};
+
+    expect(writes.flat().map(written => written.content)).toEqual([bytes]);
+    expect(notedPathIn(prompt)).toBe(`uploads/shared/${sha256(bytes)}.txt`);
+  });
+
+  it('files the uploads of a request that has a resource but no thread under the resource', async () => {
     const { sandbox } = createFakeSandbox();
     const processor = new FileUploadProcessor({ workspace: new Workspace({ sandbox }) });
-    const prompt = [
-      {
-        role: 'user' as const,
-        content: [{ type: 'file' as const, data: new Uint8Array([37, 80, 68, 70]), mediaType: 'application/pdf' }],
-      },
-    ];
-    const abort = createAbort();
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { resourceId: 'user-7' });
+    const bytes = Buffer.from('resource only');
 
-    await processor.processLLMRequest(callArgs({ prompt, abort }));
+    const { prompt } =
+      (await processor.processLLMRequest(callArgs({ prompt: promptWith(bytes), requestContext }))) ?? {};
 
-    expect(abort).not.toHaveBeenCalled();
+    expect(notedPathIn(prompt)).toBe(`uploads/user-7/${sha256(bytes)}.txt`);
   });
 });

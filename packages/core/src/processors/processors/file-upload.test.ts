@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { buildUploadPath, toDisplayName } from './file-upload';
 
-const UUID = '11111111-2222-4333-8444-555555555555';
+const HASH = 'a'.repeat(64);
 
-const THREAD = 'thread-1';
+const DIRECTORY = 'thread-1';
 
 describe('buildUploadPath', () => {
   it.each([
@@ -21,9 +21,9 @@ describe('buildUploadPath', () => {
     ['notes.t$x t', '.txt'],
     ['...', ''],
   ])('keeps nothing of the name %j but its extension', (fileName, extension) => {
-    const path = buildUploadPath({ threadId: THREAD, uuid: UUID, fileName, mimeType: 'application/octet-stream' });
+    const path = buildUploadPath({ directory: DIRECTORY, hash: HASH, fileName, mimeType: 'application/octet-stream' });
 
-    expect(path).toBe(`uploads/${THREAD}/${UUID}${extension}`);
+    expect(path).toBe(`uploads/${DIRECTORY}/${HASH}${extension}`);
   });
 
   it.each([
@@ -32,22 +32,23 @@ describe('buildUploadPath', () => {
     [undefined, 'TEXT/PLAIN; charset=utf-8', '.txt'],
     [undefined, 'application/x-unknown', ''],
   ])('takes the extension of a file sent as %j from its type %s', (fileName, mimeType, extension) => {
-    expect(buildUploadPath({ threadId: THREAD, uuid: UUID, fileName, mimeType })).toBe(
-      `uploads/${THREAD}/${UUID}${extension}`,
+    expect(buildUploadPath({ directory: DIRECTORY, hash: HASH, fileName, mimeType })).toBe(
+      `uploads/${DIRECTORY}/${HASH}${extension}`,
     );
   });
 
   it.each([
     ['3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f', '3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f'],
+    ['shared', 'shared'],
     ['../../etc', 'etc'],
     ['support ticket #42', 'support_ticket_42'],
-    ['..', 'thread'],
-    ['日本語', 'thread'],
-    ['', 'thread'],
+    ['..', 'shared'],
+    ['日本語', 'shared'],
+    ['', 'shared'],
     ['x'.repeat(300), 'x'.repeat(100)],
-  ])('files the upload of thread %j under a safe directory', (threadId, directory) => {
-    expect(buildUploadPath({ threadId, uuid: UUID, fileName: 'notes.txt', mimeType: 'text/plain' })).toBe(
-      `uploads/${directory}/${UUID}.txt`,
+  ])('files an upload under %j as a safe directory', (key, directory) => {
+    expect(buildUploadPath({ directory: key, hash: HASH, fileName: 'notes.txt', mimeType: 'text/plain' })).toBe(
+      `uploads/${directory}/${HASH}.txt`,
     );
   });
 
@@ -55,8 +56,8 @@ describe('buildUploadPath', () => {
     const hostile = ['a b', "it's", '"q"', 'a;b|c&d', 'tab\there', '~/x', 'é/è\\ê', '*?[]{}<>!'].join('');
 
     expect(
-      buildUploadPath({ threadId: hostile, uuid: UUID, fileName: `${hostile}.txt`, mimeType: 'text/plain' }),
-    ).toMatch(/^uploads\/[A-Za-z0-9._-]+\/[A-Za-z0-9-]+\.txt$/);
+      buildUploadPath({ directory: hostile, hash: HASH, fileName: `${hostile}.txt`, mimeType: 'text/plain' }),
+    ).toMatch(/^uploads\/[A-Za-z0-9._-]+\/[0-9a-f]+\.txt$/);
   });
 });
 

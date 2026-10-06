@@ -2,11 +2,13 @@
 '@mastra/core': minor
 ---
 
-Added `FileUploadProcessor`, an input processor that uploads files from user messages to the workspace sandbox and gives the model the sandbox path instead of the file content.
+Added `FileUploadProcessor`, an input processor that uploads the files a user sends to the workspace sandbox and gives the model the sandbox path instead of the file content.
 
-Use it when an agent works on user files with its sandbox tools. A `filter` function decides, file by file, what is uploaded; the files it rejects, such as images, keep going to the model. Only files sent inline are uploaded: a file sent as a URL or a provider file ID is left to the model, and never downloaded. Files sent with `agent.generate()`, `agent.stream()`, and signals are all handled, and a file uploaded on one turn isn't uploaded again on the next.
+Use it when an agent works on user files with its sandbox tools. A `filter` function decides, file by file, what is uploaded; the files it rejects, such as images, keep going to the model. Only the prompt sent to the model changes: the stored messages keep their files, so the thread and clients still have the original. Memory is optional.
 
-To upload a file, the agent needs memory and a thread; a turn without a file runs as usual. Pass the same workspace to the agent and to the processor:
+Files are named after a hash of their content, so a file is written once and the next turns only check that it's still in the sandbox. Files of the thread history and files sent with signals are handled too. The processor never downloads anything itself: a link the model fetches, or a provider file ID, is left to the model.
+
+Pass the same workspace to the agent and to the processor:
 
 ```ts
 import { FileUploadProcessor, FILE_UPLOAD_ERROR_CODES } from '@mastra/core/processors';
@@ -14,7 +16,6 @@ import type { FileUploadTripwireMetadata } from '@mastra/core/processors';
 
 const agent = new Agent({
   // ...
-  memory,
   workspace,
   inputProcessors: [
     new FileUploadProcessor({
@@ -25,7 +26,7 @@ const agent = new Agent({
   ],
 });
 
-const result = await agent.generate(messages, { memory: { thread, resource } });
+const result = await agent.generate(messages);
 
 if (result.tripwire?.processorId === 'file-upload') {
   const { code } = result.tripwire.metadata as FileUploadTripwireMetadata;
@@ -36,4 +37,4 @@ if (result.tripwire?.processorId === 'file-upload') {
 }
 ```
 
-When a file can't be uploaded, the processor stops the turn and reports why in the tripwire metadata. `FILE_UPLOAD_ERROR_CODES` lists every code.
+When a file of the current turn can't be uploaded, the processor stops the turn and reports why in the tripwire metadata. `FILE_UPLOAD_ERROR_CODES` lists every code. A file of the thread history that can't be uploaded is replaced by a note in the prompt instead, so it never blocks the thread.

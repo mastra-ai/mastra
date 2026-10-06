@@ -45,28 +45,35 @@ const noSandbox = (cause?: string) =>
   );
 
 /**
- * Writes with the provider's batch upload when it exists, otherwise through
- * shell commands, and returns the files with the path they were written at.
- * On failure, removes whatever was written before reporting it.
+ * Puts the files in the sandbox and returns them with the path they are at.
+ * A file the sandbox already has is not written again: paths are named after
+ * the content, so the same path holds the same bytes. Each file is written
+ * under a temporary name and moved into place, so an interrupted write never
+ * leaves a partial file that a later turn would take for a complete one. On
+ * failure, removes whatever this call wrote before reporting it.
  *
  * Relative paths are made absolute from the directory where commands run: each
  * provider resolves a relative path for `writeFiles` its own way, and the model
  * looks for the file with its command tool.
  */
-export async function writeFilesToSandbox<T extends SandboxUpload>(
+export async function uploadFiles<T extends SandboxUpload>(
   sandbox: WorkspaceSandbox,
   files: T[],
   abortSignal?: AbortSignal,
 ): Promise<T[]> {
-  let placed = files;
+  const token = globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+  let written: SandboxUpload[] = [];
   try {
-    const root = await createDirectories(sandbox, files, abortSignal);
-    placed = root ? files.map(file => ({ ...file, path: `${root.replace(/\/+$/, '')}/${file.path}` })) : files;
-    if (sandbox.writeFiles) await sandbox.writeFiles(placed.map(toSandboxFile), { abortSignal });
-    else await writeWithCommands(sandbox, placed, abortSignal);
+    const { root, existing } = await inspect(sandbox, files, abortSignal);
+    const placed = files.map(file => ({
+      ...file,
+      path: root ? `${root.replace(/\/+$/, '')}/${file.path}` : file.path,
+    }));
+    written = placed.filter((_, index) => !existing.has(files[index]!.path));
+    if (written.length > 0) await write(sandbox, written, token, abortSignal);
     return placed;
   } catch (error) {
-    const orphanPaths = await removeUploaded(sandbox, placed);
+    const orphanPaths = await removeUploaded(sandbox, written, token);
     throw new FileUploadError(FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED, 'Files could not be written to the sandbox.', {
       cause: describeError(error),
       ...(orphanPaths.length > 0 ? { orphanPaths } : {}),
@@ -74,21 +81,23 @@ export async function writeFilesToSandbox<T extends SandboxUpload>(
   }
 }
 
-const toSandboxFile = ({ path, content }: SandboxUpload) => ({ path, content });
-
 /**
- * Creates the upload directories and returns the directory where commands run,
- * in a single command. A sandbox that can't run commands only has its working
- * directory to go by; without either, paths stay relative.
+ * Creates the upload directories, and reads the directory where commands run
+ * and which files are already there, in a single command. A sandbox that can't
+ * run commands only has its working directory to go by, and every file is
+ * written; without either directory, paths stay relative.
  */
-async function createDirectories(
+async function inspect(
   sandbox: WorkspaceSandbox,
   files: SandboxUpload[],
   abortSignal?: AbortSignal,
-): Promise<string | undefined> {
-  if (!sandbox.executeCommand) return absolute(workingDirectoryOf(sandbox));
+): Promise<{ root?: string; existing: Set<string> }> {
+  if (!sandbox.executeCommand) return { root: absolute(workingDirectoryOf(sandbox)), existing: new Set() };
   const directories = directoriesOf(files).map(shellQuote).join(' ');
-  return absolute((await runScript(sandbox, `mkdir -p ${directories} && pwd`, abortSignal)).trim());
+  const paths = files.map(file => shellQuote(file.path)).join(' ');
+  const script = `mkdir -p ${directories} && pwd && for f in ${paths}; do if [ -e "$f" ]; then printf '%s\\n' "$f"; fi; done`;
+  const [root = '', ...existing] = (await runScript(sandbox, script, abortSignal)).split('\n');
+  return { root: absolute(root.trim()), existing: new Set(existing.map(line => line.trim()).filter(Boolean)) };
 }
 
 // Not part of the sandbox interface: `MastraSandbox` providers expose it, other sandboxes may not.
@@ -103,26 +112,60 @@ function directoriesOf(files: SandboxUpload[]): string[] {
   return [...new Set(files.map(file => file.path.slice(0, file.path.lastIndexOf('/'))))];
 }
 
+const temporaryPathOf = (file: SandboxUpload, token: string) => `${file.path}.${token}.part`;
+const encodedPathOf = (file: SandboxUpload, token: string) => `${file.path}.${token}.b64`;
+
+// Without commands nothing can be moved, so the file is written in place; it is
+// also never skipped then, so a partial write is replaced on the next turn.
+async function write(sandbox: WorkspaceSandbox, files: SandboxUpload[], token: string, abortSignal?: AbortSignal) {
+  if (!sandbox.writeFiles) return writeWithCommands(sandbox, files, token, abortSignal);
+  if (!sandbox.executeCommand) {
+    return sandbox.writeFiles(
+      files.map(({ path, content }) => ({ path, content })),
+      { abortSignal },
+    );
+  }
+  await sandbox.writeFiles(
+    files.map(file => ({ path: temporaryPathOf(file, token), content: file.content })),
+    { abortSignal },
+  );
+  const moves = files.map(file => `mv -f ${shellQuote(temporaryPathOf(file, token))} ${shellQuote(file.path)}`);
+  await runScript(sandbox, moves.join(' && '), abortSignal);
+}
+
 // `allSettled`, not `all`: a write still running after the first failure would
 // recreate its files right after they are removed.
-async function writeWithCommands(sandbox: WorkspaceSandbox, files: SandboxUpload[], abortSignal?: AbortSignal) {
-  const writes = await Promise.allSettled(files.map(file => writeOneWithCommands(sandbox, file, abortSignal)));
-  const rejected = writes.find(write => write.status === 'rejected');
+async function writeWithCommands(
+  sandbox: WorkspaceSandbox,
+  files: SandboxUpload[],
+  token: string,
+  abortSignal?: AbortSignal,
+) {
+  const writes = await Promise.allSettled(files.map(file => writeOneWithCommands(sandbox, file, token, abortSignal)));
+  const rejected = writes.find(result => result.status === 'rejected');
   if (rejected) throw rejected.reason;
 }
 
 // Base64 goes through the shell in chunks: a whole file would exceed the argument limit.
-async function writeOneWithCommands(sandbox: WorkspaceSandbox, file: SandboxUpload, abortSignal?: AbortSignal) {
+async function writeOneWithCommands(
+  sandbox: WorkspaceSandbox,
+  file: SandboxUpload,
+  token: string,
+  abortSignal?: AbortSignal,
+) {
   const target = shellQuote(file.path);
-  const encoded = shellQuote(encodedPathOf(file));
+  const temporary = shellQuote(temporaryPathOf(file, token));
+  const encoded = shellQuote(encodedPathOf(file, token));
   await runScript(sandbox, `: > ${encoded}`, abortSignal);
   for (const chunk of toBase64Chunks(file.content)) {
     await runScript(sandbox, `printf '%s' ${shellQuote(chunk)} >> ${encoded}`, abortSignal);
   }
-  await runScript(sandbox, `base64 -d < ${encoded} > ${target} && rm -f ${encoded}`, abortSignal);
+  await runScript(
+    sandbox,
+    `base64 -d < ${encoded} > ${temporary} && mv -f ${temporary} ${target} && rm -f ${encoded}`,
+    abortSignal,
+  );
 }
-
-const encodedPathOf = (file: SandboxUpload) => `${file.path}.b64`;
 
 function toBase64Chunks(content: Buffer): string[] {
   const base64 = content.toString('base64');
@@ -134,8 +177,9 @@ function toBase64Chunks(content: Buffer): string[] {
 }
 
 /** Best effort: returns the paths that may still exist because they could not be removed. */
-async function removeUploaded(sandbox: WorkspaceSandbox, files: SandboxUpload[]): Promise<string[]> {
-  const paths = files.flatMap(file => [file.path, encodedPathOf(file)]);
+async function removeUploaded(sandbox: WorkspaceSandbox, files: SandboxUpload[], token: string): Promise<string[]> {
+  if (files.length === 0) return [];
+  const paths = files.flatMap(file => [file.path, temporaryPathOf(file, token), encodedPathOf(file, token)]);
   try {
     await runScript(sandbox, `rm -f ${paths.map(shellQuote).join(' ')}`);
     return [];

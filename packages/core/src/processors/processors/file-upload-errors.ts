@@ -1,7 +1,5 @@
 /** Every reason the file upload processor can stop a turn, as reported in the tripwire metadata. */
 export const FILE_UPLOAD_ERROR_CODES = {
-  /** The agent has no memory, the call has no thread, or memory is read-only. */
-  MEMORY_REQUIRED: 'MEMORY_REQUIRED',
   /** The workspace has no sandbox, or resolved none for this request. */
   NO_SANDBOX: 'NO_SANDBOX',
   /** The sandbox supports neither `writeFiles` nor `executeCommand`. */
@@ -10,14 +8,12 @@ export const FILE_UPLOAD_ERROR_CODES = {
   INVALID_MAX_FILE_SIZE: 'INVALID_MAX_FILE_SIZE',
   /** `filter` threw, or returned something other than `true` or `false`. */
   INVALID_FILTER: 'INVALID_FILTER',
-  /** Inline file data could not be decoded. */
+  /** Inline data of a file of the current turn could not be decoded. */
   INVALID_FILE_DATA: 'INVALID_FILE_DATA',
-  /** A file is larger than the limit returned by `maxFileSize`. */
+  /** A file of the current turn is larger than the limit returned by `maxFileSize`. */
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   /** Writing to the sandbox failed. */
   UPLOAD_FAILED: 'UPLOAD_FAILED',
-  /** A file the filter accepts was still in the prompt right before the model call. */
-  FILE_NOT_UPLOADED: 'FILE_NOT_UPLOADED',
 } as const;
 
 export type FileUploadErrorCode = (typeof FILE_UPLOAD_ERROR_CODES)[keyof typeof FILE_UPLOAD_ERROR_CODES];

@@ -113,7 +113,6 @@ export {
   type FileUploadFilter,
   type FileUploadMaxFileSize,
   type FileUploadProcessorOptions,
-  type FileUploadRecord,
   type FileUploadTripwireMetadata,
 } from './file-upload';
 export {
