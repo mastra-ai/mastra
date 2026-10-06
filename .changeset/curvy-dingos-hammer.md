@@ -2,18 +2,6 @@
 'mastracode': minor
 ---
 
-Moved model-pack ownership into the Mastra Code TUI. The TUI now reapplies the active pack model when modes change and translates pack fallbacks into generic controller model routes. Per-thread, per-mode model overrides have been removed; mode-specific choices belong to the pack.
+Moved model-pack ownership into Mastra Code. Model choices now belong to the active pack instead of individual threads, and switching modes applies the pack's model for the new mode.
 
-**Before**
-
-```ts
-await session.thread.setSetting({ key: 'modeModelId_build', value: 'openai/gpt-5.6' });
-await session.mode.switch({ modeId: 'build' });
-```
-
-**After**
-
-```ts
-await switchModeWithPack(context, 'build');
-// The TUI resolves the active pack and persists one currentModelId.
-```
+To change a mode's model, open `/models`, select that mode, and update the active pack. Shift+Tab or `/mode` then applies the model configured for the selected mode. Existing per-thread, per-mode model overrides are no longer used.
