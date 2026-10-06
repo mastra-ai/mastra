@@ -626,12 +626,16 @@ describe('SourceControlStorage', () => {
     });
 
     it('is a no-op when re-run', async () => {
-      await seedDuplicateSlugProject();
+      const { project } = await seedDuplicateSlugProject();
       await domain.init();
       const before = await snapshot();
 
       await domain.init();
+      expect(await snapshot()).toEqual(before);
 
+      // Same when the project is selected again but its links already carry positions.
+      await backend.ops.updateMany('factory_projects', { id: project.id }, { sandbox_cpu_count: null });
+      await domain.init();
       expect(await snapshot()).toEqual(before);
     });
 

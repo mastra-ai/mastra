@@ -672,6 +672,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             if (!links.has(patch.projectRepositoryId))
               return context.json({ error: 'Project repository not found' }, 404);
           }
+          // A reorder must cover every link, or two links would share a position.
+          if (
+            repositoryPatches?.some(patch => patch.position !== undefined) &&
+            repositoryPatches.length !== links.size
+          ) {
+            return context.json({ error: 'invalid_environment' }, 400);
+          }
 
           let updated = project;
           if (Object.keys(projectInput).length > 0) {
