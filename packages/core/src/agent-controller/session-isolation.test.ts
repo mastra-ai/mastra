@@ -67,7 +67,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
+    await a.model.switch('cerebras/zai-glm-4.7');
 
     expect(a.model.get()).toBe('cerebras/zai-glm-4.7');
     // b still resolves its mode default, unaffected by a's override.

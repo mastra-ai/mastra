@@ -179,7 +179,7 @@ describe('runMC', () => {
       doStream: async () => ({ stream: textStream('Restored answer.') }),
     });
     const restoredThreadId = session.thread.getId()!;
-    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.model.switch('anthropic/restored-model');
     await session.thread.create();
 
     const [packModel] = await controller.listAvailableModels();
@@ -209,7 +209,7 @@ describe('runMC', () => {
       doStream: async () => ({ stream: textStream('Explicit answer.') }),
     });
     const restoredThreadId = session.thread.getId()!;
-    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.model.switch('anthropic/restored-model');
     await session.thread.create();
 
     const [explicitModel] = await controller.listAvailableModels();
@@ -239,7 +239,7 @@ describe('runMC', () => {
       doStream: async () => ({ stream: textStream('Alternate answer.') }),
     });
     const restoredThreadId = session.thread.getId()!;
-    await session.model.switch({ modelId: 'anthropic/restored-model' });
+    await session.model.switch('anthropic/restored-model');
     await session.thread.create();
 
     const [alternateModel] = await controller.listAvailableModels();

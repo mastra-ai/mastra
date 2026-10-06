@@ -769,7 +769,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   s.models.subagentModels = {};
 
   const currentModeId = ctx.state.session.mode.get();
-  const currentModeModel = ctx.state.session.model.get();
+  const currentModeModel = resolveModePackModels(s, pack)[currentModeId];
   const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
   const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
   const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
@@ -788,12 +788,10 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   const application = await applyPackToSession(ctx, pack.id, {
     settings: s,
+    // OpenAI API-key models do not accept the Codex-only `max` effort.
+    ...(shouldSetXhigh ? { thinkingLevel: 'xhigh' } : {}),
     afterApply: async () => {
       await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-      if (shouldSetXhigh) {
-        // OpenAI API-key models do not accept the Codex-only `max` effort.
-        await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
-      }
       saveSettings(s);
       ctx.state.fallbackStatus = undefined;
       updateStatusLine(ctx.state);

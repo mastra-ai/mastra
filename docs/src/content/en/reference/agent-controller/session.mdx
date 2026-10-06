@@ -559,13 +559,19 @@ Set the active model in memory without persisting it, reporting model use, or em
 session.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 
-### `session.model.switch({ modelId })`
+### `session.model.switch(modelId, options?)`
 
-Switch the session's active model. The model ID is persisted as the thread's `currentModelId` and restored with that thread. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event with `{ modelId }`.
+Switch the session's active model. The model ID is persisted as the thread's `currentModelId` and restored with that thread. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event.
+
+Pass `{ thinkingLevel }` as the second argument to switch and persist both values in one operation. The level must be `'off'`, `'low'`, `'medium'`, `'high'`, `'xhigh'`, or `'max'`, and the controller's state schema must accept it. Both live values are updated before events are emitted. Omitting the option preserves the existing thinking-level override. Every `model_changed` event includes the current `{ modelId, thinkingLevel }`, even when the thinking level is unchanged. The level is `undefined` when the session has no override.
 
 ```typescript
-await session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__', {
+  thinkingLevel: 'high',
+})
 ```
+
+The client SDK exposes the same operation as `session.switchModel(modelId, { thinkingLevel })`.
 
 ## Observational Memory
 

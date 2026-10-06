@@ -69,7 +69,7 @@ describe('hydrateSessionDefaultModel', () => {
     await hydrateSessionDefaultModel(session, dependencies);
 
     expect(dependencies.modelDefaults.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId });
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith(modelId);
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
