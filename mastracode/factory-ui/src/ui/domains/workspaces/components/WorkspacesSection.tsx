@@ -1,5 +1,15 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest, SquareKanban } from 'lucide-react';
@@ -14,7 +24,7 @@ import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePul
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { itemAwaitsPerson } from '../../factory/boardCardStatus';
+import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
@@ -72,8 +82,6 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  // Each sessions group starts on the viewer's own sessions and widens on its own, so showing
-  // everyone's sessions in one list never floods the other.
   const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
@@ -109,7 +117,6 @@ export function WorkspacesSection() {
     const item = workItemSession?.item;
     const pullRequest = item && latestPullRequestFor(item);
     const pullRequestNumber = pullRequest ? changeRequestNumberForItem(pullRequest) : undefined;
-    // The card names its provider; GitLab merge requests poll their own subscriptions route.
     const provider = pullRequest?.source === 'gitlab-pr' ? ('gitlab' as const) : ('github' as const);
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
@@ -145,18 +152,13 @@ export function WorkspacesSection() {
     const mineOnly = ownerScope[review ? 'review' : 'work'];
     const all = rows
       .filter(row => row.review === review)
-      // Unknown viewer (auth disabled) has no "own" sessions, so the scope stays off.
       .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
       .sort(bySessionPriority);
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
-    // Deep links and board handoffs can open a session that sorts below the fold;
-    // show it rather than promote it, so the list never moves under the reader.
     const open = all.find(row => row.active);
     if (open && !visible.includes(open)) visible.push(open);
     return { visible, all };
   };
-  // Whether a group exists at all is decided before the owner scope, so an empty filtered
-  // list keeps its heading and toggle instead of stranding the reader with no way back.
   const hasWorkRows = rows.some(row => !row.review);
   const hasReviewRows = rows.some(row => row.review);
   const workRows = latestRows(false);
@@ -184,11 +186,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    // A workspace's thread id is its own session id (FactoryStartCoordinator
-    // seeds the session with threadId = sessionId), so navigate straight there
-    // instead of blocking on a session create + thread listing round-trip. The
-    // thread page brings the session online on mount and shows a skeleton while
-    // its messages load.
     void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${workspace.sessionId}`, {
       state: { from: location },
     });
@@ -241,30 +238,26 @@ export function WorkspacesSection() {
       )}
 
       {confirmDelete && (
-        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
-          <DialogContent className="w-full max-w-sm" aria-label="Delete workspace">
-            <DialogHeader className="px-5 pt-4 pb-2">
+        <Dialog
+          open
+          onOpenChange={open => !open && setConfirmDelete(null)}
+          intent="destructive"
+          pending={deleteWorkspace.isPending}
+        >
+          <DialogContent size="sm" aria-label="Delete workspace">
+            <DialogHeader>
               <DialogTitle>Delete workspace?</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+              <DialogDescription>
                 This deletes the <span className="text-foreground">{confirmDelete.branch}</span> checkout and its
                 uncommitted changes. This can’t be undone. Threads from this workspace are kept.
-              </Txt>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
-                  onClick={confirmDeleteWorkspace}
-                  disabled={deleteWorkspace.isPending}
-                >
-                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
-                </Button>
-              </div>
-            </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={confirmDeleteWorkspace}>
+                {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
+              </DialogAction>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
@@ -364,26 +357,24 @@ function WorkspaceGroup({
             }}
             onSelect={() => onSelect(row.workspace)}
             onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
-            // The DELETE route is owner-only and 404s for non-owners, which the
-            // delete service treats as an idempotent success; offering delete
-            // on a known non-owned row would fake-succeed and the row would
-            // reappear. Unknown viewer (auth disabled) keeps it.
             onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>
       {visibleRows.length === 0 ? (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground m-0 pl-3">
+        <Txt as="p" variant="caption" tone="muted" role="status" className="m-0 pl-3">
           No sessions of your own.
         </Txt>
       ) : null}
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
+          className={cn('text-muted-foreground', 'hover:text-foreground pl-3 text-left')}
         >
-          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          <Txt as="span" variant="caption" className="block">
+            {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          </Txt>
         </button>
       )}
     </section>

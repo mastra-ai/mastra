@@ -87,7 +87,13 @@ export class FileTransport extends LoggerTransport {
       const logs = readFileSync(this.path, 'utf8')
         .split('\n')
         .filter(Boolean)
-        .map(log => JSON.parse(log));
+        .flatMap(line => {
+          try {
+            return [JSON.parse(line)];
+          } catch {
+            return [];
+          }
+        });
 
       let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
 

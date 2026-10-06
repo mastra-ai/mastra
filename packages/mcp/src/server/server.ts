@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { Agent, ToolsInput } from '@mastra/core/agent';
@@ -201,7 +200,7 @@ export class MCPServer extends MCPServerBase {
   private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
     let key = options?.key;
     if (key === undefined) {
-      key = randomBytes(32);
+      key = globalThis.crypto.getRandomValues(new Uint8Array(32));
       this.logger.warn(
         'No requestState.key configured: continuation state is signed with a per-process key, so a suspended request can only be resumed on this process. Set requestState.key in multi-instance and serverless deployments.',
       );
@@ -495,7 +494,14 @@ export class MCPServer extends MCPServerBase {
 
   private createServerInstance(): Server {
     const server = new Server(
-      { name: this.name, version: this.version },
+      {
+        name: this.name,
+        version: this.version,
+        title: this.title,
+        description: this.description,
+        websiteUrl: this.websiteUrl,
+        icons: this.icons,
+      },
       {
         capabilities: this.capabilities(),
         instructions: this.instructions,

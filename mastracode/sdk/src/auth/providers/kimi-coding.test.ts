@@ -136,6 +136,7 @@ describe('Kimi For Coding OAuth', () => {
       expect(onAuth).toHaveBeenCalledWith({
         url: 'https://auth.kimi.com/device?user_code=ABCD-1234',
         instructions: 'Enter code: ABCD-1234',
+        userCode: 'ABCD-1234',
       });
     } finally {
       vi.useRealTimers();

@@ -672,6 +672,21 @@ describe('DockerSandbox', () => {
       expect(explicit.workingDirectory).toBe('/custom');
     });
 
+    it('reports the reconnected container image instead of the default', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        Config: { Image: 'python:3.12-slim' },
+      });
+
+      const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
+      await sandbox._start();
+
+      expect((await sandbox.getInfo()).metadata?.image).toBe('python:3.12-slim');
+      expect(sandbox.getInstructions()).toContain('image: python:3.12-slim');
+    });
+
     it('should warn when requested hardening options differ on reconnect', async () => {
       mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
       mockContainer.inspect.mockResolvedValue({
@@ -1202,6 +1217,87 @@ describe('DockerSandbox', () => {
       expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
       expect(result.timedOut).not.toBe(true);
       expect(result.exitCode).toBe(0);
+    });
+
+    describe('UTF-8 decoding across multiplexed frames', () => {
+      // Docker multiplexed frame: 8-byte header (stream type, then payload size).
+      const frame = (type: 1 | 2, bytes: number[]) => {
+        const header = Buffer.alloc(8);
+        header[0] = type;
+        header.writeUInt32BE(bytes.length, 4);
+        return Buffer.concat([header, Buffer.from(bytes)]);
+      };
+
+      it('preserves multibyte characters split across interleaved stdout and stderr frames', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const stdoutChunks: string[] = [];
+        const stderrChunks: string[] = [];
+        const handle = await sandbox.processes!.spawn('emit', {
+          stdinMode: 'ignore',
+          onStdout: data => stdoutChunks.push(data),
+          onStderr: data => stderrChunks.push(data),
+        });
+
+        // € = E2 82 AC, 😀 = F0 9F 98 80
+        stream.write(frame(1, [0xe2]));
+        stream.write(frame(2, [0xf0, 0x9f]));
+        stream.write(frame(1, [0x82, 0xac]));
+        // Also split this frame itself across two chunks.
+        const last = frame(2, [0x98, 0x80]);
+        stream.write(last.subarray(0, 9));
+        stream.write(last.subarray(9));
+        stream.end();
+
+        const result = await handle.wait();
+        expect(result.stdout).toBe('€');
+        expect(result.stderr).toBe('😀');
+        expect(result.exitCode).toBe(0);
+        expect(stdoutChunks.join('')).toBe('€');
+        expect(stderrChunks.join('')).toBe('😀');
+        expect([...stdoutChunks, ...stderrChunks]).not.toContain('');
+      });
+
+      it('flushes an incomplete trailing sequence when the stream ends', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const handle = await sandbox.processes!.spawn('emit', { stdinMode: 'ignore' });
+
+        stream.write(frame(1, [0x61, 0xe2]));
+        stream.end();
+
+        const result = await handle.wait();
+        expect(result.stdout).toBe('a\uFFFD');
+      });
+
+      it('keeps flushed stderr instead of the fallback when the stream errors', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const handle = await sandbox.processes!.spawn('emit', { stdinMode: 'ignore' });
+
+        stream.write(frame(2, [0xe2]));
+        await new Promise(resolve => setImmediate(resolve));
+        stream.emit('error', new Error('ECONNRESET'));
+
+        const result = await handle.wait();
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toBe('\uFFFD');
+      });
     });
 
     it('should close the writable side of the exec stream to signal EOF', async () => {

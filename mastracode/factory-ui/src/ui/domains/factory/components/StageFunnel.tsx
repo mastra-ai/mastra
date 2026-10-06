@@ -35,7 +35,8 @@ interface StripStyle extends CSSProperties {
   '--stages'?: number;
 }
 
-const HATCH = `repeating-linear-gradient(-45deg, ${AGENT_COLOR} 0 2.25px, transparent 2.25px 6px)`;
+const HATCH =
+  'repeating-linear-gradient(-45deg, var(--badge-purple-edge) 0 2.25px, var(--badge-purple-subtle) 2.25px 6px)';
 
 function percent(part: number, whole: number): number {
   return whole === 0 ? 0 : Math.round((part / whole) * 100);
@@ -49,11 +50,13 @@ function rungLabel(stage: string): string {
 function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <>
-      <span className="text-meta text-muted-foreground flex items-center gap-1.5">
+      <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-1.5">
         <Icon aria-hidden className="text-placeholder size-3.5 shrink-0" />
         {label}
-      </span>
-      <span className="text-meta text-foreground text-right tabular-nums">{value}</span>
+      </Txt>
+      <Txt as="span" variant="meta" tone="ink" className="text-right tabular-nums">
+        {value}
+      </Txt>
     </>
   );
 }
@@ -61,7 +64,9 @@ function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; va
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <span className="flex flex-col gap-2">
-      <span className="text-foreground">{title}</span>
+      <Txt as="span" variant="caption" tone="ink">
+        {title}
+      </Txt>
       <span className="grid grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-1">{children}</span>
     </span>
   );
@@ -136,7 +141,6 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
   return (
     <div
       role="tooltip"
-      className="bg-card shadow-overlay text-caption text-foreground animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -144,6 +148,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
         translate: `${shift(cursor.flipX)} ${shift(cursor.flipY)}`,
         transformOrigin: `${cursor.flipX ? 'right' : 'left'} ${cursor.flipY ? 'bottom' : 'top'}`,
       }}
+      className="text-foreground bg-card shadow-overlay animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
     >
       {children}
     </div>
@@ -152,10 +157,10 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
 
 function Key({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span className="text-meta text-muted-foreground flex items-center gap-1.5">
+    <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-1.5">
       {children}
       {label}
-    </span>
+    </Txt>
   );
 }
 
@@ -191,10 +196,12 @@ export function StageFunnel({
   funnel,
   pullRequests,
   merged,
+  emptyState,
 }: {
   funnel: FunnelStage[];
   pullRequests: number;
   merged: number;
+  emptyState?: ReactNode;
 }) {
   const down = useMaybeSidebarState()?.isMobile ?? false;
   const hatchId = useId();
@@ -207,6 +214,7 @@ export function StageFunnel({
   const done = funnel.at(-1)?.reached ?? 0;
 
   if (entered === 0) {
+    if (emptyState) return emptyState;
     return (
       <Txt as="p" variant="caption" className={EMPTY}>
         Nothing new in this window
@@ -236,16 +244,14 @@ export function StageFunnel({
             <div key={step.stage} className={`flex min-w-0 flex-col gap-1 ${down ? 'justify-center' : ''}`}>
               <span className="flex min-w-0 items-center gap-1.5">
                 {stage ? <BoardStageIcon stage={stage} /> : null}
-                <Txt as="span" variant="meta" className="text-foreground truncate font-semibold">
+                <Txt tone="ink" as="span" variant="meta" className="truncate">
                   {rungLabel(step.stage)}
                 </Txt>
               </span>
-              <span
-                className={`text-foreground leading-none font-semibold tracking-tight tabular-nums ${down ? 'text-[1.5rem]' : 'text-[clamp(1.25rem,2.5cqw,2rem)]'}`}
-              >
+              <Txt as="span" variant="lead" tone="ink" className={`tabular-nums ${down ? '' : ''}`}>
                 {step.reached}
-              </span>
-              <Txt as="span" variant="meta" className="text-muted-foreground truncate tabular-nums">
+              </Txt>
+              <Txt tone="muted" as="span" variant="meta" className="truncate tabular-nums">
                 {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
@@ -272,12 +278,12 @@ export function StageFunnel({
         >
           <defs>
             <linearGradient id={coreId} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={AGENT_COLOR} stopOpacity="0.5" />
-              <stop offset="100%" stopColor={AGENT_COLOR} stopOpacity="0.95" />
+              <stop offset="0%" stopColor="var(--chart-sequential-5)" />
+              <stop offset="100%" stopColor={AGENT_COLOR} />
             </linearGradient>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="6" height="6" fill={AGENT_COLOR} fillOpacity="0.1" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke={AGENT_COLOR} strokeOpacity="0.45" strokeWidth="2.25" />
+              <rect width="6" height="6" fill="var(--badge-purple-subtle)" />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--badge-purple-edge)" strokeWidth="2.25" />
             </pattern>
             {funnel.map((step, index) => (
               <clipPath key={step.stage} id={`${clipId}-${index}`}>
@@ -383,17 +389,17 @@ export function StageFunnel({
           <span className="h-2 w-4 rounded-full opacity-50" style={{ backgroundColor: HUMAN_COLOR }} />
         </Key>
         <Key label="left the flow">
-          <span className="h-2 w-4 rounded-full opacity-60" style={{ backgroundImage: HATCH }} />
+          <span className="h-2 w-4 rounded-full" style={{ backgroundImage: HATCH }} />
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (
-            <Txt as="span" variant="meta" className="text-muted-foreground tabular-nums">
+            <Txt tone="muted" as="span" variant="meta" className="tabular-nums">
               {[`${pullRequests} opened a pull request`, merged > 0 ? `${merged} merged` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </Txt>
           ) : null}
-          <Txt as="span" variant="meta" className="text-muted-foreground">
+          <Txt tone="muted" as="span" variant="meta">
             created in this window, by furthest stage reached
           </Txt>
         </span>

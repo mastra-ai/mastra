@@ -7,12 +7,17 @@ import { clerkProvider } from './clerk/index.js';
 import { discordProvider } from './discord/index.js';
 import { firefliesProvider } from './fireflies/index.js';
 import { githubProvider } from './github/index.js';
+import { googleAnalyticsProvider } from './google-analytics/index.js';
 import { googleCalendarProvider } from './google-calendar/index.js';
+import { googleDocsProvider } from './google-docs/index.js';
+import { googleDriveProvider } from './google-drive/index.js';
 import { googleMailProvider } from './google-mail/index.js';
+import { googleSheetProvider } from './google-sheet/index.js';
 import { hubspotProvider } from './hubspot/index.js';
 import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
+import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
 import { posthogProvider } from './posthog/index.js';
@@ -30,12 +35,17 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   discordProvider,
   firefliesProvider,
   githubProvider,
+  googleAnalyticsProvider,
   googleCalendarProvider,
+  googleDocsProvider,
+  googleDriveProvider,
   googleMailProvider,
+  googleSheetProvider,
   hubspotProvider,
   incidentIoProvider,
   jiraProvider,
   linearProvider,
+  microsoftTeamsProvider,
   notionProvider,
   openaiProvider,
   posthogProvider,

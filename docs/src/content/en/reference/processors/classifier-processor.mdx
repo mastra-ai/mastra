@@ -15,14 +15,12 @@ Abort reasons are always the string supplied by the caller. Provider-generated t
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { ClassifierProcessor } from '@mastra/core/processors'
 
 const safety = new Classifier({
   id: 'safety',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     unsafe: {
       type: 'boolean',
@@ -156,12 +154,12 @@ Messages with no text content are passed through without calling the classifier.
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { ClassifierProcessor } from '@mastra/core/processors'
 
 const topic = new Classifier({
   id: 'topic',
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     topic: {
       type: 'choice',
@@ -198,12 +196,12 @@ export const agent = new Agent({
 ```typescript title="src/mastra/agents/quality-gated-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { ClassifierProcessor } from '@mastra/core/processors'
 
 const quality = new Classifier({
   id: 'quality',
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     quality: {
       type: 'score',
@@ -236,13 +234,13 @@ Register the classifier on the `Mastra` instance and reference it by key or ID. 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 export const mastra = new Mastra({
   classifiers: {
     safety: new Classifier({
       id: 'safety',
-      model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+      model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
       questions: {/* ... */},
     }),
   },

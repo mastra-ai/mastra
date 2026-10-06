@@ -1,6 +1,6 @@
+import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks/agents';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@/domains/agents/hooks/use-background-tasks';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
@@ -32,10 +32,10 @@ const BackgroundTaskMetadata = ({
   open,
   onOpenChange,
 }: BackgroundTaskMetadataProps) => {
-  const { data: task } = useGetBackgroundTaskById(
-    backgroundTaskTaskId,
-    !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt,
-  );
+  const { data: task } = useGetBackgroundTaskById({
+    backgroundTaskId: backgroundTaskTaskId,
+    queryOptions: { enabled: !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt },
+  });
   const { tasks } = useBackgroundTaskStream({
     taskId: backgroundTaskTaskId,
     enabled: !backgroundTaskCompletedAt && !backgroundTaskSuspendedAt,
@@ -91,10 +91,10 @@ const BackgroundTaskMetadata = ({
           <DialogDescription>View the metadata of the background task.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody>
           <div className="space-y-2">
             <Txt tone="muted">Background Task Duration</Txt>
-            <Txt tone="ink" className="text-body">
+            <Txt variant="body" tone="ink">
               {toSigFigs(timeDiff, 3)}ms
             </Txt>
           </div>

@@ -1,6 +1,6 @@
 import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 import { useAgentControllerPermissions } from '../../../../hooks/useAgentControllerPermissions';
 import { useSetPermissionForCategoryMutation } from '../../../../hooks/useAgentControllerPermissionMutations';
@@ -16,7 +16,6 @@ interface ChatPermissionsProviderProps {
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
   const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
     useChatSessionContext();
-  const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const commonArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -39,18 +38,16 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
   });
 
   const setPermissionForCategory = async (category: ToolCategory, policy: PermissionPolicy) => {
-    setPendingPermissionCategory(category);
     try {
       await setPermissionForCategoryMutation.mutateAsync({ category, policy });
-    } finally {
-      setPendingPermissionCategory(null);
+    } catch {
+      toast.error('Could not update the permission. Please try again.');
     }
   };
 
   const value: ChatPermissionsApi = {
     permissions: permissionsQuery.data,
     permissionsLoading: permissionsQuery.isLoading,
-    pendingPermissionCategory,
     setPermissionForCategory,
   };
 

@@ -148,7 +148,6 @@ describe('buildTracesDrilldownUrl', () => {
       preset: '24h',
       dashboardFilter: {
         entityName: 'analyst',
-        entityId: 'entity-1',
         threadId: 'thread-1',
         resourceId: 'resource-1',
         runId: 'run-1',
@@ -167,7 +166,6 @@ describe('buildTracesDrilldownUrl', () => {
 
     expect(Object.fromEntries([...params].filter(([key]) => key.startsWith('filter')))).toEqual({
       filterEntityName: 'analyst',
-      filterEntityId: 'entity-1',
       filterThreadId: 'thread-1',
       filterResourceId: 'resource-1',
       filterRunId: 'run-1',

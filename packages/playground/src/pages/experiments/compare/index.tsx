@@ -7,10 +7,10 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentsComparison } from '@/domains/experiments';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
@@ -38,8 +38,16 @@ function CompareExperimentsPage() {
 
   // Fetch each experiment by id: the global list is paginated and may not contain them.
   // The server 404s when an experiment does not belong to `datasetId`, which enforces same-dataset comparison.
-  const experimentA = useDatasetExperiment(datasetId, experimentIdA);
-  const experimentB = useDatasetExperiment(datasetId, experimentIdB);
+  const experimentA = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const experimentB = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
   const isLoading = experimentA.isLoading || experimentB.isLoading;
   const error = experimentA.error ?? experimentB.error;
 
@@ -68,10 +76,10 @@ function CompareExperimentsPage() {
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
             <p>Select two experiments to compare.</p>
-            <p className="mt-2 text-body">
+            <Txt className="mt-2">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
-            </p>
+            </Txt>
           </div>
         </div>
       </PageLayout>
@@ -102,13 +110,13 @@ function CompareExperimentsPage() {
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
-            <p className="mt-2 flex items-center justify-center gap-2 text-body">
+            <Txt className="mt-2 flex items-center justify-center gap-2">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />
               and
               <ExperimentIdLink experimentId={experimentIdB} />
               was not found in it.
-            </p>
+            </Txt>
           </div>
         </div>
       </PageLayout>
@@ -126,11 +134,11 @@ function CompareExperimentsPage() {
                 Experiments comparison
               </Txt>
 
-              <p className="flex items-center gap-2 text-caption text-muted-foreground">
+              <Txt variant="caption" tone="muted" className="flex items-center gap-2">
                 <ExperimentIdLink experimentId={experimentIdA} />
                 and
                 <ExperimentIdLink experimentId={experimentIdB} />
-              </p>
+              </Txt>
             </div>
 
             <Tooltip>

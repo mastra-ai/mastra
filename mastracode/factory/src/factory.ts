@@ -53,6 +53,8 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
+import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
@@ -552,7 +554,7 @@ export class MastraFactory {
       if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
         throw new Error(
           `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })\n` +
+            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
             `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
         );
       }
@@ -820,7 +822,15 @@ export class MastraFactory {
           }
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
-      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      ...(workItemsReady
+        ? {
+            workItems: workItemsStorage,
+            controller: {
+              getSessionByResource: async (resourceId: string) =>
+                this.#prepared?.base.controller.getSessionByResource(resourceId),
+            },
+          }
+        : {}),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -1100,6 +1110,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
+                          boards: this.#boards,
                           audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
@@ -1229,6 +1240,23 @@ export class MastraFactory {
                     memorySettings: memorySettingsStorage,
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
+                ...(githubIntegration
+                  ? {
+                      dismissStaleReviews: async decision => {
+                        await dismissStaleFactoryReviews(
+                          githubIntegration.versionControl,
+                          decision,
+                          login => isFactoryGithubLogin(githubIntegration, login),
+                          login =>
+                            trustedCollaborator(githubIntegration, {
+                              installationId: decision.installationId,
+                              repository: decision.repository,
+                              login,
+                            }),
+                        );
+                      },
+                    }
+                  : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;

@@ -2041,6 +2041,28 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/traces/aggregate": {
+    "method": "POST",
+    "path": "/observability/traces/aggregate",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "groupBy",
+      "having",
+      "interval",
+      "limit",
+      "measures",
+      "orderBy",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rows"
+    }
+  },
   "POST /observability/threads/query": {
     "method": "POST",
     "path": "/observability/threads/query",
@@ -2056,6 +2078,25 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "threads",
+      "paginationProperty": "page"
+    }
+  },
+  "POST /observability/spans/query": {
+    "method": "POST",
+    "path": "/observability/spans/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "orderBy",
+      "page",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "spans",
       "paginationProperty": "page"
     }
   },
@@ -6253,6 +6294,21 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /channels/:platform/:agentId/reconcile": {
+    "method": "POST",
+    "path": "/channels/:platform/:agentId/reconcile",
+    "pathParams": [
+      "platform",
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }

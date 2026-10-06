@@ -98,7 +98,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(
+export function hashConfig(
   opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
   baseUrl: string,
   resolvedAppName: string,
@@ -1133,7 +1133,7 @@ export class SlackProvider implements ChannelProvider {
     const config = options ?? {};
 
     // Generate unique webhook ID for this installation
-    const webhookId = crypto.randomUUID();
+    const webhookId = globalThis.crypto.randomUUID();
 
     // Build manifest using the manifest builder (includes proper default scopes)
     const appName = config.name ?? agent?.name ?? agentId;
@@ -1178,7 +1178,7 @@ export class SlackProvider implements ChannelProvider {
     }
 
     // Generate installation ID
-    const installationId = crypto.randomUUID();
+    const installationId = globalThis.crypto.randomUUID();
 
     // Build authorization URL using the scopes from the manifest
     const scopes = manifest.oauth_config?.scopes?.bot?.join(',') ?? '';
@@ -1193,7 +1193,13 @@ export class SlackProvider implements ChannelProvider {
     const authorizationUrl = authUrl.toString();
 
     // Store pending installation (includes auth URL for UI to fetch later)
-    const configHash = hashConfig(config, baseUrl, appName, appDescription);
+    // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
+    const configHash = hashConfig(
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
+      baseUrl,
+      appName,
+      appDescription,
+    );
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
@@ -1253,6 +1259,16 @@ export class SlackProvider implements ChannelProvider {
         // Remove adapter and command handlers
         this.#adapters.delete(installation.id);
         this.#slashCommands.delete(installation.webhookId);
+      } else if (record.status === 'pending') {
+        // A pending installation already minted a real Slack app via the
+        // manifest API (OAuth was just never completed). Delete that app too,
+        // otherwise it is orphaned in the Slack workspace.
+        try {
+          const pending = this.#decryptPendingInstallation(this.#parsePendingInstallation(record));
+          await client.deleteApp(pending.appId);
+        } catch (err) {
+          console.warn(`[Slack] Failed to delete pending Slack app for "${agentId}":`, err);
+        }
       }
 
       // Remove from storage (active, pending, or error)

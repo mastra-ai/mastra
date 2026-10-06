@@ -115,6 +115,16 @@ describe('Conversation Handlers', () => {
     });
   });
 
+  it('generates a UUID for a conversation without an explicit id', async () => {
+    const conversation = await CREATE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agent_id: 'test-agent',
+    });
+
+    expect(conversation.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(conversation.thread.id).toBe(conversation.id);
+  });
+
   it('lists conversation items derived from thread messages', async () => {
     const thread = await memory.createThread({
       threadId: 'conv_456',

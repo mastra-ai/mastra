@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, numbered pages, keyset cursors, and delta polling.'
+description: 'Query completed traces, thread identities, and spans with recursive predicates, numbered pages, keyset cursors, and delta polling.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -10,13 +10,124 @@ packages:
 
 Use `queryTraces()` or `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span, score, or feedback records. Use `queryTraceThreads()` or `POST /api/observability/threads/query` to find thread identities that qualify across multiple eligible traces.
 
-Both endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query or thread-query operation.
+Use `querySpans()` or `POST /api/observability/spans/query` to list the individual completed spans that match a span predicate.
+
+All three endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query, thread-query, or span-query operation.
 
 :::warning[Thread grouping is deprecated]
 
 The `group` option remains supported until the next major release. Use [`queryTraceThreads()`](/reference/client-js/observability) to retrieve matching thread identities in new code.
 
 :::
+
+## Query individual spans
+
+`querySpans()` returns one row per matching completed span across traces, including matching child spans. Use it to list the spans themselves, for example every failed tool call in the last day.
+
+`queryTraces()` with a `spans.some` predicate answers a different question. It returns the traces that contain at least one matching span, and it doesn't identify which spans matched. Both use the same span fields and operators.
+
+```typescript
+const timeRange = {
+  from: '2026-10-01T00:00:00.000Z',
+  to: '2026-10-02T00:00:00.000Z',
+}
+const where = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+    { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  ],
+} as const
+
+const firstPage = await mastraClient.querySpans({
+  timeRange,
+  where,
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 50 },
+})
+
+if (firstPage.page.next) {
+  const secondPage = await mastraClient.querySpans({
+    timeRange,
+    where,
+    orderBy: [{ field: 'startedAt', direction: 'desc' }],
+    page: { limit: 50, after: firstPage.page.next },
+  })
+}
+```
+
+The HTTP route accepts the same body:
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/spans/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-10-01T00:00:00.000Z",
+      "to": "2026-10-02T00:00:00.000Z"
+    },
+    "where": { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+    "page": { "limit": 50 }
+  }'
+```
+
+Span queries are optional for observability stores. Call `mastraClient.getObservabilityCapabilities()` and check `capabilities.spanQuery` before showing a span list. Treat a missing `spanQuery` value as unsupported, because older servers don't report it. A server whose store or `@mastra/core` version doesn't support span queries returns `501` with code `SPAN_QUERY_UNSUPPORTED`.
+
+The other statuses match trace queries: `400` for malformed JSON or a malformed cursor, `409` for a cursor that doesn't match the query, `413` for a body over 256 KiB, `422` with code `TRACE_QUERY_INVALID` and structured `issues` for an invalid query, `503` with code `TRACE_QUERY_RESOURCE_LIMIT` when a page exceeds a resource limit, and `504` with code `TRACE_QUERY_EXECUTION_TIMEOUT` when the database deadline is exceeded.
+
+The server applies [trusted tenant scope](#trusted-tenant-scope) to span queries the same way it does for trace queries. A cursor created under one scope and reused under another returns `409`.
+
+### Query individual spans through storage
+
+The observability domain in DuckDB and the PostgreSQL and ClickHouse v-next stores supports `querySpans(plan)`. Check `storage.getFeatures()?.includes('span-query')` before using this optional storage method.
+
+Build the plan in trusted backend code:
+
+```typescript
+import { planSpanQuery } from '@mastra/core/storage'
+
+const storage = await mastra.getStorage()?.getStore('observability')
+if (!storage?.getFeatures()?.includes('span-query')) {
+  throw new Error('This store does not support span queries')
+}
+
+const plan = planSpanQuery({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'eq',
+    left: { path: 'spanType' },
+    right: { literal: 'tool_call' },
+  },
+  page: { limit: 50 },
+})
+
+const { spans, page } = await storage.querySpans(plan)
+```
+
+This example uses local, unscoped storage. For a shared database, pass `{ scope: { organizationId, resourceId } }` as the second argument to `planSpanQuery()`, using identifiers resolved by your backend's authorization. The request body can't supply trusted scope. Apply the same authorization when loading full span details with `getSpan({ traceId, spanId })`.
+
+Span queries use the scalar fields and operators available inside `queryTraces()`'s `spans.some` predicate. They don't accept related-record clauses. Nested attributes require support in the shared predicate contract and each store.
+
+The `timeRange` applies to each span's `startedAt`, includes `from`, excludes `to`, and can cover at most 31 days. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
+
+Each row contains span and trace identifiers, display fields, duration, status, and input/output previews of at most 256 Unicode characters. Truncation flags indicate when a preview is incomplete. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
+
+The `cost` field describes only that span's model-token cost:
+
+- `available` includes `amount` and `currency`. Zero is a valid amount.
+- `missing` means no matching model metrics were found.
+- `unavailable` means metrics exist but a complete, unambiguous cost can't be established.
+
+Directional token totals supply the cost. Overlapping detail metrics aren't added again. A provider-supplied `query_total` cost is counted once. Partial pricing, conflicting currencies, and ambiguous totals produce `unavailable`.
+
+Current-record selection runs before mutable filters. PostgreSQL and ClickHouse select the greatest completed `endedAt`. PostgreSQL breaks ties with its ingestion cursor. DuckDB reconstructs the earliest start event and selects the latest ingested completed event, matching its existing span-predicate behavior. Time bounds are checked again after reconstruction. ClickHouse uses its existing completion-only, insert-only model, where equal-version retries must contain identical records. Querying spans doesn't add a table or materialized view.
+
+Queries have a 15-second default execution deadline. PostgreSQL and ClickHouse use their existing `traceQuery.timeoutMs` setting. ClickHouse also caps each query at 512 MiB. A page with more than 50,000 matching model metrics fails with a resource-limit error instead of returning partial cost. A small page size limits returned rows, but doesn't limit the number of records the database must examine.
 
 ## Query traces with the client SDK
 
@@ -708,7 +819,7 @@ const plan = planTraceQuery(parseTraceQueryRequest(request), {
 })
 ```
 
-`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `projectId` in predicates. An `organizationId` predicate compares recorded data and is ANDed with the scope, so it can only narrow the tenant's own traces and never widens it. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope. A cursor created under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `projectId` in predicates. An `organizationId` predicate compares recorded data and is ANDed with the scope, so it can only narrow the tenant's own traces and never widens it. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
@@ -726,7 +837,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
+Trace and thread queries consider completed traces only, and span queries consider completed spans only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
 
 ## Related
 

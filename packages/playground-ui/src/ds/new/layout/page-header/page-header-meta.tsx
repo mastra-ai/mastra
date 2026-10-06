@@ -11,12 +11,13 @@ export function PageHeaderMeta({ beside = false, className, ...props }: PageHead
     <div
       data-slot="page-header-meta"
       data-placement={beside ? 'beside' : 'below'}
+      {...props}
       className={cn(
-        'flex min-w-0 flex-wrap items-center gap-2 text-meta text-muted-foreground',
-        beside ? 'col-start-[meta] row-start-1 self-center justify-self-start' : 'col-[title/end]',
+        'text-meta text-muted-foreground',
+        'flex min-w-0 flex-wrap items-center gap-2',
+        beside && 'min-h-6 shrink-0',
         className,
       )}
-      {...props}
     />
   );
 }

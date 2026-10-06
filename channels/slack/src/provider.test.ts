@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import type { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
-import { SlackProvider, stripTrailingSlash, resolveSlackAdapterConfig } from './provider';
+import { SlackManifestClient } from './client';
+import { SlackProvider, stripTrailingSlash, resolveSlackAdapterConfig, hashConfig } from './provider';
+import type { SlackConnectOptions } from './types';
 
 describe('connect object form', () => {
   it('requires a name when connecting without an agent id', async () => {
@@ -44,5 +48,87 @@ describe('resolveSlackAdapterConfig', () => {
   it('omits textFormat when unset so the core default governs', () => {
     const resolved = resolveSlackAdapterConfig({});
     expect('textFormat' in resolved).toBe(false);
+  });
+});
+
+describe('connect config hash', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('stores a hash that config drift detection reproduces from the stored installation', async () => {
+    vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A1',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      baseUrl: 'https://example.com',
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+    } as unknown as Mastra);
+
+    await provider.connect({
+      id: 'agent-1',
+      name: 'Helper',
+      description: 'Helps',
+      slashCommands: ['/ask', { command: '/summarize', description: 'Summarize a thread' }],
+    });
+
+    const channels = (await store.getStore('channels'))!;
+    const [record] = (await channels.listInstallations('slack')) as Array<{
+      configHash?: string;
+      data: { slashCommands?: SlackConnectOptions['slashCommands'] };
+    }>;
+
+    expect(record?.configHash).toBe(
+      hashConfig({ slashCommands: record!.data.slashCommands }, 'https://example.com', 'Helper', 'Helps'),
+    );
+  });
+});
+
+describe('disconnect', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('deletes the minted Slack app when disconnecting a pending installation', async () => {
+    vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A-PENDING',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+    const deleteApp = vi.spyOn(SlackManifestClient.prototype, 'deleteApp').mockResolvedValue(undefined as never);
+
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      baseUrl: 'https://example.com',
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+    } as unknown as Mastra);
+
+    await provider.connect({ id: 'agent-1', name: 'Helper' });
+    expect(await provider.listInstallations()).toHaveLength(1);
+
+    await provider.disconnect('agent-1');
+
+    // The pending installation already minted a real Slack app; disconnect
+    // must delete it rather than orphaning it in the workspace.
+    expect(deleteApp).toHaveBeenCalledWith('A-PENDING');
+    expect(await provider.listInstallations()).toHaveLength(0);
   });
 });

@@ -1980,7 +1980,7 @@ describe('ModelSpanTracker', () => {
       modelSpan.end();
     });
 
-    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+    it('applies inference context (parameters / providerOptions / availableTools / tools / toolChoice / responseFormat) set via setInferenceContext', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1992,6 +1992,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -2018,6 +2019,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });

@@ -1,6 +1,6 @@
+import { useAgentPlan } from '@mastra/react/hooks/agents';
 import { Check, MessageSquareText, X } from 'lucide-react';
 import { useState } from 'react';
-import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
 import type { MessageMetadata } from '@/domains/chat';
 import { useToolCall } from '@/domains/chat/context/tool-call-context';
 import {
@@ -24,7 +24,8 @@ import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 
 export interface SubmitPlanToolProps {
-  agentId: string;
+  /** Omitted for read-only history (e.g. traces): submitted plans still render, pending ones can't be answered. */
+  agentId?: string;
   agentVersionId?: string;
   requestContext?: Record<string, any>;
   toolName: string;
@@ -295,6 +296,7 @@ export function SubmitPlanTool({
   const submittedPlan = getSubmittedPlan(output);
   if (submittedPlan) return <SubmittedPlanCard plan={submittedPlan} />;
 
+  if (!agentId) return null;
   const path = getSuspendedPlanPath(metadata, toolName, toolCallId);
   if (!path) return null;
 

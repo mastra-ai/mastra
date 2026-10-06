@@ -2,15 +2,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Field, FieldError, FieldLabel } from '../Field';
+import { Form } from '../Form';
 import { Combobox } from './combobox';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -139,7 +135,7 @@ describe('Combobox', () => {
       const formRef = useRef<HTMLFormElement>(null);
 
       return (
-        <form ref={formRef} onSubmit={onSubmit}>
+        <Form ref={formRef} onSubmit={onSubmit}>
           <Combobox
             multiple
             container={formRef}
@@ -148,7 +144,7 @@ describe('Combobox', () => {
             onValueChange={onValueChange}
             clearLabel="Clear"
           />
-        </form>
+        </Form>
       );
     }
 
@@ -294,21 +290,31 @@ describe('Combobox', () => {
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
-    const withError = render(<Combobox options={options} name="provider" error="Required" />);
-    const field = screen.getByRole('combobox');
+    render(
+      <Field invalid>
+        <FieldLabel>Provider</FieldLabel>
+        <Combobox options={options} />
+        <FieldError>Required</FieldError>
+      </Field>,
+    );
+    const field = screen.getByRole('combobox', { name: 'Provider' });
     const message = screen.getByRole('alert');
 
     expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(field.getAttribute('aria-describedby')).toBe('error-provider');
-    expect(message.id).toBe('error-provider');
+    expect(field.getAttribute('aria-describedby')).toContain(message.id);
     expect(message.textContent).toContain('Required');
-    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
-    const withoutError = render(<Combobox options={options} />);
+    render(
+      <Field>
+        <FieldLabel>Provider</FieldLabel>
+        <Combobox options={options} />
+      </Field>,
+    );
 
-    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
+    expect(screen.getByRole('combobox', { name: 'Provider' }).getAttribute('aria-invalid')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('takes the medium size unless the caller asks otherwise', () => {
@@ -394,15 +400,17 @@ describe('Combobox', () => {
   });
 
   it('says what went wrong under a multi-select field too', () => {
-    const withError = render(<Combobox multiple options={options} value={[]} error="Required" />);
-    expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
+    render(
+      <Field invalid>
+        <FieldLabel>Providers</FieldLabel>
+        <Combobox multiple options={options} value={[]} />
+        <FieldError>Required</FieldError>
+      </Field>,
+    );
+    const field = screen.getByRole('combobox', { name: 'Providers' });
 
-    cleanup();
-
-    const withoutError = render(<Combobox multiple options={options} value={[]} />);
-
-    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(field.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
   });
 
   it('picks a single value with nobody listening', async () => {

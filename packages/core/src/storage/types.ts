@@ -526,8 +526,8 @@ export interface StorageAgentSnapshotType {
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
   outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
-  /** Memory configuration object — static or conditional on request context */
-  memory?: StorageConditionalField<SerializedMemoryConfig>;
+  /** Memory reference (registered memory id) or inline config — static or conditional on request context */
+  memory?: StorageConditionalField<StorageMemoryRef>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
@@ -634,7 +634,7 @@ export type StorageUpdateAgentInput = {
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
-    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    memory?: StorageConditionalField<StorageMemoryRef> | null;
     /** Browser configuration (inline ref), or null to disable browser */
     browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
@@ -706,7 +706,7 @@ export type StorageListAgentsResolvedOutput = PaginationInfo & {
 /** Instruction block discriminated union, stored in agent snapshots */
 export type AgentInstructionBlock =
   | { type: 'text'; content: string }
-  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block_ref'; id: string; rules?: RuleGroup }
   | { type: 'prompt_block'; content: string; rules?: RuleGroup };
 
 /** Condition operators for rule evaluation */
@@ -1217,8 +1217,18 @@ export interface ObservationalMemoryHistoryOptions {
   from?: Date;
   /** Only return records created at or before this date */
   to?: Date;
-  /** Number of records to skip (for pagination) */
+  /** Number of records to skip after filtering and ordering (for pagination) */
   offset?: number;
+  /** Match the literal canonical `<observation-group id="..."` prefix in active or buffered observations. */
+  groupId?: string;
+  /** Only return generations strictly before this generation count. */
+  beforeGeneration?: number;
+  /** Only return generations strictly after this generation count. */
+  afterGeneration?: number;
+  /** Generation ordering. Defaults to DESC (newest first). */
+  sortDirection?: 'ASC' | 'DESC';
+  /** Only return the record with this ID, if it belongs to the requested thread or resource. */
+  recordId?: string;
 }
 
 export interface ObservationalMemoryRecord {
@@ -2252,6 +2262,18 @@ export type StorageWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: StorageWorkspaceSnapshotType }
   | { type: 'provider'; provider: string; config: Record<string, unknown> };
+
+/**
+ * Memory reference configuration stored in agent snapshots.
+ * - `{ type: 'id', memoryId }` references a Memory instance registered on Mastra
+ *   (looked up by registry key first, then by the instance's own id).
+ * - `{ type: 'inline', config }` builds a new Memory from serialized config.
+ * - An untagged `SerializedMemoryConfig` is the legacy inline form and behaves like `inline`.
+ */
+export type StorageMemoryRef =
+  | { type: 'id'; memoryId: string }
+  | { type: 'inline'; config: SerializedMemoryConfig }
+  | SerializedMemoryConfig;
 
 // ============================================
 // Workflow Storage Types

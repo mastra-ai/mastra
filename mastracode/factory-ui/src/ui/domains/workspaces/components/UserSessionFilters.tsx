@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ListFilter } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -100,16 +100,14 @@ function FilterSelect<Value extends string>({
   children: ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
-      <Txt as="span" variant="meta" className="text-muted-foreground">
-        {label}
-      </Txt>
+    <Field>
+      <FieldLabel size="smaller">{label}</FieldLabel>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger size="sm" aria-label={label}>
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>{children}</SelectContent>
       </Select>
-    </label>
+    </Field>
   );
 }

@@ -287,6 +287,20 @@ function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
   return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
+/**
+ * Whether a login is Factory itself. Prefers the resolved identity, which is
+ * observed from Factory's own writes, and falls back to the configured slug.
+ */
+export function isFactoryGithubLogin(
+  github: Pick<GithubRulesIntegration, 'identity' | 'slug'>,
+  login: string | null | undefined,
+): boolean {
+  if (github.identity?.known) return github.identity.matches(login);
+  const slug = github.slug?.trim();
+  if (!slug || !login) return false;
+  return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
 
@@ -297,11 +311,7 @@ export class GithubRules {
    * disabled every self-loop guard.
    */
   #isFactoryLogin(login: string | undefined): boolean {
-    const identity = this.options.github.identity;
-    if (identity?.known) return identity.matches(login);
-    const slug = this.options.github.slug?.trim();
-    if (!slug || !login) return false;
-    return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+    return isFactoryGithubLogin(this.options.github, login);
   }
 
   #factoryMentionTarget(): string | undefined {
@@ -553,7 +563,7 @@ export class GithubRules {
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
-        repository: { id: repositoryId, fullName: repositoryName },
+        repository: { id: repositoryId, fullName: repositoryName, installationId },
         ...(issueNumber && string(issue?.title) && string(issue?.html_url)
           ? {
               issue: {
@@ -626,6 +636,12 @@ export class GithubRules {
                 id: number(object(parsed.payload.review)?.id) ?? 0,
                 state: string(object(parsed.payload.review)?.state) ?? 'unknown',
                 url: string(object(parsed.payload.review)?.html_url) ?? '',
+                ...(string(object(object(parsed.payload.review)?.user)?.login)
+                  ? { author: string(object(object(parsed.payload.review)?.user)?.login) }
+                  : {}),
+                ...(string(object(parsed.payload.review)?.body)
+                  ? { body: string(object(parsed.payload.review)?.body) }
+                  : {}),
               },
             }
           : {}),
@@ -922,6 +938,10 @@ export interface ReconcilePullRequestState {
   mergedBy?: string;
 }
 
+export interface PolledPullRequestState extends ReconcilePullRequestState {
+  createdAt: string;
+}
+
 export type GithubPullRequestFetcher = (input: {
   installationId: number;
   repository: string;
@@ -1061,7 +1081,7 @@ export function reconciledIssueClosedEvent(
         ...(state.stateReason ? { state_reason: state.stateReason } : {}),
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
+        assignees: githubUsers(state.assignees),
       },
     },
   };
@@ -1107,8 +1127,8 @@ export function reconciledIssueRelabeledEvent(
         state: 'open',
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        labels: labels.map(name => ({ name })),
+        assignees: githubUsers(state.assignees),
+        labels: githubLabels(labels),
       },
     },
   };
@@ -1130,37 +1150,70 @@ export function reconciledIssueOpenedEvent(
   return { ...event, deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:opened` };
 }
 
+export function polledPullRequestEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: PolledPullRequestState,
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repository.id}:pull-request:${pullRequestNumber}:${state.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? '__unknown__' },
+      pull_request: pullRequestPayload(pullRequestNumber, state),
+    },
+  };
+}
+
 export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
   state: ReconcilePullRequestState,
 ): ParsedGithubWebhook {
+  const outcome = state.merged ? 'merged' : 'closed';
   return {
     event: 'pull_request',
     // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
-    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${outcome}`,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
       repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: state.mergedBy ?? 'github' },
-      pull_request: {
-        number: pullRequestNumber,
-        title: state.title,
-        html_url: state.url,
-        ...(state.createdAt ? { created_at: state.createdAt } : {}),
-        state: 'closed',
-        draft: state.draft,
-        merged: state.merged,
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
-        labels: (state.labels ?? []).map(name => ({ name })),
-        head: { ref: state.headBranch },
-        base: { ref: state.baseBranch },
-      },
+      pull_request: pullRequestPayload(pullRequestNumber, { ...state, state: 'closed' }),
     },
   };
+}
+
+function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    number: pullRequestNumber,
+    title: state.title,
+    html_url: state.url,
+    state: state.state,
+    draft: state.draft,
+    merged: state.merged,
+    assignees: githubUsers(state.assignees),
+    requested_reviewers: githubUsers(state.requestedReviewers),
+    labels: githubLabels(state.labels),
+    head: { ref: state.headBranch },
+    base: { ref: state.baseBranch },
+  };
+  if (state.createdAt) payload.created_at = state.createdAt;
+  if (state.author) payload.user = { login: state.author };
+  return payload;
+}
+
+function githubUsers(logins: readonly string[] = []): Array<{ login: string }> {
+  return logins.map(login => ({ login }));
+}
+
+function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
+  return names.map(name => ({ name }));
 }
 
 function reconciledPullRequestMetadata(

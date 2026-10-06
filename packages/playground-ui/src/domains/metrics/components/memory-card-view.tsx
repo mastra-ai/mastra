@@ -1,3 +1,4 @@
+import type { ActiveThreadRow, ResourceThreadsRow } from '@mastra/react/hooks/metrics';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
@@ -7,8 +8,6 @@ import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
-import type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
-import type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
 import { METRICS_DATA_LIST_PROPS } from './metrics-utils';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 

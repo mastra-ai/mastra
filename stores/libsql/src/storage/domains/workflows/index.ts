@@ -265,8 +265,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Update the snapshot within the same transaction
             await tx.execute({
-              sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
-              args: [safeStringify(updatedSnapshot), workflowName, runId],
+              sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?), updatedAt = ? WHERE workflow_name = ? AND run_id = ?`,
+              args: [safeStringify(updatedSnapshot), new Date().toISOString(), workflowName, runId],
             });
 
             await tx.commit();

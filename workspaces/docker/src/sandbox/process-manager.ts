@@ -7,8 +7,8 @@
  * stdout/stderr streams.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
@@ -404,7 +404,7 @@ export class DockerProcessManager extends SandboxProcessManager {
 
     // Private file (unguessable name) where the command's process group records
     // its PGID, so kill() can signal the whole kernel-owned group later.
-    const pgidFile = `${PROC_DIR}/${randomUUID()}`;
+    const pgidFile = `${PROC_DIR}/${globalThis.crypto.randomUUID()}`;
     const envArray = Object.entries({ ...options.env })
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
@@ -442,6 +442,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       // Docker multiplexes stdout/stderr into a single stream with 8-byte headers
       // when Tty is false. We need to parse these headers.
       const buffer: Buffer[] = [];
+      // Frame boundaries are not UTF-8 character boundaries, so a multibyte
+      // character can be split across frames. Each stream gets its own decoder
+      // because stdout and stderr frames interleave.
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
 
       stream.on('data', (chunk: Buffer) => {
         buffer.push(chunk);
@@ -459,11 +464,13 @@ export class DockerProcessManager extends SandboxProcessManager {
             break;
           }
 
-          const payload = combined.subarray(8, 8 + size).toString('utf-8');
+          const payload = combined.subarray(8, 8 + size);
           if (type === 1) {
-            handle.emitStdout(payload);
+            const text = stdoutDecoder.write(payload);
+            if (text) handle.emitStdout(text);
           } else if (type === 2) {
-            handle.emitStderr(payload);
+            const text = stderrDecoder.write(payload);
+            if (text) handle.emitStderr(text);
           }
 
           combined = combined.subarray(8 + size);
@@ -475,6 +482,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
+      // Flush any incomplete trailing sequence before anything reads the final output.
+      let decodersFlushed = false;
+      const flushDecoders = () => {
+        if (decodersFlushed) return;
+        decodersFlushed = true;
+        const stdoutRest = stdoutDecoder.end();
+        if (stdoutRest) handle.emitStdout(stdoutRest);
+        const stderrRest = stderrDecoder.end();
+        if (stderrRest) handle.emitStderr(stderrRest);
+      };
+
       // Every stream event settles through here and only the first one wins.
       // Previously 'end' resolved first and 'close' — the only path that attached
       // `killed`/`timedOut` — bailed out because the exit code was already set, so
@@ -484,6 +502,7 @@ export class DockerProcessManager extends SandboxProcessManager {
       const settle = (exitCode: number, metadata: Partial<CommandResult> = {}) => {
         if (settled) return;
         settled = true;
+        flushDecoders();
         handle._setExitCode(exitCode);
         resolve({
           success: exitCode === 0,
@@ -590,6 +609,7 @@ export class DockerProcessManager extends SandboxProcessManager {
           settleTerminated();
           return;
         }
+        flushDecoders();
         settle(1, { stderr: handle.stderr || 'Stream error' });
       });
     });

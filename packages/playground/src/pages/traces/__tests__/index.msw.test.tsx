@@ -1,4 +1,4 @@
-import type { GetSystemPackagesResponse } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -10,7 +10,6 @@ import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
-  traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
   traceQueryPage,
@@ -27,10 +26,11 @@ import {
   emptyScorers,
   emptyServiceNames,
   emptyTags,
-  metricsCapableSystemPackages,
-  metricsUnavailableSystemPackages,
+  metricsCapableCapabilities,
+  metricsUnavailableCapabilities,
   threadedTraceSpans,
   traceSpans,
+  traceSpansWithPayload,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
@@ -60,10 +60,9 @@ function createMemoryStorage(): Storage {
   };
 }
 
-const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
+const setTracePageHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
@@ -142,7 +141,7 @@ afterAll(async () => {
 describe('Traces page usage columns', () => {
   describe('when the observability store supports metrics', () => {
     it('renders the selected usage header', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage();
 
@@ -155,7 +154,7 @@ describe('Traces page usage columns', () => {
     });
 
     it('keeps usage totals in the trace list when a trace is selected', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceListWithTwoTraces)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceListWithTwoTraces)),
@@ -173,7 +172,7 @@ describe('Traces page usage columns', () => {
 
   describe('when the observability store does not support metrics', () => {
     it('suppresses usage columns and metric requests', async () => {
-      setTracePageHandlers(metricsUnavailableSystemPackages);
+      setTracePageHandlers(metricsUnavailableCapabilities);
 
       const { queryClient } = renderPage();
 
@@ -192,7 +191,7 @@ describe('Traces page usage columns', () => {
         TRACE_COLUMN_STORAGE_KEY,
         serializeTraceColumnPreferences({ visibleColumns: [], customColumns: [], metadataKeys: [] }),
       );
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces`, () =>
           HttpResponse.json({ ...traceList, spans: [], pagination: { ...traceList.pagination, total: 0 } }),
@@ -218,7 +217,7 @@ describe('Traces page usage columns', () => {
 
   describe('Messages column', () => {
     const setThreadedTraceHandlers = () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
           HttpResponse.json({ span: threadedTraceSpans.spans[0] }),
@@ -298,26 +297,28 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "Open full thread" is clicked, then the side panel shows every turn at the same wide size, and "Back to trace" restores the trace', async () => {
+      it('when "Open full thread" is clicked, then every turn opens in a drawer stacked above the trace, and "Back to trace" closes only that drawer', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
-        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+        const traceDialog = () => screen.getByRole('dialog', { name: 'Trace details', hidden: true });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
 
-        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
-        expect(dialog().className).toContain('w-4/5');
-        expect(screen.queryByTestId('messages-panel')).toBeNull();
-        // The page did not navigate away from the traces list.
-        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+        const threadView = await screen.findByTestId('thread-view-by-trace');
+        const threadDialog = threadView.closest<HTMLElement>('[role="dialog"]');
+        expect(threadDialog).not.toBeNull();
+        expect(threadDialog).not.toBe(traceDialog());
+        expect(threadDialog?.getAttribute('data-depth')).toBe('2');
+        await waitFor(() => expect(threadView.querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        // The trace stays open underneath.
+        expect(traceDialog().className).toContain('w-4/5');
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
 
-        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-        expect(dialog().className).toContain('w-4/5');
+        await waitFor(() => expect(screen.queryByTestId('thread-view-by-trace')).toBeNull());
+        expect(screen.getByTestId('messages-panel')).not.toBeNull();
+        expect(traceDialog().className).toContain('w-4/5');
         await waitFor(() => {
           expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
           expect(queryClient.isFetching()).toBe(0);
@@ -326,7 +327,7 @@ describe('Traces page usage columns', () => {
     });
 
     it('given a trace without a thread id, then no Messages column renders and the panel still opens wide', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
@@ -342,7 +343,7 @@ describe('Traces page usage columns', () => {
 
   describe('when an old branches URL is opened', () => {
     it('loads trace queries without requesting branches', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       const branches = vi.fn();
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/branches`, () => {
@@ -367,7 +368,7 @@ describe('Traces page list source', () => {
     it('lists traces through the light endpoint without calling trace query', async () => {
       const onTraceQuery = vi.fn<() => void>();
       const onLightList = vi.fn<() => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => {
@@ -388,7 +389,7 @@ describe('Traces page list source', () => {
 
     it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
       const onFeedback = vi.fn<() => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
@@ -417,7 +418,7 @@ describe('Traces page list source', () => {
   describe('when the server supports trace query but not feedback', () => {
     it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
       const onFeedback = vi.fn<() => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(noFeedbackCapabilities)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
@@ -446,7 +447,7 @@ describe('Traces page list source', () => {
 
 describe('Traces page auto refresh toggle', () => {
   it('renders labeled checkboxes instead of the old icon button', async () => {
-    setTracePageHandlers(metricsCapableSystemPackages);
+    setTracePageHandlers(metricsCapableCapabilities);
 
     const { queryClient } = renderPage();
     await waitFor(() => {
@@ -473,7 +474,7 @@ describe('Traces page auto refresh toggle', () => {
 describe('Traces side panel header actions', () => {
   describe('when a registered scorer is selected', () => {
     it('submits the selected trace for scoring and opens its scores', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       const onScore = vi.fn();
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
@@ -514,7 +515,7 @@ describe('Traces side panel header actions', () => {
     });
   });
   it('shows the trace actions in the panel header when a trace is selected', async () => {
-    setTracePageHandlers(metricsCapableSystemPackages);
+    setTracePageHandlers(metricsCapableCapabilities);
     server.use(
       http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
@@ -538,7 +539,7 @@ describe('Traces side panel header actions', () => {
 
 describe('Traces side panel Scores view', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
-    setTracePageHandlers(metricsCapableSystemPackages);
+    setTracePageHandlers(metricsCapableCapabilities);
     server.use(
       http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
@@ -605,7 +606,7 @@ describe('Traces side panel Scores view', () => {
 
   describe('when a span is open', () => {
     it('keeps the span panel open while the side column shows the scores', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
           HttpResponse.json({ span: traceSpans.spans[0] }),
@@ -682,7 +683,7 @@ describe('Traces page columns menu', () => {
 
   describe('when the columns menu enables Environment', () => {
     it('shows the header with each trace environment and keeps it after a reload', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
           HttpResponse.json(traceQueryPageWithThreadAndEnvironment),
@@ -710,7 +711,7 @@ describe('Traces page columns menu', () => {
 
   describe('when a Thread ID custom column offers to filter by a listed value', () => {
     it('adds a Thread ID chip and sends the thread predicate in the next query', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       const requestBodies: unknown[] = [];
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
@@ -749,7 +750,7 @@ describe('Traces page columns menu', () => {
 
   describe('when the fields endpoint reports a region metadata key', () => {
     it('offers region in the metadata column picker and adds it as a column', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
           HttpResponse.json(traceQueryFieldsWithRegion),
@@ -777,7 +778,7 @@ describe('Traces page columns menu', () => {
 
   describe('when the fields endpoint reports nested metadata paths', () => {
     it('collapses them to a single top-level key option', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
           HttpResponse.json(traceQueryFieldsWithNestedTenant),
@@ -803,7 +804,7 @@ describe('Traces page columns menu', () => {
 describe('Traces page filter bar', () => {
   describe('when the page loads without any filter', () => {
     it('renders a non-removable Time chip defaulting to Last 7 days', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage();
       await waitFor(() => {
@@ -822,7 +823,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the user picks Last 24 hours from the Time chip', () => {
     it('writes the preset to the URL', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage();
       await waitFor(() => {
@@ -840,7 +841,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the URL carries filterTraceId and filterEnvironment', () => {
     it('renders the Time chip then one chip per filter in URL order', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
       await waitFor(() => {
@@ -858,7 +859,7 @@ describe('Traces page filter bar', () => {
     });
 
     it('keeps the Time chip after Clear filters', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
       await waitFor(() => {
@@ -876,7 +877,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
     it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
       await waitFor(() => {
@@ -894,7 +895,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the user changes the field of an existing chip', () => {
     it('keeps the chip with an empty value on the new field', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?status=error');
       await waitFor(() => {
@@ -914,7 +915,7 @@ describe('Traces page filter bar', () => {
   describe('when the user commits Environment is prod through the input', () => {
     const commitEnvironmentFilter = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () =>
           HttpResponse.json(environmentsWithProd),
@@ -967,7 +968,7 @@ describe('Traces page filter bar', () => {
   describe('when the URL carries filterTraceId.op=isNot', () => {
     const renderIsNot = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
           onQuery(await request.json());
@@ -999,7 +1000,7 @@ describe('Traces page filter bar', () => {
 
   const renderCapturingQuery = async (entry: string) => {
     const onQuery = vi.fn<(body: unknown) => void>();
-    setTracePageHandlers(metricsCapableSystemPackages);
+    setTracePageHandlers(metricsCapableCapabilities);
     server.use(
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
         onQuery(await request.json());
@@ -1084,7 +1085,7 @@ describe('Traces page filter bar', () => {
 
     it('keeps the agent scope alongside the group on the agent traces page', async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
           onQuery(await request.json());
@@ -1110,7 +1111,7 @@ describe('Traces page filter bar', () => {
   describe('when the URL carries filterSpanDurationMs=1000 with the gt operator', () => {
     it('sends a numeric gt predicate inside spans.some', async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
           onQuery(await request.json());
@@ -1133,7 +1134,7 @@ describe('Traces page filter bar', () => {
   describe('when the URL carries filterSpanError with the exists operator', () => {
     const renderExists = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
           onQuery(await request.json());
@@ -1167,7 +1168,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the user switches an existing chip to the "is not" operator', () => {
     it('writes the .op param to the URL', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a');
       await waitFor(() => {
@@ -1186,7 +1187,7 @@ describe('Traces page filter bar', () => {
   describe('when the user opens the value step of a Model chip', () => {
     it('suggests models discovered in the spans scope', async () => {
       const onValues = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/values`, async ({ request }) => {
           onValues(await request.json());
@@ -1209,7 +1210,7 @@ describe('Traces page filter bar', () => {
 
   describe('when the page is scoped to an agent', () => {
     const renderScoped = async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       const result = renderPage('/traces?filterTraceId=trace-a', {
         scopedEntityId: 'weather-agent',
         scopedEntityType: EntityType.AGENT,
@@ -1257,7 +1258,7 @@ describe('Traces page metadata filter discovery', () => {
       const fieldsGate = new Promise<void>(resolve => {
         releaseFields = resolve;
       });
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
           await fieldsGate;
@@ -1282,7 +1283,7 @@ describe('Traces page metadata filter discovery', () => {
 
   describe('when discovery is unsupported by the server', () => {
     it('renders the filter bar without metadata fields and no skeleton', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
           HttpResponse.json(
@@ -1313,7 +1314,7 @@ describe('Traces page metadata filter discovery', () => {
       const onFields = vi.fn<(body: unknown) => void>();
       const onValues = vi.fn<(body: unknown) => void>();
       const onQuery = vi.fn<(body: unknown) => void>();
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async ({ request }) => {
           onFields(await request.json());
@@ -1384,7 +1385,7 @@ describe('Traces page metadata filter discovery', () => {
 
   describe('when the URL carries filterMetadata.region', () => {
     it('renders a removable region chip', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+      setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
           HttpResponse.json(traceQueryFieldsWithRegion),
@@ -1407,7 +1408,7 @@ describe('Traces page sorting', () => {
 
   const captureTraceQueries = () => {
     orderBys.length = 0;
-    setTracePageHandlers(metricsUnavailableSystemPackages);
+    setTracePageHandlers(metricsUnavailableCapabilities);
     server.use(
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
         const body = (await request.json()) as { orderBy?: unknown };
@@ -1454,6 +1455,26 @@ describe('Traces page sorting', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+    });
+  });
+});
+
+describe('Traces side panel span search', () => {
+  describe('when the opened trace has a span whose payload holds the searched term', () => {
+    it('keeps only the span matching the payload text', async () => {
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpansWithPayload)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('llm call')).toBeTruthy();
+      fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value: 'zanzibar-payload-term' } });
+
+      await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
+      expect(screen.getByText('weather tool')).toBeTruthy();
     });
   });
 });

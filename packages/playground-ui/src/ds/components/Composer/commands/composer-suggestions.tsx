@@ -1,7 +1,7 @@
 import { Collapsible } from '@base-ui/react/collapsible';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { ScrollArea } from '../../ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
 import { cn } from '@/lib/utils';
 
 export interface ComposerSuggestionItem {
@@ -39,9 +39,9 @@ export function ComposerSuggestions({
   return (
     <Collapsible.Root open={items.length > 0}>
       <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-normal ease-out-custom data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none">
-        <div className="border-b border-border/60" role="region" aria-label={label}>
+        <div className="border-b border-border" role="region" aria-label={label}>
           {contextLabel && onBack && (
-            <div className="border-b border-border/60 px-1.5 py-1">
+            <div className="border-b border-border px-1.5 py-1">
               <button
                 type="button"
                 className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-caption text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-fill-subtle hover:text-foreground motion-reduce:transition-none"
@@ -54,48 +54,50 @@ export function ComposerSuggestions({
               </button>
             </div>
           )}
-          <ScrollArea maxHeight="min(22rem, 50dvh)" viewPortClassName="overscroll-contain">
-            <div id={id} role="listbox" aria-label={label} className="flex flex-col gap-px p-1.5">
-              {items.map((item, index) => (
-                <button
-                  ref={index === activeIndex ? activeOption : undefined}
-                  id={item.id}
-                  key={item.id}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={index === activeIndex}
-                  aria-current={item.active ? 'true' : undefined}
-                  className={cn(
-                    'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
-                    index === activeIndex
-                      ? 'bg-fill-subtle text-foreground'
-                      : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
-                  )}
-                  onMouseDown={event => event.preventDefault()}
-                  onClick={() => onSelect(index)}
-                >
-                  <span className="max-w-[60%] min-w-0 shrink-0 truncate" title={item.label}>
-                    {item.label}
-                  </span>
-                  {(item.description || item.active) && (
-                    <span className="flex min-w-0 items-center gap-1.5 text-right">
-                      {item.description && (
-                        <span className="truncate" title={item.description}>
-                          {item.description}
-                        </span>
-                      )}
-                      {item.active && (
-                        <span className="flex shrink-0 items-center gap-1">
-                          <Check size={13} aria-hidden />
-                          Current
-                        </span>
-                      )}
+          <ScrollArea maxHeight="min(22rem, 50dvh)">
+            <ScrollAreaViewport className="overscroll-contain">
+              <div id={id} role="listbox" aria-label={label} className="flex flex-col gap-px p-1.5">
+                {items.map((item, index) => (
+                  <button
+                    ref={index === activeIndex ? activeOption : undefined}
+                    id={item.id}
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={index === activeIndex}
+                    aria-current={item.active ? 'true' : undefined}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+                      index === activeIndex
+                        ? 'bg-fill-subtle text-foreground'
+                        : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
+                    )}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => onSelect(index)}
+                  >
+                    <span className="max-w-[60%] min-w-0 shrink-0 truncate" title={item.label}>
+                      {item.label}
                     </span>
-                  )}
-                </button>
-              ))}
-            </div>
+                    {(item.description || item.active) && (
+                      <span className="flex min-w-0 items-center gap-1.5 text-right">
+                        {item.description && (
+                          <span className="truncate" title={item.description}>
+                            {item.description}
+                          </span>
+                        )}
+                        {item.active && (
+                          <span className="flex shrink-0 items-center gap-1">
+                            <Check size={13} aria-hidden />
+                            Current
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </ScrollAreaViewport>
           </ScrollArea>
         </div>
       </Collapsible.Panel>
