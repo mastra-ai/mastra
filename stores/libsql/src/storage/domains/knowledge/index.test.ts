@@ -15,8 +15,8 @@ import {
 import * as coreStorage from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { LibSQLStore } from '../../index';
 import { withClientWriteLock } from '../../db/write-lock';
+import { LibSQLStore } from '../../index';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 const COMPAT_CONSTANTS = [
