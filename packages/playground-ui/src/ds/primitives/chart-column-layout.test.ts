@@ -45,3 +45,26 @@ describe('singleBarBox', () => {
     expect(singleBarBox(0, { y: 200, height: 0 })).toBeNull();
   });
 });
+
+describe('column layout with bad values', () => {
+  const geo = { y: 100, height: 100 };
+
+  it('draws nothing for NaN, negative or missing values', () => {
+    expect(stackedSegmentBox([Number.NaN, 5], 0, geo)).toBeNull();
+    expect(stackedSegmentBox([-3, 5], 0, geo)).toBeNull();
+    expect(stackedSegmentBox([5], 3, geo)).toBeNull();
+    expect(singleBarBox(Number.NaN, geo)).toBeNull();
+    expect(singleBarBox(-1, geo)).toBeNull();
+  });
+
+  it('ignores NaN and negative neighbours when stacking', () => {
+    const box = stackedSegmentBox([Number.NaN, -4, 10], 2, { y: 0, height: 100 });
+    expect(box).toEqual({ y: 0, height: 100 });
+  });
+
+  it('keeps every segment finite when Recharts reports a zero-height box', () => {
+    const box = stackedSegmentBox([1, 1], 1, { y: 200, height: 0 }, { gap: 2 });
+    expect(box && Number.isFinite(box.y) && Number.isFinite(box.height)).toBe(true);
+    expect(box?.height).toBe(3);
+  });
+});

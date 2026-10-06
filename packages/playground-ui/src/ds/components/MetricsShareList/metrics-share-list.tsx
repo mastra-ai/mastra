@@ -93,7 +93,8 @@ type Paint = { color: string; alpha: number };
 
 function rowColors(base: string, count: number, palette: 'shades' | 'hues'): Paint[] {
   if (palette === 'hues') {
-    const hues = [base, ...HUES.filter(h => h !== base)].slice(0, 5);
+    // A lead color from the palette moves to the front; any other color takes the first hue's place.
+    const hues = HUES.includes(base) ? [base, ...HUES.filter(h => h !== base)] : [base, ...HUES.slice(1)];
     return Array.from({ length: count }, (_, i) => ({
       color: hues[i % hues.length] ?? base,
       alpha: [1, 0.55, 0.3][Math.floor(i / hues.length)] ?? 0.2,
@@ -104,7 +105,8 @@ function rowColors(base: string, count: number, palette: 'shades' | 'hues'): Pai
 
 const fmtShare = (n: number, total: number) => {
   const r = n / (total || 1);
-  if (n > 0 && r < 0.001) return '<0.1%';
+  if (!(r > 0)) return '0%';
+  if (r < 0.001) return '<0.1%';
   return `${(r * 100).toFixed(r < 0.1 ? 1 : 0)}%`;
 };
 
@@ -173,8 +175,11 @@ export function MetricsShareList({
     );
   }
 
-  // Largest first, so the strongest color is always the biggest share.
-  const sorted = [...input].sort((a, b) => b.share - a.share);
+  // Largest first, so the strongest color is always the biggest share. A missing, negative or
+  // infinite share counts as zero, so one bad row can't break the order or the percentages.
+  const sorted = input
+    .map(r => (Number.isFinite(r.share) && r.share > 0 ? r : { ...r, share: 0 }))
+    .sort((a, b) => b.share - a.share);
   if (sorted.length === 0) {
     return (
       <div className={cn('grid gap-4', className)}>

@@ -30,7 +30,9 @@ export function MetricsLineChartTooltip({
   formatByKey?: Record<string, (value: number) => string>;
 }) {
   if (!active || !payload?.length) return null;
-  const total = payload.reduce((sum, entry) => sum + (typeof entry.value === 'number' ? entry.value : 0), 0);
+  // A missing reading (NaN, Infinity) shows as a dash and stays out of the total.
+  const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  const total = payload.reduce((sum, entry) => sum + (finite(entry.value) ? entry.value : 0), 0);
   const heading = labelKey ? String(payload[0]?.payload?.[labelKey] ?? label ?? '') : label;
   const format = (entry: { dataKey?: string | number }) => formatByKey?.[String(entry.dataKey)] ?? formatValue;
   return (
@@ -46,8 +48,16 @@ export function MetricsLineChartTooltip({
               {entry.name}
             </Txt>
             <span className="text-right font-mono text-foreground tabular-nums">
-              {typeof entry.value === 'number' ? format(entry)(entry.value) : entry.value}
-              {suffix}
+              {finite(entry.value) ? (
+                <>
+                  {format(entry)(entry.value)}
+                  {suffix}
+                </>
+              ) : typeof entry.value === 'number' || entry.value == null ? (
+                '—'
+              ) : (
+                entry.value
+              )}
             </span>
           </div>
         ))}
