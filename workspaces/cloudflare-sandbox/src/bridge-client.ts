@@ -271,7 +271,12 @@ export class CloudflareSandboxBridgeClient {
         return;
       case 'exit': {
         const parsed = safeJsonParse(data);
-        onEvent({ type: 'exit', exitCode: typeof parsed?.exit_code === 'number' ? parsed.exit_code : 0 });
+        const exitCode = parsed?.exit_code;
+        if (typeof exitCode !== 'number' || !Number.isInteger(exitCode)) {
+          onEvent({ type: 'error', message: 'Sandbox Bridge returned an invalid exit_code' });
+          return;
+        }
+        onEvent({ type: 'exit', exitCode });
         return;
       }
       case 'error': {

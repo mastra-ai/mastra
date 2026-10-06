@@ -22,6 +22,29 @@ const sandbox = new CloudflareSandbox({
 const workspace = new Workspace({ sandbox });
 ```
 
+## Durable files
+
+Mount a private R2 Worker binding without passing storage keys into the container:
+
+```typescript
+import { S3Filesystem } from '@mastra/s3';
+
+const workspace = new Workspace({
+  sandbox,
+  mounts: {
+    '/workspace': new S3Filesystem({
+      bucket: 'WORKSPACE_FILES', // The R2 binding name in the Bridge Worker.
+      region: 'auto',
+      prefix: 'private-chat/',
+    }),
+  },
+});
+```
+
+Without an endpoint or credentials, `region: 'auto'` selects the Bridge Worker's R2 binding. Explicit S3 endpoints and AWS regions still work. Region `auto` with credentials requires an explicit endpoint.
+
+Before commands, reads, writes, archive or restore, the provider checks required mounts and reconnects them after container sleep. A failed or incomplete check, failed reconnect or unfinished mount rejects the operation. It never falls through to temporary disk. Paths without a bucket mount remain temporary.
+
 ## Documentation
 
 - [Cloudflare Sandbox integration guide](https://mastra.ai/integrations/sandboxes/cloudflare-sandbox)

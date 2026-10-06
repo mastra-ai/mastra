@@ -86,7 +86,11 @@ function toMountRequest(
   }
   // The bridge treats a request with no endpoint as an R2 binding mount, so a
   // region-only AWS filesystem must resolve to an explicit S3 endpoint.
-  const endpoint = s3.endpoint ?? (s3.region ? `https://s3.${s3.region}.amazonaws.com` : undefined);
+  if (!s3.endpoint && s3.region === 'auto' && s3.accessKeyId) {
+    return { error: 'Cloudflare Sandbox bucket mounts with region auto and credentials need an explicit endpoint' };
+  }
+  const endpoint =
+    s3.endpoint ?? (s3.region && s3.region !== 'auto' ? `https://s3.${s3.region}.amazonaws.com` : undefined);
   // The bridge requires the prefix to start with `/`; S3Filesystem emits `dir/`.
   const prefix = s3.prefix ? (s3.prefix.startsWith('/') ? s3.prefix : `/${s3.prefix}`) : undefined;
   return {
@@ -437,17 +441,27 @@ export class CloudflareSandbox extends MastraSandbox {
    * is shared across concurrent callers, and there is no probe when nothing is
    * mounted.
    */
-  private ensureMountsActive(sandboxId: string): Promise<void> {
+  private async ensureMountsActive(sandboxId: string): Promise<void> {
+    for (const [mountPath, entry] of this.mounts.entries) {
+      if (entry.state === 'pending' || entry.state === 'mounting') {
+        throw new Error(`Cloudflare Sandbox required mount ${mountPath} is not ready`);
+      }
+    }
     const mountedPaths = [...this.mounts.entries]
-      .filter(([, entry]) => entry.state === 'mounted')
+      .filter(([, entry]) => entry.state === 'mounted' || entry.state === 'error')
       .map(([mountPath]) => mountPath);
-    if (mountedPaths.length === 0) return Promise.resolve();
+    if (mountedPaths.length === 0) return;
     if (!this.ensureMountsPromise) {
       this.ensureMountsPromise = this.remountStalePaths(sandboxId, mountedPaths).finally(() => {
         this.ensureMountsPromise = undefined;
       });
     }
-    return this.ensureMountsPromise;
+    await this.ensureMountsPromise;
+    for (const [mountPath, entry] of this.mounts.entries) {
+      if (entry.state === 'pending' || entry.state === 'mounting' || entry.state === 'error') {
+        throw new Error(`Cloudflare Sandbox required mount ${mountPath} is not ready`);
+      }
+    }
   }
 
   private async remountStalePaths(sandboxId: string, mountedPaths: string[]): Promise<void> {
@@ -457,30 +471,50 @@ export class CloudflareSandbox extends MastraSandbox {
     const script = `for p in ${mountedPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done`;
     const decoder = new TextDecoder();
     let stdout = '';
+    let exitCode: number | undefined;
+    let probeError: string | undefined;
     await this.client.exec(
       sandboxId,
       { argv: [SHELL_PATH, '-c', script], timeoutMs: this.commandTimeout },
       {
         onEvent: event => {
           if (event.type === 'stdout') stdout += decoder.decode(event.data, { stream: true });
+          if (event.type === 'exit') exitCode = event.exitCode;
+          if (event.type === 'error') probeError = event.message;
         },
       },
     );
     stdout += decoder.decode();
+    if (probeError !== undefined || exitCode !== 0) {
+      throw new Error(`Cloudflare Sandbox mount verification failed: ${probeError ?? `exit ${exitCode ?? 'missing'}`}`);
+    }
 
     const stalePaths = stdout
       .split('\n')
       .map(line => line.trim())
       .filter(Boolean);
     for (const mountPath of stalePaths) {
+      if (!mountedPaths.includes(mountPath)) {
+        throw new Error(`Cloudflare Sandbox mount verification returned an unknown path: ${mountPath}`);
+      }
+    }
+    // A failed initial mount is still required, even if the probe sees an old mount.
+    const requiredPaths = new Set([
+      ...stalePaths,
+      ...mountedPaths.filter(mountPath => this.mounts.get(mountPath)?.state === 'error'),
+    ]);
+    for (const mountPath of requiredPaths) {
       const entry = this.mounts.get(mountPath);
-      if (!entry?.config) continue;
+      if (!entry?.config) throw new Error(`Cloudflare Sandbox mount ${mountPath} has no mount config`);
       const translated = toMountRequest(entry.config, mountPath);
-      if ('error' in translated) continue;
+      if ('error' in translated) throw new Error(translated.error);
       try {
         await this.client.mountBucket(sandboxId, translated.request);
+        this.mounts.set(mountPath, { state: 'mounted', error: undefined });
       } catch (cause) {
-        this.logger?.warn(`Failed to re-mount ${mountPath} after container wake`, { error: cause });
+        const error = cause instanceof Error ? cause.message : String(cause);
+        this.mounts.set(mountPath, { state: 'error', error });
+        throw new Error(`Cloudflare Sandbox could not re-mount ${mountPath}: ${error}`, { cause });
       }
     }
   }
