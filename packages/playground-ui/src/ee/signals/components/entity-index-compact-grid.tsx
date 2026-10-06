@@ -47,7 +47,7 @@ function EntityIndexCompactCard({
             </CardTitle>
             <CardDescription>{entity.entityType}</CardDescription>
           </div>
-          <div className="pointer-events-auto">
+          <div className={entity.status === 'collecting' ? 'pointer-events-auto' : undefined}>
             <EntityIndexStatus entity={entity} />
           </div>
         </div>
