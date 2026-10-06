@@ -190,6 +190,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.restart) {
+        // A restart publishes an event that a worker has to consume. Unlike the
+        // durable-agent recovery path (`DurableAgent.recover()` calls
+        // `ensureEngineWorkersStarted()` first) this path never started them, so
+        // a restart issued before `startWorkers()` was published to no one: the
+        // run stalled forever with no error and no rejection. Starting them here
+        // is a no-op when they are already running or are disabled.
+        await this.mastra?.__ensureExecutionWorkersStarted();
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
         const prevResult =
           params.restart.stepResults[params.restart.isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
