@@ -3,7 +3,6 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../hooks/useLinearData';
 import { cardMatchesSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
@@ -121,8 +120,6 @@ export function BoardContent({
     elsewhereSourceKeys: items.elsewhereSourceKeys,
     sourceFilters: filters,
   });
-  const linearStatus = useLinearStatusQuery();
-  const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
   const sourceFiltered = filters.sources.size > 0 || filters.linearProjectIds.size > 0;
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
@@ -370,7 +367,6 @@ export function BoardContent({
             view={view}
             participants={participants}
             availableLabels={availableLabels}
-            linearProjects={linearProjects.data}
             currentUserId={currentUserId}
             aside={
               builtin && (

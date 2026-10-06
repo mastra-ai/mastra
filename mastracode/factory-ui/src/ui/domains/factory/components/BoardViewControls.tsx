@@ -7,15 +7,16 @@ import { Kanban, List, ListFilter } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { boardFilterItems, boardFiltersActive } from '../boardFilters';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardViewSettings } from '../boardSavedViews';
 import type { BoardKind } from '../boardStages';
-import type { LinearProject } from '../services/linear';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, BoardFilters, boardFilterFields } from './BoardFilters';
 import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
+import { BoardViewControlsLayout } from './BoardViewControlsLayout';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
 
@@ -32,7 +33,6 @@ export function BoardViewControls({
   view,
   participants,
   availableLabels,
-  linearProjects,
   currentUserId,
   aside,
 }: {
@@ -40,17 +40,18 @@ export function BoardViewControls({
   view: BoardView;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
-  linearProjects?: readonly LinearProject[];
   currentUserId?: string;
   aside?: ReactNode;
 }) {
   const { savedViews } = view;
   const [pageFiltersOpen, setPageFiltersOpen] = useState(false);
+  const linearStatus = useLinearStatusQuery();
+  const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
   const fields = boardFilterFields({
     kind,
     participants,
     availableLabels,
-    linearProjects,
+    linearProjects: linearProjects.data,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });
@@ -60,9 +61,9 @@ export function BoardViewControls({
   const showFilters = Boolean(savedViews.draft) || (!savedViews.applied && pageFiltersOpen);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex min-w-0 grow basis-80 flex-wrap items-center gap-3 max-sm:contents">
+    <BoardViewControlsLayout
+      views={
+        <>
           <SavedViewTabs
             aria-label="Board views"
             className="max-sm:w-full"
@@ -105,7 +106,9 @@ export function BoardViewControls({
               </SegmentedControl>
             )}
           </div>
-        </div>
+        </>
+      }
+      search={
         <SearchInput
           label="Search cards"
           placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
@@ -120,33 +123,35 @@ export function BoardViewControls({
             }
           }}
         />
-        {aside && <div className="shrink-0">{aside}</div>}
-      </div>
-      {showFilters && (
-        <div
-          role="group"
-          aria-label="Board view controls"
-          className="flex min-h-8 min-w-0 flex-wrap items-center gap-2"
-        >
-          <SavedViewEditor views={savedViews} className="flex-1">
-            <div className="max-w-full min-w-0">
-              <BoardFilters
-                kind={kind}
-                fields={fields}
-                filters={view.filters}
-                onFiltersChange={view.setFilters}
-                removable
-                aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
-              />
-            </div>
-            {pageFiltersActive && (
-              <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
-                Save as view
-              </Button>
-            )}
-          </SavedViewEditor>
-        </div>
-      )}
-    </div>
+      }
+      aside={aside}
+      filters={
+        showFilters && (
+          <div
+            role="group"
+            aria-label="Board view controls"
+            className="flex min-h-8 min-w-0 flex-wrap items-center gap-2"
+          >
+            <SavedViewEditor views={savedViews} className="flex-1">
+              <div className="max-w-full min-w-0">
+                <BoardFilters
+                  kind={kind}
+                  fields={fields}
+                  filters={view.filters}
+                  onFiltersChange={view.setFilters}
+                  removable
+                  aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
+                />
+              </div>
+              {pageFiltersActive && (
+                <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
+                  Save as view
+                </Button>
+              )}
+            </SavedViewEditor>
+          </div>
+        )
+      }
+    />
   );
 }

@@ -43,6 +43,33 @@ import type { BoardStageId } from '../stages';
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
+const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
+  github: 'github-issue',
+  'github-prs': 'github-pr',
+  'gitlab-prs': 'gitlab-pr',
+  gitlab: 'gitlab-issue',
+  linear: 'linear-issue',
+  jira: 'jira-issue',
+  incidentio: 'incidentio-follow-up',
+};
+
+/** A single feed keeps its query state; multiple feeds page and retry together. */
+function combineIntakeFeeds(feeds: readonly (IntakeFeed & { isPending: boolean })[]) {
+  if (feeds.length === 0) return undefined;
+  if (feeds.length === 1) return feeds[0];
+
+  const failedFeed = feeds.find(feed => feed.error);
+  return {
+    error: failedFeed?.error ?? null,
+    isPending: feeds.some(feed => feed.isPending),
+    isFetchNextPageError: failedFeed?.isFetchNextPageError ?? false,
+    hasNextPage: feeds.some(feed => feed.hasNextPage),
+    isFetchingNextPage: feeds.some(feed => feed.isFetchingNextPage),
+    fetchNextPage: () => Promise.all(feeds.filter(feed => feed.hasNextPage).map(feed => feed.fetchNextPage())),
+    refetch: () => Promise.all(feeds.map(feed => feed.refetch())),
+  };
+}
+
 export function useBoardIntake({
   factoryProjectId,
   repository,
@@ -231,10 +258,6 @@ export function useBoardIntake({
     });
   }, [incidentioIssues.data, bindingsQuery.data, factoryProjectId, kind]);
 
-  const intakeIssues = useMemo(
-    () => boardIssues.filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
-    [boardIssues],
-  );
   const participantCandidates = useMemo(
     () =>
       review
@@ -260,44 +283,21 @@ export function useBoardIntake({
       gitlabRepository,
     ],
   );
-  const { candidates, alreadyMaterialized } = useMemo(() => {
-    const inInitialPhase = (candidate: BoardCandidate) => ({ ...candidate, column: initialPhase });
-    const candidatesBySource: Record<IntakeSource, BoardCandidate[]> = {
-      github: [
-        ...intakeIssues.map(issueCandidate).map(inInitialPhase),
-        ...(triageIssues.data ?? []).map(issueCandidate),
-      ],
-      'github-prs': (pulls.data ?? []).map(pullRequestCandidate).map(inInitialPhase),
-      'gitlab-prs': (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate).map(inInitialPhase),
-      gitlab: boardGitLabIssues.map(gitlabCandidate).map(inInitialPhase),
-      linear: boardLinearIssues.map(linearCandidate).map(inInitialPhase),
-      jira: boardJiraIssues.map(jiraCandidate).map(inInitialPhase),
-      incidentio: boardIncidentioIssues.map(incidentioCandidate).map(inInitialPhase),
-    };
-    const all = browsedSources.flatMap(source => candidatesBySource[source]);
-    // A source materializes once per Factory, so items that already have a card
-    // are held back. Only those carded on another board get counted: a card on
-    // this board is visible in a column, so it needs no explanation.
-    const fresh = all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-    const elsewhere = all.filter(candidate => elsewhereSourceKeys.has(candidate.sourceKey)).length;
-    return { candidates: fresh, alreadyMaterialized: elsewhere };
-  }, [
-    knownSourceKeys,
-    elsewhereSourceKeys,
-    participantCandidates,
-    intakeIssues,
-    triageIssues.data,
-    boardGitLabIssues,
-    boardLinearIssues,
-    boardJiraIssues,
-    active,
-    review,
-    initialPhase,
-    browsedSources,
-    pulls.data,
-    mergeRequests.data,
-    boardIncidentioIssues,
-  ]);
+  const browsedCandidates = browsedSources.flatMap(source => {
+    const initialCandidates = participantCandidates
+      .filter(candidate => candidate.source === INTAKE_CARD_SOURCES[source])
+      .filter(candidate => source !== 'github' || candidate.column !== 'triage')
+      .map(candidate => ({ ...candidate, column: initialPhase }));
+    if (source !== 'github') return initialCandidates;
+    return [...initialCandidates, ...(triageIssues.data ?? []).map(issueCandidate)];
+  });
+  // A source materializes once per Factory, so items that already have a card
+  // are held back. Only those carded on another board get counted: a card on
+  // this board is visible in a column, so it needs no explanation.
+  const candidates = browsedCandidates.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
+  const alreadyMaterialized = browsedCandidates.filter(candidate =>
+    elsewhereSourceKeys.has(candidate.sourceKey),
+  ).length;
 
   const githubFeed = routesFailed
     ? {
@@ -353,22 +353,8 @@ export function useBoardIntake({
     jira: jiraFeed,
     incidentio: incidentioFeed,
   };
-  const feeds = browsedSources.map(source => browsed[source]);
   const failedSource = browsedSources.find(source => browsed[source].error);
-  const failedFeed = failedSource ? browsed[failedSource] : undefined;
-  const feed = sourceFiltered
-    ? {
-        error: failedFeed?.error ?? null,
-        isPending: feeds.some(query => query.isPending),
-        isFetchNextPageError: failedFeed?.isFetchNextPageError ?? false,
-        hasNextPage: feeds.some(query => query.hasNextPage),
-        isFetchingNextPage: feeds.some(query => query.isFetchingNextPage),
-        fetchNextPage: () => Promise.all(feeds.filter(query => query.hasNextPage).map(query => query.fetchNextPage())),
-        refetch: () => Promise.all(feeds.map(query => query.refetch())),
-      }
-    : active
-      ? browsed[active]
-      : undefined;
+  const feed = combineIntakeFeeds(browsedSources.map(source => browsed[source]));
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
@@ -391,7 +377,7 @@ export function useBoardIntake({
 
   return {
     available,
-    active: sourceFiltered ? (failedSource ?? browsedSources[0] ?? active) : active,
+    active: failedSource ?? browsedSources[0] ?? active,
     showSwitch: available.length > 1,
     select: setSelected,
     candidates,
