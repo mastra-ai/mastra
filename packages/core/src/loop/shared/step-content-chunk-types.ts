@@ -18,19 +18,3 @@ export const STEP_CONTENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'file',
   'source',
 ]);
-
-/**
- * The first provider chunk that starts a response worth keeping. Until one arrives a
- * model request has produced only reasoning or metadata, and a queued signal may cancel it.
- */
-export function startsResponseContent(chunk: { type: string }): boolean {
-  if (chunk.type === 'reasoning-delta') return false;
-  return (
-    STEP_CONTENT_CHUNK_TYPES.has(chunk.type) ||
-    chunk.type === 'text-start' ||
-    chunk.type === 'text-end' ||
-    chunk.type === 'tool-call-input-streaming-start' ||
-    chunk.type === 'tool-call-input-streaming-end' ||
-    chunk.type === 'tool-error'
-  );
-}

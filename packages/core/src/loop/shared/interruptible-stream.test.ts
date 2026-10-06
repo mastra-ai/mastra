@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { startsResponseContent } from './step-content-chunk-types';
+import { startsResponseContent } from './interruptible-stream';
 
 describe('startsResponseContent', () => {
   it.each(['reasoning-start', 'reasoning-delta', 'reasoning-end', 'response-metadata', 'raw', 'step-start', 'finish'])(

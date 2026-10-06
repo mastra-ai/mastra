@@ -94,10 +94,11 @@ import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-me
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
+import { watchInterruptibleStream } from '../../shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
-import { startsResponseContent, STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
@@ -2125,21 +2126,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             version: currentStep.model.specificationVersion,
           },
           stream: subscribePendingSignals
-            ? ((modelResult as ReadableStream<ChunkType<OUTPUT>>).pipeThrough(
-                // Read the provider's own chunks, before output processors can hold or drop them.
-                new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-                  start(streamController) {
-                    // End the stream cleanly so in-flight processors finish before the step returns.
-                    interruption.signal.addEventListener('abort', () => streamController.terminate(), { once: true });
-                  },
-                  transform(chunk, streamController) {
-                    if (startsResponseContent(chunk)) interruptible = false;
-                    if (chunk.type === 'reasoning-start') openReasoningIds.add(chunk.payload.id);
-                    if (chunk.type === 'reasoning-end') openReasoningIds.delete(chunk.payload.id);
-                    streamController.enqueue(chunk);
-                  },
-                }),
-              ) as ReadableStream<ChunkType<OUTPUT>>)
+            ? watchInterruptibleStream(
+                modelResult as ReadableStream<ChunkType<OUTPUT>>,
+                interruption.signal,
+                () => (interruptible = false),
+                openReasoningIds,
+              )
             : (modelResult as ReadableStream<ChunkType<OUTPUT>>),
           messageList,
           messageId: currentStep.messageId,
