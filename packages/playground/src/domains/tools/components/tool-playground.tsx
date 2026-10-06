@@ -1,15 +1,16 @@
 import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useState } from 'react';
 import type { ZodType } from 'zod';
-import type { ExecuteTool } from '../hooks/use-tool-run';
-import { useToolRun } from '../hooks/use-tool-run';
+import type { ToolExecution } from '../utils/tool-run';
+import { toToolRun } from '../utils/tool-run';
 import { ToolRequest } from './tool-request';
 import { ToolResponse } from './tool-response';
 
 export interface ToolPlaygroundProps {
   zodInputSchema: ZodType;
-  /** Runs the tool and resolves with its output; a rejection is shown as an error response. */
-  execute: ExecuteTool;
+  /** The tool's run mutation: how to run it, plus its status, output and error. */
+  execution: ToolExecution;
   requestContextEntityType: RequestContextEntityType;
   requestContextEntityId: string;
 }
@@ -17,12 +18,22 @@ export interface ToolPlaygroundProps {
 /** The Playground tab: the request form, then the last response. */
 export function ToolPlayground({
   zodInputSchema,
-  execute,
+  execution,
   requestContextEntityType,
   requestContextEntityId,
 }: ToolPlaygroundProps) {
   const [requestContext] = useEntityRequestContext(requestContextEntityType, requestContextEntityId);
-  const { runTool, isRunning, lastRun } = useToolRun(execute, requestContext);
+  // The mutation holds the outcome; only how long the last run took isn't part of its state.
+  const [durationMs, setDurationMs] = useState<number>();
+
+  const runTool = async (data: unknown) => {
+    const startedAt = performance.now();
+    // A failed run is shown from the mutation's error, so the rejection needs no handling here.
+    await execution.execute(data, requestContext).catch(() => undefined);
+    setDurationMs(performance.now() - startedAt);
+  };
+
+  const isRunning = execution.status === 'pending';
 
   return (
     <div className="grid content-start gap-6">
@@ -33,7 +44,7 @@ export function ToolPlayground({
         requestContextEntityType={requestContextEntityType}
         requestContextEntityId={requestContextEntityId}
       />
-      <ToolResponse isRunning={isRunning} lastRun={lastRun} />
+      <ToolResponse isRunning={isRunning} lastRun={toToolRun(execution, durationMs)} />
     </div>
   );
 }

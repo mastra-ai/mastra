@@ -88,7 +88,9 @@ export default function Tools() {
         onSortChange={(direction, key) => setSort({ key, direction })}
         selectedToolId={openToolId}
       />
-      <ToolDrawer>{toolId => <ToolsPageDrawerBody toolId={toolId} />}</ToolDrawer>
+      <ToolDrawer>
+        <ToolsPageDrawerBody />
+      </ToolDrawer>
     </PageLayout>
   );
 }

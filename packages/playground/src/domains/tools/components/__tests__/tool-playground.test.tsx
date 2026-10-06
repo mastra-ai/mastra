@@ -1,24 +1,51 @@
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ZodType } from 'zod';
 import { z } from 'zod';
 
+import type { ExecuteTool } from '../../utils/tool-run';
 import { ToolPlayground } from '../tool-playground';
 
-function renderPlayground({
-  zodInputSchema = z.object({}),
-  execute = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
-}: {
-  zodInputSchema?: ZodType;
-  execute?: () => Promise<unknown>;
-} = {}) {
-  return render(
+interface HarnessProps {
+  zodInputSchema: ZodType;
+  execute: ExecuteTool;
+}
+
+/** Runs the tool through a real mutation, the way the drawers do. */
+function PlaygroundHarness({ zodInputSchema, execute }: HarnessProps) {
+  const { mutateAsync, status, data, error } = useMutation({
+    mutationFn: ({ input, requestContext }: { input: unknown; requestContext?: Record<string, unknown> }) =>
+      execute(input, requestContext),
+  });
+
+  return (
     <ToolPlayground
-      execute={execute}
+      execution={{
+        execute: (input, requestContext) => mutateAsync({ input, requestContext }),
+        status,
+        output: data,
+        error,
+      }}
       requestContextEntityType="tool"
       requestContextEntityId="test-tool"
       zodInputSchema={zodInputSchema}
-    />,
+    />
+  );
+}
+
+function renderPlayground({
+  zodInputSchema = z.object({}),
+  execute = vi.fn<ExecuteTool>().mockResolvedValue(undefined),
+}: {
+  zodInputSchema?: ZodType;
+  execute?: ExecuteTool;
+} = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PlaygroundHarness zodInputSchema={zodInputSchema} execute={execute} />
+    </QueryClientProvider>,
   );
 }
 

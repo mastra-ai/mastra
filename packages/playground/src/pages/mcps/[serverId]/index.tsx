@@ -40,7 +40,11 @@ export const McpServerPage = () => {
   return (
     <PageLayout variant="narrow" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
       <MCPDetail isLoading={isLoading} server={server} />
-      {serverId && <ToolDrawer>{toolId => <McpToolDrawerBody serverId={serverId} toolId={toolId} />}</ToolDrawer>}
+      {serverId && (
+        <ToolDrawer>
+          <McpToolDrawerBody serverId={serverId} />
+        </ToolDrawer>
+      )}
     </PageLayout>
   );
 };

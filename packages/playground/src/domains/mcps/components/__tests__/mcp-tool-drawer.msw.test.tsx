@@ -12,9 +12,14 @@ const TOOL_URL = `${TEST_BASE_URL}/api/mcp/v2/tools/echo`;
 
 // The drawer reads the open tool from `?tool=`, as the MCP server page does.
 const renderPanel = () =>
-  renderWithProviders(<ToolDrawer>{toolId => <McpToolDrawerBody serverId="v2" toolId={toolId} />}</ToolDrawer>, {
-    router: { initialEntries: ['/mcps/v2?tool=echo'] },
-  });
+  renderWithProviders(
+    <ToolDrawer>
+      <McpToolDrawerBody serverId="v2" />
+    </ToolDrawer>,
+    {
+      router: { initialEntries: ['/mcps/v2?tool=echo'] },
+    },
+  );
 
 /** Execution lives on the Playground tab, apart from the Overview the drawer opens on. */
 const runTool = async () => {

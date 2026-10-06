@@ -1,3 +1,14 @@
+/** Runs a tool with the given input and request context; a rejection is shown as an error response. */
+export type ExecuteTool = (data: unknown, requestContext?: Record<string, unknown>) => Promise<unknown>;
+
+/** A tool's run mutation as the Playground reads it: how to run it, and the mutation's own state. */
+export interface ToolExecution {
+  execute: ExecuteTool;
+  status: 'idle' | 'pending' | 'success' | 'error';
+  output: unknown;
+  error: Error | null;
+}
+
 export type ToolRun =
   | { status: 'success'; output: unknown; durationMs: number }
   | { status: 'error'; error: string; durationMs: number };
@@ -17,6 +28,17 @@ function formatOutput(output: unknown): string {
 export function getRunCode(run: ToolRun): string {
   if (run.status === 'error') return run.error;
   return formatOutput(run.output);
+}
+
+/** The last finished run, from the mutation's state plus how long it took. */
+export function toToolRun(
+  { status, output, error }: ToolExecution,
+  durationMs: number | undefined,
+): ToolRun | undefined {
+  if (durationMs === undefined) return undefined;
+  if (status === 'success') return { status: 'success', output, durationMs };
+  if (status === 'error') return { status: 'error', error: describeRunError(error), durationMs };
+  return undefined;
 }
 
 export function describeRunError(error: unknown): string {

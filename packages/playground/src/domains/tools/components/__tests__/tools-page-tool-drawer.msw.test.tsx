@@ -14,7 +14,9 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test
 const renderDrawer = (toolId: string) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ToolDrawer>{id => <ToolsPageDrawerBody toolId={id} />}</ToolDrawer>
+      <ToolDrawer>
+        <ToolsPageDrawerBody />
+      </ToolDrawer>
     </TestLinkProvider>,
     { router: { initialEntries: [`/tools?tool=${toolId}`] } },
   );

@@ -2,12 +2,11 @@ import type { McpToolInfo } from '@mastra/client-js';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
-import { useExecuteMCPTool } from '@mastra/react/hooks/mcps';
-import { useMcpAppHtml } from '../hooks/use-mcp-app-html';
+import { useExecuteMCPTool, useMcpAppHtml } from '@mastra/react/hooks/mcps';
 import { getAppResourceUri, isSuspendedResult } from '../utils/mcp-tool-result';
 import { ToolPlayground } from '@/domains/tools/components/tool-playground';
-import type { ExecuteTool } from '@/domains/tools/hooks/use-tool-run';
 import { toZodInputSchema } from '@/domains/tools/utils/to-zod-input-schema';
+import type { ToolExecution } from '@/domains/tools/utils/tool-run';
 
 export interface McpToolPlaygroundProps {
   serverId: string;
@@ -16,10 +15,15 @@ export interface McpToolPlaygroundProps {
 
 /** The Playground for an MCP tool, with its app UI (when it ships one) and a note for suspended results. */
 export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
-  const { mutateAsync, data: result } = useExecuteMCPTool({ serverId, toolId: tool.name });
-  const { data: appHtml } = useMcpAppHtml(serverId, getAppResourceUri(tool._meta));
+  const { mutateAsync, status, data: result, error } = useExecuteMCPTool({ serverId, toolId: tool.name });
+  const { data: appHtml } = useMcpAppHtml({ serverId, appResourceUri: getAppResourceUri(tool._meta) });
   const zodInputSchema = toZodInputSchema(tool.inputSchema);
-  const execute: ExecuteTool = (data, requestContext) => mutateAsync({ data, requestContext });
+  const execution: ToolExecution = {
+    execute: (data, requestContext) => mutateAsync({ data, requestContext }),
+    status,
+    output: result,
+    error,
+  };
 
   return (
     <div className="grid content-start gap-6">
@@ -38,7 +42,7 @@ export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
       )}
       <ToolPlayground
         zodInputSchema={zodInputSchema}
-        execute={execute}
+        execution={execution}
         requestContextEntityType="mcp-tool"
         requestContextEntityId={`${serverId}:${tool.name}`}
       />
