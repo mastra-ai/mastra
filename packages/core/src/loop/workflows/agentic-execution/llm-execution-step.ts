@@ -3320,8 +3320,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const result = await executeAttempt(context);
       if (result && 'output' in result && result.output?.steps && result.output.steps.length > attemptIndex) {
         transcriptSteps.push(attempt.transcriptStep);
-        const completedStep = result.output.steps.at(-1);
-        if (completedStep) bindModelAttempt(completedStep, attempt);
       }
       return result;
     } catch (error) {
