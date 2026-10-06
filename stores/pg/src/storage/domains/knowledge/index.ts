@@ -853,7 +853,7 @@ export class KnowledgePG extends KnowledgeStorage {
     if (rows.length === 0) return { scopes: [], nextCursor: null };
     // Parent edges for this page only, so the read stays bounded by the page size.
     const parents = await this.#readExecutor.execute({
-      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId" IN (${rows.map(() => '?').join(',')})`,
+      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId" IN (${rows.map(() => '?').join(',')}) ORDER BY ns."scopeNodeId" COLLATE "C"`,
       args: rows.map(row => String(row.id)),
     });
     const parentsByScopeId = new Map<string, string[]>();

@@ -260,7 +260,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         name: scope.name,
         ...(scope.kind ? { kind: scope.kind } : {}),
         ...(scope.description ? { description: scope.description } : {}),
-        parentIds: parentsByScopeId.get(id) ?? [],
+        parentIds: [...(parentsByScopeId.get(id) ?? [])].sort(),
       });
     }
     summaries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
