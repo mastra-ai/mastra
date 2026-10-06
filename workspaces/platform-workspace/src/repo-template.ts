@@ -59,7 +59,7 @@ export interface PlatformRepoTemplateRepository {
   getRepositoryAccess: () => Promise<PlatformRepositoryAccess | undefined>;
   /**
    * Setup command(s) run inside this repository's clone, as separate cached
-   * build steps, before and after the commit pin.
+   * build steps after the commit pin.
    */
   setupCommand?: string | string[];
 }
@@ -76,18 +76,13 @@ export interface PlatformRepoTemplateOptions {
   getRepositoryAccess?: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
   /**
    * Setup command(s) run inside the checkout. Array entries run as separate
-   * cached build steps. Each command runs twice: once right after the clone,
-   * so the install layer caches independently of the commit, and again after
-   * the checkout is pinned to the resolved head, so the image matches that
-   * commit. Commands must be safe to repeat in the same checkout. (This ordering replaced clone → pin → setup; templates built
-   * before the change rebuild once, then reuse their clone and install layers
-   * across commits.)
+   * cached build steps.
    */
   setupCommand?: string | string[];
   /**
    * Several repositories in one template. Each lands at
    * `<workingDirectory>/<repo>` and runs its own `setupCommand` inside its
-   * clone, with the same twice-around-the-pin layering as the single form.
+   * clone, with the same clone → pin → setup layering as the single form.
    * Public repositories (no `authorization`) are built before private ones in
    * caller order within each group, so their layers can outlive credential
    * rotation. Each repository writes `.mastra-sandbox/repos/<repo>`
@@ -114,8 +109,8 @@ export interface PlatformRepoTemplateOptions {
   /**
    * `repos` only. When true a failing per-repository setup command records
    * that repository's directory name in `.mastra-sandbox/setup-failed` (one
-   * line per repository, whichever passes failed) and the build continues; clone, pin, workspace and marker steps still fail
-   * the build. A per-repository marker then means "every step ran", so
+   * line per repository) and the build continues; clone, pin, workspace and
+   * marker steps still fail the build. A per-repository marker then means "every step ran", so
    * consumers check the failure list first. Default false: any failure fails
    * the build, as in the single form.
    */
@@ -345,23 +340,21 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     for (const repo of ordered) {
       const { repoDir, sha, tokenEnv, setupCommands } = repo;
       const auth = tokenEnv ? `${gitAuthFlag(tokenEnv)} ` : '';
-      // Build steps use fresh shells, so each setup command needs its own `cd`.
-      const setupSteps = setupCommands.map(command => guardedSetupCommand({ repoDir, command, continueOnFailure }));
       // Each operation gets its own cached provider build step. Same shallow
       // clone Factory makes at session start when no image provided one, so
-      // both paths yield the same checkout. The clone carries no commit, so
-      // it and the first setup pass cache across commits; the pin and the
-      // second pass are the only per-commit layers.
+      // both paths yield the same checkout.
       template = template.runCmd(
         repoCloneCommand({ cloneUrl: repo.cloneUrl, destination: repoDir, ...(tokenEnv ? { tokenEnv } : {}) }),
       );
-      for (const step of setupSteps) template = template.runCmd(step);
       if (sha) {
         template = template
           .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
           .runCmd(`git -C "${repoDir}" checkout ${sha}`);
       }
-      for (const step of setupSteps) template = template.runCmd(step);
+      // Build steps use fresh shells, so each setup command needs its own `cd`.
+      for (const command of setupCommands) {
+        template = template.runCmd(guardedSetupCommand({ repoDir, command, continueOnFailure }));
+      }
       // Last for this repository, so it only exists once every step above ran.
       const content = setupMarkerContent(setupCommands);
       template = template.runCmd(
