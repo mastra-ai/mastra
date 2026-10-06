@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import type { ContextWithMastra } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
-import { liveKitRecordingRoute } from './recording-route';
+import { liveKitRecordingRoute, recordingSchema } from './recording-route';
 
 function setup(
   spans: Array<Record<string, unknown>> = [
@@ -175,5 +175,32 @@ describe('liveKitRecordingRoute', () => {
       context,
     );
     expect(result).toEqual({ status: 502, body: { error: 'Unable to load the call recording.' } });
+  });
+});
+
+describe('recording playback validation', () => {
+  it.each([
+    'not a url',
+    '',
+    'https://',
+    'https://[invalid',
+    'javascript:alert(1)',
+    'data:audio/ogg;base64,secret',
+    'ftp://files.example/call.ogg',
+  ])('returns a validation failure for %s without throwing', url => {
+    expect(recordingSchema.safeParse({ url }).success).toBe(false);
+  });
+
+  it.each(['https://recordings.example/call.ogg?signature=short-lived', 'http://localhost:9000/call.ogg'])(
+    'accepts HTTP playback URL %s',
+    url => {
+      expect(recordingSchema.safeParse({ url })).toMatchObject({ success: true, data: { url } });
+    },
+  );
+
+  it('rejects malformed expiry dates as validation failures', () => {
+    expect(
+      recordingSchema.safeParse({ url: 'https://recordings.example/call.ogg', expiresAt: 'tomorrow' }).success,
+    ).toBe(false);
   });
 });

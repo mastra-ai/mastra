@@ -815,7 +815,7 @@ npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/age
 
 Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
 
-Keep Node.js 22.13 or newer and use a Zod version accepted by Agents: `^3.25.76 || ^4.1.8`. Verify the installed dependency tree and initialize the worker's models:
+Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Package import checks cover both supported minimums, 3.25.76 and 4.1.8, including the recording route. Verify the installed dependency tree and initialize the worker's models:
 
 ```bash npm2yarn
 npm ls @mastra/livekit @livekit/agents @livekit/agents-plugin-livekit @livekit/agents-plugin-silero @livekit/rtc-node

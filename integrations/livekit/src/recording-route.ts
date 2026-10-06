@@ -3,11 +3,8 @@ import type { SpanRecord } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 
 const traceIdSchema = z.string().min(1).max(256);
-const recordingSchema = z.object({
-  url: z
-    .string()
-    .url()
-    .refine(value => ['https:', 'http:'].includes(new URL(value).protocol)),
+export const recordingSchema = z.object({
+  url: z.url({ protocol: /^https?$/ }),
   expiresAt: z.string().datetime().optional(),
 });
 
@@ -70,8 +67,9 @@ export function liveKitRecordingRoute(options: LiveKitRecordingRouteOptions): Ap
         const recording = await options.resolveRecording({ traceId, roomName, span, context });
         if (!recording) return context.json({ status: 'unavailable' } satisfies LiveKitRecordingResponse);
         // Validate and strip extra fields so storage credentials cannot accidentally become response fields.
-        const result = recordingSchema.parse(recording);
-        return context.json({ status: 'ready', ...result } satisfies LiveKitRecordingResponse);
+        const result = recordingSchema.safeParse(recording);
+        if (!result.success) return context.json({ error: 'Unable to load the call recording.' }, 502);
+        return context.json({ status: 'ready', ...result.data } satisfies LiveKitRecordingResponse);
       } catch {
         // Storage/provider errors can contain credentials or signed request details.
         return context.json({ error: 'Unable to load the call recording.' }, 502);
