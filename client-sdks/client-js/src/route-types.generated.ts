@@ -14458,6 +14458,12 @@ export type PostMcpServerIdResourcesRead_Response = {
     uri: string;
     text?: string | undefined;
     blob?: string | undefined;
+    mimeType?: string | undefined;
+    _meta?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
   }[];
 };
 
@@ -23300,8 +23306,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
-  scope?: ('global' | 'thread') | undefined;
-  modeId?: string | undefined;
+  thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Response =

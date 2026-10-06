@@ -14,10 +14,18 @@ const lifecycleMocks = vi.hoisted(() => {
     }),
     stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
+    loadSettings: vi.fn(),
+    resolveModelDefaults: vi.fn(),
+    listBuiltinModePacks: vi.fn(),
   };
 });
 
 vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCode }));
+vi.mock('../onboarding/packs.js', () => ({ listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks }));
+vi.mock('../onboarding/settings.js', () => ({
+  loadSettings: lifecycleMocks.loadSettings,
+  resolveModelDefaults: lifecycleMocks.resolveModelDefaults,
+}));
 vi.mock('../process-memory-diagnostics.js', () => ({
   createProcessMemoryDiagnosticsFromEnvironment: lifecycleMocks.createDiagnostics,
   startConfiguredProcessMemoryDiagnostics: lifecycleMocks.startDiagnostics,
@@ -209,6 +217,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.startDiagnostics.mockClear();
     lifecycleMocks.diagnostics.stop.mockClear();
     lifecycleMocks.runMC.mockReset();
+    lifecycleMocks.loadSettings.mockReset();
+    lifecycleMocks.resolveModelDefaults.mockReset();
+    lifecycleMocks.listBuiltinModePacks.mockReset();
+    lifecycleMocks.loadSettings.mockReturnValue({ models: { activeModelPackId: null, modeDefaults: {} } });
+    lifecycleMocks.resolveModelDefaults.mockReturnValue({});
+    lifecycleMocks.listBuiltinModePacks.mockReturnValue([]);
     process.argv = argv('--prompt', 'do it');
     stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(code => {
@@ -237,7 +251,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
           hasServers: () => false,
           disconnect: vi.fn(async () => void lifecycleMocks.order.push('mcp-stop')),
         },
-        effectiveDefaults: {},
+        effectiveDefaults: { build: 'openai/gpt-5.5' },
         // close() reads `this` like the real pubsub, so a detached call is caught.
         signalsPubSub: {
           closed: false,
@@ -254,6 +268,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       async *[Symbol.asyncIterator]() {},
       result: Promise.resolve({ status: 'completed', exitCode: 0 }),
     });
+    const settings = {
+      models: { activeModelPackId: 'custom:review-pack', modeDefaults: {} },
+      customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+    };
+    lifecycleMocks.loadSettings.mockReturnValue(settings);
+    lifecycleMocks.resolveModelDefaults.mockReturnValue({ build: 'anthropic/claude-opus-4-6' });
 
     await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:0');
 
@@ -261,6 +281,10 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       settingsPath: undefined,
       coAuthor: { name: 'mastracode' },
     });
+    expect(lifecycleMocks.resolveModelDefaults).toHaveBeenCalledWith(settings, []);
+    expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
+      expect.objectContaining({ modeDefaults: { build: 'anthropic/claude-opus-4-6' } }),
+    );
     expect(lifecycleMocks.order).toEqual(
       expect.arrayContaining(['diagnostics-start', 'mastracode-create', 'intervals-stop', 'diagnostics-stop']),
     );

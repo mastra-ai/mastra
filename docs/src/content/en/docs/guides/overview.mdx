@@ -1,0 +1,56 @@
+---
+title: "Guides"
+description: "Explore guides to designing, building, and evaluating Mastra applications, from agent architecture and context to authentication and streaming."
+packages:
+  - "@mastra/core"
+---
+
+import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
+
+# Guides
+
+These guides explain how Mastra's features work together when building AI applications. They cover design decisions, runtime behavior, and patterns you can apply to your own projects.
+
+<CardGrid>
+  <CardGridItem
+    title="Multi-agent systems"
+    description="Compare handoffs, workflows, supervisors, and council patterns to choose how agents collaborate."
+    href="/docs/guides/multi-agent-systems"
+  />
+
+  <CardGridItem
+    title="Context engineering"
+    description="Combine instructions, tools, retrieval, and memory to give agents the context they need."
+    href="/docs/guides/context-engineering"
+  />
+
+  <CardGridItem
+    title="Agent lifecycle"
+    description="Follow an agent run from input preparation through model and tool calls to the final result."
+    href="/docs/guides/agent-lifecycle"
+  />
+
+  <CardGridItem
+    title="Authentication and identity"
+    description="Protect endpoints, pass trusted user context to agents and tools, and enforce data boundaries."
+    href="/docs/guides/authentication-identity"
+  />
+
+  <CardGridItem
+    title="MCP authentication"
+    description="Choose connection credentials, protect an MCP server, and control access to tools and data."
+    href="/docs/guides/mcp-authentication-authorization"
+  />
+
+  <CardGridItem
+    title="Streaming"
+    description="Stream agent and workflow responses, handle events, and integrate with AI SDK interfaces."
+    href="/docs/guides/streaming"
+  />
+
+  <CardGridItem
+    title="Build an eval loop"
+    description="Use datasets, judges, and Studio experiments to compare agent changes and build regression checks."
+    href="/docs/guides/build-an-eval-loop"
+  />
+</CardGrid>

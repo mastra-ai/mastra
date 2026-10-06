@@ -1,4 +1,4 @@
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
@@ -8,15 +8,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
-import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 
-/**
- * The Factory menu: main navigation, boards, and whatever the caller nests
- * under it (the factory Sessions list). Renders for any server-backed Factory —
- * a Factory with no linked repositories (or a disconnected GitHub integration)
- * still has a Board; those states surface connect CTAs inside the pages
- * instead of hiding the navigation.
- */
 export function FactorySection({ children }: { children?: ReactNode }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
@@ -26,7 +18,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
-      <MainSidebar.NavList>
+      <Sidebar.NavList>
         <FactoryLink to={`/factories/${factoryId}/overview`} icon={House} label="Overview" />
         <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
         <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
@@ -34,10 +26,10 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         {features.data?.knowledge ? (
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
         ) : null}
-      </MainSidebar.NavList>
+      </Sidebar.NavList>
       <section className="flex flex-col gap-1" aria-label="Boards">
-        <SidebarSectionHeading icon={<SquareKanban />}>Boards</SidebarSectionHeading>
-        <MainSidebar.NavList>
+        <Sidebar.NavHeader icon={<SquareKanban />}>Boards</Sidebar.NavHeader>
+        <Sidebar.NavList>
           {catalog.isPending ? (
             <li role="status">Loading boards…</li>
           ) : catalog.isError ? (
@@ -54,7 +46,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
               />
             ))
           )}
-        </MainSidebar.NavList>
+        </Sidebar.NavList>
       </section>
       {children}
     </nav>
@@ -68,11 +60,15 @@ function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentTyp
   const isActive = pathname === targetPathname || pathname.startsWith(`${targetPathname}/`);
 
   return (
-    <MainSidebar.NavLink asChild link={{ name: label, url: to }} isActive={isActive}>
-      <NavLink to={to} onClick={() => overlays.close('sidebar')}>
-        <Icon />
-        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
-      </NavLink>
-    </MainSidebar.NavLink>
+    <Sidebar.NavLink
+      link={{ name: label, url: to }}
+      isActive={isActive}
+      render={
+        <NavLink to={to} onClick={() => overlays.close('sidebar')}>
+          <Icon />
+          <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
+        </NavLink>
+      }
+    />
   );
 }

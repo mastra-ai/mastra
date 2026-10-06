@@ -251,9 +251,9 @@ describe('channels()', () => {
       channels({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: { 'bad key!': {} },
+        providers: { 'bad key!': {} },
       }),
-    ).rejects.toThrow(/integrations option/i);
+    ).rejects.toThrow(/providers option/i);
   });
 
   it('resolves an empty map when the project has no channel connections', async () => {
@@ -525,8 +525,7 @@ describe('channels()', () => {
     state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
     state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-B' } };
     state.contexts = {};
-    resolver.invalidate();
-    await resolver();
+    await resolver.refresh();
 
     // B's identity must come from B's token via /applications/@me — never
     // from A's leftover metadata.
@@ -657,7 +656,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           'microsoft-teams': {
             providerOptions: { appId: 'sneaky', appPassword: 'sneaky', typingStatus: false } as Record<string, unknown>,
           },
@@ -722,17 +721,142 @@ describe('channels()', () => {
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
-  it('skips channels marked disabled via per-integration overrides (no instance, no routes)', async () => {
+  it('skips channels excluded via a false provider entry (no instance, no routes)', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
     });
     const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock, { integrations: { 'slack-channels': { disabled: true } } }));
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': false } }));
     const providers = await resolver();
     expect(providers['slack-channels']).toBeUndefined();
     expect(FakeChannelProvider.configSpy).not.toHaveBeenCalledWith('slack-channels', expect.anything());
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
+  });
+
+  it('treats a false provider entry as excluded', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': false } }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeUndefined();
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
+  });
+
+  it('treats a true provider entry as enabled with default options', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': true } }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeDefined();
+    expect(resolver.getRoutes().map(route => route.path)).toContain('/slack/webhook');
+  });
+
+  it('restricts to the listed channels when providers is an array', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: ['telegram'] }));
+    const providers = await resolver();
+    // slack-channels has the only active connection, but it isn't allowlisted.
+    expect(providers['slack-channels']).toBeUndefined();
+    const paths = resolver.getRoutes().map(route => route.path);
+    expect(paths).toContain('/telegram/webhook');
+    expect(paths).not.toContain('/slack/webhook');
+  });
+
+  it("accepts 'slack' as an alias for 'slack-channels' in the record form", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { slack: true } }));
+    const providers = await resolver();
+    // The alias canonicalizes: the resolved map still keys the platform id.
+    expect(providers['slack-channels']).toBeDefined();
+    expect(providers['slack']).toBeUndefined();
+  });
+
+  it("excludes the slack channel via the 'slack' alias", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { slack: false } }));
+    expect((await resolver())['slack-channels']).toBeUndefined();
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
+  });
+
+  it("allowlists the slack channel via the 'slack' alias in the array form", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: ['slack'] }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeDefined();
+    const paths = resolver.getRoutes().map(route => route.path);
+    expect(paths).toContain('/slack/webhook');
+    expect(paths).not.toContain('/telegram/webhook');
+  });
+
+  it("rejects configuring both 'slack' and 'slack-channels'", async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: { slack: true, 'slack-channels': false } })),
+    ).rejects.toThrow(/Both 'slack' and 'slack-channels' name the 'slack-channels' channel/);
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: ['slack', 'slack-channels'] })),
+    ).rejects.toThrow(/Both 'slack' and 'slack-channels' name the 'slack-channels' channel/);
+  });
+
+  it('rejects an unknown channel id in the providers option', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: { whatsapp: {} } })),
+    ).rejects.toThrow(/Unknown channel in the providers option: 'whatsapp'/);
+    await expect(channelsFn(options(platformFetch({ connections: [] }), { providers: ['whatsapp'] }))).rejects.toThrow(
+      /Unknown channel in the providers option: 'whatsapp'/,
+    );
+  });
+
+  it('allows excluding an unknown channel id (harmless no-op)', async () => {
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(platformFetch({ connections: [] }), { providers: { whatsapp: false } }));
+    expect(await resolver()).toEqual({});
+  });
+
+  it('rejects a providers record value that is neither boolean nor object', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(
+        options(platformFetch({ connections: [] }), {
+          providers: { telegram: 'yes' as unknown as { connectionId?: string } },
+        }),
+      ),
+    ).rejects.toThrow(/expected true, false, or an options object/);
+  });
+
+  it('rejects a null providers record value with invalid_options', async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(
+        options(platformFetch({ connections: [] }), {
+          providers: { telegram: null as unknown as { connectionId?: string } },
+        }),
+      ),
+    ).rejects.toThrow(/expected true, false, or an options object, got null/);
   });
 
   it('honors a pinned connectionId when multiple are present', async () => {
@@ -747,7 +871,7 @@ describe('channels()', () => {
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
-      options(fetchMock, { integrations: { 'slack-channels': { connectionId: 'c_slack_b' } } }),
+      options(fetchMock, { providers: { 'slack-channels': { connectionId: 'c_slack_b' } } }),
     );
     const providers = await resolver();
     expect(providers['slack-channels']).toBeDefined();
@@ -815,7 +939,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           telegram: { providerOptions: { mode: 'webhook', typingStatus: false } },
         },
       }),
@@ -835,7 +959,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           telegram: {
             // Cast escape-hatch — the public type disallows these; here we
             // simulate a caller who bypassed the compile-time check to verify
@@ -869,7 +993,7 @@ describe('channels()', () => {
     await expect(tokenResolver!()).resolves.toBe(TELEGRAM_BOT_TOKEN);
   });
 
-  it('caches providers within ttlMs and invalidate() forces refresh', async () => {
+  it('caches providers within ttlMs', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -877,12 +1001,10 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     await resolver();
-    await resolver();
     const firstCallCount = fetchMock.mock.calls.length;
     expect(firstCallCount).toBeGreaterThan(0);
-    resolver.invalidate();
     await resolver();
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(firstCallCount);
+    expect(fetchMock.mock.calls.length).toBe(firstCallCount);
   });
 
   it('refresh() returns a fresh map and updates the cache', async () => {
@@ -922,9 +1044,8 @@ describe('channels()', () => {
       // A Slack connection appears on the platform — no restart, no new code.
       state.connections = [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })];
       state.credentials = { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } };
-      resolver.invalidate();
 
-      const providers = await resolver();
+      const providers = await resolver.refresh();
       expect(providers['slack-channels']).toBeInstanceOf(FakeChannelProvider);
       await expect(slackConfig().tokenResolver!()).resolves.toBe(SLACK_ACCESS_TOKEN);
       // The route surface never changed — the pre-mounted routes now have a
@@ -942,8 +1063,7 @@ describe('channels()', () => {
       const channelsFn = await importChannels();
       const resolver = await channelsFn(options(fetchMock));
       const first = await resolver();
-      resolver.invalidate();
-      const second = await resolver();
+      const second = await resolver.refresh();
       expect(second.slack).toBe(first.slack);
     });
 
@@ -960,8 +1080,7 @@ describe('channels()', () => {
       const { tokenResolver } = slackConfig();
 
       state.connections = [];
-      resolver.invalidate();
-      await expect(resolver()).resolves.toEqual({});
+      await expect(resolver.refresh()).resolves.toEqual({});
       // Routes stay mounted (the instance is long-lived)…
       expect(resolver.getRoutes().map(route => route.path)).toContain('/slack/webhook');
       // …but lazy credential fetches now fail loudly instead of using the
@@ -1002,8 +1121,7 @@ describe('channels()', () => {
       // Connection A is replaced by connection B on the platform.
       state.connections = [makeConnection({ id: 'c_slack_b', integrationId: 'slack-channels' })];
       state.credentials = { c_slack_b: { type: 'oauth2', accessToken: 'token-b', expiresAt: null } };
-      resolver.invalidate();
-      await resolver();
+      await resolver.refresh();
       await expect(tokenResolver!()).resolves.toBe('token-b');
     });
   });
@@ -1030,8 +1148,7 @@ describe('channels()', () => {
     );
 
     // The warning fires once per resolver instance, not on every refresh.
-    resolver.invalidate();
-    await resolver();
+    await resolver.refresh();
     const staleWarnings = warnSpy.mock.calls.filter(
       ([msg]) =>
         typeof msg === 'string' && msg.includes("active 'slack' connection but no 'slack-channels' connection"),
@@ -1044,8 +1161,7 @@ describe('channels()', () => {
     state.credentials = {
       c_slack_new: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
     };
-    resolver.invalidate();
-    const providersAfter = await resolver();
+    const providersAfter = await resolver.refresh();
     expect(providersAfter['slack-channels']).toBeInstanceOf(FakeChannelProvider);
   });
 });

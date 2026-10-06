@@ -16,6 +16,7 @@ import { attentionAuthorName, factoryAttentionTargetPath } from '../services/att
 import type { FactoryAttentionItem } from '../services/attention';
 import { PANEL, PANEL_ROW_LINK } from './panel';
 import { StageBadge } from './StageBadge';
+import { OverviewListEmptyState } from './OverviewListEmptyState';
 
 /** Rows before the fold, and the ceiling once it is opened. */
 const PREVIEW_ROWS = 5;
@@ -151,7 +152,7 @@ export function RunningList({
   running: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (running.length === 0) return <Empty>Nothing running</Empty>;
+  if (running.length === 0) return <OverviewListEmptyState kind="running" />;
 
   return (
     <Rows
@@ -177,7 +178,7 @@ export function StalledList({
   waiting: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (waiting.length === 0) return <Empty>Nothing stalled</Empty>;
+  if (waiting.length === 0) return <OverviewListEmptyState kind="stalled" />;
 
   return (
     <Rows
@@ -203,7 +204,7 @@ export function ActivityFeed({
   moved: MovedItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (moved.length === 0) return <Empty>Nothing moved</Empty>;
+  if (moved.length === 0) return <OverviewListEmptyState kind="activity" />;
 
   return (
     <Rows
@@ -251,7 +252,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
   if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
-  if (items.length === 0) return <Empty>All clear</Empty>;
+  if (items.length === 0) return <OverviewListEmptyState kind="attention" />;
 
   return (
     <Rows

@@ -2,8 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { platformMcpTransport, resolveClient } from '../client.js';
-import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { tools as connect } from '../tools.js';
 
 const PLATFORM_TOKEN = 'platform-token';
 const INTEGRATION_ID = 'catalog-mcp';
@@ -228,7 +228,7 @@ describe('catalog-backed MCP providers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
+      providers: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
       client: {
         accessToken: PLATFORM_TOKEN,
         baseUrl: 'https://integrations.example.test',
@@ -306,11 +306,11 @@ describe('catalog-backed MCP providers', () => {
 
 describe('MCP tool approval', () => {
   type ApprovalTool = { requireApproval?: boolean; needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown };
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch();
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -355,11 +355,24 @@ describe('MCP tool approval', () => {
     });
   });
 
+  it('matches * globs in the requireApproval list against discovered tools', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_update_*'] } });
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({}, {})).toBe(false);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
+  });
+
+  it('fails resolution when a requireApproval glob matches no discovered tool', async () => {
+    await expect(discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_nope_*'] } })).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining("Pattern 'catalog-mcp_nope_*'"),
+    });
+  });
+
   it('rejects the removed autoApproveTools option by name', () => {
     expect(() =>
       connect({
         projectId: 'project-1',
-        integrations: {
+        providers: {
           [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } as never,
         },
         client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: vi.fn() as never },
@@ -394,11 +407,11 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     },
   ];
 
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch({ connections: TWO_CONNECTIONS, matchAnyConnectionMcpPath: true });
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -475,7 +488,7 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
+      providers: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -573,15 +586,14 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     expect(acmeInitsAfterFailure).toBeGreaterThanOrEqual(1);
     warnSpy.mockRestore();
 
-    // Recovery: unblock Globex, invalidate the empty snapshot, and refresh.
-    // If the mcpClients cache still held the first-pass Acme MCPClient, it
-    // would be reused with no fresh `initialize`. The cleanup evicts +
-    // disconnects Acme's client, so both connections re-initialize on the
-    // retry. (`.invalidate()` clears only the snapshot cache, not the
+    // Recovery: unblock Globex and force a refetch past the cached empty
+    // snapshot. If the mcpClients cache still held the first-pass Acme
+    // MCPClient, it would be reused with no fresh `initialize`. The cleanup
+    // evicts + disconnects Acme's client, so both connections re-initialize
+    // on the retry. (`.refresh()` rebuilds only the snapshot, not the
     // MCPClient cache we are exercising here.)
     failing.clear();
-    tools.invalidate();
-    const discovered = (await tools()) as Record<string, unknown>;
+    const discovered = (await tools.refresh()) as Record<string, unknown>;
     expect(discovered).toHaveProperty('catalog-mcp_update_record');
     expect(gateway.getInitializeCountForConnection(acmeId)).toBeGreaterThan(acmeInitsAfterFailure);
     expect(gateway.getInitializeCountForConnection(globexId)).toBeGreaterThanOrEqual(1);

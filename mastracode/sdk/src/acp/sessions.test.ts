@@ -225,7 +225,7 @@ describe('ACP session isolation', () => {
     state.emit({ type: 'agent_end', reason: 'complete' });
     await Promise.all([prompt, mode, model]);
     expect(state.mode.switch).toHaveBeenCalledWith({ modeId: 'plan' });
-    expect(state.model.switch).toHaveBeenCalledWith({ modelId: 'test-model' });
+    expect(state.model.switch).toHaveBeenCalledWith('test-model');
     await agent.dispose();
   });
 
