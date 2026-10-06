@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildObserverSystemPrompt, formatMessagesForObserver, optimizeObservationsForContext } from './observer-agent';
+import {
+  buildObserverSystemPrompt,
+  formatMessagesForObserver,
+  optimizeObservationsForContext,
+  parseMultiThreadObserverOutput,
+  parseObserverOutput,
+  sortObservationsByTime,
+} from './observer-agent';
 
 describe('optimizeObservationsForContext', () => {
   it('should strip yellow and green emojis', () => {
@@ -130,5 +137,86 @@ describe('Observer event order', () => {
     expect(toolLines.length).toBeGreaterThanOrEqual(3);
     for (const line of toolLines) expect(line).toMatch(/^Tool (Call|Result) \S+ \(5:29 PM\):/);
     expect(input).toMatch(/User \(5:35 PM\):/);
+  });
+});
+
+describe('sortObservationsByTime', () => {
+  it('moves an observation listed out of order back to when it happened, keeping its sub-items', () => {
+    const observations = [
+      'Date: Aug 31, 2026',
+      '* 🔴 (13:35) User asked for a validation step',
+      '* 🟡 (13:24) Agent revised the plan',
+      '  * -> Fixed sequencing',
+      '* 🟡 (13:29) Plan was not approved; waiting for revision instructions',
+    ].join('\n');
+
+    expect(sortObservationsByTime(observations)).toBe(
+      [
+        'Date: Aug 31, 2026',
+        '* 🟡 (13:24) Agent revised the plan',
+        '  * -> Fixed sequencing',
+        '* 🟡 (13:29) Plan was not approved; waiting for revision instructions',
+        '* 🔴 (13:35) User asked for a validation step',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps the written order for observations with the same time and sorts each date separately', () => {
+    const observations = [
+      'Date: Dec 4, 2025',
+      '* 🔴 (14:31) Second',
+      '* 🟡 (14:30) First A',
+      '* 🟡 (14:30) First B',
+      '',
+      'Date: Dec 5, 2025',
+      '* 🔴 (09:20) Later',
+      '* 🟡 (09:15) Earlier',
+    ].join('\n');
+
+    expect(sortObservationsByTime(observations)).toBe(
+      [
+        'Date: Dec 4, 2025',
+        '* 🟡 (14:30) First A',
+        '* 🟡 (14:30) First B',
+        '* 🔴 (14:31) Second',
+        '',
+        'Date: Dec 5, 2025',
+        '* 🟡 (09:15) Earlier',
+        '* 🔴 (09:20) Later',
+      ].join('\n'),
+    );
+  });
+
+  it('orders AM/PM times', () => {
+    const observations = ['Date: Aug 31, 2026', '* 🔴 (1:35 PM) User', '* 🟡 (11:50 AM) Agent'].join('\n');
+    expect(sortObservationsByTime(observations)).toBe(
+      ['Date: Aug 31, 2026', '* 🟡 (11:50 AM) Agent', '* 🔴 (1:35 PM) User'].join('\n'),
+    );
+  });
+
+  it.each([
+    ['an observation has no time', ['* 🔴 (13:35) User', '* 🟡 Agent revised the plan']],
+    ['12-hour times without AM/PM span different hours', ['* 🔴 (1:35) User', '* 🟡 (11:50) Agent']],
+    ['AM/PM and plain times are mixed', ['* 🔴 (1:35 PM) User', '* 🟡 (11:50) Agent']],
+    ['a top-level line is not a list item', ['* 🔴 (13:35) User', 'Some heading', '* 🟡 (13:24) Agent']],
+  ])('leaves a date group as written when %s', (_, lines) => {
+    const observations = ['Date: Aug 31, 2026', ...lines].join('\n');
+    expect(sortObservationsByTime(observations)).toBe(observations);
+  });
+
+  it('leaves observations without a date header unchanged', () => {
+    const observations = '* 🔴 (13:35) User\n* 🟡 (13:24) Agent';
+    expect(sortObservationsByTime(observations)).toBe(observations);
+  });
+
+  it('is applied to single-thread and multi-thread Observer output', () => {
+    const body = 'Date: Aug 31, 2026\n* 🔴 (13:35) User\n* 🟡 (13:24) Agent';
+    const sorted = 'Date: Aug 31, 2026\n* 🟡 (13:24) Agent\n* 🔴 (13:35) User';
+
+    expect(parseObserverOutput(`<observations>\n${body}\n</observations>`).observations).toBe(sorted);
+    const multi = parseMultiThreadObserverOutput(
+      `<observations>\n<thread id="t1">\n${body}\n</thread>\n</observations>`,
+    );
+    expect(multi.threads.get('t1')?.observations).toBe(sorted);
   });
 });

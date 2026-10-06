@@ -1604,7 +1604,7 @@ export function parseMultiThreadObserverOutput(
     }
 
     // Clean up observations and apply line truncation
-    observations = sanitizeObservationLines(observations.trim());
+    observations = sortObservationsByTime(sanitizeObservationLines(observations.trim()));
 
     threads.set(threadId, {
       observations,
@@ -1760,7 +1760,7 @@ export function parseObserverOutput(output: string, extractors: readonly Extract
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  const observations = sortObservationsByTime(sanitizeObservationLines(parsed.observations || ''));
 
   return {
     observations,
@@ -1911,6 +1911,78 @@ export function sanitizeObservationLines(observations: string): string {
     }
   }
   return changed ? lines.join('\n') : observations;
+}
+
+const OBSERVATION_TIME = /^[*-]\s+(?:\S+\s+)?\((\d{1,2}):(\d{2})\s*([AaPp])?\.?(?:[Mm]\.?)?\)/;
+
+/** Minutes since midnight for each item, or undefined when the group's times can't be ordered safely. */
+function observationMinutes(items: string[][]): number[] | undefined {
+  const times = items.map(item => OBSERVATION_TIME.exec(item[0]!));
+  if (times.some(t => !t)) return undefined;
+  const matches = times as RegExpExecArray[];
+  const marked = matches.filter(m => m[3]).length;
+  if (marked > 0 && marked < matches.length) return undefined;
+  if (marked === matches.length) {
+    return matches.map(m => (Number(m[1]) % 12) * 60 + (/p/i.test(m[3]!) ? 720 : 0) + Number(m[2]));
+  }
+  // Without AM/PM, "13:35" or "09:15" are 24-hour, "1:35" is 12-hour, and "10:30" could be either.
+  const hours = matches.map(m => m[1]!);
+  const twelveHour = hours.some(h => /^[1-9]$/.test(h));
+  const twentyFourHour = hours.some(h => /^(0\d|1[3-9]|2\d)$/.test(h));
+  if (twelveHour && (twentyFourHour || new Set(hours).size > 1)) return undefined;
+  return matches.map(m => Number(m[1]) * 60 + Number(m[2]));
+}
+
+/**
+ * Put the top-level observations of each "Date:" group in time order, keeping indented
+ * sub-items with their parent. The Observer writes a time on every observation but tends
+ * to list a user's message ahead of the earlier events it follows, which can make a
+ * superseded state read as the latest one. Groups are left as written when any
+ * observation has no time or the times are ambiguous.
+ */
+export function sortObservationsByTime(observations: string): string {
+  if (!observations) return observations;
+  const output: string[] = [];
+  let group: { header: string[]; items: string[][]; trailing: string[]; sortable: boolean } | undefined;
+
+  const flush = () => {
+    if (!group) return;
+    const minutes = group.sortable && group.items.length > 1 ? observationMinutes(group.items) : undefined;
+    const items = minutes
+      ? group.items
+          .map((item, i) => ({ item, minute: minutes[i]! }))
+          .sort((a, b) => a.minute - b.minute)
+          .map(x => x.item)
+      : group.items;
+    output.push(...group.header, ...items.flat(), ...group.trailing);
+    group = undefined;
+  };
+
+  for (const line of observations.split('\n')) {
+    if (/^\s*Date:\s/.test(line)) {
+      flush();
+      group = { header: [line], items: [], trailing: [], sortable: true };
+    } else if (!group) {
+      output.push(line);
+    } else if (/^[*-]\s/.test(line)) {
+      group.items.at(-1)?.push(...group.trailing);
+      group.trailing = [];
+      group.items.push([line]);
+    } else if (group.items.length === 0) {
+      group.header.push(line);
+    } else if (line.trim() === '') {
+      group.trailing.push(line);
+    } else if (/^\s/.test(line)) {
+      group.items.at(-1)!.push(...group.trailing, line);
+      group.trailing = [];
+    } else {
+      group.sortable = false;
+      group.items.at(-1)!.push(...group.trailing, line);
+      group.trailing = [];
+    }
+  }
+  flush();
+  return output.join('\n');
 }
 
 /**
