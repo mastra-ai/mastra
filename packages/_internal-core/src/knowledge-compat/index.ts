@@ -1,5 +1,4 @@
 export const KNOWLEDGE_V2_CORE_FEATURE = 'knowledge-v2';
-export const KNOWLEDGE_V2_MINIMUM_CORE_VERSION = '1.65.0-0';
 
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
 export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
@@ -39,6 +38,26 @@ export const KNOWLEDGE_TABLE_NAMES = [
 /** Knowledge v1 tables with no v2 equivalent; an explicit schema reset drops them. */
 export const RETIRED_KNOWLEDGE_TABLE_NAMES = ['mastra_knowledge_cursors'] as const;
 
+/** Tables and indexes published v1 adapters created for every app, whether or not it used Knowledge. */
+export const PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES: ReadonlySet<string> = new Set([
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  ...RETIRED_KNOWLEDGE_TABLE_NAMES,
+]);
+export const PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
+  'idx_knowledge_nodes_identity',
+  'idx_knowledge_nodes_scope',
+  'idx_knowledge_records_node_latest',
+  'idx_knowledge_records_thread_latest',
+  'idx_knowledge_mentions_record',
+  'idx_knowledge_activity_latest',
+  'idx_knowledge_outbox_idempotency',
+  'idx_knowledge_outbox_claim',
+]);
+
 type KnowledgeStorageColumn = {
   type: 'text' | 'timestamp' | 'integer' | 'bigint' | 'jsonb' | 'boolean';
   nullable: boolean;
@@ -73,20 +92,17 @@ export const KNOWLEDGE_V2_NODES_SCHEMA = {
 
 export const KNOWLEDGE_V2_RECORDS_SCHEMA = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  node: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
   text: { type: 'text', nullable: false },
   metadata: { type: 'jsonb', nullable: true },
-  source: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
-  createdAt: { type: 'timestamp', nullable: false },
+  capturedAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
   deletedAt: { type: 'timestamp', nullable: true },
   deletedBy: { type: 'text', nullable: true },
-  node: { type: 'text', nullable: true },
   scope: { type: 'jsonb', nullable: true },
   scopeKey: { type: 'text', nullable: true },
   sourceThreadId: { type: 'text', nullable: true },
-  capturedAt: { type: 'timestamp', nullable: true },
   when: { type: 'timestamp', nullable: true },
   maxScope: { type: 'text', nullable: true },
 } as const satisfies KnowledgeSchema;
@@ -209,7 +225,7 @@ interface KnowledgeV2Core {
 export function assertKnowledgeV2CoreSupport(features: ReadonlySet<string>): void {
   if (!features.has(KNOWLEDGE_V2_CORE_FEATURE)) {
     throw new Error(
-      `Knowledge v2 requires @mastra/core >=${KNOWLEDGE_V2_MINIMUM_CORE_VERSION} with the "${KNOWLEDGE_V2_CORE_FEATURE}" feature`,
+      `Knowledge v2 requires a @mastra/core release with the "${KNOWLEDGE_V2_CORE_FEATURE}" feature. Upgrade @mastra/core to use Knowledge; other storage domains keep working on this version.`,
     );
   }
 }

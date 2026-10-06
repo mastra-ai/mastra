@@ -15,6 +15,7 @@ import {
 import * as coreStorage from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { LibSQLStore } from '../../index';
 import { withClientWriteLock } from '../../db/write-lock';
 import { KnowledgeLibSQL } from '.';
 
@@ -58,7 +59,7 @@ describe('Knowledge v2 Core compatibility', () => {
     const loadCore = knowledgeCompat.createKnowledgeV2CoreLoader(new Set(), loadStorageModule);
 
     await expect(loadCore()).rejects.toThrow(
-      'Knowledge v2 requires @mastra/core >=1.65.0-0 with the "knowledge-v2" feature',
+      'Knowledge v2 requires a @mastra/core release with the "knowledge-v2" feature. Upgrade @mastra/core to use Knowledge; other storage domains keep working on this version.',
     );
     expect(loadStorageModule).not.toHaveBeenCalled();
   });
@@ -141,6 +142,63 @@ createKnowledgeSchemaResetTests(async () => {
 });
 
 describe('KnowledgeLibSQL initialization', () => {
+  it('replaces the empty v1 tables every published LibSQL store created', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+
+      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      const tables = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
+      );
+      expect(new Set(tables.rows.map(row => String(row.name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
+      expect((await client.execute("SELECT name FROM sqlite_master WHERE name = 'existing_domain'")).rows).toHaveLength(
+        1,
+      );
+    } finally {
+      client.close();
+    }
+  });
+
+  it('opens Knowledge through the store on a database an earlier release initialized', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v1-upgrade-'));
+    const url = `file:${join(directory, 'mastra.db')}`;
+    const client = createClient({ url });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      const store = new LibSQLStore({ id: 'upgraded', url });
+      await store.init();
+
+      const knowledge = await store.getStore('knowledge');
+      expect(await knowledge?.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      await store.close();
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('names the reset call when v1 tables hold rows', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute(
+        "INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES ('thread', 'curate', 'k', '2026-01-01T00:00:00.000Z')",
+      );
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow(
+        'await storage.stores.knowledge.dangerouslyReset()',
+      );
+      expect((await client.execute('SELECT agent FROM mastra_knowledge_cursors')).rows).toHaveLength(1);
+    } finally {
+      client.close();
+    }
+  });
+
   it.each([
     'CREATE TABLE mastra_knowledge_unknown (id TEXT)',
     'CREATE TRIGGER custom_knowledge_trigger AFTER INSERT ON mastra_knowledge_nodes BEGIN SELECT 1; END',

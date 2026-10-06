@@ -66,7 +66,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(snapshot.tableNames).toBe(tableNames);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(KnowledgeSchemaResetRequiredError);
     expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(
-      'Knowledge schema reset required: experimental v1 columns detected',
+      'Knowledge schema reset required: experimental v1 columns detected. Existing Knowledge data is not migrated. To replace it, call `await storage.stores.knowledge.dangerouslyReset()`, which deletes every Knowledge row and nothing else.',
     );
     expect(inspectKnowledgeSchema({ available: true, tableNames: [] })).toEqual({
       status: 'uninitialized',
