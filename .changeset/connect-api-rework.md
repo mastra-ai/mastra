@@ -38,6 +38,14 @@ tools({ providers: { linear: true, github: false } }); // enable / exclude
 
 Unknown provider ids now fail with `invalid_options` instead of warning once and silently resolving nothing.
 
+In `channels()`, `slack` is accepted as an alias for the platform's `slack-channels` key, so the common spelling needs no quotes:
+
+```ts
+channels({ providers: { slack: true, discord: true } });
+```
+
+Both spellings configure the same channel; naming it twice throws.
+
 **Glob filters and top-level defaults**
 
 `allowTools`, `disallowTools`, and `requireApproval` accept `*` globs, and all three can be set at the top level of `tools()` as defaults for every provider. Per-provider options win, including `requireApproval: false` to opt out of a global policy.

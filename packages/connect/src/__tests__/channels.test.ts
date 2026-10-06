@@ -773,6 +773,54 @@ describe('channels()', () => {
     expect(paths).not.toContain('/slack/webhook');
   });
 
+  it("accepts 'slack' as an alias for 'slack-channels' in the record form", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { slack: true } }));
+    const providers = await resolver();
+    // The alias canonicalizes: the resolved map still keys the platform id.
+    expect(providers['slack-channels']).toBeDefined();
+    expect(providers['slack']).toBeUndefined();
+  });
+
+  it("excludes the slack channel via the 'slack' alias", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: { slack: false } }));
+    expect((await resolver())['slack-channels']).toBeUndefined();
+    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
+  });
+
+  it("allowlists the slack channel via the 'slack' alias in the array form", async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { providers: ['slack'] }));
+    const providers = await resolver();
+    expect(providers['slack-channels']).toBeDefined();
+    const paths = resolver.getRoutes().map(route => route.path);
+    expect(paths).toContain('/slack/webhook');
+    expect(paths).not.toContain('/telegram/webhook');
+  });
+
+  it("rejects configuring both 'slack' and 'slack-channels'", async () => {
+    const channelsFn = await importChannels();
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: { slack: true, 'slack-channels': false } })),
+    ).rejects.toThrow(/Both 'slack' and 'slack-channels' name the 'slack-channels' channel/);
+    await expect(
+      channelsFn(options(platformFetch({ connections: [] }), { providers: ['slack', 'slack-channels'] })),
+    ).rejects.toThrow(/Both 'slack' and 'slack-channels' name the 'slack-channels' channel/);
+  });
+
   it('rejects an unknown channel id in the providers option', async () => {
     const channelsFn = await importChannels();
     await expect(

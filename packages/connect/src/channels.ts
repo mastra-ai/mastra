@@ -58,8 +58,13 @@ export interface ChannelsProviderOptions<ProviderOptions = Record<string, unknow
  * a channel with default options and `false` excludes it, mirroring the
  * `tools()` shorthand. Unknown ids are allowed with a generic option shape so
  * future channels don't need a type change here.
+ *
+ * `slack` is accepted as an alias for `slack-channels` (the platform keys the
+ * Slack channel `slack-channels` because `slack` names the Slack tools
+ * provider); setting both keys throws.
  */
 export interface ChannelsProviders {
+  slack?: boolean | ChannelsProviderOptions<SlackChannelsProviderOptions>;
   'slack-channels'?: boolean | ChannelsProviderOptions<SlackChannelsProviderOptions>;
   telegram?: boolean | ChannelsProviderOptions<TelegramChannelsProviderOptions>;
   discord?: boolean | ChannelsProviderOptions<DiscordChannelsProviderOptions>;
@@ -74,11 +79,14 @@ export interface ChannelsOptions {
    * Which channels to resolve, in one of two shapes:
    * - `["discord", "telegram"]` — an allowlist: only the listed channels are
    *   constructed and mounted.
-   * - `{ discord: true, telegram: { connectionId: "..." }, "slack-channels": false }` —
+   * - `{ discord: true, telegram: { connectionId: "..." }, slack: false }` —
    *   per-channel configuration. Every registered channel still resolves
    *   unless excluded: `true` (or `{}`) enables with defaults, `false`
    *   excludes, and an options object pins a connection or passes
    *   provider-specific options.
+   *
+   * `slack` is an alias for the platform's `slack-channels` key; both spell
+   * the same channel in either shape, and naming it twice throws.
    *
    * Omit the option entirely to resolve every registered channel.
    */
@@ -385,13 +393,38 @@ interface NormalizedChannelProviders {
 }
 
 /**
+ * Friendly channel-key aliases. The Slack channel is keyed `slack-channels`
+ * on the platform (plain `slack` names the Slack tools provider), but inside
+ * a channels() config `slack` is unambiguous — accept it and canonicalize to
+ * the platform key for registration and connection lookup.
+ */
+const CHANNEL_KEY_ALIASES: Record<string, string> = { slack: 'slack-channels' };
+
+const canonicalChannelId = (id: string): string => CHANNEL_KEY_ALIASES[id] ?? id;
+
+/** Throws when two option keys (e.g. `slack` and `slack-channels`) name the same channel. */
+function rejectAliasCollision(sourceKeys: Record<string, string>, canonical: string, key: string): void {
+  const existing = sourceKeys[canonical];
+  if (existing === undefined) return;
+  throw new MastraConnectError(
+    'invalid_options',
+    existing === key
+      ? `Duplicate provider '${key}' in providers array.`
+      : `Both '${existing}' and '${key}' name the '${canonical}' channel in the providers option; use one key.`,
+  );
+}
+
+/**
  * Turns the two accepted `providers` shapes into the internal form, mirroring
  * `tools()`. The array form becomes an allowlist with default options; the
  * record form expands boolean shorthands (`true` → `{}`, `false` → an
- * internal exclusion marker). Malformed inputs throw at channels() time.
+ * internal exclusion marker). Alias keys canonicalize first, so `slack` and
+ * `slack-channels` configure the same channel (and collide loudly). Malformed
+ * inputs throw at channels() time.
  */
 function normalizeChannelProviders(providers: ChannelsOptions['providers']): NormalizedChannelProviders {
   if (providers === undefined) return { overrides: {}, only: undefined };
+  const sourceKeys: Record<string, string> = {};
   if (Array.isArray(providers)) {
     const overrides: Record<string, NormalizedChannelsProviderOptions> = {};
     for (const entry of providers) {
@@ -401,22 +434,25 @@ function normalizeChannelProviders(providers: ChannelsOptions['providers']): Nor
           `Invalid providers entry: expected a string channel id, got ${typeof entry}.`,
         );
       }
-      if (overrides[entry] !== undefined) {
-        throw new MastraConnectError('invalid_options', `Duplicate provider '${entry}' in providers array.`);
-      }
-      overrides[entry] = {};
+      const canonical = canonicalChannelId(entry);
+      rejectAliasCollision(sourceKeys, canonical, entry);
+      sourceKeys[canonical] = entry;
+      overrides[canonical] = {};
     }
     return { overrides, only: new Set(Object.keys(overrides)) };
   }
   const overrides: Record<string, NormalizedChannelsProviderOptions> = {};
   for (const [providerId, value] of Object.entries(providers)) {
     if (value === undefined) continue;
+    const canonical = canonicalChannelId(providerId);
+    rejectAliasCollision(sourceKeys, canonical, providerId);
+    sourceKeys[canonical] = providerId;
     if (value === true) {
-      overrides[providerId] = {};
+      overrides[canonical] = {};
     } else if (value === false) {
-      overrides[providerId] = { disabled: true };
+      overrides[canonical] = { disabled: true };
     } else if (typeof value === 'object' && !Array.isArray(value)) {
-      overrides[providerId] = value;
+      overrides[canonical] = value;
     } else {
       throw new MastraConnectError(
         'invalid_options',

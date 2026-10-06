@@ -41,6 +41,24 @@ const legalBooleanShorthand: ChannelsOptions = {
 };
 void legalBooleanShorthand;
 
+// Legal: `slack` alias for `slack-channels`, with the Slack-specialized
+// providerOptions shape (reserved fields still rejected below).
+const legalSlackAlias: ChannelsOptions = {
+  projectId: 'proj_x',
+  providers: {
+    slack: { connectionId: 'conn_slack_prod', providerOptions: { appName: 'My Bot' } },
+  },
+};
+void legalSlackAlias;
+
+// Illegal: the alias carries the same reserved-field enforcement as the
+// canonical key.
+const illegalSlackAliasReserved: ChannelsProviders = {
+  // @ts-expect-error -- token is a reserved Slack provider option
+  slack: { providerOptions: { token: 'xoxb-leak' } },
+};
+void illegalSlackAliasReserved;
+
 // ---------------------------------------------------------------------------
 // providerOptions reserved-field enforcement.
 //
