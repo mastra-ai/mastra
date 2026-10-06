@@ -67,7 +67,7 @@ describe('guardedSetupCommand', () => {
 
   it('wraps the command and appends the repo dir to the failure list when the guard is on', () => {
     expect(guardedSetupCommand({ repoDir: 'x', command: 'pnpm i && pnpm build', continueOnFailure: true })).toBe(
-      `( cd "x" && ( pnpm i && pnpm build\n) ) || { mkdir -p ".mastra-sandbox" && printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
+      `( cd "x" && ( pnpm i && pnpm build\n) ) || { mkdir -p ".mastra-sandbox" && grep -qxF 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,
     );
   });
 
@@ -96,11 +96,20 @@ describe('guardedSetupCommand', () => {
       expect(existsSync(failed())).toBe(false);
     });
 
-    it('lists each failing repo on its own line', () => {
+    it('lists each failing repo on its own line, once, however many passes fail', () => {
       setup('x', 'y');
       run(guardedSetupCommand({ repoDir: 'x', command: 'exit 1', continueOnFailure: true }));
       run(guardedSetupCommand({ repoDir: 'y', command: 'false', continueOnFailure: true }));
+      run(guardedSetupCommand({ repoDir: 'x', command: 'exit 1', continueOnFailure: true }));
       expect(readFileSync(failed(), 'utf8')).toBe('x\ny\n');
+    });
+
+    it('does not mistake a prefix or a suffix of a directory name for a prior failure', () => {
+      setup('x', 'xy', 'ax');
+      run(guardedSetupCommand({ repoDir: 'xy', command: 'exit 1', continueOnFailure: true }));
+      run(guardedSetupCommand({ repoDir: 'x', command: 'exit 1', continueOnFailure: true }));
+      run(guardedSetupCommand({ repoDir: 'ax', command: 'exit 1', continueOnFailure: true }));
+      expect(readFileSync(failed(), 'utf8')).toBe('xy\nx\nax\n');
     });
 
     it('survives a command that ends in a shell comment', () => {
