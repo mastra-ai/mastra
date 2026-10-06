@@ -365,3 +365,20 @@ describe('stored-agents schemas – memory references', () => {
     expect(response.data?.memory).toEqual({ type: 'id', memoryId: 'chat' });
   });
 });
+
+describe('stored-agents schemas – instruction blocks', () => {
+  it('preserves per-usage rules on prompt_block_ref blocks', () => {
+    const refBlock = {
+      type: 'prompt_block_ref',
+      id: 'shared-default-user-prompt',
+      rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+    };
+    const result = createStoredAgentBodySchema.safeParse({
+      name: 'Test Agent',
+      instructions: [refBlock],
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.instructions).toEqual([refBlock]);
+  });
+});

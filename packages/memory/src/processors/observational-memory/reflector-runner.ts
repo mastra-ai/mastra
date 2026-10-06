@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { MessageList } from '@mastra/core/agent';
+import type { AgentMemoryOption, MessageList } from '@mastra/core/agent';
 import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
@@ -49,7 +49,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
-import { withRetry } from './retry';
+import { assertCompleteModelResponse, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
@@ -304,6 +304,9 @@ export class ReflectorRunner {
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
       model: agentModel,
       maxRetries: 0,
+      // withRetry owns retries and restarts each attempt from a clean prompt.
+      // Processor retries would continue from the failed attempt instead.
+      errorProcessorDefaults: false,
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
@@ -394,6 +397,7 @@ export class ReflectorRunner {
       ? this.createAgent(resolvedModel.model, temporaryMemory.memory, activeExtractors)
       : this.createAgent(resolvedModel.model, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+    let attemptMemory: AgentMemoryOption | undefined;
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -450,12 +454,17 @@ export class ReflectorRunner {
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
                 try {
+                  attemptMemory = temporaryMemory?.newThread();
                   const streamResult = await agent.stream(prompt, {
+                    // One prompt, one reply. Without this cap, a reply cut off with finishReason
+                    // "other" or "unknown" makes the loop continue from the partial text, and
+                    // assertCompleteModelResponse would only see the final step's "stop".
+                    maxSteps: 1,
                     modelSettings: {
                       ...this.reflectionConfig.modelSettings,
                     },
                     providerOptions: this.reflectionConfig.providerOptions as any,
-                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(attemptMemory ? { memory: attemptMemory } : {}),
                     ...(abortSignal ? { abortSignal } : {}),
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
@@ -490,7 +499,7 @@ export class ReflectorRunner {
                       : {}),
                   });
 
-                  return await streamResult.getFullOutput();
+                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM reflector');
                 } catch (error) {
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
                   throw new OmModelExecutionError('reflector-model', error);
@@ -606,7 +615,7 @@ export class ReflectorRunner {
       agent,
       source: 'reflector',
       extractors: activeExtractors,
-      memory: temporaryMemory?.options,
+      memory: attemptMemory,
       priorExtractedValues,
       requestContext: internalRequestContext,
       observabilityContext,

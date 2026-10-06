@@ -1,5 +1,35 @@
 # @mastra/clickhouse
 
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed `updateMessages` deleting and re-inserting every message whose content it updated. Content updates are now applied in place, which is faster and no longer logs the full message content. ([#25984](https://github.com/mastra-ai/mastra/pull/25984))
+
+- Added token and cost measures to `aggregateTraces()` in the ClickHouse observability store. ([#25970](https://github.com/mastra-ai/mastra/pull/25970))
+
+  - **Token measures:** `tokens.input`, `tokens.output`, `tokens.total`, `tokens.reasoning`, and `tokens.cached`, each as `.sum` or `.avg`.
+  - **Cost measures:** `cost.sum` and `cost.avg`. Rows for cost requests also include `cost: { coverage, unit }`.
+
+  ```ts
+  const plan = planTraceAggregate(
+    parseTraceAggregateRequest({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      measures: ['tokens.total.sum', 'cost.sum'],
+    }),
+  );
+  const { rows } = await observability.aggregateTraces(plan);
+  // rows[0] → { dimensions: { entityName: 'support' }, measures: { 'tokens.total.sum': 7800, 'cost.sum': 3.75 }, cost: { coverage: 0.75, unit: 'usd' } }
+  ```
+
+  Usage comes from the model token metrics of each trace. Retried metric writes count once without waiting for background merges, and spend recorded after the window ends still counts for traces that started inside it.
+
+- Fixed `listTraces` failing with a SQL syntax error when filtering by `hasChildError` in the ClickHouse observability store. ([#25984](https://github.com/mastra-ai/mastra/pull/25984))
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 1.23.0-alpha.2
 
 ### Patch Changes

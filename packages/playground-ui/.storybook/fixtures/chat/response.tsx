@@ -2,11 +2,9 @@ import type { TextPart } from '@mastra/react/ui';
 import { editArgs, plan, reviewTools } from './data';
 import type { Phase, Turn } from './data';
 import { ReviewTool } from './tool';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { MessageText } from '@/domains/chat/messages/renderers/message-text';
 import { ReasoningPartRenderer } from '@/domains/chat/messages/renderers/reasoning-part-renderer';
 import { SignalBadge } from '@/domains/chat/messages/signal-badge';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { AskUser } from '@/ds/components/ai/ask-user';
 import { useRevealedParts } from '@/ds/components/ai/message-reveal';
 import {
@@ -21,6 +19,7 @@ import {
   PlanMain,
   PlanTitle,
 } from '@/ds/components/ai/plan';
+import { ToolApprovalActions, ToolApprovalStatus } from '@/ds/components/ai/tool-approval';
 import { ToolCallGroup } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -84,27 +83,14 @@ export function ConversationResponse({ turn, transitionTurn }: ConversationRespo
             }
           />
           {turn.phase !== 'question' && (
-            <ReviewTool toolName="edit_file" args={editArgs} defaultOpen={turn.phase === 'approval'}>
+            <ReviewTool
+              toolName="edit_file"
+              args={editArgs}
+              defaultOpen={turn.phase === 'approval'}
+              badges={turn.phase === 'approval' && <ToolApprovalStatus />}
+            >
               {turn.phase === 'approval' && (
-                <ToolCallProvider
-                  approveToolcall={approveEdit}
-                  declineToolcall={declineEdit}
-                  approveToolcallGenerate={approveEdit}
-                  declineToolcallGenerate={declineEdit}
-                  approveNetworkToolcall={approveEdit}
-                  declineNetworkToolcall={declineEdit}
-                  isRunning={false}
-                  toolCallApprovals={{}}
-                  networkToolCallApprovals={{}}
-                >
-                  <ToolApprovalButtons
-                    toolCallId="composer-edit"
-                    toolName="edit_file"
-                    toolCalled={false}
-                    isNetwork={false}
-                    toolApprovalMetadata={{ toolCallId: 'composer-edit', toolName: 'edit_file', args: editArgs }}
-                  />
-                </ToolCallProvider>
+                <ToolApprovalActions toolName="edit_file" onApprove={approveEdit} onDecline={declineEdit} />
               )}
             </ReviewTool>
           )}

@@ -101,7 +101,7 @@ describe('hydrateSupervisorSession', () => {
       factoryProjectId: project.id,
       factoryOrgId: 'org-1',
     });
-    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-sonnet-4' });
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-sonnet-4');
   });
 
   it('keeps the current model when the project has no default model', async () => {
