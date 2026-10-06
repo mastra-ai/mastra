@@ -8044,6 +8044,7 @@ export class Agent<
       eagerToolExecution: options.eagerToolExecution ?? true,
       resumeContext,
       agentId: this.id,
+      actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
       agentName: this.name,
       toolCallId: options.toolCallId,

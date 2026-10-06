@@ -539,7 +539,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   description: 'Subscribes to a session\u2019s event bus and streams events to the client over SSE.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
-  requiresPermission: 'agent-controller:read',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -888,7 +888,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   description: 'Returns the current mode, model, thread, and durable tasks for initial UI hydration.',
   tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'agent-controller:read',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);

@@ -8,6 +8,7 @@ import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
@@ -161,6 +162,112 @@ describe('Agent FGA checks', () => {
       await agent.generate('test', { requestContext: requestContext as any });
 
       expect(model.doGenerateCalls).toHaveLength(1);
+    });
+  });
+
+  describe('agent memory', () => {
+    for (const method of ['generate', 'stream'] as const) {
+      it(`denies ${method} before reading memory`, async () => {
+        const fgaProvider = createMockFGAProvider(true);
+        vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+          if (input.permission === 'memory:read') {
+            throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+          }
+        });
+        const memory = new MockMemory();
+        const getThreadById = vi.spyOn(memory, 'getThreadById');
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'test',
+          model: createMockModel(),
+          memory,
+        });
+        new Mastra({ agents: { testAgent: agent }, logger: false, server: { fga: fgaProvider } });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+        await expect(
+          agent[method]('test', {
+            memory: { thread: 'thread-1', resource: 'resource-1' },
+            requestContext: requestContext as any,
+          } as any),
+        ).rejects.toThrow('FGA authorization denied: user user-1 cannot memory:read on thread:thread-1');
+
+        expect(getThreadById).not.toHaveBeenCalled();
+        expect(fgaProvider.require).toHaveBeenCalledWith(
+          { id: 'user-1', organizationMembershipId: 'om-1' },
+          {
+            resource: { type: 'thread', id: 'thread-1' },
+            permission: 'memory:read',
+            context: {
+              requestContext,
+              resourceId: 'resource-1',
+              metadata: {
+                threadId: 'thread-1',
+                resourceId: 'resource-1',
+                agentId: 'test-agent',
+              },
+            },
+          },
+        );
+      });
+    }
+
+    it('denies writes before creating a memory thread', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+        if (input.permission === 'memory:write') {
+          throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+        }
+      });
+      const memory = new MockMemory();
+      const createThread = vi.spyOn(memory, 'createThread');
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        memory,
+      });
+      new Mastra({ agents: { testAgent: agent }, logger: false, server: { fga: fgaProvider } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        agent.generate('test', {
+          memory: { thread: 'thread-1', resource: 'resource-1' },
+          requestContext: requestContext as any,
+        }),
+      ).rejects.toThrow('FGA authorization denied: user user-1 cannot memory:write on thread:thread-1');
+
+      expect(createThread).not.toHaveBeenCalled();
+    });
+
+    it('authorizes each memory permission once per run', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        memory,
+      });
+      new Mastra({ agents: { testAgent: agent }, logger: false, server: { fga: fgaProvider } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await agent.generate('test', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+        requestContext: requestContext as any,
+      });
+
+      const memoryPermissions = vi
+        .mocked(fgaProvider.require)
+        .mock.calls.map(([, input]) => input.permission)
+        .filter(permission => permission === 'memory:read' || permission === 'memory:write');
+      expect(memoryPermissions).toEqual(['memory:read', 'memory:write']);
     });
   });
 

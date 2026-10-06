@@ -326,6 +326,8 @@ export interface SessionMachinery {
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
   buildRequestContext(requestContext?: RequestContext): Promise<RequestContext>;
+  /** Authorize an actor-driven operation before it changes session state. */
+  authorizeExecute?(requestContext?: RequestContext): Promise<void>;
   /** Persist the session's running token usage to thread metadata. */
   persistTokenUsage(): Promise<void>;
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
@@ -4072,6 +4074,7 @@ export class Session<TState = unknown> {
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(requestContextInput);
       const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
       const agent = this.machinery.getAgent();
