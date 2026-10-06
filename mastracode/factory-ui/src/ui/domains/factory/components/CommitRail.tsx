@@ -9,6 +9,7 @@ import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { RepositoryCommit } from '../services/commits';
 import { PANEL } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { CommitRailEmptyState } from './CommitRailEmptyState';
 
 const COMMITS_FETCHED = 20;
 const COMMITS_COLLAPSED = 7;
@@ -93,17 +94,23 @@ function Note({ children }: { children: string }) {
 }
 
 /** The connected repository's default branch, newest first — the one thing on Overview that comes from GitHub. */
-export function CommitRail({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
+export function CommitRail({
+  projectRepositoryId,
+  factoryProjectId,
+}: {
+  projectRepositoryId: string | undefined;
+  factoryProjectId?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const query = useRepositoryCommits(projectRepositoryId, COMMITS_FETCHED);
 
   // No repository means the query never fetches, so it stays pending for good.
-  if (!projectRepositoryId) return <Note>No repository linked yet</Note>;
+  if (!projectRepositoryId) return <CommitRailEmptyState linked={false} factoryProjectId={factoryProjectId} />;
   if (query.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
   if (query.isError) return <Note>Could not reach GitHub for the commit history.</Note>;
 
   const commits = query.data?.commits ?? [];
-  if (commits.length === 0) return <Note>No commits yet</Note>;
+  if (commits.length === 0) return <CommitRailEmptyState linked factoryProjectId={factoryProjectId} />;
 
   const shown = expanded ? commits : commits.slice(0, COMMITS_COLLAPSED);
   const hidden = commits.length - shown.length;

@@ -15,6 +15,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
+import { PipelineEmptyState } from '../domains/factory/components/PipelineEmptyState';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
 import type { LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -78,40 +79,69 @@ export function OverviewContent({
     const message = itemsQuery.error instanceof Error ? itemsQuery.error.message : 'Failed to load the board';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  if (!items) return <OverviewLoading />;
 
   return (
     <div className="mt-6 flex flex-col gap-14 pb-16">
       <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
-        <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
+        {items ? (
+          <StageFunnel
+            funnel={current.funnel}
+            pullRequests={current.pullRequests}
+            merged={current.merged}
+            emptyState={
+              <PipelineEmptyState
+                hasWorkItems={items.length > 0}
+                rangeDays={rangeDays}
+                factoryProjectId={factoryProjectId}
+              />
+            }
+          />
+        ) : (
+          <OverviewLoading />
+        )}
       </Block>
 
       <section className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <Block
           title="Stalled"
-          action={current.waiting.length > 0 ? <Count value={`${current.waiting.length} waiting`} /> : undefined}
+          action={current.waiting.length > 0 && <Count value={`${current.waiting.length} waiting`} />}
         >
-          <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <StalledList waiting={current.waiting} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
 
         <Block
           title="Running now"
           action={
-            <Count
-              value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
-            />
+            items &&
+            current.inFlight > 0 && (
+              <Count
+                value={`${new Set(current.running.map(item => item.id)).size} running · ${current.inFlight} in the pipeline`}
+              />
+            )
           }
         >
-          <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          {items ? (
+            <RunningList running={current.running} factoryProjectId={factoryProjectId} />
+          ) : (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
         </Block>
       </section>
 
       <Block title="Latest commits" action={repository ? <ViewOnGithub slug={repository.slug} /> : undefined}>
-        <CommitRail projectRepositoryId={repository?.projectRepositoryId} />
+        <CommitRail projectRepositoryId={repository?.projectRepositoryId} factoryProjectId={factoryProjectId} />
       </Block>
 
       <Block title="Activity" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/activity`} />}>
-        <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        {items ? (
+          <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
+        ) : (
+          <Skeleton className="h-24 w-full rounded-xl" />
+        )}
       </Block>
 
       <Block
@@ -210,10 +240,8 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
 
 function OverviewLoading() {
   return (
-    <div role="status" aria-label="Loading factory overview" className="mt-6 flex flex-col gap-10">
+    <div role="status" aria-label="Loading factory overview" className="flex flex-col">
       <Skeleton className="h-52 w-full rounded-xl" />
-      <Skeleton className="h-48 w-full rounded-xl" />
-      <Skeleton className="h-24 w-full rounded-xl" />
     </div>
   );
 }

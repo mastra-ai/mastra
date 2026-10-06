@@ -15,6 +15,7 @@ interface HttpTransportOptions {
   flushInterval?: number;
   timeout?: number;
   retryOptions?: RetryOptions;
+  maxBufferSize?: number;
 }
 
 export class HttpTransport extends LoggerTransport {
@@ -26,6 +27,10 @@ export class HttpTransport extends LoggerTransport {
   private timeout: number;
   private retryOptions: Required<RetryOptions>;
   private logBuffer: BaseLogMessage[];
+  private maxBufferSize: number;
+  private droppedLogCount = 0;
+  private flushPromise: Promise<void> | null = null;
+  private flushRequested = false;
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
 
@@ -42,7 +47,7 @@ export class HttpTransport extends LoggerTransport {
       'Content-Type': 'application/json',
       ...options.headers,
     };
-    this.batchSize = options.batchSize || 100;
+    this.batchSize = options.batchSize ?? 100;
     this.flushInterval = options.flushInterval || 10000;
     this.timeout = options.timeout || 30000;
     this.retryOptions = {
@@ -51,15 +56,20 @@ export class HttpTransport extends LoggerTransport {
       exponentialBackoff: options.retryOptions?.exponentialBackoff ?? true,
     };
 
+    if (!Number.isInteger(this.batchSize) || this.batchSize < 1) {
+      throw new Error('HttpTransport batchSize must be a positive integer');
+    }
+
+    const maxBufferSize = options.maxBufferSize ?? 10_000;
+    if (!Number.isInteger(maxBufferSize) || maxBufferSize < 1) {
+      throw new Error('HttpTransport maxBufferSize must be a positive integer');
+    }
+    this.maxBufferSize = Math.max(maxBufferSize, this.batchSize);
     this.logBuffer = [];
     this.lastFlush = Date.now();
 
     // Start flush interval
-    this.flushIntervalId = setInterval(() => {
-      this._flush().catch(err => {
-        console.error('Error flushing logs to HTTP endpoint:', err);
-      });
-    }, this.flushInterval);
+    this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
   }
 
   private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
@@ -99,11 +109,62 @@ export class HttpTransport extends LoggerTransport {
     }
   }
 
-  async _flush(): Promise<void> {
-    if (this.logBuffer.length === 0) {
+  private enforceBufferLimit(): void {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow <= 0) {
       return;
     }
 
+    this.logBuffer.splice(0, overflow);
+    if (this.droppedLogCount === 0) {
+      console.warn(
+        `HttpTransport: buffer exceeded maxBufferSize (${this.maxBufferSize}); dropping oldest logs. Use getDroppedLogCount() to track drops.`,
+      );
+    }
+    this.droppedLogCount += overflow;
+  }
+
+  // Internal fire-and-forget flush. While a request is in flight this only records the request, so writes
+  // during a slow or retrying request don't each attach another handler to the pending promise.
+  private requestFlush(): void {
+    if (this.flushPromise) {
+      this.flushRequested = true;
+      return;
+    }
+    this._flush().catch(err => {
+      console.error('Error flushing logs to HTTP endpoint:', err);
+    });
+  }
+
+  _flush(): Promise<void> {
+    // Only one request in flight at a time, so an outage doesn't fan out into overlapping retry chains.
+    if (this.flushPromise) {
+      this.flushRequested = true;
+      return this.flushPromise;
+    }
+    if (this.logBuffer.length === 0) {
+      return Promise.resolve();
+    }
+
+    this.flushRequested = false;
+    const flush = this.flushBatch().finally(() => {
+      this.flushPromise = null;
+    });
+    this.flushPromise = flush;
+    // Flushes requested while this request was in flight only got this promise back, so send their logs now,
+    // and keep draining full batches. On failure, wait for the next interval instead of retrying straight away.
+    flush.then(
+      () => {
+        if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
+          this.requestFlush();
+        }
+      },
+      () => {},
+    );
+    return flush;
+  }
+
+  private async flushBatch(): Promise<void> {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
 
@@ -113,6 +174,7 @@ export class HttpTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
     }
   }
@@ -141,12 +203,11 @@ export class HttpTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.enforceBufferLimit();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
-        this._flush().catch(err => {
-          console.error('Error flushing logs to HTTP endpoint:', err);
-        });
+        this.requestFlush();
       }
 
       // Pass through the log
@@ -159,9 +220,17 @@ export class HttpTransport extends LoggerTransport {
   _destroy(err: Error, cb: Function): void {
     clearInterval(this.flushIntervalId);
 
-    // Final flush
-    if (this.logBuffer.length > 0) {
-      this._flush()
+    // Final drain. Wait out any in-flight request (ignoring its failure, since its logs are back in the buffer),
+    // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      const drain = async () => {
+        await this.flushPromise?.catch(() => {});
+        while (this.flushPromise || this.logBuffer.length > 0) {
+          await (this.flushPromise ?? this._flush());
+        }
+      };
+
+      drain()
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);
@@ -247,6 +316,10 @@ export class HttpTransport extends LoggerTransport {
 
   public clearBuffer(): void {
     this.logBuffer = [];
+  }
+
+  public getDroppedLogCount(): number {
+    return this.droppedLogCount;
   }
 
   public getLastFlushTime(): number {
