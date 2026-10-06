@@ -13,7 +13,7 @@ interface ModelPackContext {
   state: Pick<TUIState, 'controller' | 'session'>;
 }
 
-export interface PackSelection {
+interface PackSelection {
   modelId: string;
   subagentModels: Record<string, string>;
   observerModelId?: string;
@@ -96,11 +96,7 @@ export function listResolvableModePacks(settings: GlobalSettings): ModePack[] {
   ];
 }
 
-export function resolvePackSelection(
-  settings: GlobalSettings,
-  packId: string,
-  modeId: string,
-): PackSelection | undefined {
+function resolvePackSelection(settings: GlobalSettings, packId: string, modeId: string): PackSelection | undefined {
   const packs = listResolvableModePacks(settings);
   const packsById = new Map(packs.map(pack => [pack.id, pack]));
   const pack = packsById.get(packId);

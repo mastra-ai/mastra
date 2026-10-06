@@ -16,7 +16,7 @@ export interface DefaultModelHydrationSession extends DefaultModelApplicableSess
   };
 }
 
-export async function applyDefaultModel(session: DefaultModelApplicableSession, modelId: string): Promise<void> {
+async function applyDefaultModel(session: DefaultModelApplicableSession, modelId: string): Promise<void> {
   await session.model.switch({ modelId });
 
   for (const agentType of ['explore', 'plan', 'execute']) {

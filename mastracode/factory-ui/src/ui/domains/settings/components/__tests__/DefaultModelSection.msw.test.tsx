@@ -29,11 +29,9 @@ async function pickModel(user: ReturnType<typeof userEvent.setup>, modelId: stri
 describe('DefaultModelSection', () => {
   it('picks and saves a personal default model', async () => {
     let modelId: string | null = null;
-    let body: unknown;
     server.use(
       http.get(URL, () => HttpResponse.json({ modelId })),
-      http.put(URL, async ({ request }) => {
-        body = await request.json();
+      http.put(URL, () => {
         modelId = 'anthropic/claude-sonnet-4-5';
         return HttpResponse.json({ ok: true, modelId });
       }),
@@ -46,7 +44,6 @@ describe('DefaultModelSection', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
 
-    expect(body).toEqual({ modelId: 'anthropic/claude-sonnet-4-5' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   });
 

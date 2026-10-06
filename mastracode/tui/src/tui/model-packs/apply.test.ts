@@ -15,7 +15,6 @@ import {
   applyCurrentThreadPack,
   applyPackToSession,
   reconcilePackAfterModeChange,
-  resolvePackSelection,
   switchModeWithPack,
 } from './apply.js';
 
@@ -106,45 +105,42 @@ describe('model pack application', () => {
     vi.clearAllMocks();
   });
 
-  it.each([
-    ['build', 'provider/build-primary'],
-    ['plan', 'provider/plan-primary'],
-    ['fast', 'provider/fast-primary'],
-  ])('resolves the %s model from the pack', (modeId, expectedModelId) => {
-    expect(resolvePackSelection(mocks.settings, 'custom:Primary', modeId)?.modelId).toBe(expectedModelId);
-  });
-
-  it('builds a generic route with account and memory models', () => {
-    const selection = resolvePackSelection(mocks.settings, 'custom:Primary', 'build');
-
-    expect(selection?.modelRoute.entries).toEqual([
-      {
-        id: 'custom:Primary',
-        label: 'Primary',
-        modelId: 'provider/build-primary',
-        accountId: 'account-primary',
-        memoryModelId: 'provider/memory-primary',
-      },
-      {
-        id: 'custom:Fallback',
-        label: 'Fallback',
-        modelId: 'provider/build-fallback',
-        accountId: 'account-fallback',
-        memoryModelId: 'provider/memory-fallback',
-      },
-    ]);
-  });
-
-  it('applies the model, subagents, OM models, and route', async () => {
+  it('applies the pack as session model, subagent, memory, and route primitives', async () => {
     const { ctx, modelSwitch } = makeContext();
 
     await applyPackToSession(ctx, 'custom:Primary', { modeId: 'build' });
 
-    expect(modelSwitch).toHaveBeenCalledWith({ modelId: 'provider/build-primary' });
-    expect(ctx.state.session.subagents.model.set).toHaveBeenCalledTimes(3);
-    expect(ctx.state.session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'provider/memory-primary' });
-    expect(ctx.state.session.state.set).toHaveBeenCalledWith({
-      modelRoute: expect.objectContaining({ entries: expect.any(Array) }),
+    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({ modelId: 'provider/build-primary' });
+    expect(ctx.state.session.subagents.model.set.mock.calls).toEqual([
+      [{ modelId: 'provider/fast-primary', agentType: 'explore' }],
+      [{ modelId: 'provider/plan-primary', agentType: 'plan' }],
+      [{ modelId: 'provider/build-primary', agentType: 'execute' }],
+    ]);
+    expect(ctx.state.session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({
+      modelId: 'provider/memory-primary',
+    });
+    expect(ctx.state.session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
+      modelId: 'provider/memory-primary',
+    });
+    expect(ctx.state.session.state.set).toHaveBeenCalledExactlyOnceWith({
+      modelRoute: {
+        entries: [
+          {
+            id: 'custom:Primary',
+            label: 'Primary',
+            modelId: 'provider/build-primary',
+            accountId: 'account-primary',
+            memoryModelId: 'provider/memory-primary',
+          },
+          {
+            id: 'custom:Fallback',
+            label: 'Fallback',
+            modelId: 'provider/build-fallback',
+            accountId: 'account-fallback',
+            memoryModelId: 'provider/memory-fallback',
+          },
+        ],
+      },
       mastracodePendingModelFallback: null,
     });
   });

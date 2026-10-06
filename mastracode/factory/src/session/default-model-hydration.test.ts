@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ModelDefaultRecord } from '../storage/domains/model-defaults/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
-  applyDefaultModel,
   hydrateSessionDefaultModel,
   type DefaultModelHydrationDependencies,
   type DefaultModelHydrationSession,
@@ -62,19 +61,6 @@ function createDependencies(record: ModelDefaultRecord | null = modelDefault()):
   };
 }
 
-describe('applyDefaultModel', () => {
-  it('sets the current model and every subagent model', async () => {
-    const session = createSession();
-
-    await applyDefaultModel(session, modelId);
-
-    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId });
-    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
-    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
-    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
-  });
-});
-
 describe('hydrateSessionDefaultModel', () => {
   it('applies the user default model to a new interactive session', async () => {
     const session = createSession();
@@ -84,6 +70,9 @@ describe('hydrateSessionDefaultModel', () => {
 
     expect(dependencies.modelDefaults.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1' });
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId });
+    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
+    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
+    expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
   });
 
   it('preserves the current thread model when the session is recreated', async () => {
