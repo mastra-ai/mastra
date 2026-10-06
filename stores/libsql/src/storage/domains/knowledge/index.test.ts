@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
@@ -20,8 +20,8 @@ createKnowledgeStorageTests(() => {
   fixtures.push({ client, path });
   return new KnowledgeLibSQL({ client });
 });
-afterAll(async () => {
-  for (const { client, path } of fixtures) {
+afterEach(async () => {
+  for (const { client, path } of fixtures.splice(0)) {
     client.close();
     await rm(path, { force: true });
   }
