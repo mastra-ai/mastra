@@ -147,7 +147,13 @@ describe('SlackIntegration.channels', () => {
     );
     const session = {
       mode: { get: () => 'build' },
-      thread: { getSetting: vi.fn(async () => null), setSetting: vi.fn(async () => {}) },
+      thread: {
+        getId: () => 'us-1',
+        getById: vi.fn(async () => ({ metadata: {} })),
+        getSetting: vi.fn(async () => null),
+        setSetting: vi.fn(async () => {}),
+        setSettingOn: vi.fn(async () => {}),
+      },
       model: {
         get: vi.fn(() => 'openai/gpt-5.5'),
         switch: vi.fn(async () => {}),
