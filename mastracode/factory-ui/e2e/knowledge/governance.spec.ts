@@ -46,6 +46,13 @@ async function createGovernanceHarness(perspective: Perspective) {
   });
 
   const proposerContext = await store.createNode({ name: 'Private proposer', isScope: true, scopeIds: [] });
+  // Vouching a scope only makes its grants eligible; the proposer context needs its own owner grant to submit.
+  await store.upsertScopeGrant({
+    scopeNodeId: proposerContext.id,
+    scopeRefId: proposerContext.id,
+    role: 'owner',
+    canSuggest: true,
+  });
   const pendingNode = await store.createNode({
     name: 'Deployment guide',
     kind: 'document',

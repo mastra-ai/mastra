@@ -4,8 +4,8 @@ import path from 'node:path';
 
 const expectedProofTests = [
   'knowledge/explore.spec.ts > renders scoped knowledge and activity from sanitized network fixtures',
-  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches only readonly access > shows proposals without mutation actions',
-  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches suggest access without edit authority > keeps review actions unavailable',
+  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches only readonly access > hides proposals whose proposer context is unreadable',
+  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches suggest access without edit authority > hides proposals and keeps review actions unavailable',
   'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches owner authority > persists rejection and conflict re-review through Factory routes',
   'knowledge/imports.spec.ts > renders an agentic import journey from sanitized network fixtures',
 ];
