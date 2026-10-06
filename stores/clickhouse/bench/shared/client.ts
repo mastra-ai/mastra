@@ -71,7 +71,14 @@ export function assertReadOnlyStatement(sql: string): void {
   if (keyword) throw new StatementRejected(`contains ${keyword[1]!.toUpperCase()}`);
 }
 
-export type ErrorCategory = 'timeout' | 'memory' | 'too_many_bytes' | 'result_rows' | 'overload' | 'other';
+export type ErrorCategory =
+  | 'timeout'
+  | 'memory'
+  | 'too_many_bytes'
+  | 'result_rows'
+  | 'request_size'
+  | 'overload'
+  | 'other';
 
 const LIMIT_CODES: Record<string, ErrorCategory> = {
   '159': 'timeout', // TIMEOUT_EXCEEDED
@@ -80,7 +87,14 @@ const LIMIT_CODES: Record<string, ErrorCategory> = {
   '396': 'result_rows', // TOO_MANY_ROWS_OR_BYTES
 };
 
-export function categorize(code: string | undefined): ErrorCategory {
+/**
+ * The HTTP interface rejects a query parameter above `http_max_field_value_size` before the query
+ * runs (no ClickHouse error code). Deterministic for a given statement, so it is a limit hit.
+ */
+const REQUEST_SIZE_MESSAGE = /Field value too long/;
+
+export function categorize(code: string | undefined, message?: string): ErrorCategory {
+  if (!code && message && REQUEST_SIZE_MESSAGE.test(message)) return 'request_size';
   return (code && LIMIT_CODES[code]) || 'other';
 }
 
@@ -246,7 +260,7 @@ export class BenchClient {
         streamedRows,
         streamedBytes,
         errorCode: code,
-        errorCategory: categorize(code),
+        errorCategory: categorize(code, error instanceof Error ? error.message : String(error)),
         errorMessage: redact(error instanceof Error ? error.message : String(error)),
       };
     }

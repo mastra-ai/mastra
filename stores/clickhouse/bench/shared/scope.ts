@@ -76,6 +76,62 @@ export function scopePayloadQuery(
   );
 }
 
+const SPAN_TENANT_FRAGMENT = /AND organizationId = (\{span_\d+:String\})/g;
+
+/**
+ * Adds `AND projectId = …` after both tenant fragments of a compiled querySpans() select
+ * (`candidate_ids` and `candidates`), failing closed on any other count.
+ */
+export function injectSpanProjectScope<T extends { query: string; query_params: Record<string, unknown> }>(
+  compiled: T,
+  projectId: string,
+): T {
+  const tenantParams = new Set<string>();
+  let matched = 0;
+  const query = compiled.query.replace(SPAN_TENANT_FRAGMENT, (fragment, param: string) => {
+    matched++;
+    tenantParams.add(param);
+    return `${fragment} AND projectId = {${PROJECT_PARAM}:String}`;
+  });
+  if (matched !== 2) throw new RewriteError(`Expected 2 tenant-scoped span scans, found ${matched}`);
+  if (tenantParams.size !== 1) throw new RewriteError('Expected one shared span tenant parameter');
+  if (PROJECT_PARAM in compiled.query_params) throw new RewriteError('Project parameter name collides');
+  return { ...compiled, query, query_params: { ...compiled.query_params, [PROJECT_PARAM]: projectId } };
+}
+
+const FROM_PARAM = 'bench_from';
+
+/**
+ * What-if for querySpans() hydration (`span-payload-scoped` / `span-metrics-scoped`): add the
+ * org/project sort-key prefix and, for the payload read, the partition bound (`endedAt >= from`,
+ * which every selected span satisfies because the select stage prewheres on it).
+ */
+export function scopeSpanHydration<T extends { query: string; query_params: Record<string, unknown> }>(
+  compiled: T,
+  stage: 'payload' | 'metrics',
+  scope: { organizationId: string; projectId: string; from?: string },
+): T {
+  const anchor = stage === 'payload' ? 'WHERE tuple(isNull(organizationId)' : 'WHERE (tuple(isNull(organizationId)';
+  const head = `WHERE organizationId = {${ORG_PARAM}:String} AND projectId = {${PROJECT_PARAM}:String}`;
+  const params: Record<string, string> = { [ORG_PARAM]: scope.organizationId, [PROJECT_PARAM]: scope.projectId };
+  let bound = '';
+  if (stage === 'payload') {
+    if (!scope.from) throw new RewriteError('Payload scope needs the window start');
+    bound = ` AND endedAt >= {${FROM_PARAM}:DateTime64(3, 'UTC')}`;
+    params[FROM_PARAM] = scope.from.replace('T', ' ').replace(/Z$/, '');
+  }
+  const count = countOccurrences(compiled.query, anchor);
+  if (count !== 1) throw new RewriteError(`Span ${stage} scope: expected one anchor, found ${count}`);
+  for (const name of Object.keys(params)) {
+    if (name in compiled.query_params) throw new RewriteError(`Parameter ${name} collides`);
+  }
+  return {
+    ...compiled,
+    query: compiled.query.replace(anchor, `${head}${bound} AND ${anchor.slice('WHERE '.length)}`),
+    query_params: { ...compiled.query_params, ...params },
+  };
+}
+
 export type Variant = 'base' | 'uniq' | 'exact' | 'w1';
 
 /**

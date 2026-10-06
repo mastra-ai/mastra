@@ -10,6 +10,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { EntityType, SpanType } from '@mastra/core/observability';
+
 import { ALLOWED_HOST, CACHE_DIR, ENV_FILE, installOutputRedaction, readEnvFileValues, registerSensitive } from './env';
 import { DOC_LITERALS, loadSelection } from './profile';
 import type { Literals, Selection } from './profile';
@@ -57,6 +59,9 @@ const STANDARD_ENVIRONMENTS = new Set([
   'uat',
 ]);
 
+/** Mastra's own span/entity type names are public vocabulary; a project's top value can be one of them. */
+const PUBLIC_VOCABULARY = new Set<string>([...Object.values(SpanType), ...Object.values(EntityType)]);
+
 export function needlesFrom(
   env: Record<string, string> | undefined,
   selection: Selection | undefined,
@@ -91,7 +96,13 @@ export function needlesFrom(
   for (const sidecar of sidecars) {
     for (const literals of Object.values(sidecar.projects)) {
       for (const value of Object.values(literals)) {
-        if (!value || Object.values(DOC_LITERALS).includes(value) || STANDARD_ENVIRONMENTS.has(value)) continue;
+        if (
+          !value ||
+          Object.values(DOC_LITERALS).includes(value) ||
+          STANDARD_ENVIRONMENTS.has(value) ||
+          PUBLIC_VOCABULARY.has(value.toLowerCase())
+        )
+          continue;
         add('literal', value);
       }
     }
@@ -99,11 +110,22 @@ export function needlesFrom(
   return needles;
 }
 
+const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Credentials and ids match anywhere. Discovered literals (customer words) match only as whole tokens:
+ * the same word inside a longer code identifier is not a disclosure, a standalone occurrence is.
+ */
+function occurrences(text: string, kind: NeedleKind, form: string): number {
+  if (kind !== 'literal') return text.split(form).length - 1;
+  return (text.match(new RegExp(`(?<![A-Za-z0-9_])${escape(form)}(?![A-Za-z0-9_])`, 'g')) ?? []).length;
+}
+
 export function countMatches(text: string, needles: Needle[]): Partial<Record<NeedleKind, number>> {
   const counts: Partial<Record<NeedleKind, number>> = {};
   for (const { kind, value } of needles) {
     for (const form of new Set([value, encodeURIComponent(value)])) {
-      const n = text.split(form).length - 1;
+      const n = occurrences(text, kind, form);
       if (n) counts[kind] = (counts[kind] ?? 0) + n;
     }
   }
