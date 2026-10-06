@@ -1,5 +1,6 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
@@ -148,7 +149,8 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
 
   const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
+    (value): value is string =>
+      typeof value === 'string' && Boolean(value.trim()) && !isLegacyAnyValue(value, operatorId),
   );
   if (!rawValues.length && !isPresence) return undefined;
 

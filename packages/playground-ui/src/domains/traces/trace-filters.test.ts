@@ -591,11 +591,13 @@ describe('traceTokensToFilterBarItems', () => {
         { fieldId: 'traceId', value: '' },
         { fieldId: 'status', value: 'Any' },
         { fieldId: 'tags', value: [] },
+        { fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' },
       ]),
     ).toEqual([
       { id: 'traceId', fieldId: 'traceId', operatorId: 'is', value: '' },
       { id: 'status', fieldId: 'status', operatorId: 'is', value: '' },
       { id: 'tags', fieldId: 'tags', operatorId: 'in', value: [] },
+      { id: 'feedback.comment', fieldId: 'feedback.comment', operatorId: 'matches', value: 'Any' },
     ]);
   });
 });

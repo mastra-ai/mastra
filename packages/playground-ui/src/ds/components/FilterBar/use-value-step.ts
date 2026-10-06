@@ -69,8 +69,13 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
   }, [selected, commit]);
 
   const canCommitFreeText = useCallback(
-    (text: string) => allowFreeText && text.length > 0 && (type !== 'number' || Number.isFinite(Number(text))),
-    [allowFreeText, type],
+    (text: string) =>
+      allowFreeText &&
+      text.length > 0 &&
+      (type !== 'number' || Number.isFinite(Number(text))) &&
+      // A text-match literal needs a word: letters, marks, or digits.
+      (!freeTextOperator || /[\p{L}\p{M}\p{N}]/u.test(text)),
+    [allowFreeText, freeTextOperator, type],
   );
 
   const commitFreeText = useCallback(() => {

@@ -580,6 +580,23 @@ describe('FilterBar', () => {
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'name', operatorId: 'matches', value: 'gpt' });
     });
 
+    it('does not commit free text without a letter or digit when the operator is free text', async () => {
+      const onChange = vi.fn();
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['matches'] }];
+      const operators: FilterBarOperator[] = [...OPERATORS, { id: 'matches', label: 'matches', freeText: true }];
+      render(<Harness fields={fields} operators={operators} onChange={onChange} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      await screen.findByText('Type a value');
+      type('!!! ---');
+      key('Enter');
+      expect(onChange).not.toHaveBeenCalled();
+      type('gpt-5');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'name', operatorId: 'matches', value: 'gpt-5' });
+    });
+
     it('does not commit free text for strict fields', async () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);

@@ -250,6 +250,18 @@ describe('buildTraceQueryRequest', () => {
       ).toBeUndefined();
     });
 
+    it('keeps the word Any, which is only a neutral sentinel for pick lists', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'Any' } } } }],
+      });
+    });
+
     it('emits matches with the field on the left and the words on the right', () => {
       expect(
         buildTraceQueryRequest({

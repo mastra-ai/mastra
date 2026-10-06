@@ -187,6 +187,10 @@ const isManyOperator = (operatorId: TraceFilterOperatorId | undefined) => operat
 export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOperatorId =>
   token.operatorId ?? (Array.isArray(token.value) ? 'in' : 'is');
 
+/** The legacy pick-multi neutral value. A text-match literal `Any` is a real word, not the sentinel. */
+export const isLegacyAnyValue = (value: unknown, operatorId: TraceFilterOperatorId): boolean =>
+  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches';
+
 const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
   const raw = searchParams.get(traceFilterOperatorParam(valueParam));
   return raw !== null && isTraceFilterOperatorId(raw) ? raw : undefined;
@@ -541,7 +545,7 @@ export function traceTokensToFilterBarItems(tokens: TraceFilterToken[]): FilterB
     id: token.fieldId,
     fieldId: token.fieldId,
     operatorId: traceFilterTokenOperator(token),
-    value: token.value === 'Any' ? '' : token.value,
+    value: isLegacyAnyValue(token.value, traceFilterTokenOperator(token)) ? '' : token.value,
   }));
 }
 
@@ -582,7 +586,7 @@ function traceGroupToFilterBarGroup(group: TraceFilterGroup): FilterBarGroup {
             id: node.id ?? node.fieldId,
             fieldId: node.fieldId,
             operatorId: traceFilterTokenOperator(node),
-            value: node.value === 'Any' ? '' : node.value,
+            value: isLegacyAnyValue(node.value, traceFilterTokenOperator(node)) ? '' : node.value,
           },
     ),
   };
