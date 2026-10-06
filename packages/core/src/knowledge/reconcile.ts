@@ -152,6 +152,49 @@ export function materializeKnowledgeScopePlan(
   });
 }
 
+/**
+ * Declared structure scopes whose address matches a configured scope type receive that type's creation-template
+ * grants, exactly as lazy materialization would. Without this, declaring an identity scope such as `org:acme`
+ * up front would create it without the self grant that makes it readable to its own host-vouched callers.
+ */
+export function applyKnowledgeScopeTypeTemplates(
+  scopeTypes: KnowledgeScopeTypesConfig | undefined,
+  plan: KnowledgeStructurePlan,
+): KnowledgeStructurePlan {
+  const types = validateKnowledgeScopeTypes(scopeTypes);
+  return validateKnowledgeStructurePlan({
+    ...plan,
+    scopes: plan.scopes.map(scope => {
+      const typed = Object.entries(types)
+        .filter(([pattern]) => pattern !== 'custom')
+        .map(([pattern, config]) => ({ config, parameters: matchPattern(pattern, scope.address) }))
+        .filter((match): match is { config: KnowledgeScopeTypeConfig; parameters: Record<string, string> } =>
+          Boolean(match.parameters),
+        );
+      if (typed.length > 1) {
+        throw new Error(`Knowledge scope address ${scope.address} matches multiple configured patterns`);
+      }
+      const match = typed[0];
+      if (!match) return scope;
+      const input = {
+        address: scope.address,
+        parentAddresses: scope.parentAddresses,
+        contextualScopeAddress: scope.address,
+      };
+      const templateGrants = (match.config.access ?? []).flatMap<KnowledgeStructureGrant>(access => {
+        const principal = resolvePrincipal(access.principal, input, match.parameters);
+        if (!principal) return [];
+        return [{ scopeRefAddress: principal, role: access.role, canSuggest: access.canSuggest }];
+      });
+      const grants = [...(scope.grants ?? [])];
+      for (const grant of templateGrants) {
+        if (!grants.some(existing => existing.scopeRefAddress === grant.scopeRefAddress)) grants.push(grant);
+      }
+      return { ...scope, grants };
+    }),
+  });
+}
+
 function matchPattern(pattern: string, address: string): Record<string, string> | null {
   const patternSegments = pattern.split(':');
   const addressSegments = address.split(':');

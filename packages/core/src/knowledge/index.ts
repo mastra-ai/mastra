@@ -34,6 +34,7 @@ import {
 } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
 import {
+  applyKnowledgeScopeTypeTemplates,
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
@@ -70,8 +71,10 @@ export class Knowledge extends MastraBase {
     super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
     this.id = config.id ?? randomUUID();
     this.description = config.description;
-    this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    this.#structure = config.structure
+      ? applyKnowledgeScopeTypeTemplates(this.#scopeTypes, structuredClone(config.structure))
+      : undefined;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
     }
