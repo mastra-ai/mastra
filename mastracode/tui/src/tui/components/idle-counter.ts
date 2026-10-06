@@ -30,18 +30,16 @@ export class IdleCounterComponent extends Container {
     this.update(now);
   }
 
-  /** Quiet mode shows the live "Thinking..." indicator here instead of in the chat. */
+  /** Quiet mode's live thinking state; status-line.ts swaps the Working row's label while it is set. */
   setThinking(thinking: boolean): void {
-    if (this.thinking === thinking) return;
     this.thinking = thinking;
-    this.update();
+  }
+
+  isThinking(): boolean {
+    return this.thinking;
   }
 
   update(now = Date.now()): void {
-    if (this.thinking) {
-      this.textChild.setText(`  ${theme.italic(theme.fg('thinkingText', 'Thinking...'))}`);
-      return;
-    }
     const segments = this.timingState ? formatIdleStatusTimingSegments(this.timingState, now) : null;
     if (!segments) {
       this.textChild.setText('');

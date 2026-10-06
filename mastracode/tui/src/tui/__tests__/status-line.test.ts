@@ -203,7 +203,7 @@ describe('updateStatusLine', () => {
     const activity = state.activityLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('openai/gpt-5');
     expect(rendered).not.toContain('1m1s');
-    expect(activity).toContain('Working 1m1s · 48 tok/s · esc to interrupt');
+    expect(activity).toContain('1m1s · 48 tok/s · esc to interrupt');
     vi.useRealTimers();
   });
 

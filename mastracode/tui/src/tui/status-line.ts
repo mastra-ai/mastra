@@ -371,7 +371,10 @@ function updateActivityLine(state: TUIState, modeColor: string | undefined, now:
   if (stale) parts.push(theme.fg('warning', `no output for ${stale}`));
   if (state.tokensPerSec > 0) parts.push(theme.fg('dim', `${state.tokensPerSec} tok/s`));
   parts.push(`${theme.fg('muted', 'esc')}${theme.fg('dim', ' to interrupt')}`);
+  // The label reads "thinking" while quiet mode hides reasoning; "working" gets a trailing space so the
+  // details after it don't shift by a column when the label swaps.
+  const label = state.idleCounter?.isThinking() ? 'thinking' : 'working ';
   state.activityLine.setText(
-    ` ${spinner} ${theme.bold(theme.fg('secondary', 'Working'))} ${parts.join(theme.fg('dim', ' · '))}`,
+    ` ${spinner} ${theme.bold(theme.fg('secondary', label))} ${parts.join(theme.fg('dim', ' · '))}`,
   );
 }
