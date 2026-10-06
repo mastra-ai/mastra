@@ -2,7 +2,7 @@
 '@mastra/playground-ui': major
 ---
 
-Polished the metrics charts and KPI cards, and added the pieces to build a full metrics page from them: a share list, chart loading ghosts, compact card tabs and a card toolbar.
+Polished the metrics charts and KPI cards, and added the pieces to build a full metrics page from them: a share list, chart loading ghosts and a card toolbar.
 
 **Charts**
 
@@ -57,10 +57,6 @@ New `MetricsShareList` ranks rows by their share of a total: one strip on top, t
 - New `SkeletonText` (a skeleton in a line of text) and `ChartSkeleton`. Skeletons now animate their shimmer; the animation was missing.
 - `MetricsKpiCard.Label` takes an `icon`, and `MetricsKpiCard.Footer` and `MetricsKpiCard.Prev` show a detail line and the prior period's value. KPI cards use the chart cards' padding.
 - `MetricsCardGroup` sizes its columns by its own width: four cards share one row from 56rem, five go 3 + 2 and then one row from 72rem.
-
-**Tabs**
-
-`TabList size="sm"` is now a compact 24px tab with 12px labels, for card toolbars. It used to render taller than the default pill tab.
 
 **Breaking:** `MetricsCardGroup` no longer takes a `variant` prop (the `MetricsCardGroupVariant` type is removed), and `MetricsLineChart` no longer takes `xAxisInterval` or `xAxisMinTickGap`: labels are placed for you, or pass `xLabels="edges"`.
 
