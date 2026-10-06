@@ -1,4 +1,10 @@
-import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
+import {
+  SETUP_FAILED_MARKER_PATH,
+  SETUP_MARKER_PATH,
+  WORKSPACE_SETUP_MARKER_PATH,
+  repoSetupMarkerPath,
+  setupMarkerContent,
+} from '@internal/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
@@ -24,6 +30,18 @@ function markerStep(...setupCommands: string[]) {
   };
 }
 
+/** Marker step for a repository of a multi-repo template, or the workspace marker. */
+function markerStepAt(path: string, ...setupCommands: string[]) {
+  const content = setupMarkerContent(setupCommands);
+  return { method: 'runCmd', args: [`mkdir -p "$(dirname "${path}")" && printf '%s' '${content}' > "${path}"`] };
+}
+
+function cloneStep(cloneUrl: string, dir: string) {
+  return { method: 'runCmd', args: [`git clone --depth=1 --single-branch '${cloneUrl}' '${dir}'`] };
+}
+
+// Step order: the clone carries no commit and the first setup pass follows it,
+// so both cache across commits; the pin and the second setup pass come after.
 describe('createRepoTemplate', () => {
   it('is side-effect-free until the lazy definition is resolved', async () => {
     const resolveHead = headOf(SHA_1);
@@ -45,6 +63,7 @@ describe('createRepoTemplate', () => {
       schemaVersion: 1,
       operations: [
         { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
+        { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
         { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
         { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
@@ -91,7 +110,11 @@ describe('createRepoTemplate', () => {
 
     const operations = serializeSandboxTemplate(template!).operations;
     const setupOps = operations.filter(op => op.method === 'runCmd' && String(op.args[0]).startsWith('cd '));
-    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "widgets" && pnpm i'] }]);
+    // Once before the pin, once after.
+    expect(setupOps).toEqual([
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+    ]);
   });
 
   it('treats an all-blank setupCommand as absent', async () => {
@@ -490,5 +513,282 @@ describe('createRepoTemplate', () => {
     await expect(resolveTemplate()).resolves.toBeUndefined();
     // Rejected before any network work.
     expect(resolveHead).not.toHaveBeenCalled();
+  });
+});
+
+describe('createRepoTemplate with repos', () => {
+  const widgets = 'https://github.com/acme/widgets';
+  const gadgets = 'https://github.com/acme/gadgets';
+  const headsOf = (heads: Record<string, string>) => vi.fn(async (url: string) => heads[url]);
+
+  it('clones every repository into the working directory with its own setup and marker, then the workspace steps', async () => {
+    const template = await createRepoTemplate({
+      repos: [
+        { getRepositoryAccess: accessFor(`${widgets}.git`), setupCommand: 'pnpm i' },
+        { getRepositoryAccess: accessFor(gadgets), setupCommand: ['npm ci', 'npm run build'] },
+      ],
+      workspaceSetupCommand: ['touch .ready', '', 'echo done'],
+      workingDirectory: '/home/user/workspace',
+      resolveHead: headsOf({ [widgets]: SHA_1, [gadgets]: SHA_2 }),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    expect(serialized.operations).toEqual([
+      { method: 'runCmd', args: ['mkdir -p "/home/user/workspace"'] },
+      { method: 'setWorkdir', args: ['/home/user/workspace'] },
+      cloneStep(widgets, 'widgets'),
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+      { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
+      { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+      markerStepAt(repoSetupMarkerPath('widgets'), 'pnpm i'),
+      cloneStep(gadgets, 'gadgets'),
+      { method: 'runCmd', args: ['cd "gadgets" && npm ci'] },
+      { method: 'runCmd', args: ['cd "gadgets" && npm run build'] },
+      { method: 'runCmd', args: [`git -C "gadgets" fetch origin ${SHA_2}`] },
+      { method: 'runCmd', args: [`git -C "gadgets" checkout ${SHA_2}`] },
+      { method: 'runCmd', args: ['cd "gadgets" && npm ci'] },
+      { method: 'runCmd', args: ['cd "gadgets" && npm run build'] },
+      markerStepAt(repoSetupMarkerPath('gadgets'), 'npm ci', 'npm run build'),
+      { method: 'runCmd', args: ['touch .ready'] },
+      { method: 'runCmd', args: ['echo done'] },
+      markerStepAt(WORKSPACE_SETUP_MARKER_PATH, 'touch .ready', 'echo done'),
+    ]);
+    expect(serialized.family).toMatch(/^repos:[0-9a-f]{32}$/);
+    expect(getSandboxTemplateBuildEnvs(template!)).toBeUndefined();
+  });
+
+  it('writes the workspace marker even without workspace commands, and never in the single form', async () => {
+    const list = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(widgets) }],
+      resolveHead: headOf(SHA_1),
+    })!();
+    expect(serializeSandboxTemplate(list!).operations.at(-1)).toEqual(markerStepAt(WORKSPACE_SETUP_MARKER_PATH));
+    expect(serializeSandboxTemplate(list!).operations.at(-2)).toEqual(markerStepAt(repoSetupMarkerPath('widgets')));
+
+    const single = await createRepoTemplate({ getRepositoryAccess: accessFor(widgets), resolveHead: headOf(SHA_1) })!();
+    const args = serializeSandboxTemplate(single!).operations.map(op => String(op.args[0]));
+    expect(args.some(arg => arg.includes(WORKSPACE_SETUP_MARKER_PATH))).toBe(false);
+    expect(args.some(arg => arg.includes('.mastra-sandbox/repos/'))).toBe(false);
+  });
+
+  it('builds public repositories before private ones and numbers token envs by caller position', async () => {
+    const privateAccess = async () => ({
+      cloneUrl: 'https://github.com/acme/secret.git',
+      authorization: { scheme: 'bearer' as const, token: 'ghs_private_token' },
+    });
+    const template = await createRepoTemplate({
+      repos: [
+        { getRepositoryAccess: privateAccess, setupCommand: 'make' },
+        { getRepositoryAccess: accessFor(widgets) },
+      ],
+      resolveHead: headsOf({ 'https://github.com/acme/secret': SHA_2, [widgets]: SHA_1 }),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    const commands = serialized.operations.map(op => String(op.args[0]));
+    expect(commands.findIndex(c => c.includes("'widgets'"))).toBeLessThan(
+      commands.findIndex(c => c.includes("'secret'")),
+    );
+    expect(getSandboxTemplateBuildEnvs(template!)).toEqual({ MASTRA_REPOSITORY_ACCESS_TOKEN_0: 'ghs_private_token' });
+    const secretClone = commands.find(c => c.includes("'secret'"))!;
+    const secretFetch = commands.find(c => c.includes('"secret"') && c.includes('fetch origin'))!;
+    expect(secretClone).toContain('$MASTRA_REPOSITORY_ACCESS_TOKEN_0');
+    expect(secretFetch).toContain('$MASTRA_REPOSITORY_ACCESS_TOKEN_0');
+    expect(JSON.stringify(serialized)).not.toContain('ghs_private_token');
+    expect(JSON.stringify(serialized)).not.toContain('MASTRA_REPOSITORY_ACCESS_TOKEN=');
+    // Credentials reach git only through a per-invocation header, never a URL or .git/config.
+    for (const c of commands.filter(c => c.includes('$MASTRA_REPOSITORY_ACCESS_TOKEN_0'))) {
+      expect(c).toContain('-c http.extraheader=');
+      expect(c).not.toMatch(/https:\/\/[^/]*@/);
+    }
+  });
+
+  it('keeps the family stable across public/private reordering and member swaps, but not member changes', async () => {
+    const privateWidgets = async () => ({
+      cloneUrl: widgets,
+      authorization: { scheme: 'bearer' as const, token: 'ghs_t' },
+    });
+    const heads = headsOf({ [widgets]: SHA_1, [gadgets]: SHA_2 });
+    const publicFirst = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(widgets) }, { getRepositoryAccess: accessFor(gadgets) }],
+      resolveHead: heads,
+    })!();
+    const privateWidgetsFirst = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: privateWidgets }, { getRepositoryAccess: accessFor(gadgets) }],
+      resolveHead: heads,
+    })!();
+    const swapped = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(gadgets) }, { getRepositoryAccess: accessFor(widgets) }],
+      resolveHead: heads,
+    })!();
+    const movedSetup = await createRepoTemplate({
+      repos: [
+        { getRepositoryAccess: accessFor(widgets), setupCommand: 'pnpm i' },
+        { getRepositoryAccess: accessFor(gadgets) },
+      ],
+      resolveHead: heads,
+    })!();
+    const again = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(widgets) }, { getRepositoryAccess: accessFor(gadgets) }],
+      resolveHead: heads,
+    })!();
+
+    const fam = (t: typeof publicFirst) => serializeSandboxTemplate(t!).family;
+    // Build order changed (gadgets now first), family did not: caller order is the identity input.
+    expect(fam(privateWidgetsFirst)).toBe(fam(publicFirst));
+    expect(serializeSandboxTemplate(privateWidgetsFirst!).operations[0]).toEqual(cloneStep(gadgets, 'gadgets'));
+    // Swapping members changes the op list and the family (a different layout).
+    expect(fam(swapped)).not.toBe(fam(publicFirst));
+    // Setup commands are not family inputs, but they change the op list.
+    expect(fam(movedSetup)).toBe(fam(publicFirst));
+    expect(serializeSandboxTemplate(movedSetup!).operations).not.toEqual(
+      serializeSandboxTemplate(publicFirst!).operations,
+    );
+    expect(serializeSandboxTemplate(again!)).toEqual(serializeSandboxTemplate(publicFirst!));
+  });
+
+  it('wraps only the setup steps when continueOnSetupFailure is set', async () => {
+    const guarded = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(widgets), setupCommand: 'exit 7' }],
+      workspaceSetupCommand: 'touch .ready',
+      continueOnSetupFailure: true,
+      resolveHead: headOf(SHA_1),
+    })!();
+    const plain = await createRepoTemplate({
+      repos: [{ getRepositoryAccess: accessFor(widgets), setupCommand: 'exit 7' }],
+      workspaceSetupCommand: 'touch .ready',
+      continueOnSetupFailure: false,
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const guardedOps = serializeSandboxTemplate(guarded!).operations;
+    const plainOps = serializeSandboxTemplate(plain!).operations;
+    const guardStep = {
+      method: 'runCmd',
+      args: [
+        `( cd "widgets" && ( exit 7\n) ) || { mkdir -p ".mastra-sandbox" && printf '%s\\n' 'widgets' >> "${SETUP_FAILED_MARKER_PATH}"; }`,
+      ],
+    };
+    expect(guardedOps[1]).toEqual(guardStep);
+    expect(guardedOps[4]).toEqual(guardStep);
+    expect(plainOps[1]).toEqual({ method: 'runCmd', args: ['cd "widgets" && exit 7'] });
+    expect(plainOps[4]).toEqual({ method: 'runCmd', args: ['cd "widgets" && exit 7'] });
+    // Clone, pin, marker and workspace steps are identical in both.
+    const rest = (ops: typeof guardedOps) => ops.filter((_, i) => i !== 1 && i !== 4);
+    expect(rest(guardedOps)).toEqual(rest(plainOps));
+    expect(
+      rest(guardedOps)
+        .map(op => String(op.args[0]))
+        .some(a => a.includes('|| {')),
+    ).toBe(false);
+  });
+
+  it('clones a repository unpinned when its head cannot be resolved, keeping the others pinned', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const template = await createRepoTemplate({
+        repos: [
+          { getRepositoryAccess: accessFor('https://github.com/acme/no-head-list'), setupCommand: 'make' },
+          { getRepositoryAccess: accessFor(gadgets) },
+        ],
+        resolveHead: vi.fn(async (url: string) => {
+          if (url === gadgets) return SHA_2;
+          throw new Error('rate limited for https://ghs_leak@github.com');
+        }),
+      })!();
+      const commands = serializeSandboxTemplate(template!).operations.map(op => String(op.args[0]));
+      expect(commands).toEqual([
+        `git clone --depth=1 --single-branch 'https://github.com/acme/no-head-list' 'no-head-list'`,
+        'cd "no-head-list" && make',
+        'cd "no-head-list" && make',
+        markerStepAt(repoSetupMarkerPath('no-head-list'), 'make').args[0],
+        `git clone --depth=1 --single-branch '${gadgets}' 'gadgets'`,
+        `git -C "gadgets" fetch origin ${SHA_2}`,
+        `git -C "gadgets" checkout ${SHA_2}`,
+        markerStepAt(repoSetupMarkerPath('gadgets')).args[0],
+        markerStepAt(WORKSPACE_SETUP_MARKER_PATH).args[0],
+      ]);
+      const logged = JSON.stringify(warn.mock.calls);
+      expect(logged).toContain('clones unpinned');
+      expect(logged).not.toContain('ghs_leak');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('degrades the whole list to resources-only when any repository access is unresolvable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const template = await createRepoTemplate({
+        repos: [{ getRepositoryAccess: accessFor(widgets) }, { getRepositoryAccess: vi.fn(async () => undefined) }],
+        cpuCount: 2,
+        resolveHead: headOf(SHA_1),
+      })!();
+      expect(serializeSandboxTemplate(template!)).toEqual({
+        schemaVersion: 1,
+        operations: [{ method: 'cpuCount', args: [2] }],
+      });
+      expect(JSON.stringify(warn.mock.calls)).toContain('"index":1');
+
+      const rejecting = createRepoTemplate({
+        repos: [
+          { getRepositoryAccess: accessFor(widgets) },
+          {
+            getRepositoryAccess: async () => {
+              throw new Error('mint failed');
+            },
+          },
+        ],
+        resolveHead: headOf(SHA_1),
+      })!;
+      await expect(rejecting()).resolves.toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('rejects both forms at call time', () => {
+    expect(() =>
+      createRepoTemplate({
+        getRepositoryAccess: accessFor(widgets),
+        repos: [{ getRepositoryAccess: accessFor(gadgets) }],
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it('rejects workspaceSetupCommand and continueOnSetupFailure without repos at call time', () => {
+    expect(() => createRepoTemplate({ getRepositoryAccess: accessFor(widgets), workspaceSetupCommand: 'x' })).toThrow(
+      /require repos/,
+    );
+    expect(() =>
+      createRepoTemplate({ getRepositoryAccess: accessFor(widgets), continueOnSetupFailure: false }),
+    ).toThrow(TypeError);
+  });
+
+  it('rejects two repositories that would share a directory', async () => {
+    await expect(
+      createRepoTemplate({
+        repos: [
+          { getRepositoryAccess: accessFor('https://github.com/acme/widgets') },
+          { getRepositoryAccess: accessFor('https://gitlab.com/other/widgets.git') },
+        ],
+        resolveHead: headOf(SHA_1),
+      })!(),
+    ).rejects.toThrow(/both clone into "widgets"/);
+  });
+
+  it('treats an empty list like no repository', () => {
+    expect(createRepoTemplate({ repos: [] })).toBeUndefined();
+    const sized = createRepoTemplate({ repos: [], cpuCount: 2 });
+    expect(sized).toBeDefined();
+  });
+
+  it('lets the template builder reject a list that exceeds the operation cap', async () => {
+    const repos = Array.from({ length: 60 }, (_, i) => ({
+      getRepositoryAccess: accessFor(`https://github.com/acme/repo-${i}`),
+      setupCommand: ['a', 'b', 'c'],
+    }));
+    await expect(createRepoTemplate({ repos, resolveHead: headOf(SHA_1) })!()).rejects.toThrow(/operations/i);
   });
 });
