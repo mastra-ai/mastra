@@ -29,7 +29,7 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   if (linearStatus.data?.connected) {
     return (
       <EmptyState
-        className="items-start py-8 text-left"
+        className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
         iconSlot={<LinearIcon />}
         titleSlot="Linear connected"
         descriptionSlot={`Connected to ${linearStatus.data.workspace?.name ?? 'Linear'}.`}
@@ -38,7 +38,7 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   }
   return (
     <EmptyState
-      className="items-start py-8 text-left"
+      className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
       iconSlot={<LinearIcon />}
       titleSlot="Connect Linear"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
@@ -61,7 +61,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
-        className="items-start py-8 text-left"
+        className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
         iconSlot={<JiraIcon />}
         titleSlot="Connect Jira"
         descriptionSlot="Couldn't load Jira connections."
@@ -76,7 +76,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   if (hasActiveConnection) {
     return (
       <EmptyState
-        className="items-start py-8 text-left"
+        className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
         iconSlot={<JiraIcon />}
         titleSlot="Jira connected"
         descriptionSlot={accountSummary(connections, 'Jira')}
@@ -85,7 +85,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   }
   return (
     <EmptyState
-      className="items-start py-8 text-left"
+      className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
       iconSlot={<JiraIcon />}
       titleSlot="Connect Jira"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
@@ -109,7 +109,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
-        className="items-start py-8 text-left"
+        className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
         iconSlot={<IncidentIoIcon />}
         titleSlot="Connect incident.io"
         descriptionSlot="Couldn't load incident.io connections."
@@ -124,7 +124,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   if (hasActiveConnection) {
     return (
       <EmptyState
-        className="items-start py-8 text-left"
+        className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
         iconSlot={<IncidentIoIcon />}
         titleSlot="incident.io connected"
         descriptionSlot={accountSummary(connections, 'incident.io')}
@@ -133,7 +133,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   }
   return (
     <EmptyState
-      className="items-start py-8 text-left"
+      className="items-start py-8 text-left max-sm:[&>div:last-child]:w-full"
       iconSlot={<IncidentIoIcon />}
       titleSlot="Connect incident.io"
       descriptionSlot="Route incident follow-ups into your Factory. Incidents themselves stay out of intake."
@@ -177,7 +177,7 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
   return (
     <section
       aria-label="Project management connections"
-      className={`border-border bg-background/80 @container rounded-2xl border p-5 [&_button]:whitespace-nowrap ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
+      className={`border-border bg-background/80 @container rounded-2xl border p-5 [&_button]:whitespace-nowrap max-sm:[&_button]:min-h-11 max-sm:[&_button]:w-full max-sm:[&_button]:justify-start ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
     >
       {paneCount > 1 ? (
         // Size columns against the panel: the desktop artwork also narrows it.
