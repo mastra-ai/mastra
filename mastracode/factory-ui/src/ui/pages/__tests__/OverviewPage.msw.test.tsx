@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -100,7 +101,7 @@ describe('Overview', () => {
     ]);
     renderOverview();
 
-    expect(await screen.findByText('Nothing new in this window')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No new work in the last 30 days' })).toBeInTheDocument();
   });
 
   it('counts a card with a live session as running, not as stalled', async () => {
@@ -137,6 +138,44 @@ describe('Overview', () => {
     renderOverview();
 
     expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
-    expect(screen.getByText('Nothing new in this window')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your pipeline starts here' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open board' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 running · 0 in the pipeline')).not.toBeInTheDocument();
+  });
+
+  it('keeps the graph and live work visible with just one item', async () => {
+    stubBoard(
+      [
+        card([{ stage: 'execute', enteredAt: hoursAgo(1), by: 'agent:builder' }], {
+          title: 'The first task',
+          sessions: { work: { sessionId: 'live', branch: 'b', threadId: 't', startedBy: 'u1' } },
+        }),
+      ],
+      ['live'],
+    );
+    renderOverview();
+
+    expect(await screen.findByRole('img', { name: /1 items entered/ })).toBeInTheDocument();
+    expect(screen.getByText('1 running · 1 in the pipeline')).toBeInTheDocument();
+    expect(screen.getAllByText('The first task')).not.toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Open board' })).not.toBeInTheDocument();
+  });
+
+  it('lets a wider range reveal older work from the empty pipeline', async () => {
+    const user = userEvent.setup();
+    stubBoard([
+      card([{ stage: 'done', enteredAt: hoursAgo(40 * 24), by: 'agent:builder' }], {
+        createdAt: hoursAgo(40 * 24),
+      }),
+    ]);
+    renderOverview();
+
+    expect(await screen.findByRole('heading', { name: 'No new work in the last 30 days' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Date range: Last 30 days' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Last 90 days' }));
+
+    expect(await screen.findByRole('img', { name: /1 items entered/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /No new work/ })).not.toBeInTheDocument();
   });
 });

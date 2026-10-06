@@ -1,5 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -73,12 +74,10 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
   );
 }
 
-function Note({ children }: { children: string }) {
+function Note({ children, description }: { children: string; description?: string }) {
   return (
-    <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
-        {children}
-      </Txt>
+    <div className={`${PANEL} flex min-h-32 items-center justify-center`}>
+      <EmptyState iconSlot={null} titleSlot={children} descriptionSlot={description} />
     </div>
   );
 }
@@ -89,12 +88,18 @@ export function CommitRail({ projectRepositoryId }: { projectRepositoryId: strin
   const query = useRepositoryCommits(projectRepositoryId, COMMITS_FETCHED);
 
   // No repository means the query never fetches, so it stays pending for good.
-  if (!projectRepositoryId) return <Note>No repository linked yet</Note>;
+  if (!projectRepositoryId)
+    return (
+      <Note description="Link a repository in Factory settings to see its latest commits.">
+        No repository linked yet
+      </Note>
+    );
   if (query.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
   if (query.isError) return <Note>Could not reach GitHub for the commit history.</Note>;
 
   const commits = query.data?.commits ?? [];
-  if (commits.length === 0) return <Note>No commits yet</Note>;
+  if (commits.length === 0)
+    return <Note description="Commits to the repository’s default branch will appear here.">No commits yet</Note>;
 
   const shown = expanded ? commits : commits.slice(0, COMMITS_COLLAPSED);
   const hidden = commits.length - shown.length;

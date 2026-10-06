@@ -1,4 +1,5 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Bot, Brain, CircleAlert, Hourglass, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
@@ -35,12 +36,10 @@ function ActorIcon({ by }: { by: string | undefined }) {
   return <Glyph className="text-muted-foreground size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
 }
 
-function Empty({ children }: { children: ReactNode }) {
+function Empty({ children, description }: { children: ReactNode; description?: string }) {
   return (
-    <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
-        {children}
-      </Txt>
+    <div className={`${PANEL} flex min-h-32 items-center justify-center`}>
+      <EmptyState iconSlot={null} titleSlot={children} descriptionSlot={description} />
     </div>
   );
 }
@@ -150,7 +149,8 @@ export function RunningList({
   running: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (running.length === 0) return <Empty>Nothing running</Empty>;
+  if (running.length === 0)
+    return <Empty description="Active agent sessions will appear here when work starts.">Nothing running</Empty>;
 
   return (
     <Rows
@@ -176,7 +176,8 @@ export function StalledList({
   waiting: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (waiting.length === 0) return <Empty>Nothing stalled</Empty>;
+  if (waiting.length === 0)
+    return <Empty description="Work waiting for its next step will appear here.">Nothing stalled</Empty>;
 
   return (
     <Rows
@@ -202,7 +203,10 @@ export function ActivityFeed({
   moved: MovedItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (moved.length === 0) return <Empty>Nothing moved</Empty>;
+  if (moved.length === 0)
+    return (
+      <Empty description="Stage changes will appear here as work moves through the pipeline.">Nothing moved</Empty>
+    );
 
   return (
     <Rows
@@ -250,7 +254,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
   if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
-  if (items.length === 0) return <Empty>All clear</Empty>;
+  if (items.length === 0) return <Empty description="Requests for your input will appear here.">All clear</Empty>;
 
   return (
     <Rows
