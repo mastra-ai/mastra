@@ -232,16 +232,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // `expectedStatus` is a compare-and-set guard, not state. It becomes part of the query
       // filter so the match and the write stay a single atomic operation, and it is stripped
       // from the merged document so it can never be persisted into the snapshot.
-      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      const { expectedStatus, expectedSleepTimers, ...state } = opts;
       const filter: Record<string, unknown> = { workflow_name: workflowName, run_id: runId };
       if (expectedStatus !== undefined) {
         filter['snapshot.status'] = { $in: Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus] };
       }
-      if (expectedSleepTimer !== undefined) {
-        filter[`snapshot.sleepTimers.${expectedSleepTimer.id}.status`] = expectedSleepTimer.status;
-        if (expectedSleepTimer.claimToken !== undefined) {
-          filter[`snapshot.sleepTimers.${expectedSleepTimer.id}.claimToken`] = expectedSleepTimer.claimToken;
-        }
+      if (expectedSleepTimers !== undefined) {
+        filter['snapshot.sleepTimers'] = expectedSleepTimers ?? {};
       }
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write

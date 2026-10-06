@@ -66,36 +66,6 @@ export async function processWorkflowWaitForEvent(
   });
 }
 
-async function persistSleepTimer({
-  workflowsStore,
-  workflowId,
-  runId,
-  timer,
-}: {
-  workflowsStore: WorkflowsStorage;
-  workflowId: string;
-  runId: string;
-  timer: NonNullable<WorkflowRunState['sleepTimers']>[string];
-}) {
-  const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-  if (!snapshot || typeof snapshot === 'string') {
-    throw new Error(`Workflow snapshot not found for runId ${runId}`);
-  }
-
-  await workflowsStore.updateWorkflowState({
-    workflowName: workflowId,
-    runId,
-    opts: {
-      status: snapshot.status,
-      sleepTimers: {
-        ...(snapshot.sleepTimers ?? {}),
-        [timer.id]: timer,
-      },
-      expectedStatus: snapshot.status,
-    },
-  });
-}
-
 export async function processWorkflowSleep(
   {
     workflow,
@@ -161,8 +131,7 @@ export async function processWorkflowSleep(
   });
   const delay = Math.max(0, duration);
   const timerId = `${step.id}:${executionPath.join('.')}`;
-  await persistSleepTimer({
-    workflowsStore,
+  await workflowsStore.persistWorkflowTimer({
     workflowId,
     runId,
     timer: {
@@ -189,8 +158,6 @@ export async function processWorkflowSleep(
       },
     },
   });
-
-
 }
 
 export async function processWorkflowSleepUntil(
@@ -243,8 +210,7 @@ export async function processWorkflowSleepUntil(
   });
   const delay = Math.max(0, duration);
   const timerId = `${step.id}:${executionPath.join('.')}`;
-  await persistSleepTimer({
-    workflowsStore,
+  await workflowsStore.persistWorkflowTimer({
     workflowId,
     runId,
     timer: {
@@ -287,5 +253,4 @@ export async function processWorkflowSleepUntil(
       },
     });
   }
-
 }

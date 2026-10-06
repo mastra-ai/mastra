@@ -17,6 +17,7 @@ import {
   TABLE_SCHEMAS,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
+  matchesExpectedSleepTimers,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -248,13 +249,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
-            const { expectedStatus, expectedSleepTimer, ...state } = opts;
+            const { expectedStatus, expectedSleepTimers, ...state } = opts;
             if (
               !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
-              (expectedSleepTimer &&
-                (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
-                  (expectedSleepTimer.claimToken !== undefined &&
-                    snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+              !matchesExpectedSleepTimers(snapshot.sleepTimers, expectedSleepTimers)
             ) {
               await tx.rollback();
               return undefined;

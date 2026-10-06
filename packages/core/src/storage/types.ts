@@ -2271,9 +2271,7 @@ export type StorageWorkspaceRef =
  * - An untagged `SerializedMemoryConfig` is the legacy inline form and behaves like `inline`.
  */
 export type StorageMemoryRef =
-  | { type: 'id'; memoryId: string }
-  | { type: 'inline'; config: SerializedMemoryConfig }
-  | SerializedMemoryConfig;
+  { type: 'id'; memoryId: string } | { type: 'inline'; config: SerializedMemoryConfig } | SerializedMemoryConfig;
 
 // ============================================
 // Workflow Storage Types
@@ -2286,11 +2284,7 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   sleepTimers?: WorkflowRunState['sleepTimers'];
-  expectedSleepTimer?: {
-    id: string;
-    status: NonNullable<WorkflowRunState['sleepTimers']>[string]['status'];
-    claimToken?: string;
-  };
+  expectedSleepTimers?: WorkflowRunState['sleepTimers'];
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
   activePaths?: Array<number>;
   activeStepsPath?: Record<string, number[]>;
@@ -2331,15 +2325,18 @@ export function matchesExpectedWorkflowStatus(
   return currentStatus !== undefined && expected.includes(currentStatus);
 }
 
-export function matchesExpectedSleepTimer(
+export function matchesExpectedSleepTimers(
   sleepTimers: WorkflowRunState['sleepTimers'] | undefined,
-  expectedTimer: UpdateWorkflowStateOptions['expectedSleepTimer'],
+  expectedTimers: UpdateWorkflowStateOptions['expectedSleepTimers'],
 ): boolean {
-  if (!expectedTimer) return true;
-  const timer = sleepTimers?.[expectedTimer.id];
+  if (expectedTimers === undefined) return true;
+  const current = sleepTimers ?? {};
+  const expected = expectedTimers ?? {};
+  const currentIds = Object.keys(current);
+  const expectedIds = Object.keys(expected);
   return (
-    timer?.status === expectedTimer.status &&
-    (expectedTimer.claimToken === undefined || timer.claimToken === expectedTimer.claimToken)
+    currentIds.length === expectedIds.length &&
+    expectedIds.every(id => JSON.stringify(current[id]) === JSON.stringify(expected[id]))
   );
 }
 

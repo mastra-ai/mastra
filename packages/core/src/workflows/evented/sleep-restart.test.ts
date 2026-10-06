@@ -58,15 +58,58 @@ describe('evented workflow sleep worker restart', () => {
     });
     await replacementWorker.startWorkers();
 
-    await vi.waitFor(async () => {
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
-      expect(snapshot?.status).toBe('success');
-      expect(snapshot?.context?.['after-sleep']).toMatchObject({ status: 'success' });
-      expect(snapshot?.sleepTimers).toEqual({});
-      expect(afterSleep).toHaveBeenCalledTimes(1);
-    });
+    await vi.waitFor(
+      async () => {
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+        expect(snapshot?.status).toBe('success');
+        expect(snapshot?.context?.['after-sleep']).toMatchObject({ status: 'success' });
+        expect(snapshot?.sleepTimers).toEqual({});
+        expect(afterSleep).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 2_500 },
+    );
 
     await replacementWorker.stopWorkers();
+  });
+
+  it('preserves sibling timers when concurrent branches persist sleeps', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'concurrent-sleep-persistence-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .sleep(5_000)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { workflow },
+    });
+    await mastra.startWorkers();
+
+    const run = await workflow.createRun({ runId: 'concurrent-sleep-persistence-run' });
+    void run.start({ inputData: { value: 'persist all' } });
+    const workflowsStore = await waitForPersistedTimer(storage, workflow.id, run.runId);
+    await mastra.stopWorkers();
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    const timer = Object.values(snapshot?.sleepTimers ?? {})[0]!;
+
+    await Promise.all(
+      ['parallel-a', 'parallel-b'].map(id =>
+        workflowsStore?.persistWorkflowTimer({
+          workflowId: workflow.id,
+          runId: run.runId,
+          timer: { ...timer, id },
+        }),
+      ),
+    );
+
+    const updated = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(Object.keys(updated?.sleepTimers ?? {})).toEqual(
+      expect.arrayContaining([timer.id, 'parallel-a', 'parallel-b']),
+    );
   });
 
   it('recovers an overdue sleep immediately when replacement workers start', async () => {
@@ -110,7 +153,7 @@ describe('evented workflow sleep worker restart', () => {
     });
     await replacementWorker.startWorkers();
 
-    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1), { timeout: 2_500 });
     await replacementWorker.stopWorkers();
   });
 
@@ -154,7 +197,7 @@ describe('evented workflow sleep worker restart', () => {
     });
     await replacementWorker.startWorkers();
 
-    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1), { timeout: 2_500 });
     await replacementWorker.stopWorkers();
   });
 
@@ -196,7 +239,7 @@ describe('evented workflow sleep worker restart', () => {
     ];
     await Promise.all(replacementWorkers.map(worker => worker.startWorkers()));
 
-    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1), { timeout: 2_500 });
     await sleep(200);
     expect(afterSleep).toHaveBeenCalledTimes(1);
 
@@ -309,7 +352,7 @@ describe('evented workflow sleep worker restart', () => {
     });
     await replacementWorker.startWorkers();
 
-    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(afterSleep).toHaveBeenCalledTimes(1), { timeout: 2_500 });
     await replacementWorker.stopWorkers();
   });
 

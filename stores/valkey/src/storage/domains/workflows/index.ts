@@ -170,7 +170,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
 
       // Best-effort only: this store reports `supportsConcurrentUpdates() === false`, so the
       // read and the write are not a single critical section.
-      const { expectedStatus, ...state } = opts;
+      const { expectedStatus, expectedSleepTimers: _expectedSleepTimers, ...state } = opts;
       if (!matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
         return undefined;
       }

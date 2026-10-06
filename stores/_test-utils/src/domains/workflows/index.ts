@@ -789,7 +789,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
               sleepTimers: {
                 [timerId]: { ...timer, status: 'claimed', claimToken, claimedAt: Date.now() },
               } as any,
-              expectedSleepTimer: { id: timerId, status: 'pending' },
+              expectedSleepTimers: { [timerId]: timer } as any,
             },
           });
         }),
@@ -798,7 +798,40 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(results.filter(result => result !== undefined)).toHaveLength(1);
       const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
       expect(persisted?.sleepTimers?.[timerId]).toMatchObject({ status: 'claimed', claimToken: expect.any(String) });
-      expect(persisted).not.toHaveProperty('expectedSleepTimer');
+      expect(persisted).not.toHaveProperty('expectedSleepTimers');
+    });
+
+    it('should preserve sibling sleep timers created concurrently', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping concurrent sleep timer persistence test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const makeTimer = (id: string) => ({
+        id,
+        stepId: id,
+        kind: 'sleep' as const,
+        startedAt: Date.now(),
+        dueAt: Date.now() + 1_000,
+        status: 'pending' as const,
+        continuation: {},
+      });
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {}, sleepTimers: {} } as any,
+      });
+      await Promise.all(
+        ['sleep-a', 'sleep-b'].map(id =>
+          workflowsStorage.persistWorkflowTimer({ workflowId: workflowName, runId, timer: makeTimer(id) as any }),
+        ),
+      );
+
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(Object.keys(persisted?.sleepTimers ?? {}).sort()).toEqual(['sleep-a', 'sleep-b']);
+      expect(persisted).not.toHaveProperty('expectedSleepTimers');
     });
 
     it('should update workflow results in snapshot', async () => {

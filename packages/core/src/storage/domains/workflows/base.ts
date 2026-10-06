@@ -65,27 +65,62 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
 
-  async listDueWorkflowTimers({ dueAt, limit }: { dueAt: number; limit: number }): Promise<StoredWorkflowTimer[]> {
-    const timers: StoredWorkflowTimer[] = [];
-    const perPage = Math.max(limit, 1);
-    let page = 0;
+  async persistWorkflowTimer({
+    workflowId,
+    runId,
+    timer,
+  }: {
+    workflowId: string;
+    runId: string;
+    timer: WorkflowSleepTimer;
+  }): Promise<void> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const snapshot = await this.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+      if (!snapshot) throw new Error(`Workflow snapshot not found for runId ${runId}`);
 
-    while (timers.length < limit) {
-      const result = await this.listWorkflowRuns({ status: 'running', page, perPage });
-      for (const run of result.runs) {
-        const snapshot = await this.loadWorkflowSnapshot({ workflowName: run.workflowName, runId: run.runId });
-        for (const timer of Object.values(snapshot?.sleepTimers ?? {})) {
-          if (timer.dueAt <= dueAt) {
-            timers.push({ ...timer, workflowId: run.workflowName, runId: run.runId });
-            if (timers.length === limit) return timers;
-          }
-        }
-      }
-      if ((page + 1) * perPage >= result.total || result.runs.length === 0) break;
-      page += 1;
+      const expectedSleepTimers = snapshot.sleepTimers ?? {};
+      const updated = await this.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: snapshot.status,
+          sleepTimers: { ...expectedSleepTimers, [timer.id]: timer },
+          expectedStatus: snapshot.status,
+          expectedSleepTimers,
+        },
+      });
+      if (updated) return;
     }
 
-    return timers;
+    throw new Error(`Failed to persist workflow sleep timer ${timer.id} for runId ${runId}`);
+  }
+
+  async listDueWorkflowTimers({
+    dueAt,
+    limit,
+    page,
+  }: {
+    dueAt: number;
+    limit: number;
+    page: number;
+  }): Promise<{ timers: StoredWorkflowTimer[]; nextPage: number }> {
+    const timers: StoredWorkflowTimer[] = [];
+    const perPage = Math.max(limit, 1);
+    const result = await this.listWorkflowRuns({ status: 'running', page, perPage });
+
+    for (const run of result.runs) {
+      const snapshot = await this.loadWorkflowSnapshot({ workflowName: run.workflowName, runId: run.runId });
+      for (const timer of Object.values(snapshot?.sleepTimers ?? {})) {
+        if (timer.dueAt <= dueAt) {
+          timers.push({ ...timer, workflowId: run.workflowName, runId: run.runId });
+          if (timers.length === limit) break;
+        }
+      }
+      if (timers.length === limit) break;
+    }
+
+    const nextPage = result.runs.length > 0 && (page + 1) * perPage < result.total ? page + 1 : 0;
+    return { timers, nextPage };
   }
 
   async claimWorkflowTimer({
@@ -117,7 +152,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
           [timerId]: { ...timer, status: 'claimed', claimToken, claimedAt: now },
         },
         expectedStatus: snapshot.status,
-        expectedSleepTimer: { id: timerId, status: timer.status, claimToken: timer.claimToken },
+        expectedSleepTimers: snapshot.sleepTimers ?? {},
       },
     });
     if (!updated) return;
@@ -147,7 +182,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
           status: snapshot.status,
           sleepTimers,
           expectedStatus: snapshot.status,
-          expectedSleepTimer: { id: timerId, status: 'claimed', claimToken },
+          expectedSleepTimers: snapshot.sleepTimers ?? {},
         },
       }),
     );
@@ -178,7 +213,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
             [timerId]: { ...timer, status: 'pending', claimToken: undefined, claimedAt: undefined },
           },
           expectedStatus: snapshot.status,
-          expectedSleepTimer: { id: timerId, status: 'claimed', claimToken },
+          expectedSleepTimers: snapshot.sleepTimers ?? {},
         },
       }),
     );

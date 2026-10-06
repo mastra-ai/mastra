@@ -7,6 +7,7 @@ import {
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
+  matchesExpectedSleepTimers,
 } from '@mastra/core/storage';
 import type {
   UpdateWorkflowStateOptions,
@@ -431,13 +432,10 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
         // row lock, and stripped so it can never be merged into the persisted snapshot.
-        const { expectedStatus, expectedSleepTimer, ...state } = opts;
+        const { expectedStatus, expectedSleepTimers, ...state } = opts;
         if (
           !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
-          (expectedSleepTimer &&
-            (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
-              (expectedSleepTimer.claimToken !== undefined &&
-                snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+          !matchesExpectedSleepTimers(snapshot.sleepTimers, expectedSleepTimers)
         ) {
           return undefined;
         }

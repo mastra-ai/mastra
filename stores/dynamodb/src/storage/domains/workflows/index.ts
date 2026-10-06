@@ -5,6 +5,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
+  matchesExpectedSleepTimers,
 } from '@mastra/core/storage';
 import type {
   WorkflowRun,
@@ -253,13 +254,10 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         const previousUpdatedAt = existingRecord.data.updatedAt;
 
-        const { expectedStatus, expectedSleepTimer, ...state } = opts;
+        const { expectedStatus, expectedSleepTimers, ...state } = opts;
         if (
           !matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus) ||
-          (expectedSleepTimer &&
-            (existingSnapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
-              (expectedSleepTimer.claimToken !== undefined &&
-                existingSnapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+          !matchesExpectedSleepTimers(existingSnapshot.sleepTimers, expectedSleepTimers)
         ) {
           return undefined;
         }

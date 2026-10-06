@@ -880,21 +880,18 @@ export async function handleTypedOperation(
       // serializable, so checking it here keeps the guard and the write atomic. It is stripped
       // from the merge so it can never be persisted into the snapshot. An empty result signals
       // "guard did not match" to the caller.
-      const { expectedStatus, expectedSleepTimer, ...state } = JSON.parse(request.opts);
+      const { expectedStatus, expectedSleepTimers, ...state } = JSON.parse(request.opts);
       if (expectedStatus !== undefined) {
         const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
         if (!expected.includes(snapshot.status)) {
           return { ok: true, result: '' };
         }
       }
-      if (expectedSleepTimer !== undefined) {
-        const timer = snapshot.sleepTimers?.[expectedSleepTimer.id];
-        if (
-          timer?.status !== expectedSleepTimer.status ||
-          (expectedSleepTimer.claimToken !== undefined && timer.claimToken !== expectedSleepTimer.claimToken)
-        ) {
-          return { ok: true, result: '' };
-        }
+      if (
+        expectedSleepTimers !== undefined &&
+        JSON.stringify(snapshot.sleepTimers ?? {}) !== JSON.stringify(expectedSleepTimers ?? {})
+      ) {
+        return { ok: true, result: '' };
       }
 
       const mergedSnapshot = { ...snapshot, ...state };

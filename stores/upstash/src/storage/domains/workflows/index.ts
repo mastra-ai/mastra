@@ -275,7 +275,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local optsJson = ARGV[1]
         local now = ARGV[2]
         local expectedStatusJson = ARGV[3]
-        local expectedSleepTimerJson = ARGV[4]
+        local expectedSleepTimersJson = ARGV[4]
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -310,13 +310,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           end
         end
 
-        if expectedSleepTimerJson ~= '' then
-          local expectedTimer = cjson.decode(expectedSleepTimerJson)
-          local timer = snapshot.sleepTimers and snapshot.sleepTimers[expectedTimer.id]
-          if not timer or timer.status ~= expectedTimer.status then
-            return nil
-          end
-          if expectedTimer.claimToken ~= nil and timer.claimToken ~= expectedTimer.claimToken then
+        if expectedSleepTimersJson ~= '' then
+          local expectedTimers = cjson.decode(expectedSleepTimersJson)
+          local currentTimers = snapshot.sleepTimers or {}
+          if cjson.encode(currentTimers) ~= cjson.encode(expectedTimers) then
             return nil
           end
         end
@@ -338,17 +335,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         return cjson.encode(data)
       `;
 
-      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      const { expectedStatus, expectedSleepTimers, ...state } = opts;
       const expectedStatusJson =
         expectedStatus === undefined
           ? ''
           : JSON.stringify(Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]);
-      const expectedSleepTimerJson = expectedSleepTimer === undefined ? '' : JSON.stringify(expectedSleepTimer);
+      const expectedSleepTimersJson =
+        expectedSleepTimers === undefined ? '' : JSON.stringify(expectedSleepTimers ?? {});
 
       const resultJson = await this.client.eval(
         luaScript,
         [key],
-        [JSON.stringify(state), now, expectedStatusJson, expectedSleepTimerJson],
+        [JSON.stringify(state), now, expectedStatusJson, expectedSleepTimersJson],
       );
 
       if (!resultJson) {

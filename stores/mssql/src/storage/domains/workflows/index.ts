@@ -6,6 +6,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   normalizePerPage,
+  matchesExpectedSleepTimers,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -262,13 +263,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         );
       }
 
-      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      const { expectedStatus, expectedSleepTimers, ...state } = opts;
       if (
         !matchesExpectedWorkflowStatus(snapshot.status, expectedStatus) ||
-        (expectedSleepTimer &&
-          (snapshot.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
-            (expectedSleepTimer.claimToken !== undefined &&
-              snapshot.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+        !matchesExpectedSleepTimers(snapshot.sleepTimers, expectedSleepTimers)
       ) {
         await transaction.rollback();
         return undefined;

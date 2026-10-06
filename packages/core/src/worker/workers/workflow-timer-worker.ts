@@ -9,7 +9,7 @@ export interface WorkflowTimerWorkerConfig {
   leaseDuration?: number;
 }
 
-const DEFAULT_POLL_INTERVAL = 100;
+const DEFAULT_POLL_INTERVAL = 1_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_LEASE_DURATION = 30_000;
 
@@ -21,6 +21,7 @@ export class WorkflowTimerWorker extends MastraWorker {
   #pollHandle?: ReturnType<typeof setTimeout>;
   #running = false;
   #polling = false;
+  #page = 0;
 
   constructor(config: WorkflowTimerWorkerConfig = {}) {
     super();
@@ -78,7 +79,12 @@ export class WorkflowTimerWorker extends MastraWorker {
     this.#polling = true;
     try {
       const now = Date.now();
-      const timers = await this.#store.listDueWorkflowTimers({ dueAt: now, limit: this.#config.batchSize });
+      const { timers, nextPage } = await this.#store.listDueWorkflowTimers({
+        dueAt: now,
+        limit: this.#config.batchSize,
+        page: this.#page,
+      });
+      this.#page = nextPage;
       await Promise.all(timers.map(timer => this.#fire(timer, now)));
     } catch (error) {
       this.deps.logger.error('WorkflowTimerWorker: failed to poll workflow timers', { error });
@@ -113,7 +119,8 @@ export class WorkflowTimerWorker extends MastraWorker {
     let published = false;
     try {
       if (claimed.emitStepEvents) {
-        const output = claimed.continuation.prevResult.status === 'success' ? claimed.continuation.prevResult.output : undefined;
+        const output =
+          claimed.continuation.prevResult.status === 'success' ? claimed.continuation.prevResult.output : undefined;
         await this.deps.pubsub.publish(`workflow.events.v2.${claimed.runId}`, {
           type: 'watch',
           runId: claimed.runId,

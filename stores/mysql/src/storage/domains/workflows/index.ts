@@ -5,6 +5,7 @@ import {
   WorkflowsStorage,
   normalizePerPage,
   matchesExpectedWorkflowStatus,
+  matchesExpectedSleepTimers,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -254,13 +255,10 @@ export class WorkflowsMySQL extends WorkflowsStorage {
 
       const existing = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
 
-      const { expectedStatus, expectedSleepTimer, ...state } = opts;
+      const { expectedStatus, expectedSleepTimers, ...state } = opts;
       if (
         !matchesExpectedWorkflowStatus(existing.status, expectedStatus) ||
-        (expectedSleepTimer &&
-          (existing.sleepTimers?.[expectedSleepTimer.id]?.status !== expectedSleepTimer.status ||
-            (expectedSleepTimer.claimToken !== undefined &&
-              existing.sleepTimers[expectedSleepTimer.id]?.claimToken !== expectedSleepTimer.claimToken)))
+        !matchesExpectedSleepTimers(existing.sleepTimers, expectedSleepTimers)
       ) {
         await connection.rollback();
         return undefined;

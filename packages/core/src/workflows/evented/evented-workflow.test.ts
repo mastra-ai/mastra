@@ -27,6 +27,7 @@ import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
+import { WorkflowTimerWorker } from '../../worker';
 import { createStep, createWorkflow } from '.';
 
 // ============================================================================
@@ -144,6 +145,7 @@ createWorkflowTestSuite({
       tools: registryEntry?.mastraTools,
       storage: sharedStorage,
       pubsub: new EventEmitterPubSub(),
+      workers: [new WorkflowTimerWorker({ pollInterval: 10 })],
     });
 
     try {
