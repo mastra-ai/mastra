@@ -13,6 +13,7 @@ import { getBufferedChunks, combineObservationsForBuffering } from '../message-u
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { getLineageHead } from '../record-lineage';
 import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
@@ -152,12 +153,12 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const { record, threadId, resourceId, messages } = this.opts;
 
-    // `Memory.deleteThread` clears the observational-memory record along with the
-    // thread, so a buffered cycle that finishes after the delete would write to a
-    // removed row and index vectors the already-finished cleanup will never delete.
+    // `Memory.deleteThread` and `om.clear` delete the record, so a buffered cycle that
+    // finishes afterwards must not write: not to a removed row (indexing vectors the finished
+    // cleanup will never delete), and not to a record created for the thread since.
     // Keying off the record rather than the thread row matters: observation can
     // legitimately run for a thread that was never persisted.
-    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const liveRecord = await getLineageHead(this.storage, record);
     if (!liveRecord) {
       omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
       return;
@@ -194,8 +195,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     // for this cycle's chunk on the head before giving up. A chunk that never landed must not
     // be indexed, reported as buffered, or advance buffering.
     if (appendResult && !appendResult.persisted) {
-      const head =
-        appendAttempts > 1 ? await this.storage.getObservationalMemory(record.threadId, record.resourceId) : null;
+      const head = appendAttempts > 1 ? await getLineageHead(this.storage, record) : null;
       const landed =
         !!head &&
         (getBufferedChunks(head).some(chunk => chunk.cycleId === this.cycleId) ||

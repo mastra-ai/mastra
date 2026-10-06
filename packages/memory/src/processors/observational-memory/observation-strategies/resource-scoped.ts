@@ -20,6 +20,7 @@ import {
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { getLineageHead } from '../record-lineage';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
@@ -444,7 +445,11 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     // Commit first. Per-thread cursors and completion markers below are what remove observed
     // messages from live context, so they may only follow a commit that landed on the head.
-    const head = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+    // Never commit into a record created after this one was cleared.
+    const head = await getLineageHead(this.storage, record);
+    if (!head) {
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
+    }
     const committed = await this.commitActiveObservationsToHead({
       processed,
       composedFrom: this.composedFrom,

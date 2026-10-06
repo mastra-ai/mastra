@@ -14,6 +14,7 @@ import {
 } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
+import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
 import { withRetry } from '../retry';
 import { stripSubconsciousSignals } from '../subconscious/origin';
@@ -440,7 +441,7 @@ export abstract class ObservationStrategy {
 
       omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); recomposing against the head`);
       if (attempt === MAX_HEAD_COMMIT_RETRIES) break;
-      const head = await this.storage.getObservationalMemory(target.threadId, target.resourceId);
+      const head = await getLineageHead(this.storage, target);
       if (!head) return null;
       target = head;
       composedFrom = head.activeObservations ?? '';
