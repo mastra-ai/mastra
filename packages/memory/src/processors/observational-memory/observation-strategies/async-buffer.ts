@@ -161,7 +161,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const liveRecord = await getLineageHead(this.storage, record);
     if (!liveRecord) {
       omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
-      return;
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
     }
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
