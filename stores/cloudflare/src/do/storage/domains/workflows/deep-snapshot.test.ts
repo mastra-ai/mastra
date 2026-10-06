@@ -1,7 +1,7 @@
-import { Miniflare } from 'miniflare';
-import { afterAll, describe, expect, it } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { describe, expect, it } from 'vitest';
 
-import { D1Store } from '../../index';
+import { WorkflowsStorageDO } from './index';
 
 const snapshot = (runId: string, result: unknown) =>
   ({
@@ -19,15 +19,17 @@ const snapshot = (runId: string, result: unknown) =>
     result,
   }) as any;
 
-describe('listWorkflowRuns status filter with deeply nested snapshots', () => {
-  const mf = new Miniflare({ modules: true, script: 'export default {};', d1Databases: { TEST_DB: ':memory:' } });
-  afterAll(() => mf.dispose());
-
+describe('WorkflowsStorageDO listWorkflowRuns status filter with deeply nested snapshots', () => {
   it('skips snapshots SQLite cannot parse instead of failing the whole query', async () => {
-    const binding = await mf.getD1Database('TEST_DB');
-    const store = new D1Store({ id: 'deep-snapshot', binding: binding as any });
-    await store.init();
-    const workflows = (await store.getStore('workflows'))!;
+    const db = new DatabaseSync(':memory:');
+    const sql = {
+      exec: (query: string, ...params: any[]) => {
+        const rows = db.prepare(query).all(...params);
+        return { toArray: () => rows };
+      },
+    };
+    const workflows = new WorkflowsStorageDO({ sql: sql as never });
+    await workflows.init();
 
     let deep: unknown = 1;
     for (let i = 0; i < 1100; i++) deep = [deep];
