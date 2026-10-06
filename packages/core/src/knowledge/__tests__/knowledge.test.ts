@@ -6,6 +6,17 @@ import { Knowledge } from '../index';
 const scope = ['org:acme', 'resource:mastra'];
 
 describe('Knowledge', () => {
+  it('rejects over-long scope descriptions at construction', () => {
+    const storage = new InMemoryStore({ id: 'bounded' });
+    const description = 'x'.repeat(401);
+    expect(
+      () => new Knowledge({ storage, structure: { scopes: [{ address: 'scope:a', name: 'A', description }] } }),
+    ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+    expect(() => new Knowledge({ storage, scopes: { 'team:$teamId': { description } } })).toThrow(
+      'Knowledge node description exceeds the 400 UTF-16 code unit limit',
+    );
+  });
+
   it('reconciles configured structure in the background and coalesces explicit waits', async () => {
     const storage = new InMemoryStore({ id: 'structured' });
     const domain = storage.stores.knowledge!;
