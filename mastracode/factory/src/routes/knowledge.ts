@@ -947,8 +947,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (!threadScopeId || profile.rootScopeId !== threadScopeId || !readableScopeIds.includes(threadScopeId)) {
       return { response: c.json({ error: 'thread_not_found' }, 404) };
     }
-    const probe = await knowledge.listRecordsBySource({ source: threadId, scopeIds: profile.scopeIds, limit: 1 });
-    if (probe.records.length === 0) return { response: c.json({ error: 'thread_not_found' }, 404) };
     return {
       projectId,
       knowledge,

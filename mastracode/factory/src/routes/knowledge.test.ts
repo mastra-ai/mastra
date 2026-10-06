@@ -996,6 +996,31 @@ describe('KnowledgeRoutes', () => {
     expect(await h.knowledge.getRecordScopeIds(created.id)).toEqual([(await h.threadScope('t-solo')).at(-1)]);
   });
 
+  it('opens a session whose facts were written by the Subconscious curator', async () => {
+    const h = await createHarness();
+    const scope = await h.threadScope('t-curated');
+    const entity = await node(h.knowledge, 'Curated Session Entity', scope);
+    await record(h.knowledge, entity, 'Captured by curate.', scope, 'subconscious:curate');
+
+    const { status, body } = await graph(h, '?threadId=t-curated');
+    expect(status).toBe(200);
+    expect(body.view).toBe('thread');
+    expect(body.nodes.map(node => node.id)).toContain(entity.id);
+  });
+
+  it('does not materialize scopes when a session view names an unknown thread', async () => {
+    const h = await createHarness();
+    await graph(h);
+    const materialize = vi.spyOn(h.runtime, 'materializeScope');
+
+    expect((await graph(h, '?threadId=never-seen')).status).toBe(404);
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?threadId=never-seen`)).status,
+    ).toBe(404);
+    expect(materialize).not.toHaveBeenCalled();
+    expect(await h.knowledge.getScopeAddress(`resource:${h.projectId}:thread:never-seen`)).toBeNull();
+  });
+
   // 19
   it('entity endpoint: thread-scoped entity 404s without threadId, 200 with it, 404 with a cross-org threadId', async () => {
     const h = await createHarness();
