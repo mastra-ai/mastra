@@ -4,6 +4,7 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
+import { assertKnowledgeDescriptionWithinBound } from '../storage/domains/knowledge/base';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -37,6 +38,7 @@ export function validateKnowledgeScopeTypes(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
+  for (const config of Object.values(types)) assertKnowledgeDescriptionWithinBound(config?.description);
   const patterns = Object.keys(types).filter(pattern => pattern !== 'custom');
   for (const [index, pattern] of patterns.entries()) {
     assertPattern(pattern);
@@ -59,6 +61,7 @@ export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): Kn
   for (const scope of plan.scopes) {
     assertAddress(scope.address);
     if (!scope.name.trim()) throw new Error(`Knowledge scope ${scope.address} must have a name`);
+    assertKnowledgeDescriptionWithinBound(scope.description);
     if (addresses.has(scope.address)) throw new Error(`Duplicate Knowledge scope address: ${scope.address}`);
     addresses.add(scope.address);
     const parents = new Set<string>();
