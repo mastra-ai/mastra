@@ -241,6 +241,7 @@ describe('Knowledge proposal lifecycle', () => {
   it('denies re-review when a conflicted target moved outside the reviewer frontier', async () => {
     const { knowledge, storage, lifecycle, node, ids } = await createFixture();
     const sourceOwner = await storage.createNode({ name: 'Source owner', isScope: true, scopeIds: [] });
+    await storage.upsertScopeGrant({ scopeNodeId: sourceOwner.id, scopeRefId: sourceOwner.id, role: 'owner' });
     await storage.upsertScopeGrant({
       scopeNodeId: ids['scope:source']!,
       scopeRefId: sourceOwner.id,
