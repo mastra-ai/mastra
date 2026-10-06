@@ -1,4 +1,10 @@
-import { isImageFile, isMarkdownFile, isVideoFile, videoMimeType, useWorkspaceFileContent } from '@mastra/react/hooks';
+import {
+  isImageFile,
+  isMarkdownFile,
+  isVideoFile,
+  videoMimeType,
+  useWorkspaceFileContent,
+} from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
@@ -69,7 +75,11 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
 
 export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: WorkspacePreviewFactory }) {
   const { workspaceId, activeFilePath } = useWorkspaceContext();
-  const { data, isLoading, error } = useWorkspaceFileContent(workspaceId, activeFilePath);
+  const { data, isLoading, error } = useWorkspaceFileContent({
+    workspaceId: workspaceId,
+    path: activeFilePath,
+    queryOptions: { enabled: !!activeFilePath },
+  });
 
   if (!activeFilePath) return null;
   if (isLoading) {

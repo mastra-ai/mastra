@@ -1,5 +1,5 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks';
+import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 
 export type UserAvatarProps = {
   user: AuthenticatedUser | CurrentUser;

@@ -1,4 +1,4 @@
-import { useTraceSpans, useTraceUsage } from '@mastra/react/hooks';
+import { useTraceSpans, useTraceUsage } from '@mastra/react/hooks/traces';
 
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
@@ -7,7 +7,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
  * agent run (root span) and the observability store can serve metrics.
  */
 export function useExperimentResultUsage(traceId: string | null | undefined) {
-  const { data: trace } = useTraceSpans(traceId);
+  const { data: trace } = useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
   const rootSpan = trace?.spans.find(span => !span.parentSpanId);
   const isAgentTrace = rootSpan?.entityType === 'agent';
   const { supportsMetrics } = useObservabilityStorageCapabilities();

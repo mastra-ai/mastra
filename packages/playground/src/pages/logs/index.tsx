@@ -19,7 +19,8 @@ import {
 } from '@mastra/playground-ui/domains/logs/log-filters';
 import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
-import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans, useLogs } from '@mastra/react/hooks';
+import { useLogs } from '@mastra/react/hooks/logs';
+import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -115,7 +116,10 @@ export default function LogsPage() {
     url.featuredTraceId,
   );
 
-  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
+  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans({
+    traceId: url.featuredTraceId ?? null,
+    queryOptions: { enabled: !!url.featuredTraceId },
+  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),

@@ -3,7 +3,7 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import type { SidebarNewLink } from '@mastra/playground-ui/new/sidebar';
-import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';

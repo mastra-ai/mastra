@@ -1,7 +1,9 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useQueries } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { isUnauthenticatedError, useCurrentUser } from '../auth';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { useToolProviders } from './use-tool-providers';
 
@@ -23,6 +25,13 @@ export interface UseAllConnectionsOptions {
    * consistent and prevents admin cross-author leakage.
    */
   scopeToSelf?: boolean;
+  /** TanStack overrides applied to every fanned-out query, spread last. `select` must keep the default shape. */
+  queryOptions?: {
+    toolkits?: MastraQueryOptions<Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['listToolkits']>>>;
+    connections?: MastraQueryOptions<
+      Awaited<ReturnType<ReturnType<MastraClient['getToolProvider']>['listConnections']>>
+    >;
+  };
 }
 
 /**
@@ -37,12 +46,11 @@ export interface UseAllConnectionsOptions {
  * Distinct from `useExistingConnections` (per-pair, used by `/integrations`)
  * to keep their query caches independent.
  */
-export const useAllConnections = (options?: UseAllConnectionsOptions) => {
+export const useAllConnections = ({ scopeToSelf = false, queryOptions }: UseAllConnectionsOptions = {}) => {
   const client = useMastraClient();
   const providersQuery = useToolProviders();
   const providers = useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data?.providers]);
 
-  const scopeToSelf = options?.scopeToSelf ?? false;
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
   const callerReady = !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
@@ -52,6 +60,7 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
     queries: providers.map(provider => ({
       queryKey: ['tool-integration-services', provider.id],
       queryFn: () => client.getToolProvider(provider.id).listToolkits(),
+      ...queryOptions?.toolkits,
     })),
   });
 
@@ -81,6 +90,7 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
         }),
       enabled: callerReady,
       staleTime: STALE_TIME_MS,
+      ...queryOptions?.connections,
     })),
   });
 

@@ -47,6 +47,7 @@ import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/trace
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import {
   createTraceQueryValuesResolver,
   useTraceMetadataFilterFields,
@@ -56,8 +57,7 @@ import {
   useTraceFeedback,
   useTraceOrBranchSpans,
   useTraceUsage,
-  useTraceSpanScores,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -147,11 +147,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam, enabled: withFeedback });
+  const { data: traceFeedbackData } = useTraceFeedback({
+    traceId: url.traceIdParam,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam },
+  });
   const { data: spanFeedbackData } = useSpanFeedback({
     traceId: url.traceIdParam,
     spanId: url.spanIdParam,
-    enabled: withFeedback,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam && !!url.spanIdParam },
   });
 
   const {
@@ -174,6 +177,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const { data: spanScoresData } = useTraceSpanScores({
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
+    queryOptions: { enabled: !!url.traceIdParam && !!anchorSpan?.spanId },
   });
 
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
@@ -204,7 +208,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
-    enabled: withQueryTrace,
+    queryOptions: { enabled: withQueryTrace },
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(

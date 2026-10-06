@@ -4,6 +4,6 @@ export * from './components/studio-config-form';
 export * from './components/mastra-version-footer';
 export * from './types';
 export * from './components/playground-config-guard';
-export * from '@mastra/react/hooks';
+export * from '@mastra/react/hooks/configuration';
 export * from './hooks/use-package-updates';
 export * from './hooks/use-has-observability';

@@ -2,7 +2,7 @@
 import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
-import { useTraceSpans } from '@mastra/react/hooks';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -110,7 +110,10 @@ describe('useDownloadTraceJson', () => {
       );
       const { result } = renderHook(
         () => ({
-          trace: useTraceSpans(suspendedTrace.traceId),
+          trace: useTraceSpans({
+            traceId: suspendedTrace.traceId,
+            queryOptions: { enabled: !!suspendedTrace.traceId },
+          }),
           download: useDownloadTraceJson(),
         }),
         { wrapper: makeWrapper() },

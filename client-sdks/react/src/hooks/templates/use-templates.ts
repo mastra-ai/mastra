@@ -1,8 +1,10 @@
-import type { TemplateInstallationRequest } from '@mastra/client-js';
+import type { MastraClient, TemplateInstallationRequest } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 
 export interface Template {
   slug: string;
@@ -138,52 +140,96 @@ async function getTemplateRepoEnvVars({
   return {};
 }
 
-export const useMastraTemplates = () => {
-  return useQuery({
+type MastraTemplateRepos = Awaited<ReturnType<typeof getMastraTemplateRepos>>;
+type TemplateRepo = Awaited<ReturnType<typeof getTemplateRepo>>;
+type TemplateRepoEnvVars = Awaited<ReturnType<typeof getTemplateRepoEnvVars>>;
+type AgentBuilderWorkflowDetails = Awaited<ReturnType<ReturnType<MastraClient['getAgentBuilderAction']>['details']>>;
+type TemplateInstallRun = Awaited<ReturnType<ReturnType<MastraClient['getAgentBuilderAction']>['createRun']>>;
+type TemplateInstallRunById = Awaited<ReturnType<ReturnType<MastraClient['getAgentBuilderAction']>['runById']>>;
+type StreamTemplateInstallVariables = {
+  inputData: TemplateInstallationRequest;
+  selectedModel: { provider: string; modelId: string };
+  runId: string;
+};
+
+export const useMastraTemplates = <TData = MastraTemplateRepos>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<MastraTemplateRepos, TData> } = {}): UseQueryResult<TData, Error> => {
+  return useQuery<MastraTemplateRepos, Error, TData>({
     queryKey: ['mastra-templates'],
     queryFn: getMastraTemplateRepos,
+    ...queryOptions,
   });
 };
 
-export const useTemplateRepo = ({ repoOrSlug, owner }: { repoOrSlug: string; owner: string }) => {
-  return useQuery({
+export const useTemplateRepo = <TData = TemplateRepo>({
+  repoOrSlug,
+  owner,
+  queryOptions,
+}: {
+  repoOrSlug: string;
+  owner: string;
+  queryOptions?: MastraQueryOptions<TemplateRepo, TData>;
+}): UseQueryResult<TData, Error> => {
+  return useQuery<TemplateRepo, Error, TData>({
     queryKey: ['template-repo', repoOrSlug, owner],
     queryFn: () => getTemplateRepo({ repoOrSlug, owner }),
+    ...queryOptions,
   });
 };
 
-export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; owner: string; branch: string }) => {
-  return useQuery({
+export const useTemplateRepoEnvVars = <TData = TemplateRepoEnvVars>({
+  repo,
+  owner,
+  branch,
+  queryOptions,
+}: {
+  repo: string;
+  owner: string;
+  branch: string;
+  queryOptions?: MastraQueryOptions<TemplateRepoEnvVars, TData>;
+}): UseQueryResult<TData, Error> => {
+  return useQuery<TemplateRepoEnvVars, Error, TData>({
     queryKey: ['template-repo-env-vars', repo, owner, branch],
     queryFn: () => getTemplateRepoEnvVars({ repo, owner, branch }),
+    ...queryOptions,
   });
 };
 
-export const useAgentBuilderWorkflow = () => {
+export const useAgentBuilderWorkflow = <TData = AgentBuilderWorkflowDetails>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<AgentBuilderWorkflowDetails, TData> } = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  return useQuery({
+  return useQuery<AgentBuilderWorkflowDetails, Error, TData>({
     queryKey: ['agent-builder-workflow'],
     queryFn: async () => {
       return await client.getAgentBuilderAction('merge-template').details();
     },
+    ...queryOptions,
   });
 };
 
-export const useCreateTemplateInstallRun = () => {
+export const useCreateTemplateInstallRun = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<TemplateInstallRun, { runId?: string }> } = {}) => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
       return await client.getAgentBuilderAction('merge-template').createRun({ runId });
     },
+    ...queryOptions,
   });
 };
 
-export const useGetTemplateInstallRun = () => {
+export const useGetTemplateInstallRun = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<TemplateInstallRunById, { runId: string }> } = {}) => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId: string }) => {
       return await client.getAgentBuilderAction('merge-template').runById(runId);
     },
+    ...queryOptions,
   });
 };
 
@@ -490,20 +536,18 @@ const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
   };
 };
 
-export const useStreamTemplateInstall = (workflowInfo?: any) => {
+export const useStreamTemplateInstall = ({
+  workflowInfo,
+  queryOptions,
+}: {
+  workflowInfo?: any;
+  queryOptions?: { streamInstall?: MastraMutationOptions<void, StreamTemplateInstallVariables> };
+} = {}) => {
   const client = useMastraClient();
   const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
 
   const streamInstall = useMutation({
-    mutationFn: async ({
-      inputData,
-      selectedModel,
-      runId,
-    }: {
-      inputData: TemplateInstallationRequest;
-      selectedModel: { provider: string; modelId: string };
-      runId: string;
-    }) => {
+    mutationFn: async ({ inputData, selectedModel, runId }: StreamTemplateInstallVariables) => {
       const maxRetries = 3;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -544,6 +588,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
         }
       }
     },
+    ...queryOptions?.streamInstall,
   });
 
   return {
@@ -557,7 +602,13 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
  * Hook for observing template installation with full replay capability.
  * Uses observeStream() which replays cached execution from beginning, then continues live.
  */
-export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
+export const useObserveStreamTemplateInstall = ({
+  workflowInfo,
+  queryOptions,
+}: {
+  workflowInfo?: any;
+  queryOptions?: { observeInstall?: MastraMutationOptions<void, { runId: string }> };
+} = {}) => {
   const client = useMastraClient();
   const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
 
@@ -604,6 +655,7 @@ export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
         }
       }
     },
+    ...queryOptions?.observeInstall,
   });
 
   return {

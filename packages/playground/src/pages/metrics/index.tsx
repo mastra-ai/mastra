@@ -17,7 +17,8 @@ import {
   loadMetricsFiltersFromStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useAgentRunsKpiMetrics, useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks';
+import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
+import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';

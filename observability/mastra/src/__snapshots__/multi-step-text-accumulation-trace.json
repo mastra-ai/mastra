@@ -267,6 +267,30 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["calculator"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "calculator",
+                          "description": "Performs calculations",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "operation": {
+                                "type": "string"
+                              },
+                              "a": {
+                                "type": "number"
+                              },
+                              "b": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["operation", "a", "b"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 10,
@@ -585,6 +609,30 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["calculator"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "calculator",
+                          "description": "Performs calculations",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "operation": {
+                                "type": "string"
+                              },
+                              "a": {
+                                "type": "number"
+                              },
+                              "b": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["operation", "a", "b"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 20,

@@ -1,5 +1,5 @@
 import type { ListWorkspacesResponse, McpServerListResponse } from '@mastra/client-js';
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

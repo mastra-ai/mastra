@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useStoredWorkspaces, useStoredSkills } from '@mastra/react/hooks';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';
@@ -10,7 +11,7 @@ export default function AgentBuilderSkillsCreate() {
   const { hasPermission, rbacEnabled } = usePermissions();
   const canWrite = !rbacEnabled || hasPermission('stored-skills:write');
   // Warm caches the edit page needs on first paint.
-  useStoredSkills({ enabled: canWrite });
+  useStoredSkills({ queryOptions: { enabled: canWrite } });
   useStoredWorkspaces();
   useBuilderSettings();
   const navigate = useNavigate();

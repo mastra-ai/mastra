@@ -1,4 +1,4 @@
-import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '@mastra/react/hooks';
+import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '@mastra/react/hooks/metrics';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';

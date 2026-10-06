@@ -1,4 +1,4 @@
-import type { UpdateStoredScorerParams } from '@mastra/client-js';
+import type { StoredScorerResponse, UpdateStoredScorerParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Form } from '@mastra/playground-ui/components/Form';
@@ -8,7 +8,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks';
+import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks/scores';
 import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,7 +27,7 @@ import { StoredScorerCrumb } from '@/domains/scores/scorer-crumb';
 
 const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb }];
 
-type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
+type StoredScorerData = StoredScorerResponse;
 
 function buildUpdateParams(values: ScorerFormValues): UpdateStoredScorerParams {
   return {
@@ -64,7 +64,7 @@ function CmsScorersEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredScorer } = useStoredScorerMutations(scorerId);
+  const { updateStoredScorer } = useStoredScorerMutations({ scorerId: scorerId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -72,6 +72,7 @@ function CmsScorersEditForm({
   const { data: versionData } = useScorerVersion({
     scorerId,
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!scorerId && !!selectedVersionId },
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -222,10 +223,15 @@ function CmsScorersEditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
-  const { data: scorer, isLoading } = useStoredScorer(scorerId, { status: 'draft' });
+  const { data: scorer, isLoading } = useStoredScorer({
+    scorerId: scorerId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(scorerId) },
+  });
   const { data: versionsData } = useScorerVersions({
     scorerId: scorerId ?? '',
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!scorerId },
   });
 
   const activeVersionId = scorer?.activeVersionId;

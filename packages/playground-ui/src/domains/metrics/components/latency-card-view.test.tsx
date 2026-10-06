@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { LatencyPoint } from '@mastra/react/hooks';
+import type { LatencyPoint } from '@mastra/react/hooks/metrics';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 

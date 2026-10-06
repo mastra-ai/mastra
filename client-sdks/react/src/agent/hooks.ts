@@ -26,6 +26,7 @@ import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
+import { createUserMessage } from './user-message';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -1357,16 +1358,10 @@ export const useChat = ({
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
-    const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
-    const coreUserMessages = [nextMessage];
+    const coreUserMessages = [createUserMessage(args.message, args.coreUserMessages)];
 
-    if (args.coreUserMessages) {
-      coreUserMessages.push(...args.coreUserMessages);
-    }
-
-    // The whole user turn (text + any attachments) is merged into a single
-    // optimistic message so streaming renders one bubble, matching how
-    // memory/reload resolves the persisted multi-part user message.
+    // Use the same multipart message for the request and optimistic display.
+    // Sending separate attachment messages would persist separate rows on reload.
     const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
     const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled

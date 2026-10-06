@@ -385,6 +385,65 @@ describe('MastraModelOutput', () => {
       expect(result.spanId).toBe('mastra-agent-span-id');
     });
 
+    it('should include traceId on fullStream chunks when tracing context exists, except custom data chunks', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        { type: 'data-progress', data: { percent: 50 } } as unknown as ChunkType,
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          tracingContext: {
+            currentSpan: { id: 'mastra-agent-span-id', externalTraceId: 'mastra-trace-id', isValid: true },
+          } as any,
+        },
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const dataChunk = chunks.find(c => c.type === 'data-progress');
+      expect(dataChunk).toEqual({ type: 'data-progress', data: { percent: 50 } });
+
+      const mastraChunks = chunks.filter(c => c.type !== 'data-progress');
+      expect(mastraChunks.length).toBeGreaterThan(0);
+      for (const chunk of mastraChunks) {
+        expect(chunk.traceId).toBe('mastra-trace-id');
+      }
+    });
+
+    it('should not add traceId to fullStream chunks when tracing is disabled', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const chunk of chunks) {
+        expect(chunk).not.toHaveProperty('traceId');
+      }
+    });
+
     it('should resolve top-level finish providerMetadata on the final output', async () => {
       const runId = 'test-run';
       const providerMetadata = {

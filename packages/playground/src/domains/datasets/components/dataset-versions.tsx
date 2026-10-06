@@ -2,7 +2,7 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { useDatasetVersions } from '@mastra/react/hooks';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
 import { useEffect } from 'react';
 
 export interface DatasetVersionsProps {
@@ -28,7 +28,7 @@ export function DatasetVersions({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useDatasetVersions(datasetId);
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) {

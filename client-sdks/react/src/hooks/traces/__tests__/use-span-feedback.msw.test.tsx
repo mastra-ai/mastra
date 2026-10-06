@@ -96,7 +96,9 @@ describe('useSpanFeedback', () => {
         }),
       );
 
-      const { result } = renderHook(() => useSpanFeedback({ traceId: TRACE_ID }), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useSpanFeedback({ traceId: TRACE_ID, queryOptions: { enabled: false } }), {
+        wrapper: makeWrapper(),
+      });
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(onRequest).not.toHaveBeenCalled();

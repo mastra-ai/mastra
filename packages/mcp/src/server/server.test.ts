@@ -81,6 +81,9 @@ describe('MCPServer', () => {
         name: 'Custom',
         version: '2.0.0',
         description: 'A custom server',
+        title: 'Custom Server',
+        websiteUrl: 'https://example.com',
+        icons: [{ src: 'https://example.com/icon.png' }],
         instructions: 'Use wisely',
         repository: { url: 'https://example.com/repo', source: 'github', id: 'repo' },
         releaseDate: '2026-07-28T00:00:00.000Z',
@@ -90,7 +93,8 @@ describe('MCPServer', () => {
         remotes: [{ transport_type: 'streamable-http', url: 'https://example.com/mcp' }],
         tools: {},
       });
-      expect(custom.getServerDetail()).toEqual({
+      // The announced identity fields stay out of the registry ServerInfo/ServerDetail shape.
+      expect(custom.getServerDetail()).toStrictEqual({
         id: 'custom-id',
         name: 'Custom',
         description: 'A custom server',

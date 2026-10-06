@@ -8,7 +8,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDataset, useDatasetItems } from '@mastra/react/hooks';
+import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -62,16 +62,21 @@ function DatasetPage() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
 
   // Fetch dataset for edit dialog
-  const { data: dataset, error, isLoading: isDatasetLoading } = useDataset(datasetId);
+  const {
+    data: dataset,
+    error,
+    isLoading: isDatasetLoading,
+  } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   // Unfiltered items query — used to disable the experiment trigger when the
   // dataset has no items. React Query dedupes this with the same call inside
   // DatasetItemsView.
-  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
-    datasetId,
-    undefined,
-    activeVersion,
-  );
+  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems({
+    datasetId: datasetId,
+    search: undefined,
+    version: activeVersion,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const disableExperimentTrigger = !isUnfilteredLoading && unfilteredItems.length === 0;
 
   if (isDatasetLoading) return null; // Let the DatasetItemsView handle the loading state to avoid layout shift when loading the dataset for the edit dialog

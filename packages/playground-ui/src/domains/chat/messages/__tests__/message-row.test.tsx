@@ -382,7 +382,7 @@ describe('MessageRow', () => {
         }),
       );
 
-      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Preview' });
+      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Image' });
       expect(image.src).toBe('data:image/png;base64,iVBORw0KGgo=');
     });
   });

@@ -134,7 +134,7 @@ describe('usePreviewInstructions', () => {
         http.post(`${API}/stored/agents/preview-instructions`, () => HttpResponse.json({ result: 'Be helpful' })),
       );
       const { result } = renderHookWithProviders(() =>
-        usePreviewInstructions([{ type: 'text', content: 'Be helpful' }], true),
+        usePreviewInstructions({ blocks: [{ type: 'text', content: 'Be helpful' }] }),
       );
       await waitFor(() => expect(result.current.data).toBe('Be helpful'));
     });
@@ -193,7 +193,7 @@ describe('useDisconnectChannel', () => {
           return HttpResponse.json({ success: true });
         }),
       );
-      const { result } = renderHookWithProviders(() => useDisconnectChannel('slack'));
+      const { result } = renderHookWithProviders(() => useDisconnectChannel({ platform: 'slack' }));
       await act(async () => {
         await result.current.mutateAsync('agent-1');
       });
@@ -206,7 +206,7 @@ describe('useAgentSkills', () => {
   describe('when the draft agent has skills', () => {
     it('exposes the skills map', async () => {
       server.use(http.get(`${API}/stored/agents/agent-1`, () => HttpResponse.json(storedAgent)));
-      const { result } = renderHookWithProviders(() => useAgentSkills('agent-1'));
+      const { result } = renderHookWithProviders(() => useAgentSkills({ agentId: 'agent-1' }));
       await waitFor(() => expect(result.current.skills).toEqual({ 'skill-1': {} }));
     });
   });
@@ -216,7 +216,7 @@ describe('useAgentWorkspace', () => {
   describe('when the draft agent references a workspace', () => {
     it('exposes the workspace ref', async () => {
       server.use(http.get(`${API}/stored/agents/agent-1`, () => HttpResponse.json(storedAgent)));
-      const { result } = renderHookWithProviders(() => useAgentWorkspace('agent-1'));
+      const { result } = renderHookWithProviders(() => useAgentWorkspace({ agentId: 'agent-1' }));
       await waitFor(() => expect(result.current.workspace).toEqual({ type: 'id', workspaceId: 'ws-1' }));
     });
   });

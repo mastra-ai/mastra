@@ -31,7 +31,7 @@ void asProviderMap2;
 const legalOptions: ChannelsOptions = {
   projectId: 'proj_x',
   integrations: {
-    slack: { providerOptions: { defaultChannel: 'C123', streaming: { enabled: true } } },
+    'slack-channels': { providerOptions: { defaultChannel: 'C123', streaming: { enabled: true } } },
     telegram: { providerOptions: { mode: 'webhook', typingStatus: true } },
     discord: { providerOptions: { applicationId: 'a', publicKey: 'p', commandScope: 'global' } },
   },
@@ -45,7 +45,7 @@ void legalOptions;
 const illegalSlackBaseUrl: ChannelsOptions = {
   integrations: {
     // @ts-expect-error baseUrl is framework-managed and cannot be passed here.
-    slack: { providerOptions: { baseUrl: 'https://example.com' } },
+    'slack-channels': { providerOptions: { baseUrl: 'https://example.com' } },
   },
 };
 void illegalSlackBaseUrl;
@@ -53,7 +53,7 @@ void illegalSlackBaseUrl;
 const illegalSlackRefreshToken: ChannelsOptions = {
   integrations: {
     // @ts-expect-error refreshToken is credential-managed and cannot be passed here.
-    slack: { providerOptions: { refreshToken: 'xoxe-1-abc' } },
+    'slack-channels': { providerOptions: { refreshToken: 'xoxe-1-abc' } },
   },
 };
 void illegalSlackRefreshToken;
@@ -61,7 +61,7 @@ void illegalSlackRefreshToken;
 const illegalSlackToken: ChannelsOptions = {
   integrations: {
     // @ts-expect-error token is credential-managed and cannot be passed here.
-    slack: { providerOptions: { token: 'xoxe-2-abc' } },
+    'slack-channels': { providerOptions: { token: 'xoxe-2-abc' } },
   },
 };
 void illegalSlackToken;
@@ -69,7 +69,7 @@ void illegalSlackToken;
 const illegalSlackEncryptionKey: ChannelsOptions = {
   integrations: {
     // @ts-expect-error encryptionKey is process-wide and cannot be passed here.
-    slack: { providerOptions: { encryptionKey: 'k' } },
+    'slack-channels': { providerOptions: { encryptionKey: 'k' } },
   },
 };
 void illegalSlackEncryptionKey;

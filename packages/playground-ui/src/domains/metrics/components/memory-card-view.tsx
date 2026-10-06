@@ -1,4 +1,4 @@
-import type { ActiveThreadRow, ResourceThreadsRow } from '@mastra/react/hooks';
+import type { ActiveThreadRow, ResourceThreadsRow } from '@mastra/react/hooks/metrics';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
