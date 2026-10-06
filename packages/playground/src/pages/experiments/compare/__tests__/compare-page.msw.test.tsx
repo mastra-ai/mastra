@@ -5,7 +5,7 @@ import CompareExperimentsPage from '..';
 import { sameDatasetA, sameDatasetB, otherDataset, emptyComparison, emptyResults, emptyScores } from './fixtures/page';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const allExperiments = [sameDatasetA, sameDatasetB, otherDataset];
 
@@ -79,6 +79,22 @@ describe('CompareExperimentsPage', () => {
     it('asks for two experiments when a parameter is missing', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a');
       expect(await screen.findByText(/select two experiments to compare/i)).toBeDefined();
+    });
+
+    it('waits for complete parameters before requesting experiment metadata', async () => {
+      let metadataRequests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, () => {
+          metadataRequests += 1;
+          return HttpResponse.json(sameDatasetA);
+        }),
+      );
+      const { queryClient } = renderPage('?dataset=dataset-1&baseline=exp-a');
+
+      await screen.findByText(/select two experiments to compare/i);
+      await waitForMutationsIdle(queryClient);
+
+      expect(metadataRequests).toBe(0);
     });
   });
 });

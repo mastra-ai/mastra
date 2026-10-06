@@ -137,12 +137,13 @@ function DatasetRow({
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
   const hasExperimentsAction = !isExperimentsLoading && ds.experimentCount > 0;
+  const hasTrailingCell = hasExperimentsAction || Boolean(isExperimentsLoading);
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
       <DataList.RowLink
         ref={linkRef}
-        colEnd={hasExperimentsAction || isExperimentsLoading ? -2 : -1}
+        colEnd={hasTrailingCell ? -2 : -1}
         to={paths.datasetLink(ds.id)}
         LinkComponent={Link}
         tabIndex={-1}
@@ -153,7 +154,7 @@ function DatasetRow({
         <TagsCell tags={ds.tags} />
         <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
         <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
-        {hasExperimentsAction || isExperimentsLoading ? null : <DataList.Cell className="justify-center" />}
+        {hasTrailingCell ? null : <DataList.Cell className="justify-center" />}
       </DataList.RowLink>
 
       {isExperimentsLoading ? (

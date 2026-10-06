@@ -353,6 +353,10 @@ export function useBoardIntake({
     ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending) ||
     bindingsPending ||
     routesPending;
+  const isConfigurationPending = !review && configQuery.isPending;
+  const isSourcePending = !active && discoveringSources;
+  const isRoutingPending = active === 'github' && routesPending;
+  const isPending = isConfigurationPending || isSourcePending || isRoutingPending || Boolean(feed?.isPending);
 
   return {
     available,
@@ -363,11 +367,7 @@ export function useBoardIntake({
     alreadyMaterialized,
     participantCandidates,
     feedByColumn,
-    isPending:
-      (!review && configQuery.isPending) ||
-      (!active && discoveringSources) ||
-      (active === 'github' && routesPending) ||
-      Boolean(feed?.isPending),
+    isPending,
     isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
   };
 }

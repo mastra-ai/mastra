@@ -21,7 +21,7 @@ import type { LinearIssue } from '../../services/linear';
 import { useBoardIntake } from '../useBoardIntake';
 import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitlab } from './fixtures/query-loading';
 
-const repository = { projectRepositoryId: 'repo-1', slug: 'acme/app' } as LinkedRepositoryPayload;
+const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
 const reviewBoard = builtinBoardCatalog.boards.find(board => board.id === 'review')!;
 
