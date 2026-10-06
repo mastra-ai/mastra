@@ -175,6 +175,8 @@ export interface MastraTUIOptions {
 
   /** Session-scoped, read-only Subconscious knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
+  /** Why `knowledgeInspector` is absent, as reported by startup. */
+  knowledgeInspectorUnavailableReason?: string;
 
   /** Process-local scheduler behind /schedules. */
   threadScheduler?: ThreadScheduler;
