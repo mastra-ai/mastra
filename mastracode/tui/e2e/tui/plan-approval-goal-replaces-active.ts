@@ -47,6 +47,9 @@ export const planApprovalGoalReplacesActiveScenario: McE2eScenario = {
     if (/Goal\s+◌\s+waiting/i.test(view)) {
       throw new Error('A second goal run started after the plan goal was judged done');
     }
+    if (!/▐build▌/.test(view) || /▐plan▌/.test(view)) {
+      throw new Error('Mode did not stay in Build after the plan goal was judged done');
+    }
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
