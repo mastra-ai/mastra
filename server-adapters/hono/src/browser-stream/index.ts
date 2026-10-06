@@ -38,6 +38,11 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
    * open a cookie-authenticated stream and drive the agent's browser. When this is
    * set, an upgrade from an origin that isn't allowed is rejected with `403`.
    *
+   * Values are matched the way Hono's `cors.origin` matches them: array entries
+   * literally, and a callback only approves an origin when it returns that same
+   * origin (or `'*'`). The server's own origin always passes, because a CORS
+   * allowlist names the *other* origins and never includes the server itself.
+   *
    * Requests without an `Origin` header (non-browser clients) are not affected,
    * and the check is skipped entirely when this is unset. The deployer passes the
    * explicitly configured `server.cors.origin` here; its permissive default is
@@ -48,18 +53,45 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
 
 /**
  * Resolve an `allowedOrigins` value against the request's `Origin` header.
+ *
+ * Mirrors Hono's `cors.origin` semantics so the same config value means the same
+ * thing on the upgrade as it does on the HTTP routes: `'*'` allows everything,
+ * array entries match literally, and a callback is only an approval when it
+ * returns the request's own origin (the value Hono would echo back) or `'*'`.
  */
 async function isOriginAllowed(allowedOrigins: BrowserStreamOrigin, origin: string, c: Context): Promise<boolean> {
-  if (allowedOrigins === '*') {
-    return true;
-  }
-  if (typeof allowedOrigins === 'string') {
-    return allowedOrigins === origin;
-  }
   if (Array.isArray(allowedOrigins)) {
-    return allowedOrigins.includes('*') || allowedOrigins.includes(origin);
+    return allowedOrigins.includes(origin);
   }
-  return Boolean(await allowedOrigins(origin, c));
+  if (typeof allowedOrigins === 'function') {
+    const allowed = await allowedOrigins(origin, c);
+    return allowed === origin || allowed === '*';
+  }
+  return allowedOrigins === '*' || allowedOrigins === origin;
+}
+
+/**
+ * Is the `Origin` header the server's own origin?
+ *
+ * A Studio served by this server connects back to the same host, and operators
+ * don't add their own origin to a CORS allowlist because same-origin requests
+ * never needed CORS. Comparing hosts (rather than scheme + host) keeps that
+ * working behind TLS-terminating proxies, where the server sees `http` while the
+ * browser sends `https`.
+ */
+function isSameOrigin(origin: string, requestHost: string | undefined): boolean {
+  if (!requestHost) {
+    return false;
+  }
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  // `x-forwarded-host` may list several hosts; the first is the client-facing one.
+  const host = (requestHost.split(',')[0] ?? '').trim();
+  return originHost !== '' && originHost.toLowerCase() === host.toLowerCase();
 }
 
 /**
@@ -155,6 +187,11 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const checkOrigin: MiddlewareHandler = async (c, next) => {
     const origin = c.req.header('origin');
     if (!allowedOrigins || !origin) {
+      return next();
+    }
+    // The server's own origin is always allowed, so an origin allowlist (which
+    // only ever lists *other* origins) can't lock out the Studio this server serves.
+    if (isSameOrigin(origin, c.req.header('x-forwarded-host') ?? c.req.header('host'))) {
       return next();
     }
     if (!(await isOriginAllowed(allowedOrigins, origin, c))) {

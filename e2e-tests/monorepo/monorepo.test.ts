@@ -1651,6 +1651,15 @@ class AliasDeployer extends Deployer {
           expect(allowedOriginUpgrade.status, 'GET /browser/:agentId/stream (allowed origin)').toBe(401);
           await allowedOriginUpgrade.body?.cancel();
 
+          // A Studio served by this server connects back to its own host, and that
+          // origin is never part of a CORS allowlist, so it must reach auth rather
+          // than be refused by the origin gate.
+          const sameOriginUpgrade = await fetch(`${baseUrl}/browser/${agentId}/stream?threadId=thread-1`, {
+            headers: { Origin: baseUrl },
+          });
+          expect(sameOriginUpgrade.status, 'GET /browser/:agentId/stream (same origin)').toBe(401);
+          await sameOriginUpgrade.body?.cancel();
+
           for (const [label, headers] of [
             ['Authorization header', { Authorization: 'Bearer test-token' }],
             ['session cookie', { Cookie: 'mastra-token=test-token' }],

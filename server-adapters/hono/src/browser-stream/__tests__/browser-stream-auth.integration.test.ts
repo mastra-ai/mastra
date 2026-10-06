@@ -173,6 +173,18 @@ describe('hono browser-stream WebSocket origin validation', () => {
     expect(result.status).toBe(401);
   });
 
+  it("upgrades the server's own origin even though the allowlist names another one", async () => {
+    // A Studio served by this server connects back to the same host. Operators
+    // never list their own origin in a CORS allowlist, so without this the
+    // live browser view would break as soon as one is configured.
+    const result = await handshake(streamUrl, {
+      Origin: new URL(streamUrl).origin,
+      Cookie: 'session=valid-token',
+    });
+
+    expect(result).toEqual({ opened: true });
+  });
+
   it('does not block a client that sends no Origin header', async () => {
     // Non-browser clients (and the Node WebSocket client used here) don't send
     // Origin, so the allowlist must not become a blanket rejection.

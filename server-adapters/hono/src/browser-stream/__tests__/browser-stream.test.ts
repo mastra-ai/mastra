@@ -436,5 +436,87 @@ describe('hono browser-stream routes', () => {
       expect(allowed.status).toBe(404);
       expect(denied.status).toBe(403);
     });
+
+    it('does not treat a wildcard entry inside an array as allow-all', async () => {
+      // Hono's array form matches literal origins, so `['*']` names an origin called
+      // "*". Anything else must be rejected instead of silently allowing every origin.
+      const originApp = await setupWithOrigins(['*']);
+
+      const response = await originApp.request(streamPath, {
+        headers: { Origin: 'https://evil.example.com', Cookie: 'session=valid-token' },
+      });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('does not treat a callback that echoes a different origin as approval', async () => {
+      // Hono echoes the callback's return value; a browser then blocks the request
+      // when it differs from the request origin. Approving it here would accept
+      // origins that the same config rejects on every HTTP route.
+      const originApp = await setupWithOrigins(() => allowedOrigin);
+
+      const response = await originApp.request(streamPath, {
+        headers: { Origin: 'https://evil.example.com', Cookie: 'session=valid-token' },
+      });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('allows every origin when the callback returns the wildcard', async () => {
+      const originApp = await setupWithOrigins(() => '*');
+
+      const response = await originApp.request(streamPath, {
+        headers: { Origin: 'https://evil.example.com', Cookie: 'session=valid-token' },
+      });
+
+      expect(response.status).toBe(404);
+    });
+
+    it("allows the server's own origin even when the allowlist names other origins", async () => {
+      // A CORS allowlist lists the *other* origins a deployment trusts, so the
+      // Studio this server serves must not be locked out of its own stream.
+      const originApp = await setupWithOrigins([allowedOrigin]);
+
+      const response = await originApp.request(streamPath, {
+        headers: {
+          Origin: 'http://localhost:4111',
+          Host: 'localhost:4111',
+          Cookie: 'session=valid-token',
+        },
+      });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('reads the proxied host from x-forwarded-host for the same-origin check', async () => {
+      // Behind a TLS-terminating proxy the browser sees `https://app.example.com`
+      // while the server sees the internal host in `Host`.
+      const originApp = await setupWithOrigins([allowedOrigin]);
+
+      const response = await originApp.request(streamPath, {
+        headers: {
+          Origin: 'https://app.example.com',
+          Host: 'internal:4111',
+          'X-Forwarded-Host': 'app.example.com, internal:4111',
+          Cookie: 'session=valid-token',
+        },
+      });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('still enforces the allowlist for an origin on a different host', async () => {
+      const originApp = await setupWithOrigins([allowedOrigin]);
+
+      const response = await originApp.request(streamPath, {
+        headers: {
+          Origin: 'https://evil.example.com',
+          Host: 'localhost:4111',
+          Cookie: 'session=valid-token',
+        },
+      });
+
+      expect(response.status).toBe(403);
+    });
   });
 });
