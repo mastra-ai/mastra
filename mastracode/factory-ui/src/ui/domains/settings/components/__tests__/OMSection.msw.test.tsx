@@ -129,11 +129,11 @@ describe('OMSection', () => {
     const [observerTrigger, reflectorTrigger] = screen.getAllByRole('combobox');
     const observerAuto = screen.getByRole('button', { name: 'Use automatic observer model' });
     const reflectorAuto = screen.getByRole('button', { name: 'Use automatic reflector model' });
-    expect(observerAuto).toHaveTextContent('Auto (configured default: openai/gpt-5.4-mini)');
+    expect(observerAuto).toHaveTextContent(/^Auto$/);
     expect(reflectorAuto).toHaveTextContent('Auto');
     expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
     expect(reflectorAuto).toHaveAttribute('aria-pressed', 'false');
-    expect(observerTrigger).toHaveTextContent('Select observer model');
+    expect(observerTrigger).toHaveTextContent('openai/gpt-5.4-mini');
     expect(reflectorTrigger).toHaveTextContent('openai/reflector-x');
 
     await user.click(reflectorAuto);

@@ -121,6 +121,9 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
+  // In Auto the combobox has no value, so its placeholder shows the model Auto picked.
+  const autoPlaceholder = (role: { model: string; effectiveModelId?: string | null } | undefined, fallback: string) =>
+    role?.model === 'auto' && role.effectiveModelId ? role.effectiveModelId : fallback;
   const observerValue = config?.observer.model === 'auto' ? '' : (config?.observer.model ?? '');
   const reflectorValue = config?.reflector.model === 'auto' ? '' : (config?.reflector.model ?? '');
   return (
@@ -152,14 +155,12 @@ export function OMSection({
             disabled={busy || !config}
             onClick={() => resetModel('observer')}
           >
-            {config?.observer.model === 'auto'
-              ? `Auto (${config.observer.effectiveModelSource === 'configured-default' ? 'configured default: ' : ''}${config.observer.effectiveModelId})`
-              : 'Auto'}
+            Auto
           </Button>
           <ModelCombobox
             models={models}
             value={observerValue}
-            placeholder="Select observer model…"
+            placeholder={autoPlaceholder(config?.observer, 'Select observer model…')}
             disabled={busy}
             onValueChange={modelId => switchModel('observer', modelId)}
             className="flex-1"
@@ -177,14 +178,12 @@ export function OMSection({
             disabled={busy || !config}
             onClick={() => resetModel('reflector')}
           >
-            {config?.reflector.model === 'auto'
-              ? `Auto (${config.reflector.effectiveModelSource === 'configured-default' ? 'configured default: ' : ''}${config.reflector.effectiveModelId})`
-              : 'Auto'}
+            Auto
           </Button>
           <ModelCombobox
             models={models}
             value={reflectorValue}
-            placeholder="Select reflector model…"
+            placeholder={autoPlaceholder(config?.reflector, 'Select reflector model…')}
             disabled={busy}
             onValueChange={modelId => switchModel('reflector', modelId)}
             className="flex-1"
