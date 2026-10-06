@@ -817,9 +817,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       const existingScopes = await Promise.all(
         entries.map(([address]) => input.knowledge.resolveScopeAddress(address)),
       );
-      await Promise.all(
-        entries.flatMap(([, scope], index) => (existingScopes[index] ? [] : [input.knowledge.materializeScope(scope)])),
-      );
+      // Materialize parents before children: a child scope cannot attach to a parent that does not exist yet.
+      const pending = new Map(entries.filter((_, index) => !existingScopes[index]));
+      const materialize = async (address: string): Promise<void> => {
+        const scope = pending.get(address);
+        if (!scope) return;
+        pending.delete(address);
+        for (const parent of scope.parentAddresses ?? []) await materialize(parent);
+        await input.knowledge.materializeScope(scope);
+      };
+      for (const address of [...pending.keys()]) await materialize(address);
       resolvedScopes = await Promise.all(entries.map(([address]) => input.knowledge.resolveScopeAddress(address)));
     } catch {
       return undefined;
