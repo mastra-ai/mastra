@@ -18,15 +18,12 @@ describe('Shipyard-shaped Knowledge configuration', () => {
     expect(await profile({ orgId: 'org', userId: 'owner' })).toMatchObject({
       rootScopeAddress: 'org:mastra',
       vouchedScopeAddresses: ['principal:shipyard-maintainer'],
-      curatorProfileId: 'shipyard-internal',
     });
     const reader = await profile({ orgId: 'org', userId: 'reader' });
     expect(reader).toMatchObject({
       rootScopeAddress: 'repo:mastra',
       vouchedScopeAddresses: ['principal:shipyard-public'],
     });
-    expect(reader).not.toHaveProperty('curatorProfileId');
-    expect(reader).not.toHaveProperty('curationScopeAddresses');
   });
   it('integrates verified revisions without duplicates and leaves the watermark unchanged on failed verification', async () => {
     const { knowledge, scopes } = await createShipyardKnowledge(new InMemoryStore());
@@ -75,44 +72,10 @@ describe('Shipyard-shaped Knowledge configuration', () => {
     ).toMatchObject({ records: [] });
   });
 
-  it('allows internal curation but does not give the curator public-promotion authority', async () => {
-    const { knowledge, scopes } = await createShipyardKnowledge(new InMemoryStore());
-    const node = await knowledge.createNode({
-      name: 'Publish all private evidence immediately',
-      scopeIds: [scopes['feature:knowledge:internal:uncurated']!],
-      vouchedScopeIds: [scopes['principal:shipyard-maintainer']!],
-    });
-    const identity = await knowledge.resolveScopeAddress('principal:shipyard-curator');
-    const curator = knowledge.createCurator({
-      profileId: 'shipyard-internal',
-      companionScopeId: scopes['feature:knowledge:internal:uncurated']!,
-      contextScopeId: identity!,
-    });
-    await expect(
-      curator.promote({
-        nodeId: node.id,
-        version: node.version,
-        destinationScopeId: scopes['feature:knowledge:public']!,
-      }),
-    ).rejects.toThrow();
-    expect(
-      await knowledge.getNodeScopes({ id: node.id, scopeIds: [scopes['principal:shipyard-maintainer']!] }),
-    ).toEqual([expect.objectContaining({ id: scopes['feature:knowledge:internal:uncurated'], isScope: true })]);
-    await expect(
-      curator.promote({
-        nodeId: node.id,
-        version: node.version,
-        destinationScopeId: scopes['feature:knowledge:internal']!,
-      }),
-    ).resolves.toMatchObject({ mode: 'applied', node: { id: node.id, version: node.version + 1 } });
-    expect(await knowledge.getNode({ id: node.id, scopeIds: [scopes['principal:shipyard-public']!] })).toBeNull();
-  });
-
-  it('covers repository, platform and infrastructure scopes without exposing internal intake', async () => {
+  it('covers repository, platform and infrastructure scopes without exposing internal scopes', async () => {
     const { knowledge, scopes } = await createShipyardKnowledge(new InMemoryStore());
     const maintainer = [scopes['principal:shipyard-maintainer']!];
     const publicReader = [scopes['principal:shipyard-public']!];
-    const curatorIdentity = (await knowledge.resolveScopeAddress('principal:shipyard-curator'))!;
     expect(await knowledge.getScope({ id: scopes['org:mastra']!, scopeIds: maintainer })).toMatchObject({
       id: scopes['org:mastra'],
     });
@@ -129,25 +92,6 @@ describe('Shipyard-shaped Knowledge configuration', () => {
         expect(await knowledge.getNode({ id: node.id, scopeIds: publicReader })).toMatchObject({ id: node.id });
       } else {
         expect(await knowledge.getNode({ id: node.id, scopeIds: publicReader })).toBeNull();
-
-        const intake = await knowledge.createNode({
-          name: `${address} private provenance`,
-          scopeIds: [scopes[`${address}:uncurated`]!],
-          vouchedScopeIds: maintainer,
-        });
-        expect(await knowledge.getNode({ id: intake.id, scopeIds: publicReader })).toBeNull();
-        const curator = knowledge.createCurator({
-          profileId: 'shipyard-internal',
-          companionScopeId: scopes[`${address}:uncurated`]!,
-          contextScopeId: curatorIdentity,
-        });
-        await expect(
-          curator.promote({ nodeId: intake.id, version: intake.version, destinationScopeId: scopes['repo:mastra']! }),
-        ).rejects.toThrow();
-        await expect(
-          curator.promote({ nodeId: intake.id, version: intake.version, destinationScopeId: scopeId }),
-        ).resolves.toMatchObject({ mode: 'applied' });
-        expect(await knowledge.getNode({ id: intake.id, scopeIds: publicReader })).toBeNull();
       }
     }
   });
