@@ -95,6 +95,18 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         ids['team:o'],
       ]);
       expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+
+      // An id filter inside a subtree answers "is this scope in that subtree?" with one bounded read.
+      expect(
+        (await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['project:p']!], limit: 1 })).scopes.map(
+          scope => scope.address,
+        ),
+      ).toEqual(['project:p']);
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['team:o']!] })).toEqual({
+        scopes: [],
+        nextCursor: null,
+      });
+      expect(await store.listScopeNodes({ ids: [] })).toEqual({ scopes: [], nextCursor: null });
     });
 
     it('adds newly declared parent edges and grants to existing static scopes, but never to materialized ones', async () => {
