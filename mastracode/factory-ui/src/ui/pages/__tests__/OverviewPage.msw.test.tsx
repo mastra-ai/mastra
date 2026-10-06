@@ -101,7 +101,9 @@ describe('Overview', () => {
     ]);
     renderOverview();
 
-    expect(await screen.findByRole('heading', { name: 'No new work in the last 30 days' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No new work in the last 30 days', level: 4 }),
+    ).toBeInTheDocument();
   });
 
   it('counts a card with a live session as running, not as stalled', async () => {
@@ -138,7 +140,7 @@ describe('Overview', () => {
     renderOverview();
 
     expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your pipeline starts here' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your pipeline starts here', level: 4 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open board' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
     expect(screen.getByRole('link', { name: 'Link repository' })).toHaveAttribute(
       'href',
@@ -178,7 +180,9 @@ describe('Overview', () => {
     ]);
     renderOverview();
 
-    expect(await screen.findByRole('heading', { name: 'No new work in the last 30 days' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No new work in the last 30 days', level: 4 }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Date range: Last 30 days' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Last 90 days' }));
 

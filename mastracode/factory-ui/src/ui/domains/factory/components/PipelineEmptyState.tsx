@@ -59,6 +59,7 @@ export function PipelineEmptyState({
         </svg>
         <div className="relative">
           <EmptyState
+            as="h4"
             iconSlot={null}
             titleSlot={hasWorkItems ? `No new work in the last ${rangeDays} days` : 'Your pipeline starts here'}
             descriptionSlot={hasWorkItems ? 'Try a wider range, or start work on the board.' : undefined}
