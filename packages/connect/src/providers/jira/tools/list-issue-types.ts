@@ -48,7 +48,8 @@ const AccessibleResourceSchema = z.object({
 export function listIssueTypesTool(proxy: PlatformProxy) {
   return createTool({
     id: 'jira_list_issue_types',
-    description: 'List Jira issue types available to the user',
+    description:
+      'List Jira issue types available to the user. Pass projectId to list only the issue types available in that project (recommended before creating an issue).',
     inputSchema: listIssueTypesInputSchema,
     outputSchema: listIssueTypesOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listIssueTypesOutputSchema>> => {
