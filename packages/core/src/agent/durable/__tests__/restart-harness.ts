@@ -13,9 +13,10 @@
  *      saved but before the next one starts), or
  *    - after every write: `original.checkpoints` holds one copy per snapshot
  *      write, so a test can restart from each of them.
- * 3. `restart(checkpoint)` builds graph 2 the same way, seeds a new store with
- *    the copied rows and recovers the run (`recover(runId)` for agents,
- *    `run.restart()` for workflows).
+ * 3. `restart(checkpoint)` builds graph 2 the same way, seeds its new store with
+ *    everything graph 1 had persisted — the checkpoint's workflow rows *and*
+ *    every other storage domain's data — and recovers the run
+ *    (`recover(runId)` for agents, `run.restart()` for workflows).
  *
  * @example Gate checkpoint
  * ```ts
@@ -63,8 +64,14 @@
  * same Node process — its blocked promises, timers and objects stay alive.
  * It cannot reach graph 2 because the graphs share no store, pubsub or module
  * state, but it still consumes CPU and can log. Release graph 1's gates when
- * the test ends. Only workflow rows are copied: memory threads, observability
- * and other storage domains start empty in graph 2.
+ * the test ends.
+ *
+ * What graph 2's store holds: the checkpoint's workflow rows, and the rest of
+ * graph 1's storage copied as of the `restart()` call. For the two cut modes
+ * that park graph 1 (a gate, a held write) those are the same moment. For an
+ * every-write checkpoint that is not the one being restarted, the non-workflow
+ * domains are a little ahead of that checkpoint — workflow rows still come from
+ * the checkpoint itself.
  */
 
 import { expect, vi } from 'vitest';
@@ -269,6 +276,46 @@ async function copyRows(workflows: any): Promise<SnapshotRow[]> {
   );
 }
 
+/**
+ * Copy everything graph 1 had persisted into graph 2's fresh store.
+ *
+ * Graph 2 needs its own store, otherwise graph 1 could keep writing into the
+ * one the recovered run reads. But a run is not only its workflow rows: a test
+ * that asserts on memory, scores or traces after a restart needs what graph 1
+ * wrote to those domains too.
+ *
+ * `InMemoryStore` keeps all of it in one shared `InMemoryDB` whose fields are
+ * public Maps, arrays and counters, and the domains hold a reference to it
+ * (`private` in TypeScript, the same object at runtime). Storage exposes no
+ * public dump, so this clones that object — in one `structuredClone` call, so
+ * aliasing inside it survives, such as the observability cursor maps keyed by
+ * the very record objects held in its arrays — and refills the new store's db
+ * field by field. Maps and arrays are refilled in place because the domains
+ * captured their references at construction.
+ *
+ * Workflow rows are left to the caller: they come from the checkpoint being
+ * restarted, which is not necessarily the store's current state.
+ */
+function copyStore(from: any, to: any) {
+  const source = (from.stores.workflows as any)?.db;
+  const target = (to.stores.workflows as any)?.db;
+  if (!source || !target) throw new Error('copyStore: expected an InMemoryStore with a shared db');
+  const snapshot = structuredClone(source) as Record<string, any>;
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (key === 'workflows') continue;
+    const existing = target[key];
+    if (value instanceof Map && existing instanceof Map) {
+      existing.clear();
+      for (const [k, v] of value) existing.set(k, v);
+    } else if (Array.isArray(value) && Array.isArray(existing)) {
+      existing.splice(0, existing.length, ...value);
+    } else {
+      // Drop the readonly marker on the class field; the values are plain data.
+      (target as Record<string, any>)[key] = value;
+    }
+  }
+}
+
 const WRITE_METHODS = [
   'persistWorkflowSnapshot',
   'updateWorkflowState',
@@ -385,6 +432,8 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
     async restart(checkpoint: Checkpoint): Promise<RestartResult> {
       const graph = await buildGraph(options, ++generation);
       graphs.push(graph);
+      // Graph 1 is the one that ran; every later graph is seeded from it, not from a previous restart.
+      copyStore(graphs[0]!.storage, graph.storage);
       const rootName = rootWorkflowName(options.kind, graph);
       const root = findRow(checkpoint, rootName, options.runId);
       if (root?.snapshot.status !== 'running') {

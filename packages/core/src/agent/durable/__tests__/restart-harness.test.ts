@@ -164,6 +164,59 @@ describe('restart harness', () => {
     }, 30_000);
   }
 
+  // The other half of isolation: graph 2 must not read graph 1's live store,
+  // but it must still see everything graph 1 had persisted. Without this, a
+  // restart test that asserts on memory, scores or traces would be measuring an
+  // empty store and still pass.
+  it('gives graph 2 everything graph 1 persisted, not only the workflow rows', async () => {
+    const runId = 'restart-seeding';
+    const { scenario, gate } = toolScenario('durable', runId);
+    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    await gate.reached;
+
+    const checkpoint = await original.checkpoint();
+    // Written to a non-workflow domain, and only after the checkpoint was taken,
+    // so it is nowhere in the rows the restart replays.
+    const thread = {
+      id: 'restart-seeding-thread',
+      resourceId: 'restart-seeding-resource',
+      title: 'before the restart',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await original.graph.storage.stores.memory.saveThread({ thread });
+    await original.graph.storage.stores.memory.saveMessages({
+      messages: [
+        {
+          id: 'restart-seeding-message',
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'written in graph 1' }] },
+        },
+      ],
+    });
+
+    const recovered = await scenario.restart(checkpoint);
+    expect(recovered.text).toBe('done');
+
+    const graph2Memory = recovered.graph.storage.stores.memory;
+    expect(await graph2Memory.getThreadById({ threadId: thread.id })).toMatchObject({
+      id: thread.id,
+      title: 'before the restart',
+    });
+    expect(
+      (await graph2Memory.listMessages({ threadId: thread.id })).messages.map((m: { id: string }) => m.id),
+    ).toEqual(['restart-seeding-message']);
+
+    // Seeded, not shared: graph 2 writes into its own store.
+    await graph2Memory.saveThread({ thread: { ...thread, id: 'restart-seeding-thread-2' } });
+    expect(
+      await original.graph.storage.stores.memory.getThreadById({ threadId: 'restart-seeding-thread-2' }),
+    ).toBeFalsy();
+  }, 30_000);
+
   // Positive control for the isolation assertions above: `finishEvents` really
   // does read live. Graph 2 already counted its one FINISH; a FINISH published
   // onto its topic *after* `restart()` returned must still bump the count, which
