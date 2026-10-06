@@ -95,6 +95,7 @@ import type {
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   UpdateKnowledgeImportRunInput,
+  ReplaceKnowledgeNodeRecordsInput,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -983,34 +984,21 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
-  override async replaceNodeRecords(input: {
-    node: UpdateKnowledgeNodeInput;
-    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
-    visibilityScopeIds: KnowledgeScopeIds;
-  }): Promise<KnowledgeRecord> {
-    const scopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
+  override async replaceNodeRecords(input: ReplaceKnowledgeNodeRecordsInput): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
-      const node = await this.#updateNode(tx, input.node);
-      let after = '';
-      while (true) {
-        const page = await tx.execute({
-          sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND source=? AND deletedAt IS NULL AND id>? ORDER BY id ASC LIMIT 100`,
-          args: [node.id, input.record.source, after],
+      await this.#assertExpectedAccessEpoch(tx, input.node.expectedAccessEpoch);
+      for (const replaced of input.replacedRecords) {
+        const record = await this.#getRecord(tx, replaced.id, false);
+        if (!record || record.nodeId !== input.node.id || record.deletedAt)
+          throw new KnowledgeConflictError(replaced.id);
+        await this.#deleteRecord(tx, {
+          id: replaced.id,
+          version: replaced.version,
+          deletedBy: input.deletedBy,
+          importRunId: input.record.importRunId,
         });
-        if (!page.rows.length) break;
-        for (const row of page.rows) {
-          const record = parseKnowledge(row);
-          if (await this.#isRecordVisible(tx, record, scopeIds)) {
-            await this.#deleteRecord(tx, {
-              id: record.id,
-              version: record.version,
-              deletedBy: input.record.source,
-              importRunId: input.record.importRunId,
-            });
-          }
-          after = record.id;
-        }
       }
+      const node = await this.#updateNode(tx, input.node);
       return this.#createRecord(tx, { ...input.record, node });
     });
   }

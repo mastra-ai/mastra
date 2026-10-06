@@ -673,6 +673,9 @@ export class Knowledge extends MastraBase {
     const readableScopeIds = getKnowledgeReadableScopeIds(frontier);
     await this.#authorizeNodeMutation({ storage, frontier, nodeId: input.node.id, capability: 'edit' });
     await this.#authorizeNodeMutation({ storage, frontier, nodeId: input.node.id, capability: 'manageAccess' });
+    // Retire exactly the same-source records authorized here; storage version-fences each one and
+    // never touches records that appear concurrently.
+    const replacedRecords: Array<{ id: string; version: number }> = [];
     let cursor: string | undefined;
     do {
       const page = await storage.listRecords({
@@ -690,14 +693,55 @@ export class Knowledge extends MastraBase {
           nodeId: record.nodeId,
           capability: 'manageAccess',
         });
+        replacedRecords.push({ id: record.id, version: record.version });
       }
       cursor = page.nextCursor;
     } while (cursor);
     await this.#authorizeRecordContent({ storage, frontier, record: input.record });
     return storage.replaceNodeRecords({
       node: { ...input.node, expectedAccessEpoch: frontier.accessEpoch },
+      replacedRecords,
+      deletedBy: input.record.source,
       record: input.record,
-      visibilityScopeIds: readableScopeIds,
+    });
+  }
+
+  /**
+   * Replace one record with a new record on the same node in a single atomic, epoch-fenced storage
+   * mutation: the replacement exists only if the original is retired. Authorized as `edit` on the
+   * node, `manageAccess` on the original, and `createRecord` for the replacement.
+   */
+  async replaceRecord(input: {
+    id: string;
+    version: number;
+    nodeVersion: number;
+    deletedBy: string;
+    record: Omit<CreateKnowledgeRecordInput, 'node'>;
+    vouchedScopeIds: KnowledgeScopeIds;
+  }) {
+    const storage = await this.#getStorage();
+    await this.#assertImportRun(storage, input.record.importRunId);
+    const frontier = await this.evaluateAccess(input.vouchedScopeIds);
+    const original = await storage.getVisibleRecord({
+      id: input.id,
+      scopeIds: getKnowledgeReadableScopeIds(frontier),
+    });
+    if (!original) throw new KnowledgeNotFoundError('record', input.id);
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId: original.nodeId, capability: 'edit' });
+    await this.#authorizeNodeMutation({ storage, frontier, nodeId: original.nodeId, capability: 'append' });
+    await this.#authorizeRecordMutation({
+      storage,
+      frontier,
+      recordId: original.id,
+      nodeId: original.nodeId,
+      capability: 'manageAccess',
+    });
+    await this.#authorizeRecordContent({ storage, frontier, record: input.record });
+    return storage.replaceNodeRecords({
+      node: { id: original.nodeId, version: input.nodeVersion, expectedAccessEpoch: frontier.accessEpoch },
+      replacedRecords: [{ id: original.id, version: input.version }],
+      deletedBy: input.deletedBy,
+      record: input.record,
     });
   }
 

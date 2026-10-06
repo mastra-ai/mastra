@@ -316,6 +316,13 @@ export interface CreateKnowledgeNodeInput extends KnowledgeMutationFence {
   scopeIds: KnowledgeScopeIds;
   contextScopeId?: string;
 }
+export interface ReplaceKnowledgeNodeRecordsInput {
+  node: UpdateKnowledgeNodeInput;
+  replacedRecords: ReadonlyArray<{ id: string; version: number }>;
+  deletedBy: string;
+  record: Omit<CreateKnowledgeRecordInput, 'node'>;
+}
+
 export interface UpdateKnowledgeNodeInput extends KnowledgeMutationFence {
   id: string;
   version: number;
@@ -753,11 +760,12 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }): Promise<{ node: KnowledgeNode; record: KnowledgeRecord }> {
     throw new KnowledgeUnsupportedError();
   }
-  async replaceNodeRecords(_input: {
-    node: UpdateKnowledgeNodeInput;
-    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
-    visibilityScopeIds: KnowledgeScopeIds;
-  }): Promise<KnowledgeRecord> {
+  /**
+   * Atomically retire exactly `replacedRecords` (each version-fenced, all on `node`), update the
+   * node, and append `record`. Records that are not listed are never touched, so a caller can only
+   * retire records it has authorized; any listed record that changed or moved fails the whole call.
+   */
+  async replaceNodeRecords(_input: ReplaceKnowledgeNodeRecordsInput): Promise<KnowledgeRecord> {
     throw new KnowledgeUnsupportedError();
   }
   async createRecord(_input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {

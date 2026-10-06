@@ -126,7 +126,7 @@ export function createKnowledgeStorageTests(
       expect(await store.listActivity({ scopeIds: [privateScope.id], limit: 100 })).not.toHaveLength(0);
     });
 
-    it('replaces all source-owned visible records across pages without deleting other evidence', async () => {
+    it('retires exactly the listed records across pages without deleting other evidence', async () => {
       const scopeIds = [PROJECT_SCOPE_ID];
       const node = await store.createNode({ name: 'Paged replacement', scopeIds });
       await store.setNodeAddress({ source: 'importer', address: 'paged:1', nodeId: node.id });
@@ -148,15 +148,20 @@ export function createKnowledgeStorageTests(
         source: 'curator',
         scopeIds: [OTHER_SCOPE_ID],
       });
+      const replacedRecords = (await store.listRecords({ node, scopeIds, limit: 300 })).records
+        .filter(record => record.source === 'curator')
+        .map(({ id, version }) => ({ id, version }));
+      expect(replacedRecords).toHaveLength(205);
       const result = await store.replaceNodeRecords({
         node: { id: node.id, version: node.version },
+        replacedRecords,
+        deletedBy: 'curator',
         record: {
           text: 'Replacement [[Replacement target]]',
           source: 'curator',
           scopeIds,
           metadata: { sourceThreadId: 'replacement-thread' },
         },
-        visibilityScopeIds: scopeIds,
       });
       expect(
         (await store.listRecords({ node, scopeIds, limit: 300 })).records.filter(record => record.source === 'curator'),
@@ -188,9 +193,12 @@ export function createKnowledgeStorageTests(
         outbox: await store.listSemanticOutbox({ scopeIds, limit: 1000 }),
       });
       const before = await snapshot();
+      const replacedRecords = before.records.records.map(({ id, version }) => ({ id, version }));
       await expect(
         store.replaceNodeRecords({
           node: { id: node.id, version: node.version },
+          replacedRecords,
+          deletedBy: 'curator',
           record: {
             id: 'failed-replacement',
             text: 'New content',
@@ -198,7 +206,6 @@ export function createKnowledgeStorageTests(
             scopeIds,
             resolutionScopeIds: [MISSING_SCOPE_ID],
           },
-          visibilityScopeIds: scopeIds,
         }),
       ).rejects.toThrow(`Knowledge scope not found: ${MISSING_SCOPE_ID}`);
       expect(await snapshot()).toEqual(before);
@@ -209,12 +216,13 @@ export function createKnowledgeStorageTests(
     it('allows only one concurrent replacement for a node version and rejects stale retries', async () => {
       const scopeIds = [PROJECT_SCOPE_ID];
       const node = await store.createNode({ name: 'Concurrent replacement', scopeIds });
-      await store.createRecord({ node, text: 'Original', source: 'curator', scopeIds });
+      const original = await store.createRecord({ node, text: 'Original', source: 'curator', scopeIds });
       const replace = (text: string) =>
         store.replaceNodeRecords({
           node: { id: node.id, version: node.version },
+          replacedRecords: [{ id: original.id, version: original.version }],
+          deletedBy: 'curator',
           record: { text, source: 'curator', scopeIds },
-          visibilityScopeIds: scopeIds,
         });
       const results = await Promise.allSettled([replace('First'), replace('Second')]);
       expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
@@ -223,6 +231,74 @@ export function createKnowledgeStorageTests(
       await expect(replace('Stale')).rejects.toThrow();
       expect(await store.listRecordsBySource({ source: 'curator', scopeIds, includeDeleted: true })).toEqual(before);
       expect((await store.listRecords({ node, scopeIds })).records).toHaveLength(1);
+    });
+
+    it('never retires records that were not listed, even when they appear concurrently', async () => {
+      const scopeIds = [PROJECT_SCOPE_ID];
+      const node = await store.createNode({ name: 'Unlisted replacement', scopeIds });
+      const authorized = await store.createRecord({ node, text: 'Authorized', source: 'curator', scopeIds });
+      // Created after the caller authorized its replacement set, e.g. in a scope the caller cannot manage.
+      const concurrent = await store.createRecord({
+        node,
+        text: 'Concurrent',
+        source: 'curator',
+        scopeIds: [OTHER_SCOPE_ID],
+      });
+      const current = await store.getNode(node.id);
+      const result = await store.replaceNodeRecords({
+        node: { id: node.id, version: current!.version },
+        replacedRecords: [{ id: authorized.id, version: authorized.version }],
+        deletedBy: 'curator',
+        record: { text: 'Replacement', source: 'curator', scopeIds },
+      });
+      expect(await store.getRecord({ id: authorized.id })).toBeNull();
+      expect(await store.getRecord({ id: concurrent.id })).toMatchObject({ text: 'Concurrent' });
+      expect(await store.getRecord({ id: result.id })).toMatchObject({ text: 'Replacement' });
+    });
+
+    it('rejects the whole replacement when a listed record changed, moved, or vanished', async () => {
+      const scopeIds = [PROJECT_SCOPE_ID];
+      const node = await store.createNode({ name: 'Fenced replacement', scopeIds });
+      const otherNode = await store.createNode({ name: 'Other node', scopeIds });
+      const first = await store.createRecord({ node, text: 'First', source: 'curator', scopeIds });
+      const foreign = await store.createRecord({ node: otherNode, text: 'Foreign', source: 'curator', scopeIds });
+      const current = (await store.getNode(node.id))!;
+      const snapshot = async () => ({
+        records: await store.listRecordsBySource({ source: 'curator', scopeIds, includeDeleted: true, limit: 100 }),
+        node: await store.getNode(node.id),
+      });
+      const before = await snapshot();
+      const attempt = (replacedRecords: Array<{ id: string; version: number }>) =>
+        store.replaceNodeRecords({
+          node: { id: node.id, version: current.version },
+          replacedRecords,
+          deletedBy: 'curator',
+          record: { text: 'Replacement', source: 'curator', scopeIds },
+        });
+      await expect(attempt([{ id: first.id, version: first.version + 1 }])).rejects.toThrow();
+      await expect(attempt([{ id: foreign.id, version: foreign.version }])).rejects.toThrow();
+      await expect(attempt([{ id: 'missing-record', version: 1 }])).rejects.toThrow();
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it('rejects replacement when the access epoch moved and leaves state unchanged', async () => {
+      const scopeIds = [PROJECT_SCOPE_ID];
+      const node = await store.createNode({ name: 'Epoch replacement', scopeIds });
+      const original = await store.createRecord({ node, text: 'Original', source: 'curator', scopeIds });
+      const current = (await store.getNode(node.id))!;
+      const epoch = await store.getAccessEpoch();
+      await store.upsertScopeGrant({ scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' });
+      expect(await store.getAccessEpoch()).toBe(epoch + 1);
+      const before = await store.listRecordsBySource({ source: 'curator', scopeIds, includeDeleted: true });
+      await expect(
+        store.replaceNodeRecords({
+          node: { id: node.id, version: current.version, expectedAccessEpoch: epoch },
+          replacedRecords: [{ id: original.id, version: original.version }],
+          deletedBy: 'curator',
+          record: { text: 'Replacement', source: 'curator', scopeIds },
+        }),
+      ).rejects.toThrow();
+      expect(await store.listRecordsBySource({ source: 'curator', scopeIds, includeDeleted: true })).toEqual(before);
     });
 
     it('reports one canonical storage contract', () => {
