@@ -1,3 +1,4 @@
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeScopeIds, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
@@ -88,7 +89,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) return;
 
         let scopeIds: KnowledgeScopeIds | undefined;
-        let store: KnowledgeStorage | undefined;
+        let knowledge: Knowledge | undefined;
         try {
           scopeIds = await resolveKnowledgeScopeIds(context.memory, {
             agent: { threadId: context.threadId, resourceId: context.resourceId },
@@ -97,7 +98,8 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
-          store = await context.memory.getKnowledgeStore();
+          knowledge = context.memory.getKnowledgeInstance?.();
+          const store = await context.memory.getKnowledgeStore();
           const sources = await dropFreshOwnRecords(
             store,
             await findReminderSources(store, scopeIds, context.rawObservations),
@@ -180,9 +182,9 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             type: 'data-subconscious-error',
             data: { agent: 'remind', error: error instanceof Error ? error.message : String(error) },
           });
-          if (store && scopeIds) {
+          if (knowledge && scopeIds) {
             await publishSubconsciousActivity({
-              store,
+              knowledge,
               scopeIds,
               recentUpdates: 10,
               sendStateSignal: context.sendStateSignal,
