@@ -898,12 +898,12 @@ describe('OM routes with a tenant', () => {
     expect((await res.json()).config).toMatchObject({
       observer: {
         model: 'auto',
-        effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelId: 'openai/gpt-6-luna',
         effectiveModelSource: 'configured-default',
       },
       reflector: {
         model: 'auto',
-        effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelId: 'openai/gpt-6-luna',
         effectiveModelSource: 'configured-default',
       },
     });

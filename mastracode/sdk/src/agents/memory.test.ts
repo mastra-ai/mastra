@@ -225,7 +225,7 @@ describe('getDynamicMemory', () => {
     });
 
     expect(config.options.generateTitle.model({ requestContext })).toEqual({
-      modelId: 'mastra/openai/gpt-5.4-mini',
+      modelId: 'mastra/openai/gpt-6-luna',
     });
   });
 
@@ -630,9 +630,9 @@ describe('getDynamicMemory', () => {
 
     modelId = 'openai/gpt-5.6-sol';
     expect(om.observation.model({ requestContext })).toBe('auto');
-    expect(requestContext.get('om.observer.effectiveModelId')).toBe('openai/gpt-5.4-mini');
+    expect(requestContext.get('om.observer.effectiveModelId')).toBe('openai/gpt-6-luna');
     expect(om.reflection.model({ requestContext })).toBe('auto');
-    expect(requestContext.get('om.reflector.effectiveModelId')).toBe('openai/gpt-5.4-mini');
+    expect(requestContext.get('om.reflector.effectiveModelId')).toBe('openai/gpt-6-luna');
     expect(resolveModelMock).not.toHaveBeenCalled();
   });
 

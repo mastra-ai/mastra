@@ -44,14 +44,14 @@ export const omAutoSelectionScenario: McE2eScenario = {
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
     await runtime.waitForScreenText(/Observer model\s+pinned-observer/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-6-luna\)/i, terminal, 8_000);
 
     terminal.write('\r');
     await runtime.waitForScreenText(/Observer Model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Auto \(gpt-6-luna\)/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Observer model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+Auto \(gpt-6-luna\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-6-luna\)/i, terminal, 8_000);
 
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);

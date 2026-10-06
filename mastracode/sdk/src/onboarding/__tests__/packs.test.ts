@@ -108,8 +108,8 @@ describe('getAvailableModePacks', () => {
 describe('OM packs', () => {
   it.each([
     ['anthropic', 'anthropic', 'anthropic/claude-haiku-4-5'],
-    ['openai-codex', 'openai', 'openai/gpt-5.4-mini'],
-    ['openai', 'openai', 'openai/gpt-5.4-mini'],
+    ['openai-codex', 'openai', 'openai/gpt-6-luna'],
+    ['openai', 'openai', 'openai/gpt-6-luna'],
     ['google', 'gemini', 'google/gemini-3.5-flash'],
   ])('maps %s to the %s OM pack', (providerId, packId, modelId) => {
     expect(resolveProviderOMDefault(providerId)).toMatchObject({ id: packId, modelId });
@@ -124,9 +124,9 @@ describe('OM packs', () => {
 
   it.each([
     ['anthropic/claude-opus-4-8', 'anthropic/claude-haiku-4-5'],
-    ['openai-codex/gpt-5.6-sol', 'openai/gpt-5.4-mini'],
+    ['openai-codex/gpt-5.6-sol', 'openai/gpt-6-luna'],
     ['mastracode/google/gemini-3.1-pro-preview', 'google/gemini-3.5-flash'],
-    ['mastra/openai/gpt-5.5', 'mastra/openai/gpt-5.4-mini'],
+    ['mastra/openai/gpt-5.5', 'mastra/openai/gpt-6-luna'],
     ['custom-provider/custom-model', 'custom-provider/custom-model'],
     ['mastracode/custom-provider/custom-model', 'mastracode/custom-provider/custom-model'],
   ])('resolves auto from main model %s to %s', (mainModelId, expected) => {
@@ -166,7 +166,7 @@ describe('selectPreferredOMPack', () => {
   it('prefers the matching reachable provider over earlier packs', () => {
     const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth', openai: 'oauth' }), 'openai-codex');
 
-    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-6-luna' });
   });
 
   it('ignores a selected provider that is not reachable', () => {

@@ -294,7 +294,7 @@ const BUILTIN_OM_PACKS: BuiltinOMPack[] = [
     id: 'openai',
     providerId: 'openai',
     name: 'OpenAI Mini',
-    modelId: 'openai/gpt-5.4-mini',
+    modelId: 'openai/gpt-6-luna',
     description: access => (access === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key'),
   },
   {
