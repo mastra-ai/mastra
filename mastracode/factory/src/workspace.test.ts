@@ -77,6 +77,7 @@ const mocks = vi.hoisted(() => ({
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
+  syncEnvironmentRepository: vi.fn(async () => ({ outcome: 'default' as const, branch: 'main' })),
   runSetupCommand: vi.fn(async () => {}),
   runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
@@ -114,6 +115,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
+  syncEnvironmentRepository: (...args: unknown[]) => (mocks.syncEnvironmentRepository as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
   runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
@@ -127,6 +129,7 @@ import {
   hasFailedSetupCommand,
   recordFailedSetupCommand,
 } from './sandbox/session-sandbox.js';
+import { __clearSessionEnvironmentsForTests, peekSessionEnvironment } from './session/environment-state-processor.js';
 import {
   createWorkspaceFactory,
   FactorySkillSource,
@@ -167,8 +170,10 @@ afterEach(async () => {
   mocks.localRoot = null;
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
+  __clearSessionEnvironmentsForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
+  mocks.syncEnvironmentRepository.mockClear();
   mocks.runSetupCommand.mockClear();
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
@@ -3215,5 +3220,157 @@ describe('factory environment sandbox context', () => {
       expect('repos' in ctx).toBe(false);
       expect('cpuCount' in ctx).toBe(false);
     }
+  });
+
+  describe('environment boot', () => {
+    /**
+     * Resolve the workspace, then answer the marker probes the environment
+     * hook issues (per-repo markers are keyed by directory name, the
+     * workspace marker by its path) and force the lazy start.
+     */
+    async function boot(
+      resolver: (args: any) => Promise<any>,
+      markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
+    ) {
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> };
+      const original = sandbox.executeCommand.getMockImplementation()!;
+      sandbox.executeCommand.mockImplementation(async (command: string, ...rest: unknown[]) => {
+        const text = String(command);
+        const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
+        if (repoProbe) {
+          return { exitCode: markers.repos?.[repoProbe[1]!] ? 0 : 1, stdout: '', stderr: '' };
+        }
+        if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
+          return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
+        }
+        return original(command, ...rest);
+      });
+      await workspace.sandbox.getInfo();
+      return { workspace, exec: sandbox.executeCommand };
+    }
+
+    it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+      mocks.syncEnvironmentRepository.mockResolvedValueOnce({ outcome: 'resumed', branch: 'factory/issue-7' });
+
+      const { workspace, exec } = await boot(resolver);
+
+      // The primary keeps today's path: materialize with the session store, then the session branch.
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      const [primary, docs] = mocks.materializeRepo.mock.calls.map(call => call[0] as any);
+      expect(primary.row.sandboxWorkdir).toBe('/home/user/hello');
+      expect(primary.token).toBe('repo-token-repository-1');
+      expect(typeof primary.storage.markMaterialized).toBe('function');
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledWith(
+        expect.anything(),
+        '/home/user/hello',
+        expect.objectContaining({ branch: 'factory/issue-7', token: 'repo-token-repository-1' }),
+      );
+      // The secondary is cloned into its own directory with its own token and synced by the remote rule.
+      expect(docs.row.sandboxWorkdir).toBe('/home/user/docs');
+      expect(docs.repoInfo).toMatchObject({ repoFullName: 'octocat/docs', defaultBranch: 'main' });
+      expect(docs.token).toBe('repo-token-repository-2');
+      expect(mocks.syncEnvironmentRepository).toHaveBeenCalledExactlyOnceWith(
+        expect.anything(),
+        '/home/user/docs',
+        expect.objectContaining({
+          branch: 'factory/issue-7',
+          defaultBranch: 'main',
+          token: 'repo-token-repository-2',
+          repoFullName: 'octocat/docs',
+        }),
+      );
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+      // Setup: the primary's command in its directory, the workspace command at the root, nothing for docs.
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['/home/user/hello', 'pnpm i'],
+        ['/home/user', 'touch .workspace-ready'],
+      ]);
+      const markerWrites = exec.mock.calls.map(([command]) => String(command)).filter(c => c.includes("printf '%s'"));
+      expect(markerWrites.some(c => c.includes('/home/user/.mastra-sandbox/repos/hello'))).toBe(true);
+      expect(markerWrites.some(c => c.includes('/home/user/.mastra-sandbox/workspace-setup'))).toBe(true);
+      // D2: the session's working directory is the root; the primary checkout stays the PR tools' target.
+      expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe('/home/user');
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user');
+      expect(peekSessionEnvironment('session-a')).toEqual({
+        workingDirectory: '/home/user',
+        repositories: [
+          {
+            slug: 'octocat/hello',
+            dir: '/home/user/hello',
+            branch: 'factory/issue-7',
+            defaultBranch: 'main',
+            position: 1,
+            setupStatus: 'ok',
+          },
+          {
+            slug: 'octocat/docs',
+            dir: '/home/user/docs',
+            branch: 'factory/issue-7',
+            defaultBranch: 'main',
+            position: 2,
+            setupStatus: 'skipped',
+          },
+        ],
+      });
+    });
+
+    it('skips setup where the template marker matches and runs it where the marker is missing', async () => {
+      const { resolver } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      await boot(resolver, { repos: { hello: true, docs: false }, workspace: true });
+
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['/home/user/docs', 'pnpm docs'],
+      ]);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+    });
+
+    it('continues the boot when a secondary repository cannot be synced, and reports it in the state', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.syncEnvironmentRepository.mockRejectedValueOnce(new Error('fetch failed'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Environment repository could not be synced; continuing the boot',
+        expect.objectContaining({ projectRepositoryId: 'link-2', error: 'fetch failed' }),
+      );
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).toEqual(['pnpm i', 'touch .workspace-ready']);
+      expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
+        slug: 'octocat/docs',
+        branch: null,
+      });
+      warn.mockRestore();
+    });
+
+    it('keeps the primary setup failure fatal while the other repositories still boot', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockRejectedValueOnce(
+        new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'),
+      );
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+
+      expect(mocks.syncEnvironmentRepository).toHaveBeenCalledTimes(1);
+      expect(peekSessionEnvironment('session-a')?.repositories[0]).toMatchObject({
+        slug: 'octocat/hello',
+        setupStatus: 'failed',
+      });
+    });
   });
 });

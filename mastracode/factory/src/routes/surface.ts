@@ -22,7 +22,7 @@ import {
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
   resolveFactorySourceControl,
-  resolveFactorySourceRepository,
+  resolvePrimaryEnvironmentRepository,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -229,18 +229,12 @@ async function inheritEarlierSession(
   input: FactoryBindingPreparationInput,
   board: { roleForPhase(phase: string): string | undefined } | undefined,
   branch: string,
-  repositorySlug: string,
+  primaryProjectRepositoryId: string | undefined,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   if (input.role === 'review') return undefined;
-  // The card's linked repository can change after an earlier role ran; only
-  // continue in a session on the repository a fresh session would use.
-  const repository = await resolveFactorySourceRepository({
-    sourceControl,
-    orgId: input.record.orgId,
-    factoryProjectId: input.record.factoryProjectId,
-    repositorySlug,
-  });
-  if (!repository.found) return undefined;
+  // The environment's primary link can change after an earlier role ran; only
+  // continue in a session on the link a fresh session would be filed under.
+  if (!primaryProjectRepositoryId) return undefined;
   const candidates: string[] = [];
   for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
     const role = board?.roleForPhase(entry.stage);
@@ -251,7 +245,7 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch && session.projectRepositoryId === repository.projectRepositoryId) {
+    if (session && session.branch === branch && session.projectRepositoryId === primaryProjectRepositoryId) {
       return session;
     }
   }
@@ -325,15 +319,7 @@ export async function prepareFactoryRuleBinding(
       const linked =
         link && (await sourceControl.repositories.get({ orgId: input.record.orgId, id: link.repositoryId }));
       if (linked && repository.candidates.includes(linked.slug)) {
-        const match = await resolveFactorySourceRepository({
-          sourceControl,
-          orgId: input.record.orgId,
-          factoryProjectId: input.record.factoryProjectId,
-          repositorySlug: linked.slug,
-        });
-        if (match.found && match.projectRepositoryId === boundSession.projectRepositoryId) {
-          repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: match.projectRepositoryId };
-        }
+        repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: link.id };
       }
     }
     if (repository.status !== 'resolved') {
@@ -348,7 +334,21 @@ export async function prepareFactoryRuleBinding(
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
-    if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
+    // A fresh session is filed under the factory's position-1 environment
+    // link (D1), whichever repository the card targets: the sandbox holds
+    // every environment repository. A held session on that link is therefore
+    // as valid as one on the targeted repository.
+    const primary = await resolvePrimaryEnvironmentRepository({
+      sourceControl,
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+    });
+    const primaryProjectRepositoryId = primary.found ? primary.projectRepositoryId : undefined;
+    if (
+      boundSession &&
+      boundSession.projectRepositoryId !== repository.projectRepositoryId &&
+      boundSession.projectRepositoryId !== primaryProjectRepositoryId
+    ) {
       throw new FactoryDispatchError(
         'source_repository_ambiguous',
         `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
@@ -356,12 +356,11 @@ export async function prepareFactoryRuleBinding(
     }
     const preparedSession =
       boundSession ??
-      (await inheritEarlierSession(sourceControl, input, board, branch, repository.slug)) ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, primaryProjectRepositoryId)) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
-        repositorySlug: repository.slug,
         branch,
         // A person who approved the run is its interactive user: attribute it to
         // them, not the repo connector. An agent's pre-approval names no person.

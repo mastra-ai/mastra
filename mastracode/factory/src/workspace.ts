@@ -28,6 +28,7 @@ import {
   runSetupCommand,
   runTeardownCommand,
   SetupCommandError,
+  syncEnvironmentRepository,
 } from './integrations/github/sandbox.js';
 import {
   registerGithubPatKind,
@@ -38,6 +39,7 @@ import {
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
+  createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
@@ -45,7 +47,10 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import { repositoryDirectoryName } from './sandbox/workdir.js';
+import { clearSessionEnvironment, recordSessionEnvironment } from './session/environment-state-processor.js';
+import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { DEFAULT_SANDBOX_CPU_COUNT, DEFAULT_SANDBOX_MEMORY_MB } from './storage/domains/source-control/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
@@ -554,7 +559,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // factory in position order, with the project's settings. Absent when the
     // factory has none (or the session predates `factoryProjectId`), which
     // keeps the single-repository sandbox of the session's own link.
-    const environment = await resolveSessionEnvironment(projects, storage, session);
+    const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    // The session's own link must be part of the environment: it is the
+    // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
+    // whose link left the environment keeps its single-repository sandbox.
+    const environment = resolvedEnvironment?.repos.some(repo => repo.projectRepositoryId === projectRepository.id)
+      ? resolvedEnvironment
+      : undefined;
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
@@ -568,12 +579,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // invoked during start, long after this closure fully initializes.
     const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
       runSessionSetup(requireExec(target as WorkspaceSandbox), workdir, gate);
-    const guardedSetup = createSessionSetupHook(
-      runSetupOn,
-      session.id,
-      repoFullName,
-      projectRepository.setupCommand ?? undefined,
-    );
+    const runEnvironmentSetupOn = (target: unknown, gate: SessionEnvironmentGate) =>
+      runSessionEnvironmentSetup(requireExec(target as WorkspaceSandbox), gate);
+    const guardedSetup = environment
+      ? createEnvironmentSetupHook(runEnvironmentSetupOn, session.id, repoFullName, {
+          repos: environment.repos.map(repo => ({
+            slug: repo.slug,
+            ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+          })),
+          ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+        })
+      : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -616,7 +632,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // reattach to the same VM. Providers with no separate physical id
           // (e.g. local) fall back to the logical id, preserving prior behavior.
           sandboxId: target.sandboxId ?? target.id,
-          sandboxWorkdir: sessionEntry.workdir ?? '',
+          // D2: a list session's working directory is the workspace root,
+          // the repositories sit beneath it; a single-repository session
+          // keeps its checkout as before.
+          sandboxWorkdir: sessionWorkdir(sessionEntry.workdir) ?? '',
         });
         void constructedWorkspaces
           .get(workspaceId)
@@ -755,7 +774,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
     };
     const sessionEntry = constructSessionEntry();
-    const workdir = sessionEntry.workdir;
+    // The session's working directory as the agent sees it: the workspace
+    // root for an environment session (D2), the checkout otherwise.
+    // `resolveSessionWorkdir` keeps pointing at the session's own repository
+    // so the PR tools and the start hook run git in the right checkout.
+    const sessionWorkdir = (checkout: string | undefined): string | undefined =>
+      checkout === undefined ? undefined : environment ? path.posix.dirname(checkout) : checkout;
+    const workdir = sessionWorkdir(sessionEntry.workdir);
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
     // The SDK system prompt uses `state.projectPath` without falling back to
     // the server cwd. Pin the session workdir once known so the prompt and
@@ -1078,6 +1103,122 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
+    // The environment boot: the session's own repository keeps today's path
+    // (materialize, session branch, gated setup); every other environment
+    // repository is materialized beneath the workspace root, synced by the
+    // conservative remote rule, and set up behind its own marker. A failure
+    // on a secondary repository is logged and the boot continues, so one
+    // broken link never wedges the whole environment. The workspace setup
+    // command runs last, once, and is fatal like the template build.
+    const runSessionEnvironmentSetup = async (target: SessionSandbox, gate: SessionEnvironmentGate): Promise<void> => {
+      const repos = environment!.repos;
+      const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
+      const states: SessionEnvironmentRepositoryState[] = [];
+      let primaryError: unknown;
+      for (const repo of repos) {
+        const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
+        if (!entry) continue;
+        const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
+        const state: SessionEnvironmentRepositoryState = {
+          slug: repo.slug,
+          dir: entry.dir,
+          branch: null,
+          defaultBranch: repo.defaultBranch,
+          position: repo.position,
+          setupStatus: repo.setupCommand ? 'ok' : 'skipped',
+        };
+        states.push(state);
+        if (isPrimary) {
+          try {
+            await runSessionSetup(target, primaryDir, entry.gate);
+            state.branch = session.branch;
+            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) state.setupStatus = 'failed';
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            state.branch = session.branch;
+            state.setupStatus = 'failed';
+            primaryError = error;
+          }
+          continue;
+        }
+        try {
+          const access = await sourceControl.versionControl.getRepositoryAccess({
+            orgId: session.orgId,
+            repositoryId: repo.repositoryId,
+          });
+          const token = access.authorization?.token;
+          if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
+          await materializeRepo({
+            row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
+            repoInfo: {
+              repoFullName: repo.slug,
+              defaultBranch: repo.defaultBranch,
+              cloneUrl: access.cloneUrl,
+              authUsername: access.authorization?.username,
+            },
+            sandbox: target,
+            token,
+            // `materialized_at` is the session's own repository's.
+            storage: { markMaterialized: async () => {} },
+          });
+          const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
+            syncEnvironmentRepository(target, entry.dir, {
+              branch: session.branch,
+              defaultBranch: repo.defaultBranch,
+              token,
+              repoFullName: repo.slug,
+              cloneUrl: access.cloneUrl,
+              authUsername: access.authorization?.username,
+            }),
+          );
+          state.branch = synced.branch;
+        } catch (error) {
+          console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: repo.projectRepositoryId,
+            error: error instanceof Error ? error.message.slice(-2000) : String(error),
+          });
+          continue;
+        }
+        if (!repo.setupCommand || entry.gate.setupDone) continue;
+        if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
+          state.setupStatus = 'failed';
+          continue;
+        }
+        try {
+          await timedPhase(`workspace.setup(${repo.slug})`, () =>
+            runSetupCommand(target, entry.dir, repo.setupCommand!),
+          );
+          await entry.gate.markSetupDone();
+        } catch (error) {
+          if (!(error instanceof SetupCommandError)) throw error;
+          recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
+          state.setupStatus = 'failed';
+          console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: repo.projectRepositoryId,
+            error: error.message.slice(-2000),
+          });
+        }
+      }
+      if (environment!.workspaceSetupCommand && !gate.workspace.setupDone) {
+        await timedPhase('workspace.setup(workspace)', () =>
+          runSetupCommand(target, gate.root, environment!.workspaceSetupCommand!),
+        );
+        await gate.workspace.markSetupDone();
+      }
+      recordSessionEnvironment(
+        session.sessionId,
+        { workingDirectory: gate.root, repositories: states },
+        states.flatMap(state => {
+          const command = repos.find(repo => repo.slug === state.slug)?.teardownCommand;
+          return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
+        }),
+      );
+      if (primaryError) throw primaryError;
+    };
     // The session's real sandbox goes straight onto the Workspace. Providers
     // own lazy start (`ensureRunning()` inside the first command/process op)
     // and dead-VM self-healing, and the composed `onStart` hook runs the repo
@@ -1091,7 +1232,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Lazy: a remote workdir is only knowable once a VM runs. The first
       // file operation resolves it (starting the VM — which materializes the
       // repo via the onStart hook — when needed) and memoizes it.
-      workdir: () => resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName),
+      workdir: async () => {
+        const checkout = await resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName);
+        return sessionWorkdir(checkout) ?? checkout;
+      },
     });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
@@ -1140,6 +1284,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.
         evictSessionSandbox(session.id);
+        clearSessionEnvironment(session.sessionId);
         await mastra?.removeWorkspace?.(workspaceId);
       },
     );

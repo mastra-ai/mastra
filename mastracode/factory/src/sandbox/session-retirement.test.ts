@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  __clearSessionEnvironmentsForTests,
+  recordSessionEnvironment,
+} from '../session/environment-state-processor.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -10,6 +14,7 @@ import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox 
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
+  __clearSessionEnvironmentsForTests();
 });
 
 function workItem(sessionId: string): WorkItemRow {
@@ -154,6 +159,45 @@ describe('SessionRetirementCoordinator', () => {
     expect(peekSessionSandbox(session.id)).toBeUndefined();
     // The session row survives (deleteSession: false).
     expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+  });
+
+  it('tears every environment repository down in position order, each in its own directory, and keeps going on failure', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const calls: string[] = [];
+    const fake = seedMemoSandbox(session, calls);
+    fake.executeCommand = async (command: string, args?: string[]) => {
+      const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
+      calls.push(script);
+      if (script.includes('docs teardown')) return { exitCode: 3, stdout: '', stderr: 'docs failed' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    };
+    recordSessionEnvironment(session.sessionId, { workingDirectory: '/workspace', repositories: [] }, [
+      { slug: 'acme/docs', dir: '/workspace/docs', command: 'docs teardown' },
+      { slug: 'acme/mastra', dir: '/workspace/mastra', command: 'pnpm local teardown' },
+    ]);
+    const warn = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: vi.fn(), warn });
+
+    await coordinator.retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
+    });
+
+    const teardowns = calls.filter(call => call.includes('teardown'));
+    expect(teardowns).toHaveLength(2);
+    // Each command runs inside its own repository directory, docs first.
+    expect(teardowns[0]).toMatch(/^cd '\/workspace\/docs' && \{ docs teardown/);
+    expect(teardowns[1]).toMatch(/^cd '\/workspace\/mastra' && \{ pnpm local teardown/);
+    expect(warn).toHaveBeenCalledWith(
+      'Factory teardown command failed',
+      expect.objectContaining({ repository: 'acme/docs', error: expect.stringContaining('exit 3') }),
+    );
+    expect(calls.indexOf('stop')).toBeGreaterThan(calls.findIndex(call => call.includes('pnpm local teardown')));
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
   });
 
   it('continues cleanup when the teardown command fails', async () => {
