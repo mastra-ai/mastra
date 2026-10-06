@@ -1,4 +1,6 @@
+import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
+import { KnowledgeNotFoundError } from '@mastra/core/storage';
 import type { KnowledgeRecord, KnowledgeScopeIds } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -140,9 +142,9 @@ async function requirePin(
   scopeIds: KnowledgeScopeIds,
 ): Promise<KnowledgeRecord> {
   const record = await knowledge.getRecord({ id: recordId, scopeIds: vouchedScopeIds(scopeIds) });
-  if (!record) throw new Error(`Pin not found: ${recordId}`);
+  if (!record) throw new KnowledgeNotFoundError('record', recordId);
   const nodeId = await resolvePinnedNodeId(knowledge, scopeIds);
-  if (!nodeId || record.nodeId !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
+  if (!nodeId || record.nodeId !== nodeId) throw new KnowledgeNotFoundError('record', recordId);
   return record;
 }
 
@@ -230,10 +232,31 @@ export function createPinnedTools(
         const record = await requirePin(knowledge, value.recordId, options.scopeIds);
         const { pins } = await listPinnedKnowledge({ knowledge, scopeIds: options.scopeIds });
         assertBudget(options, pins, value.text, record);
+        // Removing the original needs `manageAccess`; check it before appending so a session that
+        // may append but not remove gets a clean rejection instead of a duplicated pin.
+        const storage = await knowledge.getStorageInternal();
+        const [nodeScopeIds, recordScopeIds] = await Promise.all([
+          storage.getNodeScopeIds(record.nodeId),
+          storage.getRecordScopeIds(record.id),
+        ]);
+        const frontier = await knowledge.evaluateAccess(vouched);
+        assertKnowledgeTargetCapability({
+          frontier,
+          scopeIds: nodeScopeIds,
+          capability: 'manageAccess',
+          targetType: 'record',
+          targetId: record.id,
+        });
+        assertKnowledgeScopeCapabilities({
+          frontier,
+          scopeIds: recordScopeIds,
+          capability: 'manageAccess',
+          targetType: 'scope',
+        });
         const replacement = await knowledge.createRecord({
           node: record.nodeId,
           text: value.text,
-          scopeIds: await (await knowledge.getStorageInternal()).getRecordScopeIds(record.id),
+          scopeIds: recordScopeIds,
           resolutionScopeIds: vouched,
           metadata: {
             ...record.metadata,
