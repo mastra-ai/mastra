@@ -47,7 +47,7 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
           </span>
         </DataList.Cell>
         <DataList.Cell className="min-w-0 overflow-visible">
-          <span title={purpose} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
+          <span title={purpose} className="block max-w-[70ch] min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
             {purpose}
           </span>
         </DataList.Cell>

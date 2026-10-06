@@ -71,13 +71,15 @@ function Agents() {
   const visibleAgents = sortAgents(filteredAgents, sort);
 
   let agentsView = (
-    <AgentsList
-      agents={visibleAgents}
-      isLoading={isLoading}
-      hasSearch={Boolean(search)}
-      sort={sort}
-      onSortChange={setSort}
-    />
+    <div className="mx-auto w-full max-w-7xl">
+      <AgentsList
+        agents={visibleAgents}
+        isLoading={isLoading}
+        hasSearch={Boolean(search)}
+        sort={sort}
+        onSortChange={setSort}
+      />
+    </div>
   );
   if (view === 'compact') {
     agentsView = <AgentsCompactGrid agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
