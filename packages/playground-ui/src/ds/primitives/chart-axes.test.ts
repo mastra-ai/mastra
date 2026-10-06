@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartYTickCount, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, labelWidth, pickTimeTicks } from './chart-axes';
 
 const HOUR = 3_600_000;
 const start = new Date(2026, 9, 5, 14).getTime();
@@ -118,6 +118,20 @@ describe('pickTimeTicks edge cases', () => {
     expect([...pickTimeTicks([], [], 800)]).toEqual([]);
     expect([...pickTimeTicks([start], ['2 PM'], 800)]).toEqual([0]);
     expect([...pickTimeTicks([start, start + HOUR], ['2 PM', '3 PM'], 800)]).toEqual([0, 1]);
+  });
+
+  it('sizes the step from the full range when buckets are missing', () => {
+    // One hourly gap, then a point every 6 hours: the first gap alone suggests a 30-hour span.
+    const day = new Date(2026, 9, 5).getTime();
+    const gappy = [day, day + HOUR, ...Array.from({ length: 28 }, (_, i) => day + (i + 2) * 6 * HOUR)];
+    const gappyLabels = gappy.map(clock);
+    const picked = [...pickTimeTicks(gappy, gappyLabels, 600)];
+    // Labels sit at their bucket's index, so neighbours must be a label width apart.
+    const px = 600 / (gappy.length - 1);
+    const widest = Math.max(...gappyLabels.map(labelWidth));
+    for (let i = 1; i < picked.length; i++) {
+      expect(((picked[i] ?? 0) - (picked[i - 1] ?? 0)) * px).toBeGreaterThan(widest);
+    }
   });
 
   it('ignores non-finite timestamps and falls back to even spacing', () => {

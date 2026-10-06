@@ -76,7 +76,8 @@ export function pickTimeTicks(
   if (fit < 3) return ends;
   const ts = timestamps.every(t => typeof t === 'number' && Number.isFinite(t)) ? (timestamps as number[]) : null;
   const bucket = ts ? (ts[1] ?? 0) - (ts[0] ?? 0) : 0;
-  const span = (labels.length * bucket) / MINUTE;
+  // From the full range, so gaps (missing buckets) can't make the series look shorter.
+  const span = ts ? ((ts[last] ?? 0) - (ts[0] ?? 0) + bucket) / MINUTE : 0;
   // The smallest round step that is a whole number of buckets and whose labels fit.
   const step = ts ? STEPS.find(n => n * MINUTE >= bucket && (n * MINUTE) % bucket === 0 && span / n <= fit) : undefined;
   if (!ts || !(bucket > 0) || step === undefined) {

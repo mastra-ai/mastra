@@ -59,6 +59,14 @@ describe('MetricsShareList', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(16);
   });
 
+  it('follows a new limit after rendering', () => {
+    const rows = Array.from({ length: 30 }, (_, i) => row(`r${i}`, 100 - i));
+    const { rerender } = render(<MetricsShareList rows={rows} valueLabel="Runs" limit={5} overflow="more" />);
+    expect(screen.getByText('5 of 30')).toBeTruthy();
+    rerender(<MetricsShareList rows={rows} valueLabel="Runs" limit={15} overflow="more" />);
+    expect(screen.getByText('15 of 30')).toBeTruthy();
+  });
+
   it('keeps the active row listed even when it ranks past the shown rows', () => {
     const rows = Array.from({ length: 30 }, (_, i) => row(`r${i}`, 100 - i));
     render(<MetricsShareList rows={rows} valueLabel="Requests" limit={5} overflow="more" activeKey="r20" />);

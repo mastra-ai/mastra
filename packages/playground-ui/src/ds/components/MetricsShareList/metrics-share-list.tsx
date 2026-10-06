@@ -159,7 +159,9 @@ export function MetricsShareList({
   className,
 }: MetricsShareListProps) {
   const [hover, setHover] = useState<string | null>(null);
-  const [count, setCount] = useState(limit);
+  // Extra pages opened with "Show more", so the row count follows `limit` when it changes.
+  const [pages, setPages] = useState(0);
+  const count = limit + pages * pageSize;
   const header = showHeader && (
     <div className="flex justify-end">
       <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
@@ -235,8 +237,8 @@ export function MetricsShareList({
         total={sorted.length}
         limit={limit}
         pageSize={pageSize}
-        onMore={() => setCount(c => c + pageSize)}
-        onLess={() => setCount(limit)}
+        onMore={() => setPages(p => p + 1)}
+        onLess={() => setPages(0)}
       />
     );
   }
