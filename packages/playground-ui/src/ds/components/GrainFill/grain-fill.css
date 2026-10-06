@@ -1,3 +1,10 @@
+/* Utilities can override this default with absolute/fixed positioning. */
+@layer components {
+  [data-grain-tone] {
+    position: relative;
+  }
+}
+
 [data-grain-tone='warning'] {
   --grain-ink: var(--warning-indicator);
   --grain-surface: var(--warning-subtle);
@@ -23,24 +30,50 @@
 }
 
 [data-grain-tone] {
-  --grain-back: color-mix(in oklab, var(--grain-ink) 16%, var(--grain-surface));
   --grain-1: color-mix(in oklab, var(--grain-ink) 8%, var(--grain-surface));
   --grain-2: var(--grain-surface);
   --grain-3: color-mix(in oklab, var(--grain-surface) 75%, var(--card));
   --grain-4: color-mix(in oklab, var(--grain-surface) 50%, var(--card));
   --grain-5: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
 
+  --grain-origin-y: 0%;
+  --grain-noise-opacity: 0.06;
+
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 200ms ease-out;
+  background-image: radial-gradient(
+    ellipse 100% 150% at 0% var(--grain-origin-y),
+    var(--grain-1),
+    var(--grain-2) 25%,
+    var(--grain-3) 45%,
+    var(--grain-4) 65%,
+    var(--grain-5) 85%,
+    var(--card)
+  );
+  background-repeat: no-repeat;
+  background-size: var(--grain-width) max(var(--grain-height), 100%);
 }
 
-[data-grain-tone][data-ready] {
-  opacity: 1;
+/* A shared 64px raster tile avoids live SVG filters, canvases and GPU contexts.
+ * It contains deterministic white alpha noise (seed 2166); CSS supplies the ink.
+ * The gradient fades the flecks with the glow, leaving the far edge neutral. */
+[data-grain-tone]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right, var(--grain-ink), transparent);
+  background-size: var(--grain-width) 100%;
+  background-repeat: no-repeat;
+  mask-image: url('./grain-noise.png');
+  mask-size: 64px 64px;
+  opacity: var(--grain-noise-opacity);
+}
+
+[data-grain-tone='color'] {
+  --grain-origin-y: 24%;
 }
 
 html.light [data-grain-tone] {
-  --grain-back: var(--grain-surface);
+  --grain-noise-opacity: 0.035;
   --grain-1: color-mix(in oklab, var(--grain-surface) 55%, var(--card));
   --grain-2: color-mix(in oklab, var(--grain-surface) 25%, var(--card));
   --grain-3: var(--card);

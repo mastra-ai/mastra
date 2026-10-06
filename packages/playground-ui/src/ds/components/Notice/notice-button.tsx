@@ -1,6 +1,6 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,8 +9,8 @@ export interface NoticeButtonProps extends useRender.ComponentProps<'button'> {
 }
 
 function nativeButtonProps(render: NoticeButtonProps['render']) {
-  if (render) return {};
-  return { type: 'button' as const };
+  if (!render || (isValidElement(render) && render.type === 'button')) return { type: 'button' as const };
+  return {};
 }
 
 export function NoticeButton({ render, icon, className, children, ...props }: NoticeButtonProps) {

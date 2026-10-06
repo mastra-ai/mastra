@@ -1,12 +1,12 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
-import React from 'react';
-import { GrainFill } from '@/ds/components/GrainFill';
-import { Txt } from '@/ds/components/Txt';
+import { Children, type ReactNode } from 'react';
+import { GrainFill } from '@/ds/components/GrainFill/grain-fill';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 
-const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; iconClass: string }> = {
+const variantConfig: Record<NoticeVariant, { icon: ReactNode; iconClass: string }> = {
   success: { icon: <LightbulbIcon />, iconClass: 'text-success-indicator' },
   destructive: { icon: <OctagonAlertIcon />, iconClass: 'text-destructive-indicator' },
   warning: { icon: <TriangleAlertIcon />, iconClass: 'text-warning-foreground' },
@@ -17,18 +17,22 @@ const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; iconClass: s
 const titledMessage = { variant: 'caption', tone: 'muted' } as const;
 const plainMessage = { variant: 'body-sm', tone: 'ink' } as const;
 
-function lastRowOf({ action, children }: Pick<NoticeRootProps, 'action' | 'children'>) {
-  if (action) return 'action';
-  if (children) return 'message';
+function hasContent(content: ReactNode) {
+  return Children.toArray(content).some(child => child !== '');
+}
+
+function lastRowOf(hasAction: boolean, hasMessage: boolean) {
+  if (hasAction) return 'action';
+  if (hasMessage) return 'message';
   return 'title';
 }
 
 export interface NoticeRootProps {
   variant: NoticeVariant;
-  title?: React.ReactNode;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-  children?: React.ReactNode;
+  title?: ReactNode;
+  icon?: ReactNode;
+  action?: ReactNode;
+  children?: ReactNode;
   className?: string;
 }
 
@@ -38,14 +42,17 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
     <span className={cn('flex h-lh shrink-0 items-center [&>svg]:size-icon-sm', iconClass)}>{icon ?? defaultIcon}</span>
   );
 
-  const lastRow = lastRowOf({ action, children });
-  const messageText = title ? titledMessage : plainMessage;
+  const hasTitle = hasContent(title);
+  const hasMessage = hasContent(children);
+  const hasAction = hasContent(action);
+  const lastRow = lastRowOf(hasAction, hasMessage);
+  const messageText = hasTitle ? titledMessage : plainMessage;
 
   return (
     <div
       className={cn(
         'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl bg-card p-3 shadow-raised',
-        'animate-in duration-200 fade-in-0 slide-in-from-top-2',
+        'motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0 motion-safe:slide-in-from-top-2',
         className,
       )}
     >
@@ -54,23 +61,23 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
           tone={variant}
           width={464}
           height={200}
-          className="absolute inset-y-0 left-0 -z-10 w-116 mask-r-from-34%"
+          className="absolute inset-px -z-10 max-w-116 rounded-[inherit] mask-r-from-34%"
         />
       )}
-      {title && (
+      {hasTitle && (
         <Txt as="div" variant="subheading" tone="ink" className="flex min-w-0 items-start gap-2">
           <span className="min-w-0 flex-1 truncate">{title}</span>
           {lastRow === 'title' && glyph}
         </Txt>
       )}
-      {children && (
+      {hasMessage && (
         <Txt as="div" {...messageText} className="flex min-w-0 items-end gap-2">
           {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
           <div className="flex min-w-0 flex-1 flex-col gap-2 wrap-anywhere">{children}</div>
           {lastRow === 'message' && glyph}
         </Txt>
       )}
-      {action && (
+      {hasAction && (
         <Txt as="div" variant="label" className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0">{action}</div>
           {glyph}

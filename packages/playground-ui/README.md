@@ -21,6 +21,20 @@ export function SaveButton() {
 }
 ```
 
+### Grain fills
+
+`GrainFill` adds a decorative grain gradient in a status tone (`warning`, `destructive`, `info`, or `success`) or any color token, such as `brand-purple`. Its `width` and `height` set the gradient's reference size; position and size the layer with `className`.
+
+```tsx
+import { GrainFill } from '@mastra/playground-ui/components/GrainFill';
+
+<div className="relative isolate h-50 w-116 overflow-hidden rounded-2xl bg-card shadow-raised">
+  <GrainFill tone="warning" width={464} height={200} className="absolute inset-px -z-10 rounded-[inherit]" />
+</div>;
+```
+
+The fill uses CSS gradients and a shared static noise tile, so it works during server rendering and without WebGL or a theme provider. Colors follow the document's `html.light` mode and local token overrides. Keep the decorative layer one pixel inside a raised surface to preserve its inset rim; `Notice` does this automatically.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
