@@ -1,5 +1,5 @@
 ---
-'@mastra/livekit': patch
+'@mastra/livekit': minor
 ---
 
 Raised the supported LiveKit Agents and plugin minimum to 1.7.1 so speech flushing and playback outcome APIs are available. **Before:** The peer range `^1.4.0` accepted Agents 1.4–1.6. **After:** The minimum is `1.7.1`. Upgrade Agents and any installed LiveKit or Silero plugins to matching versions:
