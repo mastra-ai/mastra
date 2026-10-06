@@ -1788,9 +1788,45 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const timeout = input.claimTimeoutMs ?? 60_000;
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const allEntries = [...this.#db.knowledgeSemanticOutbox.values()].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+    );
+    if (queryScope) {
+      for (const successor of allEntries) {
+        const eligibleSuccessor =
+          (successor.status === 'pending' ||
+            (successor.status === 'processing' &&
+              successor.claimedAt &&
+              now.getTime() - successor.claimedAt.getTime() >= timeout)) &&
+          successor.availableAt <= now &&
+          this.#isSemanticOutboxEntryVisible(successor, queryScope);
+        if (!eligibleSuccessor) continue;
+        for (const predecessor of allEntries) {
+          if (
+            predecessor.documentId !== successor.documentId ||
+            predecessor.status === 'completed' ||
+            predecessor.createdAt > successor.createdAt ||
+            (predecessor.createdAt.getTime() === successor.createdAt.getTime() && predecessor.id >= successor.id)
+          ) {
+            continue;
+          }
+          if (successor.operation !== 'delete' && this.#isSemanticOutboxEntryVisible(predecessor, queryScope)) {
+            continue;
+          }
+          const staleProcessingPredecessor =
+            predecessor.status === 'processing' &&
+            predecessor.claimedAt &&
+            now.getTime() - predecessor.claimedAt.getTime() >= timeout;
+          if (predecessor.status === 'pending' || staleProcessingPredecessor) {
+            predecessor.status = 'completed';
+            predecessor.completedAt = now;
+          }
+        }
+      }
+    }
     const ordered: KnowledgeSemanticOutboxEntry[] = [];
     const blockedDocuments = new Set<string>();
-    for (const entry of this.#db.knowledgeSemanticOutbox.values()) {
+    for (const entry of allEntries) {
       if (entry.status === 'completed') continue;
       const eligible =
         (entry.status === 'pending' ||
