@@ -3683,7 +3683,7 @@ describe('Observer Agent Helpers', () => {
         (om as any).resolveObservationModel(1, {
           currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
         }),
-      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
       await expect(
         (om as any).resolveReflectionModel(1, {
           currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: 'anthropic/claude-opus-4-6' },
@@ -3774,7 +3774,7 @@ describe('Observer Agent Helpers', () => {
 
       await expect(
         (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
-      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
     });
 
     it.each([
@@ -3939,7 +3939,7 @@ describe('Observer Agent Helpers', () => {
 
       await expect(
         (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } }),
-      ).resolves.toMatchObject({ model: 'mastra/openai/gpt-5.4-mini' });
+      ).resolves.toMatchObject({ model: 'mastra/openai/gpt-6-luna' });
     });
 
     it('applies autoModels overrides, including the Gemini pick', async () => {

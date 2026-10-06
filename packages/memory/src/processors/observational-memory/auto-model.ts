@@ -7,8 +7,8 @@ import { OBSERVATIONAL_MEMORY_DEFAULTS } from './constants';
 export const AUTO_MODEL_BY_PROVIDER: Readonly<Record<string, string>> = {
   google: OBSERVATIONAL_MEMORY_DEFAULTS.observation.model,
   anthropic: 'anthropic/claude-haiku-4-5',
-  openai: 'openai/gpt-5.4-mini',
-  'openai-codex': 'openai/gpt-5.4-mini',
+  openai: 'openai/gpt-6-luna',
+  'openai-codex': 'openai/gpt-6-luna',
   deepseek: 'deepseek/deepseek-v4-flash',
 };
 

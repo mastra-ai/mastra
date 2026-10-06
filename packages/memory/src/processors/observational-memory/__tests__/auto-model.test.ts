@@ -9,13 +9,13 @@ describe('resolveAutoModelId', () => {
   it('picks the low-cost model for the main provider', () => {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
     expect(resolveAutoModelId('anthropic/claude-opus-4-6')).toBe('anthropic/claude-haiku-4-5');
-    expect(resolveAutoModelId('openai-codex/gpt-5.5')).toBe('openai/gpt-5.4-mini');
+    expect(resolveAutoModelId('openai-codex/gpt-5.5')).toBe('openai/gpt-6-luna');
     expect(resolveAutoModelId('google/gemini-3.1-pro-preview')).toBe('google/gemini-2.5-flash');
   });
 
   it('keeps the mastra gateway prefix', () => {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-    expect(resolveAutoModelId('mastra/openai/gpt-5.5')).toBe('mastra/openai/gpt-5.4-mini');
+    expect(resolveAutoModelId('mastra/openai/gpt-5.5')).toBe('mastra/openai/gpt-6-luna');
   });
 
   it('returns the main model for providers without a low-cost pick', () => {
