@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
+import { RETIRED_KNOWLEDGE_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
@@ -445,23 +446,17 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
-  /**
-   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
-   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers) needs an
-   * explicit reset.
-   */
-  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
-    const objects = await executor.execute(
-      "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
-    );
-    for (const row of objects.rows) {
-      const type = String(row.type);
-      const name = String(row.name);
-      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) continue;
-      const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
-      if (type !== 'index' || !knownIndex) return false;
-    }
-    return true;
+  override async dangerouslyReset(): Promise<void> {
+    await withClientWriteLock(this.#client, async () => {
+      await this.#client.batch(
+        [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].map(table => ({
+          sql: `DROP TABLE IF EXISTS "${table}"`,
+          args: [],
+        })),
+        'write',
+      );
+    });
+    await this.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {
