@@ -191,7 +191,7 @@ async function resolverContractOutcome(
       const allDisabled = await channels({
         projectId,
         client: clientOptions,
-        integrations: Object.fromEntries(CHANNEL_IDS.map(id => [id, { disabled: true as const }])),
+        providers: Object.fromEntries(CHANNEL_IDS.map(id => [id, { disabled: true as const }])),
       });
       const disabledRoutes = allDisabled.getRoutes();
       const disabledMap = await allDisabled();
@@ -370,7 +370,7 @@ async function resolverContractOutcome(
         const pinned = await channels({
           projectId,
           client: clientOptions,
-          integrations: { [pinnableId]: { connectionId: 'conn-mastra-smoke-nonexistent' } },
+          providers: { [pinnableId]: { connectionId: 'conn-mastra-smoke-nonexistent' } },
         });
         const pinnedMap = await pinned();
         steps.push(
@@ -674,7 +674,7 @@ async function discordWebhookFlow(
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: {
+      providers: {
         ...disableAllExcept('discord'),
         discord: { providerOptions: { publicKey: publicKeyHex, gateway: false } },
       },
@@ -877,7 +877,7 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: disableAllExcept('slack-channels'),
+      providers: disableAllExcept('slack-channels'),
     });
     // The agent exists only so connect() can derive the app's display name;
     // its model is never invoked.
@@ -1077,7 +1077,7 @@ async function teamsProvisionFlow(
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: disableAllExcept('microsoft-teams'),
+      providers: disableAllExcept('microsoft-teams'),
     });
     const resolved = await resolver();
     provider = resolved['microsoft-teams'] as ProvisionProvider | undefined;

@@ -85,7 +85,7 @@ describe('connect', () => {
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: { 'does.not.exist': { disabled: true } },
+        providers: { 'does.not.exist': { disabled: true } },
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
   });
@@ -121,7 +121,7 @@ describe('connect', () => {
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: ['linear'],
+      providers: ['linear'],
     })();
     expect(tools).toEqual(fakeTools);
     const [callArgs] = createTools.mock.calls[0]!;
@@ -136,7 +136,7 @@ describe('connect', () => {
     await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { allowTools: ['linear_fake_tool'] } },
+      providers: { linear: { allowTools: ['linear_fake_tool'] } },
     })();
     const [callArgs] = createTools.mock.calls[0]!;
     expect(callArgs.allowTools).toEqual(['linear_fake_tool']);
@@ -149,7 +149,7 @@ describe('connect', () => {
     await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { disallowTools: ['linear_deprecated_tool'] } },
+      providers: { linear: { disallowTools: ['linear_deprecated_tool'] } },
     })();
     const [callArgs] = createTools.mock.calls[0]!;
     expect(callArgs.disallowTools).toEqual(['linear_deprecated_tool']);
@@ -162,7 +162,7 @@ describe('connect', () => {
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: {
+        providers: {
           // Bypass the XOR type so we can exercise the runtime guard.
           linear: { allowTools: ['a'], disallowTools: ['b'] } as unknown as Record<string, never>,
         },
@@ -178,7 +178,7 @@ describe('connect', () => {
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: ['linear', 123 as unknown as string],
+        providers: ['linear', 123 as unknown as string],
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
   });
@@ -189,7 +189,7 @@ describe('connect', () => {
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: ['linear', 'linear'],
+        providers: ['linear', 'linear'],
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
   });
@@ -241,7 +241,7 @@ describe('connect', () => {
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { connectionId: 'c_stale' } },
+      providers: { linear: { connectionId: 'c_stale' } },
     })();
     expect(tools).toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-auth'));
@@ -267,7 +267,7 @@ describe('connect', () => {
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { connectionId: 'c_err' } },
+      providers: { linear: { connectionId: 'c_err' } },
     })();
     expect(tools).toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("connection c_err is not active (status 'error')"));
@@ -581,7 +581,7 @@ describe('connect', () => {
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { disallowTools: ['linear_delete_issue'] } },
+      providers: { linear: { disallowTools: ['linear_delete_issue'] } },
     })();
     // The wrapped toolset exposes the non-disallowed provider tool plus the list-connections helper.
     expect(Object.keys(tools).sort()).toEqual(['linear__list_connections', 'linear_get_issue']);
@@ -615,7 +615,7 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
       // Referencing the wrapper-only key must not blow up the inner provider.
-      integrations: { linear: { disallowTools: ['linear__list_connections'] } },
+      providers: { linear: { disallowTools: ['linear__list_connections'] } },
     })();
     for (const call of createTools.mock.calls) {
       expect(call[0].disallowTools).toEqual([]);
@@ -632,7 +632,7 @@ describe('connect', () => {
     await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { connectionId: 'c2' } },
+      providers: { linear: { connectionId: 'c2' } },
     })();
     expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c2' }));
   });
@@ -658,7 +658,7 @@ describe('connect', () => {
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      integrations: { linear: { disabled: true } },
+      providers: { linear: { disabled: true } },
     })();
     expect(tools).toEqual({});
     expect(createTools).not.toHaveBeenCalled();

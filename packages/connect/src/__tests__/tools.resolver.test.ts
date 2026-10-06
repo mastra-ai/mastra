@@ -429,7 +429,7 @@ describe('catalog availability', () => {
     });
     const tools = connect({
       projectId: 'proj_1',
-      integrations: { 'catalog-mcp': { disabled: true } },
+      providers: { 'catalog-mcp': { disabled: true } },
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
 
@@ -465,7 +465,7 @@ describe('HTTP provider tool approval', () => {
       linear_delete_issue: { id: 'linear_delete_issue' },
     } as never);
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: true } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: true } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_list_issues']!.requireApproval).toBe(true);
@@ -479,7 +479,7 @@ describe('HTTP provider tool approval', () => {
       linear_delete_issue: { id: 'linear_delete_issue' },
     } as never);
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: ['linear_delete_issue'] } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_issue'] } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_list_issues']!.requireApproval).toBeFalsy();
@@ -489,7 +489,7 @@ describe('HTTP provider tool approval', () => {
   it('fails resolution when requireApproval names an unknown generated tool', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: ['linear_nope'] } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope'] } } });
 
     await expect(tools()).rejects.toMatchObject({
       code: 'invalid_options',
@@ -503,7 +503,7 @@ describe('HTTP provider tool approval', () => {
       makeConnection(),
       makeConnection({ id: 'c_lin2', accountLabel: 'Beta' }),
     ]);
-    const tools = connect({ ...options, integrations: { linear: { requireApproval: true } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: true } } });
 
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_fake_tool']!.requireApproval).toBe(true);
@@ -513,11 +513,11 @@ describe('HTTP provider tool approval', () => {
   it('rejects a requireApproval value that is neither a boolean nor a string array', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
-    expect(() => connect({ ...options, integrations: { linear: { requireApproval: 'true' } as never } })).toThrow(
+    expect(() => connect({ ...options, providers: { linear: { requireApproval: 'true' } as never } })).toThrow(
       /requireApproval must be a boolean or an array of tool keys/,
     );
     expect(() =>
-      connect({ ...options, integrations: { linear: { requireApproval: ['linear_fake_tool', 7] } as never } }),
+      connect({ ...options, providers: { linear: { requireApproval: ['linear_fake_tool', 7] } as never } }),
     ).toThrow(/requireApproval must be a boolean or an array of tool keys/);
   });
 
@@ -525,7 +525,7 @@ describe('HTTP provider tool approval', () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
     expect(() =>
-      connect({ ...options, integrations: { linear: { autoApproveTools: ['linear_fake_tool'] } as never } }),
+      connect({ ...options, providers: { linear: { autoApproveTools: ['linear_fake_tool'] } as never } }),
     ).toThrow(/autoApproveTools was removed/);
   });
 });

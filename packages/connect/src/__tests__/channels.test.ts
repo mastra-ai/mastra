@@ -251,9 +251,9 @@ describe('channels()', () => {
       channels({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: { 'bad key!': {} },
+        providers: { 'bad key!': {} },
       }),
-    ).rejects.toThrow(/integrations option/i);
+    ).rejects.toThrow(/providers option/i);
   });
 
   it('resolves an empty map when the project has no channel connections', async () => {
@@ -657,7 +657,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           'microsoft-teams': {
             providerOptions: { appId: 'sneaky', appPassword: 'sneaky', typingStatus: false } as Record<string, unknown>,
           },
@@ -728,7 +728,7 @@ describe('channels()', () => {
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
     });
     const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock, { integrations: { 'slack-channels': { disabled: true } } }));
+    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': { disabled: true } } }));
     const providers = await resolver();
     expect(providers['slack-channels']).toBeUndefined();
     expect(FakeChannelProvider.configSpy).not.toHaveBeenCalledWith('slack-channels', expect.anything());
@@ -747,7 +747,7 @@ describe('channels()', () => {
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
-      options(fetchMock, { integrations: { 'slack-channels': { connectionId: 'c_slack_b' } } }),
+      options(fetchMock, { providers: { 'slack-channels': { connectionId: 'c_slack_b' } } }),
     );
     const providers = await resolver();
     expect(providers['slack-channels']).toBeDefined();
@@ -815,7 +815,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           telegram: { providerOptions: { mode: 'webhook', typingStatus: false } },
         },
       }),
@@ -835,7 +835,7 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(
       options(fetchMock, {
-        integrations: {
+        providers: {
           telegram: {
             // Cast escape-hatch — the public type disallows these; here we
             // simulate a caller who bypassed the compile-time check to verify

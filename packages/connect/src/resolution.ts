@@ -14,12 +14,12 @@ export interface ConnectionRequest {
 
 const INTEGRATION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 
-export function validateIntegrationOverrides(integrations: Record<string, unknown> | undefined): void {
-  for (const integrationId of Object.keys(integrations ?? {})) {
+export function validateProviderIds(providers: Record<string, unknown> | undefined): void {
+  for (const integrationId of Object.keys(providers ?? {})) {
     if (!INTEGRATION_ID_PATTERN.test(integrationId)) {
       throw new MastraConnectError(
         'invalid_options',
-        `Invalid provider '${integrationId}' in integrations option: expected 1-128 letters, numbers, underscores, or hyphens.`,
+        `Invalid provider '${integrationId}' in providers option: expected 1-128 letters, numbers, underscores, or hyphens.`,
       );
     }
   }

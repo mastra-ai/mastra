@@ -228,7 +228,7 @@ describe('catalog-backed MCP providers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
+      providers: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
       client: {
         accessToken: PLATFORM_TOKEN,
         baseUrl: 'https://integrations.example.test',
@@ -306,11 +306,11 @@ describe('catalog-backed MCP providers', () => {
 
 describe('MCP tool approval', () => {
   type ApprovalTool = { requireApproval?: boolean; needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown };
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch();
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -359,7 +359,7 @@ describe('MCP tool approval', () => {
     expect(() =>
       connect({
         projectId: 'project-1',
-        integrations: {
+        providers: {
           [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } as never,
         },
         client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: vi.fn() as never },
@@ -394,11 +394,11 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     },
   ];
 
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch({ connections: TWO_CONNECTIONS, matchAnyConnectionMcpPath: true });
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -475,7 +475,7 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
+      providers: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);

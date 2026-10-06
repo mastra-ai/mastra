@@ -15,11 +15,11 @@ import {
   connectionIdEnvVar,
   groupByIntegrationId,
   resolveProviderConnection,
-  validateIntegrationOverrides,
+  validateProviderIds,
 } from './resolution.js';
 import { applyToolFilter } from './toolset.js';
 
-interface ToolsIntegrationOptionsBase {
+interface ToolsProviderOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
   connectionId?: string;
   /**
@@ -42,7 +42,7 @@ interface ToolsIntegrationOptionsBase {
  * accidental co-occurrence in typed object literals; `tools()` also
  * validates at build time so loosely typed callers get a clear error.
  */
-export type ToolsIntegrationOptions = ToolsIntegrationOptionsBase &
+export type ToolsProviderOptions = ToolsProviderOptionsBase &
   (
     | {
         /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
@@ -70,7 +70,7 @@ export interface ToolsOptions {
    * Both forms may be combined by passing the object form; use the array
    * shorthand only when no overrides are needed.
    */
-  integrations?: string[] | Record<string, ToolsIntegrationOptions>;
+  providers?: string[] | Record<string, ToolsProviderOptions>;
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -82,8 +82,8 @@ type ResolvedToolsRecord = Record<string, { id: string }>;
 
 /**
  * Live tool resolver returned by `tools()`. Pass it straight to an agent's
- * dynamic `tools` argument: Mastra calls it per generate/stream, so project
- * integrations attached or detached on the platform are reflected without
+ * dynamic `tools` argument: Mastra calls it per generate/stream, so providers
+ * connected or disconnected on the platform are reflected without
  * restarting the server. Call it directly (`await tools()`) when you need the
  * current flat tool record.
  */
@@ -99,7 +99,7 @@ export interface ToolsResolver {
 
 interface NormalizedRequest {
   registration: ProviderRegistration;
-  options: ToolsIntegrationOptions;
+  options: ToolsProviderOptions;
 }
 
 const DEFAULT_TTL_MS = 30_000;
@@ -113,8 +113,8 @@ let nextResolverId = 0;
  * are discovered from the Platform integration catalog. Tools from every supported
  * provider with a matching project connection are merged into one flat record
  * (matched by `integrationId`). The resolver serves a cached snapshot,
- * revalidating from the platform every `ttlMs`, so integrations attached
- * to (or detached from) the project are picked up (or dropped) without a
+ * revalidating from the platform every `ttlMs`, so providers connected
+ * to (or disconnected from) the project are picked up (or dropped) without a
  * restart.
  *
  * Configuration errors (missing project id, bad ttlMs, malformed integration id,
@@ -143,11 +143,11 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   // Keyed by `${integrationId}::${connectionId}` so multiple active
   // connections for the same provider each get their own MCP client.
   const mcpClients = new Map<string, { integrationId: string; connectionId: string; client: MCPClient }>();
-  const integrationOverrides = normalizeIntegrationOverrides(options.integrations);
-  validateIntegrationOverrides(integrationOverrides);
-  validateIntegrationXor(integrationOverrides);
-  validateRequireApproval(integrationOverrides);
-  rejectRemovedAutoApproveTools(integrationOverrides);
+  const providerOverrides = normalizeProviderOverrides(options.providers);
+  validateProviderIds(providerOverrides);
+  validateProviderXor(providerOverrides);
+  validateRequireApproval(providerOverrides);
+  rejectRemovedAutoApproveTools(providerOverrides);
 
   let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
@@ -176,7 +176,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       connection =>
         connection.status === 'active' &&
         !checkedIn.has(connection.integrationId) &&
-        !integrationOverrides[connection.integrationId]?.disabled,
+        !providerOverrides[connection.integrationId]?.disabled,
     );
     if (needsCatalog) throw catalogResult.reason;
     const reason = catalogResult.reason;
@@ -196,7 +196,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       inflight = (async () => {
         try {
           const { connections, catalog } = await loadSnapshotInputs();
-          const requests = buildRequests(integrationOverrides, catalog);
+          const requests = buildRequests(providerOverrides, catalog);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
@@ -264,33 +264,31 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
 }
 
 /**
- * Turns the two accepted `integrations` shapes into the internal Record form.
+ * Turns the two accepted `providers` shapes into the internal Record form.
  * The string-array shorthand (`["linear", "github"]`) becomes
  * `{ linear: {}, github: {} }`; the object form passes through unchanged.
  * Also rejects malformed inputs early (non-string array entries, duplicates)
  * so a bad option throws at tools() time rather than at first refresh.
  */
-function normalizeIntegrationOverrides(
-  integrations: ToolsOptions['integrations'],
-): Record<string, ToolsIntegrationOptions> {
-  if (integrations === undefined) return {};
-  if (Array.isArray(integrations)) {
-    const record: Record<string, ToolsIntegrationOptions> = {};
-    for (const entry of integrations) {
+function normalizeProviderOverrides(providers: ToolsOptions['providers']): Record<string, ToolsProviderOptions> {
+  if (providers === undefined) return {};
+  if (Array.isArray(providers)) {
+    const record: Record<string, ToolsProviderOptions> = {};
+    for (const entry of providers) {
       if (typeof entry !== 'string') {
         throw new MastraConnectError(
           'invalid_options',
-          `Invalid integrations entry: expected a string integration id, got ${typeof entry}.`,
+          `Invalid providers entry: expected a string provider id, got ${typeof entry}.`,
         );
       }
       if (record[entry] !== undefined) {
-        throw new MastraConnectError('invalid_options', `Duplicate integration '${entry}' in integrations array.`);
+        throw new MastraConnectError('invalid_options', `Duplicate provider '${entry}' in providers array.`);
       }
       record[entry] = {};
     }
     return record;
   }
-  return integrations;
+  return providers;
 }
 
 /**
@@ -299,8 +297,8 @@ function normalizeIntegrationOverrides(
  * runtime guard catches loosely typed inputs (e.g. built from JSON or a
  * `Record<string, unknown>` upstream).
  */
-function validateIntegrationXor(integrations: Record<string, ToolsIntegrationOptions>): void {
-  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+function validateProviderXor(providers: Record<string, ToolsProviderOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(providers)) {
     const filters = providerOptions as { allowTools?: unknown; disallowTools?: unknown };
     if (filters.allowTools !== undefined && filters.disallowTools !== undefined) {
       throw new MastraConnectError(
@@ -318,8 +316,8 @@ function validateIntegrationXor(integrations: Record<string, ToolsIntegrationOpt
  * approval on MCP providers silently (and crash the HTTP path into
  * warn-and-skip) instead of gating tools as the author intended.
  */
-function validateRequireApproval(integrations: Record<string, ToolsIntegrationOptions>): void {
-  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+function validateRequireApproval(providers: Record<string, ToolsProviderOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(providers)) {
     const requireApproval = (providerOptions as Record<string, unknown>).requireApproval;
     if (requireApproval === undefined || typeof requireApproval === 'boolean') continue;
     if (Array.isArray(requireApproval) && requireApproval.every(name => typeof name === 'string')) continue;
@@ -336,8 +334,8 @@ function validateRequireApproval(integrations: Record<string, ToolsIntegrationOp
  * carrying this key would otherwise be ignored silently and its tools would
  * run without the prompts the author expected.
  */
-function rejectRemovedAutoApproveTools(integrations: Record<string, ToolsIntegrationOptions>): void {
-  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
+function rejectRemovedAutoApproveTools(providers: Record<string, ToolsProviderOptions>): void {
+  for (const [integrationId, providerOptions] of Object.entries(providers)) {
     if ('autoApproveTools' in (providerOptions as Record<string, unknown>)) {
       throw new MastraConnectError(
         'invalid_options',
@@ -348,10 +346,10 @@ function rejectRemovedAutoApproveTools(integrations: Record<string, ToolsIntegra
 }
 
 function buildRequests(
-  integrations: Record<string, ToolsIntegrationOptions>,
+  providers: Record<string, ToolsProviderOptions>,
   catalog: IntegrationCatalogEntry[],
 ): NormalizedRequest[] {
-  const overrides = integrations;
+  const overrides = providers;
   const registrations = new Map(TOOLS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
@@ -364,7 +362,7 @@ function buildRequests(
   }
   for (const integrationId of Object.keys(overrides)) {
     if (!registrations.has(integrationId) && !catalogIds.has(integrationId)) {
-      console.warn(`[@mastra/connect] Ignoring unknown integration override '${integrationId}'.`);
+      console.warn(`[@mastra/connect] Ignoring unknown provider override '${integrationId}'.`);
     }
   }
   const requests: NormalizedRequest[] = [];
@@ -487,11 +485,11 @@ async function mapTools(
 }
 
 /**
- * Extracts whichever provider tool filter is set. Since `ToolsIntegrationOptions`
+ * Extracts whichever provider tool filter is set. Since `ToolsProviderOptions`
  * is an XOR union and tools() validates co-occurrence up front, at most one
  * of the two will ever be defined here.
  */
-function providerFilterOptions(options: ToolsIntegrationOptions): {
+function providerFilterOptions(options: ToolsProviderOptions): {
   allowTools?: string[];
   disallowTools?: string[];
 } {
