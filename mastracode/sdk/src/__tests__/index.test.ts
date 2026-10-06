@@ -817,27 +817,17 @@ describe('createMastraCode', () => {
     expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
-  it('uses a host-owned Knowledge instance and preserves its registration key', async () => {
+  it('uses a host-owned Knowledge instance', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
     const { createMastraCode } = await import('../index.js');
 
-    const code = await createMastraCode({ knowledge: { key: 'mastra', instance } });
+    const code = await createMastraCode({ knowledge: instance });
 
     expect(code.knowledge).toBe(instance);
-    expect(code.knowledgeKey).toBe('mastra');
     // No `settingsPath` configured; Knowledge rides in the fourth slot.
     expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), undefined, instance);
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
-  });
-
-  it('rejects an empty host-owned Knowledge registration key', async () => {
-    const { Knowledge } = await import('@mastra/core/knowledge');
-    const { createMastraCode } = await import('../index.js');
-
-    await expect(
-      createMastraCode({ knowledge: { key: '  ', instance: new Knowledge({ id: 'mastra' }) } }),
-    ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
   it('passes an injected vector to dynamic memory', async () => {
