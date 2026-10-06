@@ -2021,13 +2021,18 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visibleNodeScope
         WHERE visibleNodeScope.nodeId=${nodeAlias}.id AND ${inScope('visibleNodeScope.scopeNodeId', ids)}
       )))`;
+    // A tombstoned scope no longer reads as itself; like InMemory, its parent memberships decide visibility.
+    const membershipVisible = (nodeAlias: string, ids: string[]) => `EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" deletedScopeMembership
+        WHERE deletedScopeMembership.nodeId=${nodeAlias}.id AND ${inScope('deletedScopeMembership.scopeNodeId', ids)}
+      )`;
     const currentTargetScopesVisible = (ids: string[]) => `(
       (target.type='node' AND EXISTS (
         SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" targetNode
         WHERE targetNode.id=target.id
           AND ((COALESCE(target.expectedDeleted,0)=1 AND targetNode.deletedAt IS NOT NULL)
             OR (COALESCE(target.expectedDeleted,0)=0 AND targetNode.deletedAt IS NULL))
-          AND ${nodeVisible('targetNode', ids)}
+          AND (CASE WHEN COALESCE(target.expectedDeleted,0)=1 THEN ${membershipVisible('targetNode', ids)} ELSE ${nodeVisible('targetNode', ids)} END)
       )) OR
       (target.type='record' AND EXISTS (
         SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord

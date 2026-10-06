@@ -1964,7 +1964,19 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         in: {
           $cond: [
             { $eq: ['$$target.type', 'node'] },
-            { $and: [targetStateMatches('$$node'), nodeVisible('$$node', ids)] },
+            {
+              $and: [
+                targetStateMatches('$$node'),
+                {
+                  // A tombstoned scope no longer reads as itself; like InMemory, its parent memberships decide visibility.
+                  $cond: [
+                    { $eq: [{ $ifNull: ['$$target.expectedDeleted', false] }, true] },
+                    membershipsVisible('$__nodeScopes', '$$node.id', ids),
+                    nodeVisible('$$node', ids),
+                  ],
+                },
+              ],
+            },
             {
               $let: {
                 vars: {
