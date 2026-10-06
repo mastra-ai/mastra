@@ -3,8 +3,8 @@ import { createTool } from '@mastra/core/tools';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { tools as connect } from '../tools.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.

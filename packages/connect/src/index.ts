@@ -1,7 +1,5 @@
 export { tools } from './tools.js';
 export type { ToolsOptions, ToolsIntegrationOptions, ToolsResolver } from './tools.js';
-export { connect } from './connect.js';
-export type { ConnectOptions, ConnectIntegrationOptions, ConnectTools } from './connect.js';
 export { channels } from './channels.js';
 export type {
   ChannelsOptions,
@@ -12,8 +10,6 @@ export type {
 } from './channels.js';
 export type { ChannelProviderRegistration, ChannelInstance, ChannelRuntime } from './providers/channel-provider.js';
 export { credential } from './credential.js';
-export { environment } from './environment.js';
-export type { ConnectEnvironment, EnvironmentIntegrationOptions, EnvironmentOptions } from './environment.js';
 export { MastraConnectError } from './errors.js';
 export type { MastraConnectErrorCode } from './errors.js';
 export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';

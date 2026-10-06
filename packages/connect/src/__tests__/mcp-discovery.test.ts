@@ -2,8 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { platformMcpTransport, resolveClient } from '../client.js';
-import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { tools as connect } from '../tools.js';
 
 const PLATFORM_TOKEN = 'platform-token';
 const INTEGRATION_ID = 'catalog-mcp';
