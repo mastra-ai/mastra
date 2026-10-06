@@ -139,7 +139,7 @@ function getSurface(): MastraSurface {
 let detectedTerminalBg: string | undefined;
 
 /** The effective background color used for contrast calculations. */
-function getContrastBg(): string {
+export function getContrastBg(): string {
   return detectedTerminalBg ?? getSurface().bg;
 }
 

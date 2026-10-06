@@ -45,6 +45,7 @@ vi.mock('../theme.js', () => ({
     getTheme: () => ({ accent: '#62f69d' }),
   },
   displayModeColor: (color: string) => color,
+  getContrastBg: () => '#000000',
   mastra: {
     orange: '#f97316',
     pink: '#ec4899',

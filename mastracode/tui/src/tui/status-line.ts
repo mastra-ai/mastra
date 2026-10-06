@@ -8,7 +8,7 @@ import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
-import { theme, mastra, displayModeColor, extendedColors } from './theme.js';
+import { theme, mastra, displayModeColor, extendedColors, getContrastBg } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -106,10 +106,25 @@ function truncateLastSegment(path: string, maxWidth: number): string {
   return head + name.slice(0, start).join('') + '…' + name.slice(name.length - (room - start)).join('');
 }
 
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+// A small dot that pulses (fades into the background and back) rather than a braille spinner, so it
+// reads differently from the spinner on shell tools.
+const PULSE_PERIOD_MS = 1600;
+/** How far the dot fades at its dimmest: 0 = no fade, 1 = disappears into the background. */
+const PULSE_DEPTH = 1;
 
 /** Terminal width at which the footer last needed two rows (see updateStatusLine). */
 const twoRowFooterWidth = new WeakMap<TUIState, number>();
+
+function pulseDot(color: string, now: number): string {
+  const wave = (Math.cos((now / PULSE_PERIOD_MS) * Math.PI * 2) + 1) / 2; // 1 = full color, 0 = dimmest
+  const fade = PULSE_DEPTH * (1 - wave);
+  const bg = getContrastBg();
+  const channel = (i: number) => {
+    const fg = parseInt(color.slice(i, i + 2), 16);
+    return Math.round(fg + (parseInt(bg.slice(i, i + 2), 16) - fg) * fade);
+  };
+  return chalk.rgb(channel(1), channel(3), channel(5))('•');
+}
 
 type Part = { plain: string; styled: string };
 
@@ -371,7 +386,7 @@ function updateActivityLine(state: TUIState, modeColor: string | undefined, now:
     return;
   }
   const color = modeColor ?? theme.getTheme().accent;
-  const spinner = chalk.hex(color)(SPINNER[Math.floor(now / 80) % SPINNER.length]!);
+  const spinner = pulseDot(color, now);
   const elapsed = formatStatusDuration(now - state.agentRunStartedAt, { includeSeconds: true });
   const stale =
     state.agentRunLastStreamPartAt !== undefined && now - state.agentRunLastStreamPartAt > 3 * 60_000
