@@ -79,7 +79,7 @@ async function createHarness(
   const resource = await runtime.materializeScope({
     address: resourceAddress,
     parentAddresses: [orgAddress],
-    contextualScopeAddress: orgAddress,
+    contextualScopeAddress: resourceAddress,
   });
   const orgScope = [org.scopes[orgAddress]!];
   const projectScope = [...orgScope, resource.scopes[resourceAddress]!];
@@ -97,7 +97,7 @@ async function createHarness(
       const thread = await runtime.materializeScope({
         address,
         parentAddresses: [resourceAddress],
-        contextualScopeAddress: resourceAddress,
+        contextualScopeAddress: address,
       });
       const threadScopeId = thread.scopes[address]!;
       if (!allScopeIds.includes(threadScopeId)) allScopeIds.push(threadScopeId);
@@ -218,6 +218,40 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
+  it('offers host profiles built-in identity scopes that own themselves rather than their parent', async () => {
+    let offered: Parameters<KnowledgeAccessProfileResolver>[0]['builtInScopes'] | undefined;
+    const h = await createHarness({
+      accessProfile: async ({ builtInScopes }) => {
+        offered = builtInScopes;
+        return {
+          id: 'thread',
+          rootScopeAddress: builtInScopes.thread!.address,
+          baselineScopes: [builtInScopes.org, builtInScopes.resource],
+          intakeScopes: [builtInScopes.thread!],
+        };
+      },
+    });
+    const threadScopeIds = await h.threadScope('t-own');
+    await record(
+      h.knowledge,
+      await node(h.knowledge, 'Session Note', threadScopeIds),
+      'Thread fact.',
+      threadScopeIds,
+      't-own',
+    );
+    expect((await graph(h, '?threadId=t-own')).status).toBe(200);
+
+    const fresh = new Knowledge({ id: 'fresh', storage: new InMemoryStore() });
+    const store = await fresh.getStorageInternal();
+    for (const scope of [offered!.org, offered!.resource, offered!.thread!]) {
+      const scopeId = (await fresh.materializeScope(scope)).scopes[scope.address]!;
+      const owners = (await store.listScopeGrants({ scopeNodeId: scopeId }))
+        .filter(grant => grant.role === 'owner')
+        .map(grant => grant.scopeRefId);
+      expect(owners).toEqual([scopeId]);
+    }
+  });
+
   it('ignores request-supplied knowledge keys and reads only the host-selected runtime', async () => {
     const first = new Knowledge({ id: 'first', storage: new InMemoryStore() });
     const second = new Knowledge({ id: 'second', storage: new InMemoryStore() });
