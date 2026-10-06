@@ -744,6 +744,36 @@ describe('KnowledgePage', () => {
     await waitFor(() => expect(subgraphParams).toContain('org'));
   });
 
+  it('says when the scope tree is missing scopes the server could not list', async () => {
+    stubKnowledgeRoute();
+    let truncated = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, () =>
+        HttpResponse.json({
+          roots: [
+            { level: 'org', id: 'org-1', available: true },
+            { level: 'resource', id: FACTORY_ID, available: true },
+          ],
+          defaultLevel: 'resource',
+          ...(truncated ? { truncated: true } : {}),
+        }),
+      ),
+    );
+    const notice = 'This org has more scopes than can be listed; some are not shown.';
+
+    const first = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    await within(scopes).findByRole('button', { name: /org-1 org/ });
+    expect(within(scopes).queryByText(notice)).not.toBeInTheDocument();
+    first.unmount();
+
+    truncated = true;
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+    expect(
+      await within(await screen.findByRole('complementary', { name: 'Knowledge scopes' })).findByText(notice),
+    ).toBeInTheDocument();
+  });
+
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>

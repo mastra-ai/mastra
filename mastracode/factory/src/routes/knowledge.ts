@@ -122,6 +122,8 @@ export interface KnowledgeScopeTreePayload {
   nextCursor?: string;
   /** Initial child-page cursors keyed by parent scope id. */
   childCursors?: Record<string, string>;
+  /** True when the org has more scopes than the route reads, so whole scopes are missing from the tree. */
+  truncated?: boolean;
 }
 
 /** Window caps. Injectable at construction only — never per-request. */
@@ -132,9 +134,16 @@ export interface KnowledgeRouteLimits {
   maxRecords: number;
   /** Max fallback `resolveNode` store lookups per request (deduped per unique name+scope). */
   maxFallbackLookups: number;
+  /** Max `listScopeNodes` pages (of up to 1,000 scopes) read for one org; past it responses report `truncated`. */
+  maxOrgScopePages: number;
 }
 
-const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, maxFallbackLookups: 100 };
+const DEFAULT_LIMITS: KnowledgeRouteLimits = {
+  maxNodes: 500,
+  maxRecords: 2000,
+  maxFallbackLookups: 100,
+  maxOrgScopePages: 10,
+};
 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
   /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
@@ -336,20 +345,34 @@ function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSu
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
 
-/** Org scope reads stop after this many storage pages; past it the tree drops whole scopes. */
-const MAX_ORG_SCOPE_PAGES = 10;
-
-/** Every scope in one org (the org scope and everything beneath it), filtered and paged in storage. */
-async function listOrgScopeNodes(store: KnowledgeStorage, orgId: string): Promise<KnowledgeScopeNodeSummary[]> {
+/**
+ * Scopes in one org (the org scope and everything beneath it), filtered and paged in storage.
+ * Reads at most `maxPages` pages; `truncated` is true when scopes remain past that point.
+ */
+async function listOrgScopeNodes(
+  store: KnowledgeStorage,
+  orgId: string,
+  maxPages: number,
+): Promise<{ scopes: KnowledgeScopeNodeSummary[]; truncated: boolean }> {
   const scopes: KnowledgeScopeNodeSummary[] = [];
   let cursor: string | undefined;
-  for (let page = 0; page < MAX_ORG_SCOPE_PAGES; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     const result = await store.listScopeNodes({ withinAddress: `org:${orgId}`, cursor });
     scopes.push(...result.scopes);
-    if (!result.nextCursor) break;
+    if (!result.nextCursor) return { scopes, truncated: false };
     cursor = result.nextCursor;
   }
-  return scopes;
+  return { scopes, truncated: true };
+}
+
+/** One scope node, only if it is in the org. Independent of how many scopes the org has. */
+async function findOrgScopeNode(
+  store: KnowledgeStorage,
+  orgId: string,
+  scopeNodeId: string,
+): Promise<KnowledgeScopeNodeSummary | undefined> {
+  const { scopes } = await store.listScopeNodes({ withinAddress: `org:${orgId}`, ids: [scopeNodeId], limit: 1 });
+  return scopes[0];
 }
 
 function knowledgeSearchRank(name: string, query: string): number {
@@ -685,8 +708,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           let nextCursor: string | undefined;
           const childCursors: Record<string, string> = {};
           let storedScopeNodes: KnowledgeScopeNodeSummary[] = [];
+          let scopesTruncated = false;
           try {
-            storedScopeNodes = await listOrgScopeNodes(view.store, view.orgId);
+            ({ scopes: storedScopeNodes, truncated: scopesTruncated } = await listOrgScopeNodes(
+              view.store,
+              view.orgId,
+              this.#limits.maxOrgScopePages,
+            ));
             const scopeNodeById = new Map(storedScopeNodes.map(node => [node.id, node]));
             const childScopeCountByParent = new Map<string, number>();
             for (const node of storedScopeNodes) {
@@ -812,6 +840,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             ...(scopeNodes ? { scopeNodes } : {}),
             ...(nextCursor ? { nextCursor } : {}),
             ...(Object.keys(childCursors).length > 0 ? { childCursors } : {}),
+            ...(scopesTruncated ? { truncated: true } : {}),
           } satisfies KnowledgeScopeTreePayload);
         },
       }),
@@ -846,10 +875,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
 
           let structuralScopes: KnowledgeScopeNodeSummary[] = [];
+          let scopesTruncated = false;
           try {
-            structuralScopes = (await listOrgScopeNodes(view.store, view.orgId)).filter(node =>
-              node.name.toLocaleLowerCase().includes(query),
-            );
+            const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
+            scopesTruncated = orgScopes.truncated;
+            structuralScopes = orgScopes.scopes.filter(node => node.name.toLocaleLowerCase().includes(query));
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
           }
@@ -898,6 +928,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           return c.json({
             results: results.slice(0, SEARCH_RESULT_LIMIT),
             truncated:
+              scopesTruncated ||
               results.length > SEARCH_RESULT_LIMIT ||
               prefixNodes.length > SEARCH_RESULT_LIMIT ||
               scannedNodes.length >= scanLimit,
@@ -926,9 +957,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             const limits = this.#limits;
             const { store } = resolved;
 
-            let scopeNodes: KnowledgeScopeNodeSummary[];
+            let storedRoot: KnowledgeScopeNodeSummary | undefined;
             try {
-              scopeNodes = await listOrgScopeNodes(store, resolved.orgId);
+              storedRoot = await findOrgScopeNode(store, resolved.orgId, scopeNodeId);
             } catch (error) {
               // Adapters without the structural read have no lenses to serve.
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
@@ -936,8 +967,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
               throw error;
             }
-            const storedRoot = scopeNodes.find(node => node.id === scopeNodeId);
             if (!storedRoot) return c.json({ error: 'scope_not_found' }, 404);
+            // Child-scope counts for the lens come from the org's scopes, which may be capped.
+            const { scopes: scopeNodes, truncated: scopesTruncated } = await listOrgScopeNodes(
+              store,
+              resolved.orgId,
+              limits.maxOrgScopePages,
+            );
             const root =
               storedRoot.address === `resource:${resolved.factoryProjectId}`
                 ? { ...storedRoot, name: resolved.factoryProjectName }
@@ -947,7 +983,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             const bounded = fetched.filter(
               node => node.isScope || (Array.isArray(node.scope) && withinViewBoundary(node.scope, resolved.scope)),
             );
-            let truncated = bounded.length > limits.maxNodes;
+            let truncated = scopesTruncated || bounded.length > limits.maxNodes;
             const members = bounded.slice(0, limits.maxNodes);
             const contentMembers = members.filter(node => !node.isScope);
             const childScopeCountByParent = new Map<string, number>();
@@ -1319,18 +1355,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           let memberIds: Set<string> | undefined;
           if (scopeNodeId !== undefined) {
             if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
-            let scopeNodes: KnowledgeScopeNodeSummary[];
+            let scopeNode: KnowledgeScopeNodeSummary | undefined;
             try {
-              scopeNodes = await listOrgScopeNodes(resolved.store, resolved.orgId);
+              scopeNode = await findOrgScopeNode(resolved.store, resolved.orgId, scopeNodeId);
             } catch (error) {
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
                 return c.json({ error: 'scope_not_found' }, 404);
               }
               throw error;
             }
-            if (!scopeNodes.some(scopeNode => scopeNode.id === scopeNodeId)) {
-              return c.json({ error: 'scope_not_found' }, 404);
-            }
+            if (!scopeNode) return c.json({ error: 'scope_not_found' }, 404);
             const members = await resolved.store.listScopeMembers({
               scopeNodeId,
               limit: this.#limits.maxNodes + 1,
