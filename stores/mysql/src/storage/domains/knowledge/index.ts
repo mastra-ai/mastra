@@ -144,6 +144,7 @@ function createExecutor(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'quer
 }
 
 const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
+const EPOCH_CHANGING_PROPOSAL_KINDS = new Set<string>(['delete-node', 'delete-scope', 'restore-node', 'restore-scope']);
 const reconcileChains = new Map<unknown, Promise<unknown>>();
 const unidentifiedClientReconcileKey = {};
 
@@ -795,8 +796,9 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async #deleteNode(tx: Executor, input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
-    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     const existing = await this.#getNode(tx, input.id);
+    if (existing?.isScope) await this.#lockAccessEpochForChange(tx);
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
     if (existing.isScope) await this.#assertScopeIsEmpty(tx, existing.id);
@@ -841,8 +843,9 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async #restoreNode(tx: Executor, input: RestoreKnowledgeNodeInput): Promise<KnowledgeNode> {
-    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     const existing = await this.#getNodeIncludingDeleted(tx, input.id);
+    if (existing?.isScope) await this.#lockAccessEpochForChange(tx);
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     if (!existing?.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
     const scopeIds = await this.#assertScopeNodes(tx, await this.#getNodeScopeIds(tx, existing.id));
@@ -2225,13 +2228,15 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     },
   ): Promise<KnowledgeProposal> {
     return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const existing = await tx.execute({
         sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
         args: [input.id],
       });
       if (!existing.rows[0]) throw new KnowledgeNotFoundError('proposal', input.id);
       const proposal = parseProposal(existing.rows[0]);
+      const kind = (input.verifiedMutation ?? (proposal.payload as Partial<KnowledgeProposalMutation>))?.kind;
+      if (kind && EPOCH_CHANGING_PROPOSAL_KINDS.has(kind)) await this.#lockAccessEpochForChange(tx);
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
       const targets = input.verifiedTargets ?? proposal.targets;
       for (const target of targets) {
@@ -2976,10 +2981,16 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     }
   }
 
+  /** Take the exclusive access-state lock. Call before the fence in any transaction that may bump the epoch. */
+  async #lockAccessEpochForChange(tx: Executor): Promise<void> {
+    await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch WHERE id='global'`);
+  }
+
   async #assertExpectedAccessEpoch(executor: Executor, expectedAccessEpoch?: number): Promise<void> {
     if (expectedAccessEpoch === undefined) return;
     // A locking read waits for an uncommitted grant change and blocks later ones until this mutation commits;
-    // a plain REPEATABLE READ snapshot would miss both.
+    // a plain REPEATABLE READ snapshot would miss both. Transactions that later bump the epoch must take
+    // #lockAccessEpochForChange first: upgrading this shared lock to exclusive deadlocks against a waiting writer.
     const result = await executor.execute(
       `SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global' FOR SHARE`,
     );
