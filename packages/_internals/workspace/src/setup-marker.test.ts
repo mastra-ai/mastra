@@ -96,7 +96,7 @@ describe('guardedSetupCommand', () => {
       expect(existsSync(failed())).toBe(false);
     });
 
-    it('lists each failing repo on its own line, once, however many passes fail', () => {
+    it('lists each failing repo on its own line, once, however many of its commands fail', () => {
       setup('x', 'y');
       run(guardedSetupCommand({ repoDir: 'x', command: 'exit 1', continueOnFailure: true }));
       run(guardedSetupCommand({ repoDir: 'y', command: 'false', continueOnFailure: true }));

@@ -71,15 +71,14 @@ export interface GuardedSetupCommandOptions {
  * Without the guard this is the plain `cd "<dir>" && <cmd>` step. With it,
  * the `cd` sits inside the parenthesized group so that the failure branch
  * runs back at the build cwd and the failure list lands at the workspace
- * level, never inside the repository. The newline before the inner group's
- * closing paren keeps a command that ends in a shell comment from swallowing it.
+ * level, never inside the repository.
  */
 export function guardedSetupCommand({ repoDir, command, continueOnFailure }: GuardedSetupCommandOptions): string {
   if (!continueOnFailure) return `cd "${repoDir}" && ${command}`;
   // The command runs through `sh -c` so a trailing comment, heredoc or stray
   // quote inside it cannot swallow the guard, and the whole step stays on one
-  // line (a Dockerfile RUN cannot span lines). One line per repository: the
-  // same guarded command runs before and after the pin.
+  // line (a Dockerfile RUN cannot span lines). One line per repository,
+  // however many of its setup commands fail.
   return (
     `( cd "${repoDir}" && sh -c ${shellQuote(command)} ) || ` +
     `{ mkdir -p "${SETUP_MARKER_DIR}" && grep -qxF -- '${repoDir}' "${SETUP_FAILED_MARKER_PATH}" 2>/dev/null || ` +
