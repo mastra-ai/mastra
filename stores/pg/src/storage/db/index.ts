@@ -422,10 +422,21 @@ export interface PgDBInternalConfig {
   skipDefaultIndexes?: boolean;
 }
 
-// Static map to track schema setup across all PgDB instances
-// Key: schemaName, Value: { promise, complete }
-// This prevents race conditions when multiple domains try to create the same schema concurrently
-const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
+type SchemaSetupEntry = { promise: Promise<void> | null; complete: boolean };
+
+// Tracks schema setup per connection pool, then per schema name. Domains sharing a
+// pool coordinate concurrent setup; stores on other pools (possibly other databases
+// with the same schema name) set their schema up independently.
+const schemaSetupRegistry = new WeakMap<Pool, Map<string, SchemaSetupEntry>>();
+
+function getSchemaSetupRegistry(pool: Pool): Map<string, SchemaSetupEntry> {
+  let registry = schemaSetupRegistry.get(pool);
+  if (!registry) {
+    registry = new Map();
+    schemaSetupRegistry.set(pool, registry);
+  }
+  return registry;
+}
 
 /**
  * Guard prune batch limits: a non-positive limit deletes nothing while callers'
@@ -738,8 +749,8 @@ export class PgDB extends MastraBase {
       return;
     }
 
-    // Use static registry to coordinate schema setup across all PgDB instances
-    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    const registry = getSchemaSetupRegistry(this.client.$pool);
+    let registryEntry = registry.get(this.schemaName);
     if (registryEntry?.complete) {
       return;
     }
@@ -751,7 +762,7 @@ export class PgDB extends MastraBase {
     // cold schema yields an empty snapshot and falls through to the probe.
     const snapshot = this.schemaSnapshot;
     if (snapshot && snapshot.tables.size > 0) {
-      schemaSetupRegistry.set(this.schemaName, { promise: null, complete: true });
+      registry.set(this.schemaName, { promise: null, complete: true });
       return;
     }
 
@@ -792,21 +803,21 @@ export class PgDB extends MastraBase {
           }
 
           // Mark as complete in the registry
-          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          const entry = registry.get(schemaNameCapture);
           if (entry) {
             entry.complete = true;
           }
           this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
           // On error, clear the registry entry so retry is possible
-          schemaSetupRegistry.delete(schemaNameCapture);
+          registry.delete(schemaNameCapture);
           throw error;
         }
       })();
 
       // Register the promise immediately so concurrent callers can await it
-      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
-      registryEntry = schemaSetupRegistry.get(this.schemaName);
+      registry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = registry.get(this.schemaName);
     }
 
     await registryEntry!.promise;
