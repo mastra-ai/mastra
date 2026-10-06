@@ -39,11 +39,17 @@ function collectErrorText(error: unknown, depth = 0): string[] {
   return texts;
 }
 
+function isRateLimited(error: unknown, depth = 0): boolean {
+  if (depth > MAX_CAUSE_DEPTH || error == null || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  return record.statusCode === 429 || isRateLimited(record.cause, depth + 1);
+}
+
+// No HTTP status is required: errors raised inside a stream reach processAPIError as the
+// provider's raw error payload, which has none.
 export function isContextOverflowError(error: unknown): boolean {
   // Token-per-minute rate limits mention tokens and request size too, but retrying them
   // after observing would not help.
-  if (error && typeof error === 'object' && (error as Record<string, unknown>).statusCode === 429) {
-    return false;
-  }
+  if (isRateLimited(error)) return false;
   return collectErrorText(error).some(text => CONTEXT_OVERFLOW_PATTERNS.some(pattern => pattern.test(text)));
 }
