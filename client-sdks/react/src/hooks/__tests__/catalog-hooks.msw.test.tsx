@@ -94,7 +94,7 @@ describe('useSchedule', () => {
   describe('when given a schedule id', () => {
     it('returns that schedule', async () => {
       server.use(http.get(`${API}/schedules/sched-1`, () => HttpResponse.json(schedule)));
-      const { result } = renderHookWithProviders(() => useSchedule('sched-1'));
+      const { result } = renderHookWithProviders(() => useSchedule({ scheduleId: 'sched-1' }));
       await waitFor(() => expect(result.current.data?.id).toBe('sched-1'));
     });
   });
@@ -110,7 +110,7 @@ describe('useToggleSchedule', () => {
           return HttpResponse.json({ ...schedule, status: 'paused' });
         }),
       );
-      const { result } = renderHookWithProviders(() => useToggleSchedule('sched-1'));
+      const { result } = renderHookWithProviders(() => useToggleSchedule({ scheduleId: 'sched-1' }));
       await act(() => result.current.mutateAsync('pause'));
       expect(paused).toBe(true);
     });
@@ -131,7 +131,7 @@ describe('useToolkits', () => {
   describe('when given a provider', () => {
     it('returns that provider toolkits', async () => {
       server.use(http.get(`${API}/tool-providers/composio/toolkits`, () => HttpResponse.json(toolkits)));
-      const { result } = renderHookWithProviders(() => useToolkits('composio'));
+      const { result } = renderHookWithProviders(() => useToolkits({ providerId: 'composio' }));
       await waitFor(() => expect(result.current.data).toEqual(toolkits));
     });
   });
@@ -147,7 +147,9 @@ describe('useProviderTools', () => {
           return HttpResponse.json(tools);
         }),
       );
-      const { result } = renderHookWithProviders(() => useProviderTools('composio', { toolkit: 'gmail' }));
+      const { result } = renderHookWithProviders(() =>
+        useProviderTools({ providerId: 'composio', params: { toolkit: 'gmail' } }),
+      );
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(toolkit).toBe('gmail');
     });

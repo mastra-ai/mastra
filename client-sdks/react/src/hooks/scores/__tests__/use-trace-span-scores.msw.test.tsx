@@ -53,7 +53,10 @@ describe('useTraceSpanScores', () => {
   describe('when called', () => {
     it('does not fetch without a span', () => {
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1' }), { wrapper });
+      const { result } = renderHook(
+        () => useTraceSpanScores({ traceId: 'trace-1', queryOptions: { enabled: false } }),
+        { wrapper },
+      );
       expect(result.current.fetchStatus).toBe('idle');
     });
   });

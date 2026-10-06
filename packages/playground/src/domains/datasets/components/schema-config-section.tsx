@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useWorkflows, useWorkflowSchema } from '@mastra/react/hooks';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -52,9 +53,10 @@ export function SchemaConfigSection({
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
-  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   // Static schemas for agent and scorer
   const agentSchema = useAgentSchema();

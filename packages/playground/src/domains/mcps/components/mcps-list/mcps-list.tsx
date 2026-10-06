@@ -9,7 +9,7 @@ import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMastraClient } from '@mastra/react';
-import { useMCPServerTools } from '@mastra/react/hooks';
+import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo } from 'react';
 
 type McpServer = McpServerListResponse['servers'][number];
@@ -39,7 +39,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const transportPath = hasSse ? 'sse' : 'mcp';
   const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
-  const { data: tools } = useMCPServerTools(server);
+  const { data: tools } = useMCPServerTools({ selectedServer: server });
   const toolsList = Object.values(tools || {});
   const toolsCount = toolsList.length;
   const agentToolsCount = toolsList.filter(t => t.toolType === 'agent').length;

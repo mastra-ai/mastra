@@ -12,7 +12,7 @@ import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
+import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
@@ -79,7 +79,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             writerOptions?: { messageId?: string },
           ) => {
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
-            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+            if (isDataChunk(data) && emittedMessageId && !data.transient) {
               // Persistence failures must not drop the frame from the stream —
               // delivery to the client takes priority over saving to memory.
               try {
@@ -146,7 +146,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             if (r.part == null) continue;
             const part = r.part as ChunkType<OUTPUT>;
-            if (part.type.startsWith('data-')) {
+            if (isDataChunk(part)) {
               await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
             } else {
               safeEnqueue(controller, part);
@@ -157,9 +157,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
-        if (chunk.type.startsWith('data-')) {
+        if (isDataChunk(chunk)) {
           // Run data-* chunks through output processors before persisting
-          let processedChunk = chunk;
+          let processedChunk: ChunkType<OUTPUT> = chunk;
           if (dataChunkProcessorRunner) {
             const {
               part: processed,
@@ -192,8 +192,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
           if (
-            typeof processedChunk.type === 'string' &&
-            processedChunk.type.startsWith('data-') &&
+            isDataChunk(processedChunk) &&
             responseMessageId &&
             !('transient' in processedChunk && processedChunk.transient)
           ) {

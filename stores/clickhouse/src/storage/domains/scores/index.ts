@@ -46,6 +46,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.#db.ensureSkipIndexes(TABLE_SCORERS);
   }
 
   async dangerouslyClearAll(): Promise<void> {

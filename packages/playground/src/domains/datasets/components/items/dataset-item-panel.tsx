@@ -7,7 +7,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';

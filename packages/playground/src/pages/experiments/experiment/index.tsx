@@ -6,12 +6,8 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useExperiments,
-  useExperimentMetrics,
-} from '@mastra/react/hooks';
+import { useDatasetExperiment, useDatasetExperimentResults, useExperiments } from '@mastra/react/hooks/datasets';
+import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
@@ -85,7 +81,11 @@ function ExperimentPage() {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
-  } = useDatasetExperiment(datasetId, experimentId ?? '');
+  } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
+  });
 
   const {
     data: results,
@@ -98,6 +98,7 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
   const { supportsMetrics } = useObservabilityStorageCapabilities();
@@ -105,6 +106,7 @@ function ExperimentPage() {
     experimentId,
     experimentStatus: experiment?.status,
     supportsMetrics,
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics },
   });
 
   const selection = useExperimentResultsSelection({

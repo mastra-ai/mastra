@@ -1,5 +1,5 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
-import { useTraceSpanScores } from '@mastra/react/hooks';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
@@ -29,7 +29,12 @@ export type TraceScoresTabProps = {
  */
 export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTabProps) {
   const [page, setPage] = useState(0);
-  const { data: scoresData, isLoading } = useTraceSpanScores({ traceId, spanId, page });
+  const { data: scoresData, isLoading } = useTraceSpanScores({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
 
   if (isLoading) {
     return (

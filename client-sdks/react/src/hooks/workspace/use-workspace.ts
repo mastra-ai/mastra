@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from './compatibility';
 import type {
   WorkspaceInfo,
@@ -8,6 +10,15 @@ import type {
   WriteFileParams,
   WriteFileFromFileParams,
 } from './types';
+
+export type DeleteWorkspaceFileParams = { path: string; recursive?: boolean; force?: boolean; workspaceId?: string };
+export type CreateWorkspaceDirectoryParams = { path: string; recursive?: boolean; workspaceId?: string };
+export type IndexWorkspaceContentParams = {
+  workspaceId: string;
+  path: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+};
 
 function getParentPath(path: string): string {
   return path.split('/').slice(0, -1).join('/') || (path.startsWith('/') ? '/' : '.');
@@ -20,10 +31,19 @@ export { isWorkspaceV1Supported, isWorkspaceNotSupportedError };
 // Workspace Info Hook
 // =============================================================================
 
-export const useWorkspaceInfo = (workspaceId?: string) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useWorkspaceInfo = <TData = WorkspaceInfo>({
+  workspaceId,
+  queryOptions,
+}: {
+  workspaceId?: string;
+  queryOptions?: MastraQueryOptions<WorkspaceInfo, TData>;
+} = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
+  return useQuery<WorkspaceInfo, Error, TData>({
     queryKey: ['workspace', 'info', workspaceId],
     queryFn: async (): Promise<WorkspaceInfo> => {
       if (!isWorkspaceV1Supported(client)) {
@@ -35,8 +55,9 @@ export const useWorkspaceInfo = (workspaceId?: string) => {
       const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.info();
     },
-    enabled: !!workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
+    ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };
 
@@ -44,10 +65,12 @@ export const useWorkspaceInfo = (workspaceId?: string) => {
 // List All Workspaces Hook
 // =============================================================================
 
-export const useWorkspaces = () => {
+export const useWorkspaces = <TData = WorkspacesListResponse>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<WorkspacesListResponse, TData> } = {}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
+  return useQuery<WorkspacesListResponse, Error, TData>({
     queryKey: ['workspaces'],
     queryFn: async (): Promise<WorkspacesListResponse> => {
       if (!isWorkspaceV1Supported(client)) {
@@ -56,6 +79,7 @@ export const useWorkspaces = () => {
       return (client as any).listWorkspaces();
     },
     retry: shouldRetryWorkspaceQuery,
+    ...queryOptions,
   });
 };
 
@@ -63,31 +87,45 @@ export const useWorkspaces = () => {
 // Filesystem Hooks
 // =============================================================================
 
-export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean; workspaceId?: string }) => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useWorkspaceFileStat = <TData = FileStatResponse>({
+  path,
+  workspaceId,
+  queryOptions,
+}: {
+  path: string;
+  workspaceId?: string;
+  queryOptions?: MastraQueryOptions<FileStatResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
 
-  return useQuery({
-    queryKey: ['workspace', 'stat', path, options?.workspaceId],
+  return useQuery<FileStatResponse, Error, TData>({
+    queryKey: ['workspace', 'stat', path, workspaceId],
     queryFn: async (): Promise<FileStatResponse> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      if (!options?.workspaceId) {
+      if (!workspaceId) {
         throw new Error('workspaceId is required');
       }
-      const workspace = (client as any).getWorkspace(options.workspaceId);
+      const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.stat(path);
     },
-    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
+    ...queryOptions,
+    enabled: isWorkspaceV1Supported(client) && (queryOptions?.enabled ?? true),
   });
 };
 
-export const useWriteWorkspaceFile = () => {
+export const useWriteWorkspaceFile = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<unknown, WriteFileParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<unknown, Error, WriteFileParams>({
     mutationFn: async (params: WriteFileParams) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -103,14 +141,17 @@ export const useWriteWorkspaceFile = () => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
+    ...queryOptions,
   });
 };
 
-export const useWriteWorkspaceFileFromFile = () => {
+export const useWriteWorkspaceFileFromFile = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<unknown, WriteFileFromFileParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<unknown, Error, WriteFileFromFileParams>({
     mutationFn: async (params: WriteFileFromFileParams) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -130,15 +171,18 @@ export const useWriteWorkspaceFileFromFile = () => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
+    ...queryOptions,
   });
 };
 
-export const useDeleteWorkspaceFile = () => {
+export const useDeleteWorkspaceFile = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<unknown, DeleteWorkspaceFileParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async (params: { path: string; recursive?: boolean; force?: boolean; workspaceId?: string }) => {
+  return useMutation<unknown, Error, DeleteWorkspaceFileParams>({
+    mutationFn: async (params: DeleteWorkspaceFileParams) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
@@ -153,15 +197,18 @@ export const useDeleteWorkspaceFile = () => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
+    ...queryOptions,
   });
 };
 
-export const useCreateWorkspaceDirectory = () => {
+export const useCreateWorkspaceDirectory = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<unknown, CreateWorkspaceDirectoryParams> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async (params: { path: string; recursive?: boolean; workspaceId?: string }) => {
+  return useMutation<unknown, Error, CreateWorkspaceDirectoryParams>({
+    mutationFn: async (params: CreateWorkspaceDirectoryParams) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
@@ -172,6 +219,7 @@ export const useCreateWorkspaceDirectory = () => {
       const parentPath = getParentPath(variables.path);
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
     },
+    ...queryOptions,
   });
 };
 
@@ -179,16 +227,13 @@ export const useCreateWorkspaceDirectory = () => {
 // Search Hooks
 // =============================================================================
 
-export const useIndexWorkspaceContent = () => {
+export const useIndexWorkspaceContent = ({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<unknown, IndexWorkspaceContentParams> } = {}) => {
   const client = useMastraClient();
 
-  return useMutation({
-    mutationFn: async (params: {
-      workspaceId: string;
-      path: string;
-      content: string;
-      metadata?: Record<string, unknown>;
-    }) => {
+  return useMutation<unknown, Error, IndexWorkspaceContentParams>({
+    mutationFn: async (params: IndexWorkspaceContentParams) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
@@ -199,5 +244,6 @@ export const useIndexWorkspaceContent = () => {
         metadata: params.metadata,
       });
     },
+    ...queryOptions,
   });
 };

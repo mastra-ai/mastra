@@ -1,9 +1,5 @@
-import {
-  useCreateFeedback,
-  useDeleteFeedback,
-  useTraceFeedback,
-  useUpdateFeedbackReviewStatus,
-} from '@mastra/react/hooks';
+import { useUpdateFeedbackReviewStatus } from '@mastra/react/hooks/feedback';
+import { useCreateFeedback, useDeleteFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 
 import { FeedbackThread } from './feedback-thread';
@@ -21,7 +17,7 @@ type TraceFeedbackTabProps = {
  */
 export function TraceFeedbackTab({ traceId, variant }: TraceFeedbackTabProps) {
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useTraceFeedback({ traceId, page });
+  const { data, isLoading } = useTraceFeedback({ traceId, page, queryOptions: { enabled: !!traceId } });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId });
   const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();

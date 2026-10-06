@@ -20,6 +20,7 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryTenantScope: true,
     traceQueryContextIds: true,
     threadQuery: true,
+    spanQuery: true,
     feedback: true,
   },
 };
@@ -42,5 +43,6 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryTenantScope: false,
     traceQueryContextIds: false,
     threadQuery: false,
+    spanQuery: false,
   },
 };

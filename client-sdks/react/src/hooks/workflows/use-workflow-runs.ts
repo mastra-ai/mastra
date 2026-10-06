@@ -1,8 +1,9 @@
 import type { GetWorkflowRunByIdResponse, MastraClient } from '@mastra/client-js';
-import type { UseInfiniteQueryResult, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
+import type { QueryKey, UseInfiniteQueryResult, UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraInfiniteQueryOptions, MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
 import { useInView } from '../shared/use-in-view';
 
 type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
@@ -31,10 +32,15 @@ export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
  * `summary: true` asks the server to reduce each run snapshot to `{ status, timestamp }`,
  * avoiding transfer of full snapshots when only list metadata is displayed.
  */
-export const useWorkflowRuns = (
-  workflowId: string,
-  { enabled = true, summary = false }: { enabled?: boolean; summary?: boolean } = {},
-): UseInfiniteQueryResult<ReturnType<typeof selectUniqueRuns>, Error> & {
+export const useWorkflowRuns = <TData = ReturnType<typeof selectUniqueRuns>>({
+  workflowId,
+  summary = false,
+  queryOptions,
+}: {
+  workflowId: string;
+  summary?: boolean;
+  queryOptions?: MastraInfiniteQueryOptions<WorkflowRuns, TData, QueryKey, number>;
+}): UseInfiniteQueryResult<TData, Error> & {
   setEndOfListElement: ReturnType<typeof useInView>['setRef'];
 } => {
   const client = useMastraClient();
@@ -47,10 +53,10 @@ export const useWorkflowRuns = (
         .runs({ limit: PER_PAGE, offset: pageParam * PER_PAGE, ...(summary ? { summary: true } : {}) }),
     initialPageParam: 0,
     getNextPageParam: getWorkflowRunsNextPageParam,
-    select: selectUniqueRuns,
+    select: data => selectUniqueRuns(data) as TData,
     retry: false,
-    enabled,
     refetchInterval: 5000,
+    ...queryOptions,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
@@ -66,23 +72,35 @@ export const useWorkflowRuns = (
 
 export const workflowRunQueryKey = (workflowId: string, runId: string) => ['workflow-run', workflowId, runId] as const;
 
-export const useWorkflowRun = (
-  workflowId: string,
-  runId: string,
-  refetchInterval?: UseQueryOptions<GetWorkflowRunByIdResponse>['refetchInterval'],
-): UseQueryResult<GetWorkflowRunByIdResponse, Error> => {
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export const useWorkflowRun = <TData = GetWorkflowRunByIdResponse>({
+  workflowId,
+  runId,
+  queryOptions,
+}: {
+  workflowId: string;
+  runId: string;
+  queryOptions?: MastraQueryOptions<GetWorkflowRunByIdResponse, TData>;
+}): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  return useQuery({
+  return useQuery<GetWorkflowRunByIdResponse, Error, TData>({
     queryKey: workflowRunQueryKey(workflowId, runId),
     queryFn: () => client.getWorkflow(workflowId).runById(runId),
-    enabled: Boolean(workflowId && runId),
     gcTime: 0,
     staleTime: 0,
-    refetchInterval,
+    ...queryOptions,
   });
 };
 
-export const useDeleteWorkflowRun = (workflowId: string): UseMutationResult<unknown, Error, { runId: string }> => {
+export const useDeleteWorkflowRun = ({
+  workflowId,
+  queryOptions,
+}: {
+  workflowId: string;
+  queryOptions?: MastraMutationOptions<unknown, { runId: string }>;
+}): UseMutationResult<unknown, Error, { runId: string }> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   return useMutation({
@@ -90,5 +108,6 @@ export const useDeleteWorkflowRun = (workflowId: string): UseMutationResult<unkn
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
     },
+    ...queryOptions,
   });
 };

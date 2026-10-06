@@ -17,6 +17,7 @@ import type { DiscordAdapter } from '@chat-adapter/discord';
 import {
   buildInviteUrl,
   guildHealthCheck,
+  listBotGuildIds,
   registerGlobalCommands,
   registerGuildCommands,
   validateApp,
@@ -24,6 +25,7 @@ import {
 import type { DiscordApplication } from './discord-client';
 import { DEFAULT_COMMANDS, hashCommands, normalizeCommands } from './commands';
 import { DiscordInstallStore, PLATFORM, toInstallationInfo } from './install-store';
+import { SNAPSHOT_TTL_MS, hasReconcilableSnapshot, planReconcile } from './reconcile';
 import { DEFAULT_INVITE_PERMISSIONS, DEFAULT_INVITE_SCOPES, DISCORD_API_BASE_URL } from './types';
 import type { DiscordAppConfig, DiscordConnectOptions, DiscordInstallation, DiscordProviderConfig } from './types';
 
@@ -339,40 +341,104 @@ export class DiscordProvider implements ChannelProvider {
     const installedAt = existing?.installedAt ?? new Date();
     const commands = normalizeCommands(options.commands ?? this.#config.commands ?? DEFAULT_COMMANDS);
 
-    // Eager bind: the bot is already a member of the target guild.
+    // Eager bind: the bot is already a member of the target guild. The save
+    // runs inside the per-webhook chain with a fresh re-read — between the
+    // read at the top of connect() and this point, a first interaction or a
+    // reconcile can have activated the pending row, and an unserialized save
+    // would clobber its confirmed guildIds.
     if (options.guildId && (await guildHealthCheck(app.botToken, options.guildId, this.#apiBaseUrl()))) {
-      const installation: DiscordInstallation = {
-        id: installationId,
-        agentId,
-        webhookId,
-        status: 'active',
-        guildIds: [options.guildId],
-        displayName,
-        commands: commands.length ? commands : undefined,
-        commandVersions: existing?.commandVersions,
-        installedAt,
-      };
-      await store.save(installation);
-      await this.#registerCommands(app, installation, options.guildId);
-      await this.#activateInstallation(installation);
-      this.#configured = true;
-      await this.#config.onInstall?.(installation);
-      return { type: 'immediate', installationId };
+      const guildId = options.guildId;
+      return await this.#enqueueWebhookTask(webhookId, async () => {
+        const fresh = existing ? await store.getByWebhookId(webhookId) : null;
+        if (fresh?.status === 'active') {
+          // Activated while we validated — the agent is connected; nothing to redo.
+          return { type: 'immediate' as const, installationId: fresh.id };
+        }
+        const installation: DiscordInstallation = {
+          id: installationId,
+          agentId,
+          webhookId,
+          status: 'active',
+          guildIds: [guildId],
+          displayName,
+          commands: commands.length ? commands : undefined,
+          commandVersions: fresh?.commandVersions ?? existing?.commandVersions,
+          installedAt,
+        };
+        await store.save(installation);
+        await this.#registerCommands(app, installation, guildId);
+        await this.#activateInstallation(installation);
+        this.#configured = true;
+        await this.#config.onInstall?.(installation);
+        return { type: 'immediate' as const, installationId };
+      });
     }
 
     // Invite flow: persist pending, hand back the OAuth2 bot-invite URL.
-    const pending: DiscordInstallation = {
-      id: installationId,
-      agentId,
+    // Snapshot the bot's current guild membership first so the install can be
+    // reconciled once the operator finishes the invite in another tab (see
+    // reconcileInstallation) — without it, activation waits for the first
+    // inbound interaction. Best-effort: a failed listing (or a bot in more
+    // guilds than we page) just falls back to lazy activation. The save runs
+    // inside the per-webhook chain with a fresh re-read so a racing
+    // first-interaction/reconcile activation can't be flipped back to pending.
+    const outcome = await this.#enqueueWebhookTask(
       webhookId,
-      status: 'pending',
-      guildIds: existing?.guildIds ?? [],
-      displayName,
-      commands: commands.length ? commands : undefined,
-      commandVersions: existing?.commandVersions,
-      installedAt,
-    };
-    await store.save(pending);
+      async (): Promise<ChannelConnectResult | DiscordInstallation> => {
+        const fresh = existing ? await store.getByWebhookId(webhookId) : null;
+        if (fresh?.status === 'active') {
+          // The previous invite completed while this connect was validating.
+          return { type: 'immediate', installationId: fresh.id };
+        }
+        const base = fresh ?? existing;
+
+        // A re-connect while pending keeps the ORIGINAL baseline — the
+        // operator may have already completed the previous invite (the bot
+        // joined between the two connect calls), and a fresh snapshot would
+        // include that guild and hide it from the reconcile diff forever —
+        // but only while it's trustworthy: same application, within the
+        // claim window. An expired or foreign-app baseline is replaced.
+        const now = new Date();
+        const reusable =
+          base?.guildSnapshot != null &&
+          base.snapshotApplicationId === app.applicationId &&
+          base.snapshotAt != null &&
+          now.getTime() - base.snapshotAt.getTime() <= SNAPSHOT_TTL_MS;
+        let guildSnapshot: string[] | undefined = reusable ? base!.guildSnapshot : undefined;
+        if (!guildSnapshot) {
+          try {
+            guildSnapshot = (await listBotGuildIds(app.botToken, this.#apiBaseUrl())) ?? undefined;
+          } catch (err) {
+            console.warn('[Discord] Could not snapshot guild membership for pending install:', err);
+          }
+        }
+        const pending: DiscordInstallation = {
+          id: installationId,
+          agentId,
+          webhookId,
+          status: 'pending',
+          guildIds: base?.guildIds ?? [],
+          displayName,
+          commands: commands.length ? commands : undefined,
+          commandVersions: base?.commandVersions,
+          installedAt,
+          guildSnapshot,
+          // Stamp the flow even when the snapshot fetch failed: a live flow
+          // without a baseline must poison reconcile attribution (any new
+          // guild might be THIS invite landing) until the window expires.
+          snapshotAt: now,
+          snapshotApplicationId: app.applicationId,
+          // Remember an explicit target so reconciliation never auto-activates
+          // this install on some other guild the bot happens to join. A
+          // re-connect without a target keeps the original intent.
+          targetGuildId: options.guildId ?? base?.targetGuildId,
+        };
+        await store.save(pending);
+        return pending;
+      },
+    );
+    if ('type' in outcome) return outcome; // activated concurrently
+    const pending = outcome;
     // Global commands don't need a guild — register once now (best-effort).
     // Guild commands wait for the first-seen guild (lazy activation).
     await this.#registerCommands(app, pending);
@@ -394,26 +460,33 @@ export class DiscordProvider implements ChannelProvider {
    * `webhookId` is unknown.
    */
   async activateGuild(webhookId: string, guildId: string): Promise<DiscordInstallation | null> {
-    // Serialize per-webhook activations so each read happens *after* the
-    // previous save. Without this chain, two concurrent first-interactions can:
-    //   - lose a guildId (both reads see the same row, second save overwrites first)
-    //   - fire onInstall twice / send duplicate command-registration PUTs
-    // The chain is dropped once the last queued activation settles so keys
-    // don't accumulate forever.
+    return this.#enqueueWebhookTask(webhookId, () => this.#activateGuildNow(webhookId, guildId));
+  }
+
+  #activationChains = new Map<string, Promise<unknown>>();
+
+  /**
+   * Serialize every mutation of one webhook's installation row — activations,
+   * pending-row saves, runtime bring-up, disconnects — so each task's read
+   * happens *after* the previous task's save. Without the chain, two
+   * concurrent first-interactions can lose a guildId (both read the same row,
+   * second save overwrites the first) or fire onInstall twice; a connect's
+   * pending save can clobber a row a racing interaction just activated; and a
+   * disconnect can land mid-activation and be resurrected by its post-HTTP
+   * persistence. The chain entry is dropped once the last queued task settles
+   * so keys don't accumulate forever.
+   */
+  async #enqueueWebhookTask<T>(webhookId: string, task: () => Promise<T>): Promise<T> {
     const prev = this.#activationChains.get(webhookId) ?? Promise.resolve();
-    const next: Promise<DiscordInstallation | null> = prev
-      .catch(() => {})
-      .then(() => this.#activateGuildNow(webhookId, guildId));
+    const next = prev.catch(() => {}).then(task);
     this.#activationChains.set(webhookId, next);
     try {
       return await next;
     } finally {
-      // Only clear our own entry — a newer activation may have replaced it.
+      // Only clear our own entry — a newer task may have replaced it.
       if (this.#activationChains.get(webhookId) === next) this.#activationChains.delete(webhookId);
     }
   }
-
-  #activationChains = new Map<string, Promise<unknown>>();
 
   async #activateGuildNow(webhookId: string, guildId: string): Promise<DiscordInstallation | null> {
     const store = await this.#getStore();
@@ -426,6 +499,10 @@ export class DiscordProvider implements ChannelProvider {
 
     if (!known) installation.guildIds.push(guildId);
     installation.status = 'active';
+    delete installation.guildSnapshot; // the reconcile baseline is spent once a guild is confirmed
+    delete installation.snapshotAt;
+    delete installation.snapshotApplicationId;
+    delete installation.targetGuildId;
     await store.save(installation);
     // Register this newly-seen guild's commands (best-effort, hash-skipped).
     const app = await store.getAppConfig();
@@ -450,16 +527,127 @@ export class DiscordProvider implements ChannelProvider {
     if (!existing) {
       throw new Error(`No Discord installation found for agent "${agentId}"`);
     }
-    this.#adapters.delete(existing.id);
-    await store.deleteByAgent(agentId);
+    // Serialize the delete behind any in-flight activation for this webhook.
+    // An activation's post-HTTP persistence (the command-version save in
+    // #registerCommands) would otherwise land AFTER the delete and resurrect
+    // the disconnected row.
+    await this.#enqueueWebhookTask(existing.webhookId, async () => {
+      this.#adapters.delete(existing.id);
+      await store.deleteByAgent(agentId);
+    });
     this.#configured = (await store.getAppConfig()) != null || (await store.list()).some(i => i.status === 'active');
   }
 
-  /** List installations (public info only — no secrets). */
+  /**
+   * List installations (public info only — no secrets). A pure read: pending
+   * installs are confirmed through the write-authorized
+   * {@link reconcileInstallation} path, never as a listing side effect.
+   */
   async listInstallations(): Promise<ChannelInstallationInfo[]> {
     const store = await this.#getStore();
     const installations = await store.list();
     return installations.map(toInstallationInfo);
+  }
+
+  /**
+   * Activate an agent's pending install if its invite has since been completed.
+   *
+   * The invite URL carries no `redirect_uri` (the app would have to allowlist
+   * every operator origin), so nothing calls back when the operator authorizes
+   * the bot — and a pending install has no adapter, so no interaction or
+   * gateway event can reach it either. Instead, each pending install carries a
+   * {@link DiscordInstallation.guildSnapshot} taken when the invite was issued;
+   * this diffs it against the bot's current membership and activates the
+   * install when exactly one new, uncontested guild has appeared (the full
+   * claim rules live in {@link planReconcile}). The claim analysis spans every
+   * install — other pending invites contest the diff — but only **this**
+   * agent's install can activate: the caller holds write access for this agent
+   * alone. Anything ambiguous stays pending and retries on the next call, with
+   * the first interaction as the authoritative fallback. Best-effort: failures
+   * log and resolve rather than throw.
+   *
+   * Called by the server's reconcile route (write-authorized); Studio invokes
+   * it on window focus while a connect is in flight. Returns the (possibly
+   * just-activated) installation's public info, or `null` when the agent has
+   * no installation.
+   *
+   * Limitation: the bot-invite URL is per-app, not per-install, so when the
+   * operator invites the bot to a new server *for an already-active install*
+   * (as `connect()`'s already-connected error suggests) while an invite for
+   * another agent is outstanding, nothing distinguishes the two intents — the
+   * new guild can be attributed to the pending install. Reconciliation is only
+   * reliable while a single invite flow is in progress.
+   */
+  async reconcileInstallation(agentId: string): Promise<ChannelInstallationInfo | null> {
+    const store = await this.#getStore();
+    const existing = await store.getByAgent(agentId);
+    if (!existing) return null;
+    if (existing.status === 'pending') {
+      // Single-flight per agent: concurrent reconciles (e.g. rapid focus
+      // events) share one pass instead of racing duplicate membership fetches.
+      const inflight = this.#reconcileInflight.get(agentId);
+      if (inflight) {
+        await inflight;
+      } else {
+        const run = this.#reconcilePendingInstallation(store, agentId).finally(() => {
+          this.#reconcileInflight.delete(agentId);
+        });
+        this.#reconcileInflight.set(agentId, run);
+        await run;
+      }
+    }
+    const fresh = await store.getByAgent(agentId);
+    return fresh ? toInstallationInfo(fresh) : null;
+  }
+
+  #reconcileInflight = new Map<string, Promise<void>>();
+
+  async #reconcilePendingInstallation(store: DiscordInstallStore, agentId: string): Promise<void> {
+    try {
+      const app = await store.getAppConfig();
+      if (!app) return;
+      // Cheap pre-check: skip the membership fetch when this agent's install
+      // can't reconcile anyway (no baseline, expired window, foreign app).
+      const target = await store.getByAgent(agentId);
+      if (!target || target.status !== 'pending') return;
+      if (!hasReconcilableSnapshot(target, app.applicationId, new Date())) return;
+
+      const current = await listBotGuildIds(app.botToken, this.#apiBaseUrl());
+      if (!current) return; // membership unknown (too many guilds to page) — stay pending
+
+      // Read the claimant inventory AFTER the slow membership fetch. A
+      // connect() landing during the fetch must be counted — computed against
+      // a pre-fetch list, its invite's guild would look uncontested and could
+      // be attributed to this older pending install.
+      const all = await store.list();
+      const activation = planReconcile({
+        installations: all,
+        currentGuildIds: current,
+        applicationId: app.applicationId,
+        now: new Date(),
+      }).find(a => a.agentId === agentId);
+      if (!activation) return;
+
+      // Activate the row AND bring the runtime up inside one chain step, so a
+      // racing first interaction (whose webhook handler also builds the
+      // adapter) serializes behind the whole bring-up instead of just the row
+      // update — two unserialized bring-ups would start two gateway loops.
+      await this.#enqueueWebhookTask(activation.webhookId, async () => {
+        const activated = await this.#activateGuildNow(activation.webhookId, activation.guildId);
+        if (!activated || this.#adapters.has(activated.id)) return; // runtime already up
+        try {
+          await this.#activateInstallation(activated);
+        } catch (err) {
+          // The guild IS confirmed (row saved active) but the runtime didn't
+          // come up. Drop the half-built adapter so the first webhook hit —
+          // or a provider restart — rebuilds it cleanly.
+          this.#adapters.delete(activated.id);
+          throw err;
+        }
+      });
+    } catch (err) {
+      console.warn(`[Discord] Pending-install reconcile for agent "${agentId}" failed (will retry):`, err);
+    }
   }
 
   /** The full installation for an agent (no secrets live on it), or `null`. */
@@ -587,7 +775,13 @@ export class DiscordProvider implements ChannelProvider {
       }
       installation.commandVersions = { ...versions, [key]: hash };
       const store = await this.#getStore();
-      await store.save(installation);
+      // The PUT above is a long await — the installation may have been
+      // disconnected meanwhile. Persist the version onto the LIVE row only;
+      // saving the closed-over object would resurrect a deleted installation.
+      const fresh = await store.getByWebhookId(installation.webhookId);
+      if (!fresh) return;
+      fresh.commandVersions = { ...fresh.commandVersions, [key]: hash };
+      await store.save(fresh);
     } catch (err) {
       console.warn(`[Discord] command registration failed (${scope}${guildId ? `, guild ${guildId}` : ''}):`, err);
     }

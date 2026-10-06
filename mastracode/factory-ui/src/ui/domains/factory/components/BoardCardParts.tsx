@@ -11,9 +11,17 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardState';
-import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
+import {
+  HIDDEN_CARD_LABELS,
+  SOURCE_LABELS,
+  metadataLabelColors,
+  metadataLabels,
+  pullRequestStatusForItem,
+} from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import type { WorkItemSource } from '../services/workItems';
+import type { WorkItem, WorkItemSource } from '../services/workItems';
+import { SourceIcon } from './BoardIcons';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -22,6 +30,11 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
       <span id={id}>{title}</span>
     </>
   );
+}
+
+export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
+  if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
+  return <SourceIcon source={item.source} />;
 }
 
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
@@ -37,15 +50,19 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// Beside the card's menu, in the slot where the open copy puts Collapse; the click falls through to the card.
-export function CardDetailsHint() {
+// A mouse twin of the card's own details button, which keeps the keyboard and screen-reader path.
+export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   return (
-    <span
+    <button
+      type="button"
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      tabIndex={-1}
+      draggable={false}
+      onClick={onOpen}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
-    </span>
+    </button>
   );
 }
 
@@ -127,15 +144,10 @@ function labelDotClass(label: string): string {
   return 'bg-muted-foreground';
 }
 
-export function CardLabels({
-  labels,
-  colors = {},
-}: {
-  labels: readonly string[];
-  colors?: Readonly<Record<string, string>>;
-}) {
-  const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
+  const displayLabels = metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
+  const colors = metadataLabelColors(metadata);
   return (
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">

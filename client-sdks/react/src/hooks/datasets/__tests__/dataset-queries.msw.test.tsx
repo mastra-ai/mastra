@@ -62,7 +62,7 @@ describe('useDataset', () => {
       server.use(http.get('*/api/datasets/ds-1', () => HttpResponse.json(dataset)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useDataset('ds-1'), { wrapper });
+      const { result } = renderHook(() => useDataset({ datasetId: 'ds-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data?.name).toBe('Support questions'));
     });
@@ -75,7 +75,7 @@ describe('useDatasetItem', () => {
       server.use(http.get('*/api/datasets/ds-1/items/item-1', () => HttpResponse.json(item)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useDatasetItem('ds-1', 'item-1'), { wrapper });
+      const { result } = renderHook(() => useDatasetItem({ datasetId: 'ds-1', itemId: 'item-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data?.id).toBe('item-1'));
     });
@@ -88,7 +88,7 @@ describe('useDatasetItems', () => {
       server.use(http.get('*/api/datasets/ds-1/items', () => HttpResponse.json(itemsPage)));
 
       const { wrapper } = makeWrapper();
-      const { result } = renderHook(() => useDatasetItems('ds-1'), { wrapper });
+      const { result } = renderHook(() => useDatasetItems({ datasetId: 'ds-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data.map(i => i.id)).toEqual(['item-1']));
       expect(result.current.total).toBe(1);

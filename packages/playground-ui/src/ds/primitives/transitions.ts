@@ -13,6 +13,8 @@
 export const controlStateColorTransition =
   'transition-[color] duration-fast ease-out-custom motion-reduce:transition-none';
 
+export const heightTransition = 'transition-[height] duration-normal ease-out-custom motion-reduce:transition-none';
+
 export const transitions = {
   // For color changes (background, text, border)
   colors: 'transition-colors duration-normal ease-out-custom',

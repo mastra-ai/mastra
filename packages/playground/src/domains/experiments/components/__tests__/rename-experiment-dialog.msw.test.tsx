@@ -1,4 +1,4 @@
-import { useDatasetExperiment } from '@mastra/react/hooks';
+import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -16,7 +16,11 @@ const patchCalls: Array<{ datasetId: string; experimentId: string; body: Record<
 
 /** Mirrors the detail page: the title comes from the experiment query so a rename must refresh it. */
 function Harness() {
-  const { data } = useDatasetExperiment('dataset-1', base.id);
+  const { data } = useDatasetExperiment({
+    datasetId: 'dataset-1',
+    experimentId: base.id,
+    queryOptions: { enabled: Boolean('dataset-1') && Boolean(base.id) },
+  });
   const [open, setOpen] = useState(false);
   if (!data) return null;
   return (

@@ -9,8 +9,13 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import type { ProcessorDetail, ProcessorPhase, MastraDBMessage, ExecuteProcessorResponse } from '@mastra/react/hooks';
-import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks';
+import type {
+  ProcessorDetail,
+  ProcessorPhase,
+  MastraDBMessage,
+  ExecuteProcessorResponse,
+} from '@mastra/react/hooks/processors';
+import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks/processors';
 import CodeMirror from '@uiw/react-codemirror';
 import { Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -34,7 +39,11 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
-  const { data: processor, isLoading, error } = useProcessor(processorId);
+  const {
+    data: processor,
+    isLoading,
+    error,
+  } = useProcessor({ processorId: processorId, queryOptions: { enabled: !!processorId } });
 
   useEffect(() => {
     if (error) {

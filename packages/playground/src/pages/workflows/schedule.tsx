@@ -10,7 +10,7 @@ import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useSchedule, useScheduleTriggers, useToggleSchedule } from '@mastra/react/hooks';
+import { useSchedule, useScheduleTriggers, useToggleSchedule } from '@mastra/react/hooks/schedules';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -38,7 +38,7 @@ export default function SchedulePage() {
     { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
   ];
   const { paths } = useLinkComponent();
-  const { data: schedule, error } = useSchedule(scheduleId);
+  const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
   const {
     data: triggers,
     isLoading: triggersLoading,
@@ -46,8 +46,8 @@ export default function SchedulePage() {
     hasNextPage: triggersHasNextPage,
     isFetchingNextPage: triggersIsFetchingNextPage,
     setEndOfListElement: triggersSetEndOfListElement,
-  } = useScheduleTriggers(scheduleId);
-  const toggle = useToggleSchedule(scheduleId);
+  } = useScheduleTriggers({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
+  const toggle = useToggleSchedule({ scheduleId: scheduleId });
 
   if (error && is401UnauthorizedError(error)) {
     return (

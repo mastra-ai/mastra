@@ -1,6 +1,10 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { useCreateWorkflowRun, useCancelWorkflowRun } from '@mastra/react';
-import { useWorkflow, workflowRunQueryKey } from '@mastra/react/hooks';
+import {
+  useCreateWorkflowRun,
+  useCancelWorkflowRun,
+  useWorkflow,
+  workflowRunQueryKey,
+} from '@mastra/react/hooks/workflows';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -45,7 +49,15 @@ export function WorkflowRunProvider({
 }) {
   const resetStepDetail = useContext(WorkflowStepDetailContext)?.resetStepDetail;
   const [debugMode, setDebugMode] = useState(false);
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const queryClient = useQueryClient();
   const createWorkflowRun = useCreateWorkflowRun();
   const cancelWorkflowRun = useCancelWorkflowRun();

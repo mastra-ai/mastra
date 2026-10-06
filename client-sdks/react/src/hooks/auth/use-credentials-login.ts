@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
 
 export type CredentialsLoginRequest = {
   email: string;
@@ -23,7 +24,7 @@ export type CredentialsLoginResponse = {
  *
  * @example
  * ```tsx
- * import { useCredentialsLogin } from '@mastra/react/hooks';
+ * import { useCredentialsLogin } from '@mastra/react/hooks/auth';
  *
  * function LoginForm() {
  *   const { mutate: login, isPending, error } = useCredentialsLogin();
@@ -89,7 +90,9 @@ export async function makeCredentialsLoginRequest(
   return data;
 }
 
-export function useCredentialsLogin() {
+export function useCredentialsLogin({
+  queryOptions,
+}: { queryOptions?: MastraMutationOptions<CredentialsLoginResponse, CredentialsLoginRequest> } = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -99,5 +102,6 @@ export function useCredentialsLogin() {
       // Invalidate auth queries to refetch user state
       void queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
+    ...queryOptions,
   });
 }

@@ -12,8 +12,8 @@ export function SidebarNewNav({ children, className, ...props }: SidebarNewNavPr
     <MainSidebarNav
       className={cn(
         '-mr-1.5',
-        '[&_[data-orientation=vertical]]:w-1 [&_[data-orientation=vertical]]:p-0',
-        'focus-within:[&_[data-orientation=vertical][data-has-overflow-y]]:opacity-100',
+        '[&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:w-1 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:p-0',
+        'focus-within:[&_[data-slot=scroll-area-scrollbar][data-orientation=vertical][data-has-overflow-y]]:opacity-100',
         isMobile && '[&_a]:min-h-11 [&_a]:touch-manipulation [&_button]:min-h-11 [&_button]:touch-manipulation',
         className,
       )}

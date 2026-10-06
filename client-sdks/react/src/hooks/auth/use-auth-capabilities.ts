@@ -1,6 +1,8 @@
 import type { MastraClient } from '@mastra/client-js';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 import { getClientQueryKey } from './get-client-query-key';
 import type { AuthCapabilities } from './types';
@@ -43,7 +45,7 @@ export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise
  *
  * @example
  * ```tsx
- * import { useAuthCapabilities } from '@mastra/react/hooks';
+ * import { useAuthCapabilities } from '@mastra/react/hooks/auth';
  *
  * function AuthStatus() {
  *   const { data: capabilities, isLoading } = useAuthCapabilities();
@@ -59,13 +61,16 @@ export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise
  * }
  * ```
  */
-export function useAuthCapabilities() {
+export function useAuthCapabilities<TData = AuthCapabilities>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<AuthCapabilities, TData> } = {}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
-  return useQuery<AuthCapabilities>({
+  return useQuery<AuthCapabilities, Error, TData>({
     queryKey: ['auth', 'capabilities', getClientQueryKey(client)],
     queryFn: () => makeAuthCapabilitiesRequest(client),
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false, // Don't retry auth requests
+    ...queryOptions,
   });
 }

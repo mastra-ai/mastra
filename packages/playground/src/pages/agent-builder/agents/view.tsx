@@ -1,7 +1,8 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import type { StoredAgent } from '@mastra/react/hooks';
-import { useCurrentUser, useStoredAgent } from '@mastra/react/hooks';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
+import { useStoredAgent } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { memo, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
@@ -21,7 +22,11 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 
 export default function AgentBuilderAgentView() {
   const { id: agentId } = useParams<{ id: string }>();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(agentId, { status: 'draft' });
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent({
+    agentId: agentId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { canWrite } = useBuilderAgentAccess();
   useChannelConnectToast();

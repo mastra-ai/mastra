@@ -3,7 +3,7 @@ import { TokenUsageTimelineCardView } from '@mastra/playground-ui/domains/metric
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useTokenUsageTimeSeries } from '@mastra/react/hooks';
+import { useTokenUsageTimeSeries } from '@mastra/react/hooks/metrics';
 
 export function TokenUsageTimelineCard() {
   const { data, isLoading, isError } = useTokenUsageTimeSeries(useMetricsFilters());

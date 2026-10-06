@@ -103,7 +103,7 @@ describe('useGetBackgroundTaskById', () => {
       };
       server.use(http.get(`${API}/background-tasks/task-1`, () => HttpResponse.json(task)));
 
-      const { result } = renderHookWithProviders(() => useGetBackgroundTaskById('task-1'));
+      const { result } = renderHookWithProviders(() => useGetBackgroundTaskById({ backgroundTaskId: 'task-1' }));
 
       await waitFor(() => expect(result.current.data).toEqual(task));
     });

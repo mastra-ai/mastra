@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AskUser } from './ask-user';
 import type { AskUserPayload } from './ask-user';
 
@@ -15,11 +15,6 @@ afterEach(cleanup);
 
 // Base UI's Radio synthesizes a PointerEvent on click, which jsdom does not
 // implement. Polyfill it with the available MouseEvent constructor.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 describe('AskUser', () => {
   describe('when free text is submitted with Enter', () => {

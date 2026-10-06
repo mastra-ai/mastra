@@ -4,7 +4,7 @@ import { ModelUsageCostCardView } from '@mastra/playground-ui/domains/metrics/co
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useModelUsageCostMetrics } from '@mastra/react/hooks';
+import { useModelUsageCostMetrics } from '@mastra/react/hooks/metrics';
 
 export function ModelUsageCostCard() {
   const { data, isLoading, isError } = useModelUsageCostMetrics(useMetricsFilters());

@@ -2581,6 +2581,9 @@ importers:
       react-router:
         specifier: ^8.0.0
         version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.2.2
@@ -4640,6 +4643,9 @@ importers:
       '@mastra/slack':
         specifier: workspace:^
         version: link:../../channels/slack
+      '@mastra/teams':
+        specifier: workspace:^
+        version: link:../../channels/teams
       '@mastra/telegram':
         specifier: workspace:^
         version: link:../../channels/telegram
@@ -4653,6 +4659,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      hono:
+        specifier: 4.13.8
+        version: 4.13.8
       prettier:
         specifier: 3.9.5
         version: 3.9.5
@@ -37023,7 +37032,7 @@ snapshots:
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.11)':
     optionalDependencies:
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@couchbase/couchbase-darwin-arm64-napi@4.7.1':
     optional: true
@@ -45796,7 +45805,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@supabase/auth-js@2.111.0':
     dependencies:

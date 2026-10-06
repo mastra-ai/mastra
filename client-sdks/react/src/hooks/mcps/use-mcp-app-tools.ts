@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 export interface McpAppToolInfo {
   serverId: string;
@@ -17,7 +19,9 @@ export interface McpAppToolInfo {
  * and the namespaced name (`${serverId}_${toolName}`) so that agent tools
  * sourced via `MCPClient.listTools()` (which namespaces) can be resolved.
  */
-export function useMcpAppTools() {
+export function useMcpAppTools<TData = Record<string, McpAppToolInfo>>({
+  queryOptions,
+}: { queryOptions?: MastraQueryOptions<Record<string, McpAppToolInfo>, TData> } = {}): UseQueryResult<TData, Error> {
   const client = useMastraClient();
 
   return useQuery({
@@ -58,5 +62,6 @@ export function useMcpAppTools() {
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    ...queryOptions,
   });
 }

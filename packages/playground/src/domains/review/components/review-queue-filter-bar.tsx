@@ -3,7 +3,9 @@ import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
-import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useProcessors } from '@mastra/react/hooks/processors';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -113,12 +115,10 @@ export function ReviewQueueFilterBar({
   tagOptions,
   onChange,
 }: ReviewQueueFilterBarProps) {
-  const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({
-    enabled: targetType === 'workflow',
-  });
+  const { data: agents } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
+  const { data: workflows } = useWorkflows({ queryOptions: { enabled: targetType === 'workflow' } });
   const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors } = useProcessors({ queryOptions: { enabled: targetType === 'processor' } });
 
   const fields = useMemo<FilterBarField[]>(() => {
     const targetOptions =

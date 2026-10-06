@@ -8,7 +8,8 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useCurrentUser, useStoredSkills } from '@mastra/react/hooks';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -32,7 +33,7 @@ export default function AgentBuilderSkillsPage() {
   const goToCreate = () => navigate('/agent-builder/skills/create', { viewTransition: true });
   const goToEdit = (skillId: string) => navigate(`/agent-builder/skills/${skillId}/edit`, { viewTransition: true });
 
-  const { data, isLoading, error } = useStoredSkills({ enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredSkills({ queryOptions: { enabled: !isCurrentUserLoading } });
   const [search, setSearch] = useState('');
 
   const skills = useMemo(() => data?.skills ?? [], [data?.skills]);

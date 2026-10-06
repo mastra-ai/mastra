@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
-import { useAgentMessages } from '@mastra/react/hooks';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -142,10 +141,11 @@ describe('ToolCard dispatch', () => {
         }),
       );
 
-      expect(screen.getAllByRole<HTMLImageElement>('img', { name: 'Preview' }).map(image => image.src)).toEqual([
-        'https://example.com/generated.png',
-        'data:image/webp;base64,UklGRg==',
-        'data:image/jpeg;base64,/9j/4AAQ',
+      const images = within(screen.getByTestId('tool-result-media')).getAllByRole<HTMLImageElement>('img');
+      expect(images.map(image => ({ src: image.src, alt: image.alt }))).toEqual([
+        { src: 'https://example.com/generated.png', alt: 'generated.png' },
+        { src: 'data:image/webp;base64,UklGRg==', alt: 'Image' },
+        { src: 'data:image/jpeg;base64,/9j/4AAQ', alt: 'Image' },
       ]);
     });
   });
@@ -529,7 +529,10 @@ describe('ToolCard dispatch', () => {
         />,
         { wrapper: Providers },
       );
-      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+      expect(screen.queryByRole('button', { expanded: false })).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Approval required');
       expect(screen.getByRole('button', { name: 'Approve agent-head' })).not.toBeNull();
     });
   });
