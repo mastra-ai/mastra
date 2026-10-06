@@ -146,6 +146,9 @@ describe('Overview', () => {
     );
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.queryByText('0 running · 0 in the pipeline')).not.toBeInTheDocument();
+    for (const name of ['Nothing stalled', 'Nothing running', 'Nothing moved', 'All clear']) {
+      expect(await screen.findByRole('heading', { name, level: 4 })).toBeInTheDocument();
+    }
   });
 
   it('keeps the graph and live work visible with just one item', async () => {

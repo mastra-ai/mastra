@@ -74,7 +74,7 @@ export function OverviewListEmptyState({ kind, title }: { kind: PreviewKind; tit
       <svg aria-hidden="true" viewBox="0 0 240 96" className="text-placeholder w-28 shrink-0 sm:w-48">
         <PreviewRows kind={kind} />
       </svg>
-      <Txt as="h3" variant="subheading">
+      <Txt as="h4" variant="subheading">
         {title}
       </Txt>
     </div>
