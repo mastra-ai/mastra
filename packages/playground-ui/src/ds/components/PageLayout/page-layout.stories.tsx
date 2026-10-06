@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BoxesIcon, PlusIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { expect, within } from 'storybook/test';
 
 import { ActionRow } from '../ActionRow';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
@@ -75,6 +76,39 @@ export const Container: Story = {
       </PageLayout>
     </StoryFrame>
   ),
+};
+
+export const TopBarSpacingComparison: Story = {
+  render: () => (
+    <div className="grid grid-cols-2">
+      <StoryFrame>
+        <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+          <div className="mt-6">{resourceList}</div>
+        </PageLayout>
+      </StoryFrame>
+      <StoryFrame>
+        <PageLayout header={pageHeader}>
+          <div className="mt-6">{resourceList}</div>
+        </PageLayout>
+      </StoryFrame>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const layouts = canvasElement.querySelectorAll<HTMLElement>('[data-slot="page-layout"]');
+    const offsets = Array.from(layouts, layout => {
+      const header = layout.querySelector('[data-slot="page-layout-header"]');
+      if (!header) throw new Error('Missing page layout header');
+      const body = within(within(layout).getByRole('main')).getByRole('list');
+      const top = layout.getBoundingClientRect().top;
+      return {
+        header: header.getBoundingClientRect().top - top,
+        body: body.getBoundingClientRect().top - top,
+      };
+    });
+
+    await expect(offsets.map(offset => offset.header)).toEqual([56, 56]);
+    await expect(offsets[1]?.body).toBe(offsets[0]?.body);
+  },
 };
 
 export const Narrow: Story = {
