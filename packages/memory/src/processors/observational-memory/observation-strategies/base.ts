@@ -58,11 +58,12 @@ function isOmPart(part: unknown): boolean {
  */
 function afterOwnStartMarker(message: MastraDBMessage, marker: { type: string; data: unknown }): number {
   const cycleId = (marker.data as { cycleId?: string } | undefined)?.cycleId;
-  if (!cycleId || marker.type === 'data-om-observation-start') return -1;
+  const startType = marker.type.startsWith('data-om-buffering-')
+    ? 'data-om-buffering-start'
+    : 'data-om-observation-start';
+  if (!cycleId || marker.type === startType) return -1;
   const parts = message.content?.parts ?? [];
-  const start = parts.findIndex(
-    (part: any) => part?.type === 'data-om-observation-start' && part?.data?.cycleId === cycleId,
-  );
+  const start = parts.findIndex((part: any) => part?.type === startType && part?.data?.cycleId === cycleId);
   if (start === -1) return -1;
   let index = start + 1;
   while (index < parts.length && isOmPart(parts[index])) index++;
@@ -682,6 +683,12 @@ export abstract class ObservationStrategy {
       notAfter?: Date;
       /** Only mark a message whose content is all observed, or that carries this cycle's start marker. */
       onlyIfObserved?: boolean;
+      /**
+       * Only mark the message that carries this cycle's start marker. Any newer assistant message
+       * may still be streaming: the agent re-saves it whole from its own copy, which would drop the
+       * marker, and writing back the copy read here could drop content the agent saved meanwhile.
+       */
+      onCycleStartMessage?: boolean;
     },
   ): Promise<void> {
     try {
@@ -696,9 +703,11 @@ export abstract class ObservationStrategy {
       );
       // An end/failed marker belongs with this cycle's start marker, even if a newer assistant
       // message was saved meanwhile; otherwise the start marker would look in progress forever.
-      const msg =
-        (opts?.onlyIfObserved ? assistants.find(m => afterOwnStartMarker(m, marker) !== -1) : undefined) ??
-        assistants[0];
+      const startMessage =
+        opts?.onlyIfObserved || opts?.onCycleStartMessage
+          ? assistants.find(m => afterOwnStartMarker(m, marker) !== -1)
+          : undefined;
+      const msg = opts?.onCycleStartMessage ? startMessage : (startMessage ?? assistants[0]);
       if (!msg) return;
       const markerData = marker.data as { cycleId?: string } | undefined;
       const alreadyPresent =
