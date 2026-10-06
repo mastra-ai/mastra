@@ -3824,6 +3824,18 @@ export class Run<
     return this.#abortController;
   }
 
+  #getParentWorkflow(parent: NestedWorkflowParent) {
+    if (!this.#mastra) {
+      return undefined;
+    }
+
+    if (this.#mastra.__hasInternalWorkflow(parent.workflowId, parent.runId)) {
+      return this.#mastra.__getInternalWorkflow(parent.workflowId, parent.runId);
+    }
+
+    return this.#mastra.getWorkflowById(parent.workflowId);
+  }
+
   #wakeParentWorkflow(): void {
     if (!this.parentWorkflow || !this.#mastra) {
       return;
@@ -3831,7 +3843,7 @@ export class Run<
 
     const parent = this.parentWorkflow;
     void (async () => {
-      const parentWorkflow = this.#mastra?.getWorkflowById(parent.workflowId);
+      const parentWorkflow = this.#getParentWorkflow(parent);
       if (!parentWorkflow) {
         throw new Error(`Parent workflow ${parent.workflowId} is not registered`);
       }
@@ -5196,7 +5208,7 @@ export class Run<
       | undefined;
 
     if (this.parentWorkflow && !params.skipParentWorkflowClaim && workflowsStore) {
-      const parentWorkflow = this.#mastra?.getWorkflowById(this.parentWorkflow.workflowId);
+      const parentWorkflow = this.#getParentWorkflow(this.parentWorkflow);
       if (!parentWorkflow) {
         await releaseClaimIfUnused();
         throw new Error(`Parent workflow ${this.parentWorkflow.workflowId} is not registered`);
