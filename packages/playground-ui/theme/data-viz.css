@@ -21,6 +21,14 @@
   --chart-sequential-5: oklch(0.62 0.18 290);
   --chart-sequential-pale: var(--purple-200);
 
+  /* Share lists: green, sky, violet, teal, indigo, far apart on the wheel; rest is a quiet gray. */
+  --chart-share-1: oklch(0.82 0.16 145);
+  --chart-share-2: oklch(0.78 0.11 228);
+  --chart-share-3: oklch(0.72 0.11 295);
+  --chart-share-4: oklch(0.8 0.1 185);
+  --chart-share-5: oklch(0.66 0.12 265);
+  --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
   --span-model: oklch(0.75 0.15 320);
@@ -44,6 +52,13 @@ html.light {
   --chart-orange: var(--orange-600);
   --chart-pink: var(--pink-500);
   --chart-red: var(--red-700);
+
+  --chart-share-1: oklch(0.64 0.17 150);
+  --chart-share-2: oklch(0.6 0.13 235);
+  --chart-share-3: oklch(0.56 0.15 295);
+  --chart-share-4: oklch(0.64 0.11 190);
+  --chart-share-5: oklch(0.5 0.15 265);
+  --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
 
   --span-agent: oklch(0.55 0.15 250);
   --span-workflow: oklch(0.55 0.093 200);
@@ -78,6 +93,12 @@ html.light {
   --color-chart-sequential-4: var(--chart-sequential-4);
   --color-chart-sequential-5: var(--chart-sequential-5);
   --color-chart-sequential-pale: var(--chart-sequential-pale);
+  --color-chart-share-1: var(--chart-share-1);
+  --color-chart-share-2: var(--chart-share-2);
+  --color-chart-share-3: var(--chart-share-3);
+  --color-chart-share-4: var(--chart-share-4);
+  --color-chart-share-5: var(--chart-share-5);
+  --color-chart-share-rest: var(--chart-share-rest);
   --color-span-agent: var(--span-agent);
   --color-span-workflow: var(--span-workflow);
   --color-span-model: var(--span-model);

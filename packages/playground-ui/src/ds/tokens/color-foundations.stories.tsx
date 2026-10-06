@@ -348,6 +348,11 @@ const chartRows: TokenRow[] = [
     use: step === 1 ? 'Ordered values, highest contrast against the page first' : '',
   })),
   { token: 'chart-sequential-pale', use: 'Secondary flow beside the sequential scale, same in both modes' },
+  ...[1, 2, 3, 4, 5].map(step => ({
+    token: `chart-share-${step}`,
+    use: step === 1 ? 'Share list rows, in rank order: green, sky, violet, teal, indigo' : '',
+  })),
+  { token: 'chart-share-rest', use: 'Share list rows past the colored ones, folded into one gray' },
 ];
 
 const spanRows: TokenRow[] = [

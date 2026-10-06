@@ -75,30 +75,31 @@ export type MetricsShareListProps = MetricsShareListHeaderProps & {
   className?: string;
 };
 
-/** Brand green, toned down for large fills. */
-const DEFAULT_COLOR = 'oklch(82% .16 145)';
+/** Brand green, toned down for large fills. Theme token: tuned for dark and light. */
+const DEFAULT_COLOR = 'var(--chart-share-1)';
 /**
  * Cool hues for long lists: green, sky, violet, teal, indigo, ordered so neighbours sit far
  * apart on the wheel; no warning amber or error red. The first row's color leads.
  */
-const HUES = [DEFAULT_COLOR, 'oklch(78% .11 228)', 'oklch(72% .11 295)', 'oklch(80% .1 185)', 'oklch(66% .12 265)'];
-const SHADES = [100, 70, 48, 32, 20, 14];
-const REST_COLOR = 'color-mix(in oklab, var(--muted-foreground) 35%, transparent)';
+const HUES = [1, 2, 3, 4, 5].map(i => `var(--chart-share-${i})`);
+const SHADES = [1, 0.7, 0.48, 0.32, 0.2, 0.14];
+const REST: Paint = { color: 'var(--chart-share-rest)', alpha: 1 };
 /** Rows with their own strip segment; past that, segments get too thin and share the gray one. */
 const SEGMENTS = 50;
-const REST = '__rest';
+const REST_KEY = '__rest';
 
-const fade = (color: string, pct: number) =>
-  pct >= 100 ? color : `color-mix(in oklab, ${color} ${pct}%, transparent)`;
+/** A row's color and how strongly it shows: fainter rows fade toward the card, not to gray. */
+type Paint = { color: string; alpha: number };
 
-function rowColors(base: string, count: number, palette: 'shades' | 'hues') {
+function rowColors(base: string, count: number, palette: 'shades' | 'hues'): Paint[] {
   if (palette === 'hues') {
     const hues = [base, ...HUES.filter(h => h !== base)].slice(0, 5);
-    return Array.from({ length: count }, (_, i) =>
-      fade(hues[i % hues.length] ?? base, [100, 55, 30][Math.floor(i / hues.length)] ?? 20),
-    );
+    return Array.from({ length: count }, (_, i) => ({
+      color: hues[i % hues.length] ?? base,
+      alpha: [1, 0.55, 0.3][Math.floor(i / hues.length)] ?? 0.2,
+    }));
   }
-  return Array.from({ length: count }, (_, i) => fade(base, SHADES[i] ?? 10));
+  return Array.from({ length: count }, (_, i) => ({ color: base, alpha: SHADES[i] ?? 0.1 }));
 }
 
 const fmtShare = (n: number, total: number) => {
@@ -130,7 +131,7 @@ export function MetricsShareListHeader({
   );
 }
 
-type Shown = MetricsShareListRow & { color: string; segment: string };
+type Shown = MetricsShareListRow & { paint: Paint; segment: string };
 
 /**
  * Each row's share of a total: one 100% strip on top, the ranked rows below with their share
@@ -196,17 +197,17 @@ export function MetricsShareList({
     const head = folds ? sorted.slice(0, limit) : sorted;
     rest = folds ? sorted.slice(limit) : [];
     const colors = rowColors(color, head.length, palette);
-    shown = head.map((r, i) => ({ ...r, color: colors[i] ?? REST_COLOR, segment: r.key }));
+    shown = head.map((r, i) => ({ ...r, paint: colors[i] ?? REST, segment: r.key }));
     if (rest.length) {
       const folded = other?.(rest);
       shown.push({
-        key: REST,
+        key: REST_KEY,
         label: `Other (${rest.length})`,
         share: rest.reduce((sum, r) => sum + Math.max(r.share, 0), 0),
         value: folded?.value ?? null,
         cells: folded?.cells,
-        color: REST_COLOR,
-        segment: REST,
+        paint: REST,
+        segment: REST_KEY,
       });
     }
   } else {
@@ -220,7 +221,7 @@ export function MetricsShareList({
     const rank = new Map(sorted.map((r, i) => [r.key, i]));
     shown = listed.map(r => {
       const i = rank.get(r.key) ?? sorted.length;
-      return { ...r, color: colors[i] ?? REST_COLOR, segment: i < own ? r.key : REST };
+      return { ...r, paint: colors[i] ?? REST, segment: i < own ? r.key : REST_KEY };
     });
     rest = sorted.slice(own);
     footer = (
@@ -237,14 +238,14 @@ export function MetricsShareList({
 
   // Strip segments: one per row with its own color, then everything else in one gray segment.
   const segments = [
-    ...shown.filter(r => r.segment !== REST).map(r => ({ key: r.key, share: r.share, color: r.color })),
+    ...shown.filter(r => r.segment !== REST_KEY).map(r => ({ key: r.key, share: r.share, paint: r.paint })),
     ...(rest.length
-      ? [{ key: REST, share: rest.reduce((sum, r) => sum + Math.max(r.share, 0), 0), color: REST_COLOR }]
+      ? [{ key: REST_KEY, share: rest.reduce((sum, r) => sum + Math.max(r.share, 0), 0), paint: REST }]
       : []),
   ].filter(s => s.share > 0);
   const hoveredSegment = hover === null ? null : (shown.find(r => r.key === hover)?.segment ?? hover);
   const dimSegment = (key: string) => hoveredSegment !== null && hoveredSegment !== key;
-  const dimRow = (r: Shown) => hover !== null && hover !== r.key && !(hover === REST && r.segment === REST);
+  const dimRow = (r: Shown) => hover !== null && hover !== r.key && !(hover === REST_KEY && r.segment === REST_KEY);
   const Anchor = LinkComponent ?? 'a';
 
   return (
@@ -256,7 +257,11 @@ export function MetricsShareList({
             key={s.key}
             onMouseEnter={() => setHover(s.key)}
             className="h-full min-w-[3px] transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
-            style={{ flex: `${s.share} 1 0`, backgroundColor: s.color, opacity: dimSegment(s.key) ? 0.3 : 1 }}
+            style={{
+              flex: `${s.share} 1 0`,
+              backgroundColor: s.paint.color,
+              opacity: s.paint.alpha * (dimSegment(s.key) ? 0.3 : 1),
+            }}
           />
         ))}
       </div>
@@ -264,7 +269,10 @@ export function MetricsShareList({
         {shown.map(r => {
           const content = (
             <>
-              <span className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: r.color }} />
+              <span
+                className="size-2 shrink-0 rounded-[2px]"
+                style={{ backgroundColor: r.paint.color, opacity: r.paint.alpha }}
+              />
               {/* A block line box, like the skeleton's, so loaded and loading rows share a height. */}
               {typeof r.label === 'string' ? (
                 <span className="min-w-0 flex-1 truncate" title={r.title ?? r.label}>
