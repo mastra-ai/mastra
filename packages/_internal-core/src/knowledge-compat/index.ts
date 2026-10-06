@@ -36,6 +36,9 @@ export const KNOWLEDGE_TABLE_NAMES = [
   TABLE_KNOWLEDGE_PROPOSALS,
 ] as const;
 
+/** Knowledge v1 tables with no v2 equivalent; an explicit schema reset drops them. */
+export const RETIRED_KNOWLEDGE_TABLE_NAMES = ['mastra_knowledge_cursors'] as const;
+
 type KnowledgeStorageColumn = {
   type: 'text' | 'timestamp' | 'integer' | 'bigint' | 'jsonb' | 'boolean';
   nullable: boolean;
