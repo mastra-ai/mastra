@@ -556,38 +556,8 @@ describe('TracesListView — custom columns', () => {
   });
 });
 
-describe('TracesListView — scrolling back to the top', () => {
+describe('TracesListView — scroll container', () => {
   const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
-
-  it('scrolls back to the top when a fresh query starts, keeping the same container', () => {
-    const { container, rerender } = render(
-      <TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />,
-    );
-    const gridBefore = gridOf(container);
-    const setScrollTop = vi.spyOn(Element.prototype, 'scrollTop', 'set');
-
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-
-    expect(setScrollTop).toHaveBeenCalledWith(0);
-    expect(gridOf(container)).toBe(gridBefore);
-    setScrollTop.mockRestore();
-  });
-
-  it('leaves the scroll position alone while paginating', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const setScrollTop = vi.spyOn(Element.prototype, 'scrollTop', 'set');
-
-    rerender(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
-        isFetchingNextPage
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(setScrollTop).not.toHaveBeenCalled();
-    setScrollTop.mockRestore();
-  });
 
   it('keeps the same scroll container once a query resolves', () => {
     const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);

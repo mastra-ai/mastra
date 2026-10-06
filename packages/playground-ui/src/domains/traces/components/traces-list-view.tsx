@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListFilterIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
@@ -139,13 +139,6 @@ export function TracesListView({
     onNavigate: index => virtualizer.scrollToIndex(index),
     global: true,
   });
-
-  // A fresh query (filter / date range change) starts from the top. The scroll container is
-  // shared between skeleton and rows, so the virtualizer picks this up from the real scroll event.
-  // `isLoading` only flips on initial fetches, so pagination keeps its position.
-  useEffect(() => {
-    if (isLoading && scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [isLoading]);
 
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
