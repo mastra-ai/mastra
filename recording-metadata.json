@@ -1,0 +1,70 @@
+{
+  "beforeCommit": "cf0039dbdb",
+  "afterCommit": "4f4410fdf8c1043b8c72ed25159b759bb2a4e561",
+  "method": "Actual React components, real query providers/clients, local fetch fixtures, fresh query caches, simultaneous starts. The upstream delay is 3000 ms for visibility; this is not production latency.",
+  "simulatedDelayMs": 3000,
+  "captureFps": 20,
+  "gifFps": 10,
+  "studioVisibleAtMs": {
+    "before": 3213.8,
+    "after": 368.9
+  },
+  "factoryTrace": {
+    "readyTimes": {
+      "after": 45.700000000186265,
+      "before": 3069.9000000003725
+    },
+    "beforeRequests": [
+      {
+        "path": "/web/factory/projects/factory-1/work-items",
+        "at": 35.700000000186265
+      },
+      {
+        "path": "/web/factory/projects/factory-1/supervisor/health",
+        "at": 36.10000000055879
+      },
+      {
+        "path": "/web/github/projects/repository-1/commits",
+        "at": 3053.100000000559
+      },
+      {
+        "path": "/web/factory/projects/factory-1/attention",
+        "at": 3053.2999999998137
+      },
+      {
+        "path": "/web/factory/projects/factory-1/work-items",
+        "at": 8049
+      },
+      {
+        "path": "/web/factory/projects/factory-1/attention",
+        "at": 8066.100000000559
+      }
+    ],
+    "afterRequests": [
+      {
+        "path": "/web/github/projects/repository-1/commits",
+        "at": 37.799999999813735
+      },
+      {
+        "path": "/web/factory/projects/factory-1/attention",
+        "at": 38.200000000186265
+      },
+      {
+        "path": "/web/factory/projects/factory-1/work-items",
+        "at": 38.39999999944121
+      },
+      {
+        "path": "/web/factory/projects/factory-1/supervisor/health",
+        "at": 38.39999999944121
+      },
+      {
+        "path": "/web/factory/projects/factory-1/attention",
+        "at": 5042.799999999814
+      },
+      {
+        "path": "/web/factory/projects/factory-1/work-items",
+        "at": 8075.5
+      }
+    ]
+  }
+}
