@@ -889,5 +889,8 @@ describe('dropBatchedParts', () => {
     const state = { other: [1] };
     dropBatchedParts(state, [1]);
     expect(state).toEqual({ other: [1] });
+    const custom = { batch: [1], timeoutId: 'kept' };
+    dropBatchedParts(custom, [1]);
+    expect(custom).toEqual({ batch: [1], timeoutId: 'kept' });
   });
 });

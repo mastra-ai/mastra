@@ -781,6 +781,7 @@ describe('queued signals preempt default-loop reasoning', () => {
     expect(partsAtStepFinish[0]?.join()).not.toContain('STALE_REASONING_FINGERPRINT');
     expect(partsAtStepFinish[0]?.filter(part => part.includes('"step-start"'))).toHaveLength(1);
   });
+
   it('drops discarded reasoning held by a built-in batch buffer', async () => {
     const batch = new BatchPartsProcessor({ batchSize: 1_000, emitOnNonText: false, maxWaitTime: 60_000 });
     const processing = vi.spyOn(batch, 'processOutputStream');
