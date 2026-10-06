@@ -42,9 +42,15 @@ function referenceFrontier(vouchedScopeIds: string[], grants: KnowledgeScopeGran
     changed = false;
     for (const grant of grants) {
       const referenced = frontier.get(grant.scopeRefId) ?? 0;
-      const activates = seeds.has(grant.scopeRefId) || (referenced & READ) !== 0;
+      const isSeed = seeds.has(grant.scopeRefId);
+      const activates = isSeed || (referenced & READ) !== 0;
       if (grant.role !== 'mirror' && !activates) continue;
-      const granted = grant.role === 'mirror' ? referenced : ROLE_MASKS[grant.role] | (grant.canSuggest ? SUGGEST : 0);
+      let granted = referenced;
+      if (grant.role !== 'mirror') {
+        const roleMask = ROLE_MASKS[grant.role] | (grant.canSuggest ? SUGGEST : 0);
+        // Only a host-vouched scope passes a grant's full role; reached scopes cap it at what is held there.
+        granted = isSeed ? roleMask : roleMask & referenced;
+      }
       const current = frontier.get(grant.scopeNodeId) ?? 0;
       const combined = current | granted;
       if (combined === current) continue;
