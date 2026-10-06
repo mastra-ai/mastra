@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readFile, rename, stat, writeFile, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, stat, utimes, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +16,13 @@ const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
 const CREDENTIALS_LOCK_FILE = join(CREDENTIALS_DIR, 'credentials.lock');
 const CREDENTIALS_LOCK_RETRY_MS = 50;
 const CREDENTIALS_LOCK_TIMEOUT_MS = 30_000;
+// A live lock owner refreshes the lock mtime every CREDENTIALS_LOCK_TOUCH_MS, so a
+// lock untouched for CREDENTIALS_LOCK_STALE_MS belongs to a crashed process.
+const CREDENTIALS_LOCK_TOUCH_MS = 5_000;
+const CREDENTIALS_LOCK_STALE_MS = 15_000;
+// Must stay well below CREDENTIALS_LOCK_TIMEOUT_MS so a hung refresh request
+// releases the lock before waiters give up.
+const REFRESH_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface Credentials {
   token: string;
@@ -50,15 +57,6 @@ class LoginTimedOutError extends Error {
   }
 }
 
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
 async function acquireCredentialsLock(signal?: AbortSignal): Promise<() => Promise<void>> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
   const startedAt = Date.now();
@@ -71,33 +69,35 @@ async function acquireCredentialsLock(signal?: AbortSignal): Promise<() => Promi
         mode: 0o600,
         flag: 'wx',
       });
+      // Keep the lock mtime fresh so waiters never mistake a held lock for a
+      // stale one, no matter how long the locked operation runs.
+      const keepAlive = setInterval(() => {
+        const now = new Date();
+        void utimes(CREDENTIALS_LOCK_FILE, now, now).catch(() => {});
+      }, CREDENTIALS_LOCK_TOUCH_MS);
+      keepAlive.unref?.();
       return async () => {
+        clearInterval(keepAlive);
         await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
 
+    // Reclaim a lock only when its mtime stopped advancing: live owners refresh
+    // it every CREDENTIALS_LOCK_TOUCH_MS, so a lock untouched for
+    // CREDENTIALS_LOCK_STALE_MS has no live owner (crashed or killed process).
+    // The stat happens immediately before the unlink to keep the window in
+    // which a freshly swapped-in lock could be removed as small as possible.
     try {
-      const lock = JSON.parse(await readFile(CREDENTIALS_LOCK_FILE, 'utf-8')) as { pid?: unknown };
-      if (typeof lock.pid !== 'number' || !isProcessAlive(lock.pid)) {
-        await unlink(CREDENTIALS_LOCK_FILE);
+      const lockStat = await stat(CREDENTIALS_LOCK_FILE);
+      if (Date.now() - lockStat.mtimeMs >= CREDENTIALS_LOCK_STALE_MS) {
+        await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
         continue;
       }
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') continue;
-      if (error instanceof SyntaxError) {
-        const lockAge = await stat(CREDENTIALS_LOCK_FILE)
-          .then(lockStat => Date.now() - lockStat.mtimeMs)
-          .catch(() => 0);
-        if (lockAge >= CREDENTIALS_LOCK_TIMEOUT_MS) {
-          await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
-          continue;
-        }
-      } else {
-        throw error;
-      }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
     }
 
     if (Date.now() - startedAt >= CREDENTIALS_LOCK_TIMEOUT_MS) {
@@ -210,30 +210,35 @@ export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal):
   try {
     return await withCredentialsLock(async () => {
       const storedCredentials = await loadCredentials();
-      if (
-        storedCredentials &&
-        (storedCredentials.token !== creds.token || storedCredentials.refreshToken !== creds.refreshToken)
-      ) {
+      // Logged out while we waited for the lock: don't resurrect the session
+      // from the caller's stale refresh token.
+      if (!storedCredentials) return null;
+      // A different account logged in while we waited: don't hand its token to
+      // this caller or rotate its refresh token.
+      if (storedCredentials.user?.id !== creds.user?.id) return null;
+      if (storedCredentials.token !== creds.token || storedCredentials.refreshToken !== creds.refreshToken) {
         return storedCredentials.token;
       }
 
-      const currentCredentials = storedCredentials ?? creds;
-      if (!currentCredentials.refreshToken) return null;
+      if (!storedCredentials.refreshToken) return null;
 
+      // Bound the request so a hung refresh releases the lock before waiting
+      // processes time out.
+      const timeoutSignal = AbortSignal.timeout(REFRESH_REQUEST_TIMEOUT_MS);
       // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
       // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
       // so if this request also 401s we'd infinitely recurse.
       const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: currentCredentials.refreshToken }),
-        signal,
+        body: JSON.stringify({ refreshToken: storedCredentials.refreshToken }),
+        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
       });
       if (!res.ok) return null;
 
       const data = (await res.json()) as { accessToken: string; refreshToken: string };
       const refreshedCredentials = {
-        ...currentCredentials,
+        ...storedCredentials,
         token: data.accessToken,
         refreshToken: data.refreshToken,
       };

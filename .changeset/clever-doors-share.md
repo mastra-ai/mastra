@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed concurrent CLI commands logging each other out by coordinating credential refresh across processes. Token refresh now takes a cross-process lock, re-reads credentials rotated by another process instead of submitting a stale refresh token, and writes the credentials file atomically.
+Fixed an issue where running several Mastra CLI commands at the same time could log you out. The commands now share one refreshed login instead of conflicting with each other.
