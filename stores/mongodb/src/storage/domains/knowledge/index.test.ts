@@ -33,7 +33,7 @@ describe('MongoDB canonical Knowledge support', () => {
       contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
     });
-    expect(KnowledgeMongoDB.MANAGED_COLLECTIONS).toHaveLength(16);
+    expect(KnowledgeMongoDB.MANAGED_COLLECTIONS).toHaveLength(15);
     expect(KnowledgeMongoDB.MANAGED_COLLECTIONS.every(name => name.startsWith('mastra_knowledge_'))).toBe(true);
   });
 

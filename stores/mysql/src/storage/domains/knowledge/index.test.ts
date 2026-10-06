@@ -52,7 +52,7 @@ describe('MySQL canonical Knowledge support', () => {
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
     });
     const ddl = KnowledgeMySQL.getExportDDL();
-    expect(ddl).toHaveLength(16);
+    expect(ddl).toHaveLength(15);
     expect(ddl.every(statement => statement.includes('mastra_knowledge_'))).toBe(true);
   });
 
