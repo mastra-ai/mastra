@@ -28,6 +28,8 @@ import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessor,
@@ -2231,6 +2233,7 @@ ${workingMemory}`;
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
             bufferOnIdle: omConfig.observation.bufferOnIdle,
+            observeOnContextOverflow: omConfig.observation.observeOnContextOverflow,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
@@ -3921,12 +3924,31 @@ Notes:
   }
 
   /**
+   * Extends the base implementation to add ObservationalMemory as an error processor.
+   * OM uses processAPIError to observe pending messages and retry when the provider
+   * rejects a request for exceeding the model's context window.
+   */
+  async getErrorProcessors(
+    configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    const processors = await super.getErrorProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as ErrorProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
    * Creates an ObservationalMemory processor wrapping the shared engine.
    * Returns null if OM is not configured, not supported, or already present
    * in the user's configured processors.
    */
   private async createOMProcessor(
-    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
     const hasObservationalMemory = configuredProcessors.some(

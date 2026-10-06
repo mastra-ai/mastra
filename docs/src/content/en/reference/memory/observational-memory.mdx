@@ -262,6 +262,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'false',
           },
           {
+            name: 'observeOnContextOverflow',
+            type: 'boolean',
+            description:
+              "Recover when the model provider rejects a request for exceeding its context window. Provider token counts can be higher than Observational Memory's local estimate, for example with attachments or after switching to a model with a smaller window, so a request can overflow before the `messageTokens` threshold is reached. When this happens, Observational Memory activates buffered observations, observes every pending message regardless of the threshold, and retries the request once with the smaller context. Set to `false` to let the error reach the caller instead.",
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'bufferActivation',
             type: 'number',
             description:
@@ -1203,6 +1211,17 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
   },
 ]}
 />
+
+### Forcing observation
+
+`observe()` only observes once pending tokens reach the observation threshold. Pass `force: true` to observe pending messages regardless of the threshold. The bypass applies to that call only and isn't saved to the record's config.
+
+```typescript
+const result = await om.observe({ threadId, resourceId, force: true })
+// result.observed: true if pending messages were observed
+```
+
+Agents don't need this to recover from context-window errors. `observation.observeOnContextOverflow` handles that automatically.
 
 ## Recall tool
 

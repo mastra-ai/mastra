@@ -706,6 +706,7 @@ export class ObservationalMemory {
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
       bufferOnIdle: config.observation?.bufferOnIdle ?? false,
+      observeOnContextOverflow: config.observation?.observeOnContextOverflow ?? true,
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
@@ -3888,6 +3889,11 @@ ${formattedMessages}
     hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
+    /**
+     * Observe even when unobserved tokens are below the observation threshold.
+     * Applies to this call only; nothing is written to the record's config.
+     */
+    force?: boolean;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
@@ -3930,7 +3936,9 @@ ${formattedMessages}
               freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
             );
 
-        if (
+        if (opts.force) {
+          if (unobservedMessages.length === 0) return;
+        } else if (
           !this.meetsObservationThreshold({
             record: freshRecord,
             unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
