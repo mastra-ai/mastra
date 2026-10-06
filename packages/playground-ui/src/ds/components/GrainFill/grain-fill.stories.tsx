@@ -12,6 +12,7 @@ type Story = StoryObj<typeof GrainFill>;
 
 const surfaceClassName =
   'relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim shadow-(--elevation-raised)';
+const backgroundClassName = 'absolute inset-0 -z-10 bg-card';
 const tones = ['warning', 'destructive', 'info', 'success'] as const;
 
 export const Tones: Story = {
@@ -19,7 +20,7 @@ export const Tones: Story = {
     <div className="flex flex-col gap-4">
       {tones.map(tone => (
         <div key={tone} className={surfaceClassName}>
-          <div className="absolute inset-0 -z-10 bg-card">
+          <div className={backgroundClassName}>
             <GrainFill tone={tone} width={464} height={200} className="absolute inset-0" />
           </div>
         </div>
@@ -35,7 +36,7 @@ export const AnyColorToken: Story = {
     <div className="flex flex-col gap-4">
       {colorTokens.map(tone => (
         <div key={tone} className={surfaceClassName}>
-          <div className="absolute inset-0 -z-10 bg-card">
+          <div className={backgroundClassName}>
             <GrainFill tone={tone} width={464} height={200} className="absolute inset-0" />
           </div>
         </div>
