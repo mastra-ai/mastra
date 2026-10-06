@@ -5,11 +5,11 @@
 // Two harness conditions are represented. `wf-evented-restart` parks a step and restarts:
 // `sequential`, `parallel`, `conditional`, `foreach`, `empty-path`. `wf-default` is the harness's
 // in-process reference on the default engine, and contributes the shapes whose default-engine
-// restart is also green: `sequential`, `parallel`, `conditional`, `state`, `nested-done`,
-// `nested-pending`. `empty-path` is evented-only — the default engine never saves a `running`
-// snapshot with no active step, so the harness leaves that shape out of `wf-default` too.
+// restart is also green: `sequential`, `parallel`, `conditional`, `state`, `finished`,
+// `nested-done`, `nested-pending`. `empty-path` is evented-only — the default engine never saves a
+// `running` snapshot with no active step, so the harness leaves that shape out of `wf-default` too.
 //
-// Shapes whose restart is still red on this SHA are recorded as evidence in
+// Shape restarts that are still red on this SHA are recorded as evidence in
 // `.mastracode/plans/cor-1382-restart-helper.proof/sigkill-only-repro.scratch.test.ts`, to land with
 // their owning fixes; none of them is skipped here. On the evented engine: `state` (COR-1352) parks
 // in a step like `sequential` but loses the finished step's mark, and
@@ -17,8 +17,9 @@
 // between two persisted states rather than inside a step. On the default engine `foreach` re-runs
 // completed item 1 (COR-1350), and `foreach-gap` cannot be cut at all: the interruption point the
 // shape needs (`item`'s partial output array) is never written, so the harness does not exercise it
-// either. The default engine's `finished` restarts cleanly under this helper while the harness
-// recorded a failure for it, so it is left out until the harness is re-run at this SHA.
+// either. These cells assert current behaviour, so a shape the harness's `RESULTS.md` table records
+// as failing but that restarts cleanly here is committed as a passing cell; the recorded table is a
+// baseline question for the harness, not a reason to leave a green cell out.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow } from './restart-harness';
@@ -157,6 +158,8 @@ function buildShape(
         .then(report as any)
         .commit();
     }
+    case 'finished':
+      return wf().then(step('first')).then(step('second')).then(step('last')).commit();
     case 'nested-done':
     case 'nested-pending': {
       const nested = createWorkflow({ id: `${id}-nested`, inputSchema: N, outputSchema: N })
@@ -180,6 +183,7 @@ type ShapeName =
   | 'conditional'
   | 'foreach'
   | 'state'
+  | 'finished'
   | 'nested-done'
   | 'nested-pending'
   | 'empty-path';
@@ -223,6 +227,14 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
     expect: (r: any) => r?.n === 3 && JSON.stringify(r?.marks) === JSON.stringify(['first', 'block']),
     reruns: ['first'],
   },
+  finished: {
+    input: { n: 1 },
+    expect: (r: any) => r?.n === 4,
+    reruns: ['first', 'second'],
+    reenter: { step: 'last', n: 3 },
+    // COR-1354: `second` had succeeded, `last` had not started.
+    hold: { when: (s: any) => ctxOf(s, 'second')?.status === 'success' && !ctxOf(s, 'last') },
+  },
   'nested-done': {
     input: { n: 1 },
     expect: (r: any) => r?.n === 4,
@@ -247,7 +259,7 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
 
 /** Which shapes restart cleanly on each engine (see the file header for the red ones). */
 const GREEN: Record<Engine, ShapeName[]> = {
-  default: ['sequential', 'parallel', 'conditional', 'state', 'nested-done', 'nested-pending'],
+  default: ['sequential', 'parallel', 'conditional', 'state', 'finished', 'nested-done', 'nested-pending'],
   evented: ['sequential', 'parallel', 'conditional', 'foreach', 'empty-path'],
 };
 
