@@ -133,6 +133,18 @@ describe('Subconscious knowledge write tools', () => {
     expect(await store.getRecordScopeIds(result.record.id)).toEqual([scopeIds[1]]);
   });
 
+  it('places a node on its first record’s rung when no node placement is given', async () => {
+    const { store, tools } = await fixture();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      { name: 'Release owner', kind: 'decision', text: 'Priya owns the release.', scope: 'resource' },
+      {} as any,
+    )) as any;
+
+    expect(await store.getNodeScopeIds(result.node.id)).toEqual([scopeIds[1]]);
+    expect(await store.getRecordScopeIds(result.record.id)).toEqual([scopeIds[1]]);
+  });
+
   it('places created nodes into visible structural scopes by address', async () => {
     const { store, scopes, tools } = await structuralFixture();
 
