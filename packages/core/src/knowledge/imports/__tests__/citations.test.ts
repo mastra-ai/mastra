@@ -10,10 +10,25 @@ const platformRepo = { source: GITHUB, scope: 'repo:platform' } as const;
 const feature = { source: DISTILL, scope: 'feature:knowledge' } as const;
 const structure = {
   scopes: [
-    { address: 'org:acme', name: 'Acme' },
-    { address: 'repo:mastra', name: 'Mastra', parentAddresses: ['org:acme'] },
-    { address: 'repo:platform', name: 'Platform', parentAddresses: ['org:acme'] },
-    { address: 'feature:knowledge', name: 'Knowledge', parentAddresses: ['repo:mastra'] },
+    { address: 'org:acme', name: 'Acme', grants: [{ scopeRefAddress: 'org:acme', role: 'owner' }] },
+    {
+      address: 'repo:mastra',
+      name: 'Mastra',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: 'repo:mastra', role: 'owner' }],
+    },
+    {
+      address: 'repo:platform',
+      name: 'Platform',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: 'repo:platform', role: 'owner' }],
+    },
+    {
+      address: 'feature:knowledge',
+      name: 'Knowledge',
+      parentAddresses: ['repo:mastra'],
+      grants: [{ scopeRefAddress: 'feature:knowledge', role: 'owner' }],
+    },
   ],
 } as const;
 const budget = { maxDepth: 4, maxItems: 20, timeoutMs: 5_000 };

@@ -35,16 +35,19 @@ function capabilityMask(capabilities: Readonly<KnowledgeCapabilities>): number {
 }
 
 function referenceFrontier(vouchedScopeIds: string[], grants: KnowledgeScopeGrant[]): Map<string, number> {
-  const frontier = new Map(vouchedScopeIds.map(id => [id, READ]));
+  const seeds = new Set(vouchedScopeIds);
+  const frontier = new Map<string, number>();
   let changed = true;
   while (changed) {
     changed = false;
     for (const grant of grants) {
-      const referenced = frontier.get(grant.scopeRefId);
-      if (referenced === undefined) continue;
+      const referenced = frontier.get(grant.scopeRefId) ?? 0;
+      const activates = seeds.has(grant.scopeRefId) || (referenced & READ) !== 0;
+      if (grant.role !== 'mirror' && !activates) continue;
       const granted = grant.role === 'mirror' ? referenced : ROLE_MASKS[grant.role] | (grant.canSuggest ? SUGGEST : 0);
-      const combined = (frontier.get(grant.scopeNodeId) ?? 0) | granted;
-      if (combined === frontier.get(grant.scopeNodeId)) continue;
+      const current = frontier.get(grant.scopeNodeId) ?? 0;
+      const combined = current | granted;
+      if (combined === current) continue;
       frontier.set(grant.scopeNodeId, combined);
       changed = true;
     }
