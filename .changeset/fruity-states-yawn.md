@@ -8,4 +8,3 @@ Fixed several layout and input problems in auto-generated forms (for example too
 - Fields typed `T | null` (for example an optional region) render as one optional input instead of two unlabeled inputs separated by "OR".
 - Key-value fields render each pair as one row (key, value, remove) without a nested card.
 - Number fields keep a number while you type, so submitting with Enter sends a number instead of failing validation, and clearing a number field no longer submits the previous value.
-- Pressing Enter in a text field submits the form, like in any other input. Shift+Enter still adds a new line.

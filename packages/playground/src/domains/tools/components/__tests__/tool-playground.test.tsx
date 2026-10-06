@@ -93,29 +93,4 @@ describe('ToolPlayground', () => {
       expect(screen.getByText(/Out of ingredients/)).not.toBeNull();
     });
   });
-
-  describe('when Enter is pressed in a field', () => {
-    it('runs the tool with the typed input', async () => {
-      const execute = vi.fn().mockResolvedValue('ok');
-      renderPlayground({ zodInputSchema: z.object({ ingredient: z.string() }), execute });
-
-      const field = screen.getByRole('textbox');
-      fireEvent.change(field, { target: { value: 'basil' } });
-      fireEvent.keyDown(field, { key: 'Enter' });
-
-      expect(await screen.findByText('Success')).not.toBeNull();
-      expect(execute).toHaveBeenCalledWith({ ingredient: 'basil' }, expect.anything());
-    });
-  });
-
-  describe('when Shift+Enter is pressed in a field', () => {
-    it('does not run the tool', () => {
-      const execute = vi.fn().mockResolvedValue('ok');
-      renderPlayground({ zodInputSchema: z.object({ ingredient: z.string() }), execute });
-
-      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', shiftKey: true });
-
-      expect(execute).not.toHaveBeenCalled();
-    });
-  });
 });
