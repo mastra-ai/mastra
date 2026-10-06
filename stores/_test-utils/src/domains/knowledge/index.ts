@@ -72,7 +72,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
       expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
       expect(within.nextCursor).toBeNull();
-      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds.sort()).toEqual(
+      // Parent ids come back in a stable order so pages of the same query compare equal.
+      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds).toEqual(
         [ids['team:a'], ids['team:b']].sort(),
       );
 
