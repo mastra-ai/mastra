@@ -29,7 +29,7 @@ function testsScanningChangedFiles(changedFiles, declarations) {
 
 function listDeclaringTests(repoRoot) {
   try {
-    return execFileSync('git', ['grep', '-l', '-e', 'export const scannedRoots', '--', '*.test.ts', '*.test.tsx'], {
+    return execFileSync('git', ['grep', '-l', '-e', '^export const scannedRoots', '--', '*.test.ts', '*.test.tsx'], {
       cwd: repoRoot,
       encoding: 'utf8',
     })
