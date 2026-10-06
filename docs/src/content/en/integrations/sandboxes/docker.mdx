@@ -40,6 +40,107 @@ const agent = new Agent({
 })
 ```
 
+### Repository templates
+
+`createDockerRepoTemplate` builds an image that already holds a checkout of a
+repository and the output of its setup command, so a session starts from
+installed dependencies instead of a cold clone:
+
+```typescript
+import { DockerSandbox, createDockerRepoTemplate } from '@mastra/docker'
+
+const sandbox = new DockerSandbox({
+  id: sessionId,
+  template: createDockerRepoTemplate({
+    getRepositoryAccess: async () => ({
+      cloneUrl: 'https://github.com/octocat/hello-world.git',
+    }),
+    setupCommand: 'npm ci',
+  }),
+})
+```
+
+`getRepositoryAccess` supplies the clone URL and, for private repositories, a
+short-lived credential. The credential is passed to the clone step as a build
+secret and never enters the image, its layers or the image identity. When
+`getRepositoryAccess` is `undefined`, `createDockerRepoTemplate` returns
+`undefined`, which selects the provider's default image without a conditional
+at the call site.
+
+The repository is cloned to `<workingDirectory>/<repo>` (default
+`/workspace`), which becomes the working directory of the sandbox. Pass `ref`
+to prepare a branch, tag or commit other than the default branch. Right before
+the build the resolver runs `git ls-remote` to pin the ref to a commit, which
+is part of the image identity: a moved branch yields a fresh image on the next
+new sandbox and an unmoved one reuses the cached image. If the head can't be
+resolved the resolver rejects rather than caching an unpinned clone.
+
+`setupCommand` also accepts an array; each entry runs as its own cached build
+step. Each setup command runs twice: once right after the clone and again
+after the checkout is pinned, so the clone and install layers are reused
+across commits. Setup commands must therefore be safe to run twice in the same
+checkout. Images built with an earlier version rebuild once after upgrading.
+
+#### Several repositories in one image
+
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories
+into one image, each with its own access resolver, `ref` and setup command:
+
+```typescript
+const sandbox = new DockerSandbox({
+  id: sessionId,
+  template: createDockerRepoTemplate({
+    repos: [
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/template-docs-expert.git',
+        }),
+        setupCommand: 'npm install',
+      },
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/good-issue.git',
+        }),
+        ref: 'main',
+      },
+    ],
+    workspaceSetupCommand: 'touch .workspace-ready',
+    continueOnSetupFailure: true,
+    workingDirectory: '/workspace',
+  }),
+})
+```
+
+Every repository lands at `<workingDirectory>/<repo>` and the working directory
+itself becomes the sandbox cwd. Public repositories (entries whose access
+resolves without `authorization`) are built before private ones, keeping the
+caller's order within each group. Each private credential is passed as the
+build secret `GH_TOKEN_<n>` (`n` is the entry's position in `repos`) to that
+repository's clone step only; setup commands never see it.
+
+`workspaceSetupCommand` runs at the working directory after every repository
+is set up; a failure fails the build. `continueOnSetupFailure` (default
+`false`) lets a failing per-repository setup command record that repository's
+directory name in `.mastra-sandbox/setup-failed` (one line per repository,
+whichever passes failed) and continue; clone, pin, workspace and marker steps
+still fail the build. Both options require `repos` and throw a `TypeError`
+otherwise, as does passing `repos` together with `getRepositoryAccess`. An
+empty `repos` array behaves like no repository at all.
+
+Markers tell a session what the image already ran. The single form writes
+`.mastra-sandbox/setup` inside the checkout only when every setup command
+succeeded. The list form writes `.mastra-sandbox/repos/<repo>` under the
+working directory per repository once every step for it ran, and
+`.mastra-sandbox/workspace-setup` after the workspace commands (even when
+there were none); with `continueOnSetupFailure`, check
+`.mastra-sandbox/setup-failed` first.
+
+Unlike the E2B and platform templates, which clone unpinned when a head can't
+be resolved, this template rejects the whole resolution when any entry's
+access or head can't be resolved: it clones full history and pins by checkout,
+so there is no unpinned mode. Two entries that would clone into the same
+directory name are rejected.
+
 ## Constructor parameters
 
 <PropertiesTable
