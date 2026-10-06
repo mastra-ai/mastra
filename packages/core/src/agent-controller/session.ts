@@ -1931,8 +1931,8 @@ export class SessionRun {
  * is active and responsible for persisting that one selection per thread.
  */
 type ThinkingLevelSwitch = (
-  level: AgentControllerThinkingLevel,
-  commit: () => Promise<void>,
+  level: unknown,
+  commit: (() => Promise<void>) | undefined,
   isActive: () => boolean,
   applyModel: () => void,
 ) => Promise<boolean>;
@@ -2003,10 +2003,10 @@ export class SessionModel {
   }
 
   /**
-   * Re-sync the in-memory selection from the persisted thread model.
+   * Re-sync the in-memory model and thinking level from the persisted thread.
    *
    * Unmarked legacy metadata is migrated before the selection is applied. Only
-   * emits when the persisted model actually changes the in-memory selection.
+   * emits `model_changed` when either value changes the in-memory selection.
    */
   async syncFromPersisted(): Promise<void> {
     const store = this.#store();
@@ -2017,10 +2017,25 @@ export class SessionModel {
     await migratePersistedModelSelection({
       getMetadata: () => store.getAllOn(threadId),
       modeId: currentModeId,
-      onResolved: modelId => {
-        if (store.getThreadId() !== threadId || modelId === this.#id) return;
-        this.#id = modelId;
-        this.#bus.emit({ type: 'model_changed', modelId, thinkingLevel: this.#getThinkingLevel() });
+      onResolved: async (modelId, metadata) => {
+        const isActive = () => store.getThreadId() === threadId;
+        if (!isActive()) return;
+        const previousModelId = this.#id;
+        const previousThinkingLevel = this.#getThinkingLevel();
+        if (metadata.thinkingLevel !== previousThinkingLevel) {
+          if (
+            !(await this.#setThinkingLevel(metadata.thinkingLevel, undefined, isActive, () => this.set({ modelId })))
+          ) {
+            return;
+          }
+        } else {
+          this.set({ modelId });
+        }
+        if (!isActive()) return;
+        const thinkingLevel = this.#getThinkingLevel();
+        if (modelId !== previousModelId || thinkingLevel !== previousThinkingLevel) {
+          this.#bus.emit({ type: 'model_changed', modelId, thinkingLevel });
+        }
       },
       set: (key, value) => store.setOn(threadId, key, value),
       threadId,
@@ -2557,10 +2572,10 @@ class SessionState<TState = unknown> {
     return run;
   }
 
-  /** Validate a model preference before committing its model and metadata. */
+  /** Validate a model preference before applying its model and optionally committing metadata. */
   setWithCommit(
     updates: Partial<TState>,
-    commit: () => Promise<void>,
+    commit: (() => Promise<void>) | undefined,
     shouldApply: () => boolean,
     onApply: () => void,
   ): Promise<boolean> {

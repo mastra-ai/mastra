@@ -110,6 +110,156 @@ describe('session.model.switch', () => {
     },
   );
 
+  it.each([
+    ['openai/gpt-4o', 'low'],
+    ['openai/gpt-5.5', 'low'],
+    ['openai/gpt-4o', undefined],
+  ] as const)(
+    'synchronizes the persisted pair from another session to %s/high from %s',
+    async (modelId, initialLevel) => {
+      const trackModelUse = vi.fn();
+      const storage = new InMemoryStore();
+      const { controller, session } = await createSession(trackModelUse, storage);
+      const thread = await session.thread.create();
+      await session.model.switch('openai/gpt-4o', { thinkingLevel: initialLevel });
+      const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+      await writer.thread.switch({ threadId: thread.id });
+      await writer.model.switch(modelId, { thinkingLevel: 'high' });
+      trackModelUse.mockClear();
+      const memory = (await storage.getStore('memory'))!;
+      const save = vi.spyOn(memory, 'saveThread');
+      const snapshots: unknown[] = [];
+      session.subscribe(event => {
+        if (event.type === 'state_changed' || event.type === 'model_changed') {
+          snapshots.push({ event, modelId: session.model.get(), thinkingLevel: session.state.get().thinkingLevel });
+        }
+      });
+
+      await session.model.syncFromPersisted();
+      await session.model.syncFromPersisted();
+
+      expect(session.model.get()).toBe(modelId);
+      expect(session.state.get().thinkingLevel).toBe('high');
+      expect(snapshots).toEqual([
+        {
+          event: { type: 'state_changed', state: { thinkingLevel: 'high' }, changedKeys: ['thinkingLevel'] },
+          modelId,
+          thinkingLevel: 'high',
+        },
+        { event: { type: 'model_changed', modelId, thinkingLevel: 'high' }, modelId, thinkingLevel: 'high' },
+      ]);
+      expect(save).not.toHaveBeenCalled();
+      expect(trackModelUse).not.toHaveBeenCalled();
+    },
+  );
+
+  it('clears a thinking override removed by another session without changing the model', async () => {
+    const { controller, session } = await createSession();
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    await writer.thread.switch({ threadId: thread.id });
+    await writer.state.set({ thinkingLevel: undefined });
+    const listener = vi.fn();
+    session.subscribe(event => {
+      if (event.type === 'model_changed') listener(event);
+    });
+
+    await session.model.syncFromPersisted();
+
+    expect(session.model.get()).toBe('openai/gpt-5.5');
+    expect(session.state.get().thinkingLevel).toBeUndefined();
+    expect(listener).toHaveBeenCalledExactlyOnceWith({
+      type: 'model_changed',
+      modelId: 'openai/gpt-5.5',
+      thinkingLevel: undefined,
+    });
+  });
+
+  it('uses the state schema default when a persisted thinking override is removed', async () => {
+    const storage = new InMemoryStore();
+    const schema = z.object({ thinkingLevel: z.enum(['low', 'high']).default('low') });
+    const { session } = await createSession(undefined, storage, schema);
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'high' });
+    const { controller } = await createSession(undefined, storage);
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    await writer.thread.switch({ threadId: thread.id });
+    await writer.model.switch('openai/gpt-5.5');
+    await writer.state.set({ thinkingLevel: undefined });
+    const listener = vi.fn();
+    session.subscribe(event => {
+      if (event.type === 'model_changed') listener(event);
+    });
+
+    await session.model.syncFromPersisted();
+    await session.model.syncFromPersisted();
+
+    expect(session.model.get()).toBe('openai/gpt-5.5');
+    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(listener).toHaveBeenCalledExactlyOnceWith({
+      type: 'model_changed',
+      modelId: 'openai/gpt-5.5',
+      thinkingLevel: 'low',
+    });
+    expect(await session.thread.getSetting({ key: 'thinkingLevel' })).toBeUndefined();
+  });
+
+  it('rejects invalid persisted thinking before applying either selection', async () => {
+    const { controller, session } = await createSession();
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    await writer.thread.switch({ threadId: thread.id });
+    await writer.model.switch('openai/gpt-5.5');
+    await writer.thread.setSetting({ key: 'thinkingLevel', value: 'invalid' });
+    const listener = vi.fn();
+    session.subscribe(listener);
+
+    await expect(session.model.syncFromPersisted()).rejects.toThrow('Invalid state update');
+
+    expect(session.model.get()).toBe('openai/gpt-4o');
+    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('does not apply a persisted pair after the thread changes during validation', async () => {
+    let release = () => {};
+    let entered = () => {};
+    const validationStarted = new Promise<void>(resolve => {
+      entered = resolve;
+    });
+    const validationGate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const schema = z.object({ thinkingLevel: z.string().optional() }).superRefine(async state => {
+      if (state.thinkingLevel === 'high') {
+        entered();
+        await validationGate;
+      }
+    });
+    const storage = new InMemoryStore();
+    const { session } = await createSession(undefined, storage, schema);
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
+    const { controller } = await createSession(undefined, storage);
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    await writer.thread.switch({ threadId: thread.id });
+    await writer.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
+    const listener = vi.fn();
+    session.subscribe(listener);
+
+    const syncing = session.model.syncFromPersisted();
+    await validationStarted;
+    session.thread.set({ threadId: 'newly-bound-thread' });
+    release();
+    await syncing;
+
+    expect(session.model.get()).toBe('openai/gpt-4o');
+    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('serializes concurrent model and thinking selections as pairs', async () => {
     const { session } = await createSession();
     await session.thread.create();
