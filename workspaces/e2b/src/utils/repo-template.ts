@@ -159,11 +159,7 @@ export interface RepoTemplateOptions {
   getRepositoryAccess?: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
    * Setup command(s) run inside the checkout and hashed into the template name.
-   * Array entries run as separate cached build steps. Each command runs
-   * twice: once right after the clone, so the install layer caches
-   * independently of the commit, and again after the checkout is pinned to
-   * the resolved head, so the image matches that commit. Commands must be
-   * safe to repeat in the same checkout.
+   * Array entries run as separate cached build steps.
    */
   setupCommand?: string | string[];
   /**
@@ -198,8 +194,8 @@ export interface RepoTemplateOptions {
   /**
    * `repos` only. When true a failing per-repository setup command records
    * that repository's directory name in `.mastra-sandbox/setup-failed` (one
-   * line per repository, whichever passes failed) and the build continues;
-   * clone, pin, workspace and marker steps still fail the build. Default
+   * line per repository) and the build continues; clone, pin, workspace and
+   * marker steps still fail the build. Default
    * false: any failure fails the build.
    */
   continueOnSetupFailure?: boolean;
@@ -593,16 +589,11 @@ function buildRepoTemplateSpec(
     const { repoDir, sha, tokenEnv } = repo;
     const cloneUrl = normalizeCloneUrl(repo.cloneUrl);
     const auth = tokenEnv ? `${gitAuthFlag(tokenEnv)} ` : '';
-    // Build steps use fresh shells, so each setup command needs its own `cd`.
     const setupCommands = normalizeSetupCommands(repo.setupCommand);
-    const setupSteps = setupCommands.map(command => guardedSetupCommand({ repoDir, command, continueOnFailure }));
     // Each command gets its own cached build layer. Same shallow clone Factory
     // makes at session start when no image provided one, so both paths yield
-    // the same checkout. The clone carries no commit, so it and the first
-    // setup pass cache across commits; the pin and the second pass are the
-    // only per-commit layers.
+    // the same checkout.
     template = template.runCmd(repoCloneCommand({ cloneUrl, destination: repoDir, ...(tokenEnv ? { tokenEnv } : {}) }));
-    for (const step of setupSteps) template = template.runCmd(step);
     if (sha) {
       // GitHub serves fetches of reachable shas, so pinning after a default
       // clone is reliable without full-history flags.
@@ -610,7 +601,10 @@ function buildRepoTemplateSpec(
         .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
         .runCmd(`git -C "${repoDir}" checkout ${sha}`);
     }
-    for (const step of setupSteps) template = template.runCmd(step);
+    // Build steps use fresh shells, so each setup command needs its own `cd`.
+    for (const command of setupCommands) {
+      template = template.runCmd(guardedSetupCommand({ repoDir, command, continueOnFailure }));
+    }
     // Last for this repository, so it only exists once every step above ran.
     const content = setupMarkerContent(setupCommands);
     template = template.runCmd(
