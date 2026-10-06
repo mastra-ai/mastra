@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getModelReasoningOptions } from '@mastra/core/llm';
@@ -793,9 +794,12 @@ describe('OM routes with a tenant', () => {
   // provider-following behavior these cases assert.
   beforeEach(() => {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+    // The host's stored Mastra gateway key would otherwise make every `mastra/` route available.
+    vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue(undefined);
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   /**
@@ -879,13 +883,6 @@ describe('OM routes with a tenant', () => {
       body: JSON.stringify(body),
     });
 
-  const postJson = (app: Hono, path: string, body: unknown) =>
-    app.request(path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
@@ -957,6 +954,29 @@ describe('OM routes with a tenant', () => {
     });
   });
 
+  it('reports a gateway route available when only the Mastra gateway key is configured', async () => {
+    vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue('mg-test');
+    const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observer).toMatchObject({
+      effectiveModelId: 'mastra/deepseek/deepseek-v4-flash',
+      providerStatus: 'available',
+    });
+  });
+
+  it('reports a gateway route unavailable without a gateway key or provider credential', async () => {
+    const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
+    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observer).toMatchObject({
+      effectiveModelId: 'mastra/deepseek/deepseek-v4-flash',
+      providerStatus: 'unavailable',
+    });
+  });
+
   it('reports caller-visible custom providers as available', async () => {
     await seed.customProviders.upsert({
       orgId: 'org1',
@@ -985,19 +1005,6 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('validates provider reachability without materializing auto role models', async () => {
-    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
-      providerId: 'anthropic',
-    });
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).config).toMatchObject({
-      observer: { model: 'auto' },
-      reflector: { model: 'auto' },
-    });
-    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
-  });
-
   it('rejects factory-scoped OM access for a factory outside the caller org', async () => {
     const foreign = await seed.projects.create({ orgId: 'org2', userId: 'user-b', input: { name: 'Other Org' } });
     const app = buildApp(makeOmSession());
@@ -1005,32 +1012,15 @@ describe('OM routes with a tenant', () => {
     const read = await app.request(`/web/config/om?factoryId=${foreign.id}`);
     expect(read.status).toBe(404);
 
-    const write = await postJson(app, '/web/config/om/provider-defaults', {
-      providerId: 'anthropic',
+    const write = await putJson(app, '/web/config/om/observer/model', {
+      resourceId: 'r1',
+      modelId: 'anthropic/claude-fable-5',
       factoryId: foreign.id,
     });
     expect(write.status).toBe(404);
     await expect(
       seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(foreign.id) }),
     ).resolves.toBeNull();
-  });
-
-  it('does not overwrite an explicit role or materialize the other role on provider connect', async () => {
-    await seed.memorySettings.patch({
-      orgId: 'org1',
-      userId: 'user-a',
-      patch: { observerModelId: 'anthropic/claude-fable-5' },
-    });
-
-    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
-      providerId: 'anthropic',
-    });
-
-    expect(res.status).toBe(200);
-    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
-      observerModelId: 'anthropic/claude-fable-5',
-      reflectorModelId: null,
-    });
   });
 
   it('persists a role model switch without materializing the other auto role', async () => {

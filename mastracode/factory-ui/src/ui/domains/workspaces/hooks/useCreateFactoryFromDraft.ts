@@ -55,7 +55,7 @@ export function useCreateFactoryFromDraft({
   };
 
   return useMutation({
-    mutationFn: async ({ modelId }: { providerId: string; modelId: string }) => {
+    mutationFn: async ({ modelId }: { modelId: string }) => {
       if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
 
       const factory = draft.factoryId

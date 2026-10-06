@@ -1,3 +1,4 @@
+import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -5,11 +6,13 @@ import {
   getCustomProviderId,
   isThinkingLevelSetting,
   loadSettings,
+  MASTRA_GATEWAY_PROVIDER,
   saveSettings,
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
+import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -494,7 +497,11 @@ function roleConfig(
     model,
     effectiveModelId,
     effectiveModelSource: model === 'auto' ? autoModelSource : 'explicit',
-    providerStatus: availableProviders.has(modelProvider(effectiveModelId)) ? 'available' : 'unavailable',
+    providerStatus:
+      availableProviders.has(modelProvider(effectiveModelId)) ||
+      (effectiveModelId.startsWith(MASTRA_GATEWAY_PREFIX) && availableProviders.has(MASTRA_GATEWAY_PROVIDER))
+        ? 'available'
+        : 'unavailable',
   };
 }
 
@@ -659,10 +666,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         controller,
         authStorage: tenantCredentials ? undefined : authStorage,
         tenantCredentials,
+        deploymentProviders,
       });
       const availableProviders = new Set(
         Object.entries(access).flatMap(([providerId, configured]) => (configured ? [providerId] : [])),
       );
+      // `mastra/` routes run through the Mastra gateway whenever its key is configured.
+      if (MastraCodeGateway.getMastraGatewayApiKey()) availableProviders.add(MASTRA_GATEWAY_PROVIDER);
       if (options.customProviders) {
         const context = await resolveCustomProvidersContext({
           c: loose(c),
@@ -1145,64 +1155,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ok: true,
               globalDefault: settings.preferences.thinkingLevel,
               modeDefaults: settings.models.modeThinkingDefaults,
-            });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      // Provider connection changes reachability, not selection intent, so this
-      // no longer seeds observer/reflector rows from the provider's low-cost
-      // pack: it validates the provider and returns the current config. The
-      // route is kept as a contract for callers that still probe it.
-      registerApiRoute('/web/config/om/provider-defaults', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          let body: { providerId?: unknown; factoryId?: unknown };
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
-          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
-          if (!providerId) return c.json({ error: 'Missing required field: providerId' }, 400);
-
-          const context = await resolveMemorySettingsContext({
-            c: loose(c),
-            auth,
-            memorySettings: options.memorySettings,
-            factoryProjectId,
-            factoryProjects: options.factoryProjects,
-          });
-          if ('response' in context) return context.response;
-
-          try {
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            const access = await buildProviderAccess({
-              controller,
-              authStorage: tenantCredentials ? undefined : authStorage,
-              tenantCredentials,
-              deploymentProviders,
-            });
-            if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
-
-            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const availableProviders = await resolveOMResponseContext(loose(c));
-            return c.json({
-              ok: true,
-              config: readStoredOMConfig(
-                record,
-                await factoryOmFallback(factoryProjectId),
-                'configured-default',
-                availableProviders,
-              ),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
