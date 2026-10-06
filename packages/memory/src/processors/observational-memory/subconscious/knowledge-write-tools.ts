@@ -63,14 +63,18 @@ async function resolveNodePlacement(
   store: KnowledgeStorage,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
+  recordScope: SubconsciousScopeSelection | undefined,
 ): Promise<KnowledgeScopeIds> {
-  if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection | undefined);
+  // Without an explicit placement the node shares its first record's rung, so the record is never
+  // stranded on a node that its own readers cannot see.
+  if (placement === undefined) return resolveWriteScopeIds(options, recordScope);
+  if ((SCOPE_RUNGS as readonly string[]).includes(placement)) {
+    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection);
   }
   const frontier = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? []) ?? [];
   const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
   if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
-  return [...resolveWriteScopeIds(options), scope.scopeNodeId];
+  return [...resolveWriteScopeIds(options, recordScope), scope.scopeNodeId];
 }
 
 async function requireVisible(
@@ -125,7 +129,7 @@ export function createKnowledgeWriteTools(
           when?: string;
         };
         const store = await getStore(memory);
-        const nodeScope = await resolveNodePlacement(memory, store, options, value.nodeScope);
+        const nodeScope = await resolveNodePlacement(memory, store, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScopeIds(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
