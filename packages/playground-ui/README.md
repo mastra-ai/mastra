@@ -28,12 +28,14 @@ export function SaveButton() {
 ```tsx
 import { GrainFill } from '@mastra/playground-ui/components/GrainFill';
 
-<div className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim bg-card shadow-(--elevation-raised)">
-  <GrainFill tone="warning" width={464} height={200} className="absolute inset-0 -z-10" />
+<div className="relative isolate h-50 w-116 max-w-full overflow-hidden rounded-2xl border border-surface-rim shadow-(--elevation-raised)">
+  <div className="absolute inset-0 -z-10 bg-card">
+    <GrainFill tone="warning" width={464} height={200} className="absolute inset-0" />
+  </div>
 </div>;
 ```
 
-The fill uses CSS colors and shared static masks that capture the wave and fine grain together at 2× resolution, so it works during server rendering and without WebGL or a theme provider. Colors follow the document's `html.light` mode and local token overrides. The enclosing surface owns the border radius and overflow clipping; keep the grain layer square and fill its bounds. A surface border preserves the rim without rounding each background layer. `Notice` does this automatically and adds a subtle white inset highlight in light mode.
+The fill uses CSS colors and shared static masks that capture the wave and fine grain together at 2× resolution, so it works during server rendering and without WebGL or a theme provider. Colors follow the document's `html.light` mode and local token overrides. The outer frame owns only the border radius and overflow clipping. Place the base color and grain inside a separate square background layer; neither background layer has its own radius or clipping. A surface border preserves the rim without rounding each background layer. `Notice` does this automatically and adds a subtle white inset highlight in light mode.
 
 To regenerate the masks, run `node scripts/generate-grain-masks.mjs` from the repository root. This optional authoring tool requires the playground's Playwright, Chromium, and Python Pillow. It packs Paper Shaders 0.0.81 into a temporary directory to capture the reference grain, then encodes shared monochrome WebP masks. Paper is not an application dependency or a build requirement. Set `GRAIN_CHROMIUM_PATH` when using a system Chromium installation.
 

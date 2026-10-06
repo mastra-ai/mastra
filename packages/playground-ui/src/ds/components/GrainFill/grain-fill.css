@@ -34,7 +34,6 @@
   --grain-mask: url('./grain-mask-dark.webp');
 
   pointer-events: none;
-  background-color: var(--card);
 }
 
 /* The mask carries the wave and its fine grain together, rather than tiling
