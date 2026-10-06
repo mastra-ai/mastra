@@ -355,8 +355,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
     // --- Config validation (read-only) ---
     const restoredThreadSelection = Boolean(restoredThreadId || thread?.clone);
-    const modeIdForModel = options.mode ?? session.mode.get();
-    const configuredDefaultModelId = options.modeDefaults?.[modeIdForModel];
+    const modeIdForModel = options.mode ?? (options.modeDefaults ? session.mode.get() : undefined);
+    const configuredDefaultModelId = modeIdForModel ? options.modeDefaults?.[modeIdForModel] : undefined;
     const modelIdToApply =
       options.model ?? (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
     try {
