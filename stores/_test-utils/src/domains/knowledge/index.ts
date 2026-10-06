@@ -47,6 +47,58 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.dangerouslyClearAll();
     });
 
+    it('adds newly declared parent edges and grants to existing static scopes, but never to materialized ones', async () => {
+      const org = { address: 'org:acme', name: 'Acme' };
+      const other = { address: 'org:other', name: 'Other' };
+      let first;
+      try {
+        first = await store.reconcileStructure({ scopes: [org, other, { address: 'team', name: 'Team' }] });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      const teamParents = async () =>
+        (await store.listScopeNodes()).find(scope => scope.address === 'team')?.parentIds ?? [];
+
+      const withParent = await store.reconcileStructure({
+        scopes: [org, other, { address: 'team', name: 'Team', parentAddresses: ['org:acme'] }],
+      });
+      expect(withParent).toMatchObject({ changed: true, accessEpoch: first.accessEpoch + 1, createdScopeIds: [] });
+      expect(await teamParents()).toEqual([first.scopes['org:acme']]);
+
+      const teamWithGrant = {
+        address: 'team',
+        name: 'Team',
+        parentAddresses: ['org:acme'],
+        grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+      };
+      const withGrant = await store.reconcileStructure({ scopes: [org, other, teamWithGrant] });
+      expect(withGrant).toMatchObject({ changed: true, accessEpoch: withParent.accessEpoch + 1 });
+      await expect(store.reconcileStructure({ scopes: [org, other, teamWithGrant] })).resolves.toMatchObject({
+        changed: false,
+        accessEpoch: withGrant.accessEpoch,
+      });
+
+      // Materialization plans keep a scope as it was created, even when its template changes.
+      await expect(
+        store.reconcileStructure({
+          scopes: [
+            {
+              ...teamWithGrant,
+              parentAddresses: ['org:acme', 'org:other'],
+              grants: [...teamWithGrant.grants, { scopeRefAddress: 'org:other', role: 'readonly' }],
+            },
+          ],
+          retrofit: false,
+        }),
+      ).resolves.toMatchObject({ changed: false, accessEpoch: withGrant.accessEpoch });
+      expect(await teamParents()).toEqual([first.scopes['org:acme']]);
+    });
+
     it('persists one content-capable node record', async () => {
       const node = await store.createNode({
         name: 'Deploy',

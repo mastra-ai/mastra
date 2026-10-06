@@ -484,6 +484,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         const scopes: Record<string, string> = {};
         const createdScopeIds: string[] = [];
         const createdAddresses = new Set<string>();
+        const retrofit = plan.retrofit ?? true;
+        let structureChanged = false;
         const deletedScopeAddresses = new Set<string>();
         const resolveAddress = async (address: string): Promise<string | undefined> => {
           if (scopes[address]) return scopes[address];
@@ -524,14 +526,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           scopes[scope.address] = id;
           createdAddresses.add(scope.address);
           createdScopeIds.push(id);
+          structureChanged = true;
         }
 
         for (const scope of plan.scopes) {
-          if (!createdAddresses.has(scope.address)) continue;
+          if (!createdAddresses.has(scope.address) && (!retrofit || deletedScopeAddresses.has(scope.address))) continue;
           const scopeNodeId = scopes[scope.address]!;
           for (const parentAddress of scope.parentAddresses ?? []) {
             const parentId = await resolveAddress(parentAddress);
             if (!parentId || deletedScopeAddresses.has(parentAddress)) {
+              const deletedParentId = scopes[parentAddress];
+              const existing = deletedParentId
+                ? await tx.execute({
+                    sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+                    args: [scopeNodeId, deletedParentId],
+                  })
+                : undefined;
+              if (existing?.rows.length) continue;
               throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
             }
             const sibling = await tx.execute({
@@ -541,24 +552,34 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             if (sibling.rows.length) {
               throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
             }
-            await tx.execute({
+            const inserted = await tx.execute({
               sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
               args: [scopeNodeId, parentId, new Date().toISOString()],
             });
+            structureChanged ||= inserted.rowsAffected > 0;
           }
           for (const grant of scope.grants ?? []) {
             const scopeRefId = await resolveAddress(grant.scopeRefAddress);
             if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
+              const deletedScopeRefId = scopes[grant.scopeRefAddress];
+              const existing = deletedScopeRefId
+                ? await tx.execute({
+                    sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE scopeNodeId=? AND scopeRefId=?`,
+                    args: [scopeNodeId, deletedScopeRefId],
+                  })
+                : undefined;
+              if (existing?.rows.length) continue;
               throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
             }
-            await tx.execute({
+            const inserted = await tx.execute({
               sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeNodeId,scopeRefId,role,canSuggest) VALUES (?,?,?,?)`,
               args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
             });
+            structureChanged ||= inserted.rowsAffected > 0;
           }
         }
 
-        if (createdScopeIds.length) {
+        if (structureChanged) {
           await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
         }
         const state = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
@@ -566,7 +587,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           scopes,
           createdScopeIds,
           deletedScopeAddresses: [...deletedScopeAddresses],
-          changed: createdScopeIds.length > 0,
+          changed: structureChanged,
           accessEpoch: Number(state.rows[0]?.epoch ?? 0),
         };
       }),
