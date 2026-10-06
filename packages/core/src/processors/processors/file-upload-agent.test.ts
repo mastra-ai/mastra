@@ -79,7 +79,7 @@ function createModel(holdFirstStream?: Promise<void>) {
 
 /** Sandbox double with the `writeFiles` fast path; records every write and command. */
 function createFakeSandbox(
-  overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles' | 'executeCommand' | 'workingDirectory'>> = {},
+  overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles' | 'executeCommand'>> & { workingDirectory?: string } = {},
 ) {
   const writes: SandboxFileInput[][] = [];
   const commands: string[] = [];

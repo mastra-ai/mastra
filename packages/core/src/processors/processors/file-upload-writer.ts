@@ -57,9 +57,15 @@ async function createDirectories(
   files: SandboxUpload[],
   abortSignal?: AbortSignal,
 ): Promise<string | undefined> {
-  if (!sandbox.executeCommand) return absolute(sandbox.workingDirectory);
+  if (!sandbox.executeCommand) return absolute(workingDirectoryOf(sandbox));
   const directories = directoriesOf(files).map(shellQuote).join(' ');
   return absolute((await runScript(sandbox, `mkdir -p ${directories} && pwd`, abortSignal)).trim());
+}
+
+// Not part of the sandbox interface: `MastraSandbox` providers expose it, other sandboxes may not.
+function workingDirectoryOf(sandbox: WorkspaceSandbox): string | undefined {
+  const { workingDirectory } = sandbox as { workingDirectory?: unknown };
+  return typeof workingDirectory === 'string' ? workingDirectory : undefined;
 }
 
 const absolute = (directory: string | undefined) => (directory?.startsWith('/') ? directory : undefined);
