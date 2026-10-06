@@ -3,7 +3,7 @@
 '@mastra/deployer': patch
 ---
 
-Fixed unauthenticated access to agent browser streaming. The browser WebSocket stream (`/browser/:agentId/stream`), the session probe, and the close endpoint now require the same authentication as the rest of the server. Previously anyone who could reach the server could watch a live browser screen, send mouse and keyboard input to a running agent session, and force-close it, without any credentials.
+Agent browser streaming now requires authentication. The browser WebSocket stream (`/browser/:agentId/stream`), the session probe, and the close endpoint previously accepted unauthenticated requests; they now require the same authentication as the rest of the server.
 
 Browser streaming is now denied with `401` unless the request carries a valid credential for the server auth provider configured on `Mastra`:
 
