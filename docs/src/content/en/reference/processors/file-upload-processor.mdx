@@ -331,6 +331,7 @@ The processor handles files sent with `agent.sendMessage()` and `agent.sendSigna
 ## Limitations
 
 - **Stored messages with a raw file.** A message stored without going through the processor keeps its file, and the model receives it on later turns. This happens with threads created before you added the processor, and with a signal sent with the `persist` behavior, which is stored without running input processors.
+- **Sandboxes shared across threads.** The directory of each thread keeps files apart but doesn't protect them. In a sandbox shared by other threads or users, the command tool of any thread can read every upload. When files are private, resolve [one sandbox per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 - **Text files sent from Studio.** Studio inserts a text file, such as a CSV, JSON, Markdown, or source file, into the message as text instead of attaching it as a file. The processor never sees it, so it isn't uploaded and its whole content goes into the prompt. A file sent through the API as a file part is uploaded as usual.
 - **Durable agents and early signals.** On a durable agent, a signal that arrives before the first model call of a run isn't uploaded. The turn stops with `FILE_NOT_UPLOADED`.
 - **Relative paths with `writeFiles`.** Each sandbox provider resolves the relative `uploads/` path itself. Check that your provider resolves it against the directory where commands run.
