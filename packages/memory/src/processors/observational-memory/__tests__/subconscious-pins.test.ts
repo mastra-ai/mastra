@@ -212,9 +212,25 @@ describe('Subconscious pinned knowledge', () => {
     await store.createRecord({ node: kept.nodeId, text: 'hidden pin', scopeIds: [hidden.id] });
     const visible = await listPinnedKnowledge({
       knowledge: memory.knowledge,
-      scopeIds: [...threadScope.slice(0, 2), hidden.id],
+      scopeIds: [...threadScope, hidden.id],
     });
-    expect(visible.pins).toEqual([]);
+    expect(visible.pins.map(pin => pin.text)).toEqual(['thread pin']);
+  });
+
+  it('rejects an edit it could not finish without adding a duplicate pin', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const store = await getStore(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'original', scope: 'thread' } as any, {} as any);
+
+    // `edit` may append the replacement but may not remove the original.
+    await store.upsertScopeGrant({ scopeNodeId: threadScope[2]!, scopeRefId: threadScope[2]!, role: 'edit' });
+    await store.upsertScopeGrant({ scopeNodeId: resourceScope[1]!, scopeRefId: resourceScope[1]!, role: 'edit' });
+    await expect(
+      tools.knowledge_edit_pin!.execute!({ recordId: pinned.id, text: 'replacement' } as any, {} as any),
+    ).rejects.toThrow();
+    const { pins } = await listPinnedKnowledge({ knowledge: memory.knowledge, scopeIds: threadScope });
+    expect(pins.map(pin => pin.text)).toEqual(['original']);
   });
 
   it('fails closed without a Knowledge instance', async () => {
