@@ -7927,6 +7927,9 @@ importers:
         specifier: ^7.5.0
         version: 7.5.0(@aws-sdk/credential-providers@3.1104.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9)
     devDependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -8022,6 +8025,9 @@ importers:
         specifier: ^3.24.4
         version: 3.24.4(@types/node@22.19.15)
     devDependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
