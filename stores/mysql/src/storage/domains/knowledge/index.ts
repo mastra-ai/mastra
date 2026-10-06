@@ -9,7 +9,6 @@ import {
   isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
-  KNOWLEDGE_CURSORS_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
   KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
@@ -39,7 +38,6 @@ import {
   sanitizeKnowledgeImportError,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
   TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
@@ -312,6 +310,10 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
   };
 }
 
+// Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
 export class KnowledgeMySQL extends KnowledgeStorage {
   readonly #pool: Pool;
   readonly #operations: StoreOperationsMySQL;
@@ -371,11 +373,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_SCHEMA, schema: KNOWLEDGE_SCHEMA_SCHEMA }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_CURSORS,
-        schema: KNOWLEDGE_CURSORS_SCHEMA,
-        compositePrimaryKey: ['sourceThreadId', 'agent'],
-      }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA }),
       generateTableSQL({ tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA }),
     ];
@@ -396,7 +393,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       [TABLE_KNOWLEDGE_IMPORT_RUNS, KNOWLEDGE_IMPORT_RUNS_SCHEMA],
       [TABLE_KNOWLEDGE_PROPOSALS, KNOWLEDGE_PROPOSALS_SCHEMA],
       [TABLE_KNOWLEDGE_SCHEMA, KNOWLEDGE_SCHEMA_SCHEMA],
-      [TABLE_KNOWLEDGE_CURSORS, KNOWLEDGE_CURSORS_SCHEMA, ['sourceThreadId', 'agent']],
       [TABLE_KNOWLEDGE_ACTIVITY, KNOWLEDGE_ACTIVITY_SCHEMA],
       [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA],
     ] as const;
@@ -478,7 +474,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         TABLE_KNOWLEDGE_IMPORT_STATE,
         TABLE_KNOWLEDGE_IMPORT_RUNS,
         TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-        TABLE_KNOWLEDGE_CURSORS,
         TABLE_KNOWLEDGE_RECORDS,
         TABLE_KNOWLEDGE_NODES,
       ]) {
@@ -1225,36 +1220,24 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return results;
   }
 
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
-    const result = await this.#executor.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_CURSORS}" WHERE sourceThreadId=? AND agent=?`,
-      args: [input.sourceThreadId, input.agent],
-    });
-    const row = result.rows[0];
-    return row
-      ? {
-          sourceThreadId: String(row.sourceThreadId),
-          agent: String(row.agent),
-          lastKnowledgeId: String(row.lastKnowledgeId),
-          updatedAt: toDate(row.updatedAt),
-        }
-      : null;
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
-  async advanceCurationCursor(input: {
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
     sourceThreadId: string;
     agent: string;
     lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
-    const updatedAt = new Date();
-    const result = await this.#transaction(tx =>
-      tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastKnowledgeId,updatedAt) VALUES (?,?,?,?) AS incoming ON DUPLICATE KEY UPDATE lastKnowledgeId=IF(incoming.lastKnowledgeId>=lastKnowledgeId,incoming.lastKnowledgeId,lastKnowledgeId),updatedAt=IF(incoming.lastKnowledgeId>=lastKnowledgeId,incoming.updatedAt,updatedAt)`,
-        args: [input.sourceThreadId, input.agent, input.lastKnowledgeId, updatedAt.toISOString()],
-      }),
-    );
-    if (result.rowsAffected === 0) throw new Error('Knowledge curation cursor cannot move backwards');
-    return { ...input, updatedAt };
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
   async getScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
