@@ -540,7 +540,7 @@ describe('KnowledgeRoutes', () => {
     for (const intake of ['issue', 'pull-request', 'slack', 'thread']) {
       profiles.set(intake, {
         address: `resource:${h.projectId}:thread:${intake}`,
-        contextualScopeAddress: `resource:${h.projectId}`,
+        contextualScopeAddress: `resource:${h.projectId}:thread:${intake}`,
         parameters: { resourceId: h.projectId, threadId: intake },
       });
       const firstTouch = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`, {
