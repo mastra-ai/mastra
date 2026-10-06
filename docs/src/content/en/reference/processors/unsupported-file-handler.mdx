@@ -7,7 +7,7 @@ packages:
 
 # UnsupportedFileHandler
 
-The `UnsupportedFileHandler` is an **error processor** that keeps an agent working when the model rejects a file the user sent. It takes the file out of the prompt and calls the model again. When the agent's workspace has a sandbox, the file is uploaded there and the model gets its path. Otherwise, the model gets a note saying the file wasn't sent.
+The `UnsupportedFileHandler` is an **error processor** that keeps an agent working when the model rejects a file the user sent. It takes the file out of the prompt and calls the model again. When the agent's workspace has a sandbox, the file is uploaded there and the model gets its path. Otherwise, the model gets a placeholder in place of the file.
 
 Mastra adds this processor to every agent's `errorProcessors` by default, after `PrefillErrorHandler` and before `StreamErrorRetryProcessor`. It needs no configuration. Setting `errorProcessorDefaults: false` turns it off along with the other defaults.
 
@@ -28,13 +28,10 @@ type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 size: 48213 bytes
 ```
 
-Without a sandbox, or when the upload fails, the model gets a note instead, and the turn goes on:
+Without a sandbox, or when the upload fails, the model gets the placeholder Mastra uses for any attachment it can't use, and the turn goes on. A file sent without a name shows its type instead:
 
 ```text
-[File not sent]
-name: leads.xlsx
-type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-reason: The model does not support this type of file, so the file was not sent to it.
+[Attachment unavailable: leads.xlsx]
 ```
 
 The sandbox is the workspace of the step, the one the agent's tools use. Files over 10 MB aren't uploaded and get a note with the reason.
@@ -74,7 +71,7 @@ The `UnsupportedFileHandler` takes no constructor parameters.
     name: 'processLLMRequest',
     type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
     description:
-      'Once a call of the request was refused for a file, uploads the files the model may not read to the sandbox, or notes them, in the prompt of every following call.',
+      'Once a call of the request was refused for a file, uploads the files the model may not read to the sandbox, or replaces them with a placeholder, in the prompt of every following call.',
     isOptional: false,
   },
 ]}

@@ -1,6 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 
 import type { MessageList } from '../agent/message-list';
+import { unavailableAttachmentPlaceholder } from '../agent/message-list/prompt/unavailable-attachments';
 import { RequestContext } from '../request-context';
 import {
   cacheOf,
@@ -160,11 +161,8 @@ function mayBeUnsupported(part: PromptFilePart, rejected: Set<string>): boolean 
   return !(mediaType.startsWith('image/') || mediaType.startsWith('text/') || mediaType === 'application/pdf');
 }
 
+// The placeholder Mastra uses for an attachment it can't use, so the model sees one wording for both cases.
+// A file without a name shows its type, as there.
 function unsentNote(part: PromptFilePart, fileName = part.filename): string {
-  return [
-    '[File not sent]',
-    `name: ${toDisplayName(fileName)}`,
-    `type: ${part.mediaType}`,
-    'reason: The model does not support this type of file, so the file was not sent to it.',
-  ].join('\n');
+  return unavailableAttachmentPlaceholder(fileName ? toDisplayName(fileName) : part.mediaType || 'file');
 }

@@ -119,13 +119,8 @@ const turnWith = (...files: Array<ReturnType<typeof file>>) => [
   { role: 'user' as const, content: [{ type: 'text' as const, text: 'Read these' }, ...files] },
 ];
 
-const unsentNote = (name: string, mediaType: string) =>
-  [
-    '[File not sent]',
-    `name: ${name}`,
-    `type: ${mediaType}`,
-    'reason: The model does not support this type of file, so the file was not sent to it.',
-  ].join('\n');
+/** The placeholder Mastra also uses for an attachment it can't use; a file without a name shows its type. */
+const unsentNote = (name: string) => `[Attachment unavailable: ${name}]`;
 
 const run = async (agent: Agent, mode: 'generate' | 'stream', input: Parameters<Agent['generate']>[0]) => {
   if (mode === 'generate') return (await agent.generate(input, { memory: MEMORY })).text;
@@ -144,7 +139,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       expect(prompts).toHaveLength(2);
       expect(userFileParts(prompts[0]!)).toMatchObject([{ mediaType: XLSX, filename: 'leads.xlsx' }]);
       expect(userFileParts(prompts[1]!)).toEqual([]);
-      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
     });
 
     it('sends a file the model accepts unchanged, in a single call', async () => {
@@ -188,11 +183,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
 
     expect(result.text).toBe('ok');
     expect(prompts).toHaveLength(2);
-    expect(userTexts(prompts[1]!)).toEqual([
-      'Read these',
-      unsentNote('leads.xlsx', XLSX),
-      unsentNote('unnamed file', 'application/zip'),
-    ]);
+    expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx'), unsentNote('application/zip')]);
   });
 
   it('keeps the rejected file in the stored message', async () => {
@@ -236,8 +227,8 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
 
     expect([first.text, second.text]).toEqual(['ok', 'ok']);
     expect(prompts).toHaveLength(4);
-    expect(userTexts(prompts[1]!)).toContain(unsentNote('old.xlsx', XLSX));
-    expect(userTexts(prompts[3]!)).toContain(unsentNote('old.xlsx', XLSX));
+    expect(userTexts(prompts[1]!)).toContain(unsentNote('old.xlsx'));
+    expect(userTexts(prompts[3]!)).toContain(unsentNote('old.xlsx'));
   });
 
   it('leaves a rejection that is not about a file alone', async () => {
@@ -329,7 +320,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
 
       expect(result.text).toBe('ok');
-      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
     });
 
     it('falls back to a note when the upload fails, without stopping the turn', async () => {
@@ -344,7 +335,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
 
       expect(result.text).toBe('ok');
       expect(result.tripwire).toBeUndefined();
-      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx', XLSX)]);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
     });
   });
 });
