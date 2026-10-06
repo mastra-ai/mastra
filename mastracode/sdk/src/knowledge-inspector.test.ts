@@ -588,6 +588,30 @@ describe('KnowledgeInspector', () => {
     });
   });
 
+  it('materializes identity rungs that own themselves rather than their parent', async () => {
+    const db = new InMemoryDB();
+    const storage = new MastraCompositeStore({
+      id: 'lazy-identity',
+      domains: { knowledge: new InMemoryKnowledgeStorage({ db }) },
+    });
+    const runtime = new Knowledge({ id: 'lazy-identity', storage });
+    const inspector = await createKnowledgeInspector({
+      storage,
+      knowledge: runtime,
+      session: createSessionHarness().session,
+    });
+
+    await inspector!.listNodes({ level: 'thread' });
+
+    const scopeId = (address: string) => db.knowledgeScopeAddresses.get(address)!;
+    const owners = (address: string) =>
+      [...db.knowledgeScopeGrants.values()]
+        .filter(grant => grant.scopeNodeId === scopeId(address) && grant.role === 'owner')
+        .map(grant => grant.scopeRefId);
+    expect(owners('resource:project-1')).toEqual([scopeId('resource:project-1')]);
+    expect(owners('resource:project-1:thread:thread-1')).toEqual([scopeId('resource:project-1:thread:thread-1')]);
+  });
+
   it('selects registered Knowledge keys and never falls back for an unknown key', async () => {
     const storage = new MastraCompositeStore({ id: 'fallback', default: new InMemoryStore({ id: 'fallback' }) });
     const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }) });
