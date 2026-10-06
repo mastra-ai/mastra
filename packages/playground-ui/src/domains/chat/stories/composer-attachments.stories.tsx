@@ -100,6 +100,14 @@ export const MixedFiles: Story = {
     const thumbnailHeight = previews[0]?.getBoundingClientRect().height;
     const thumbnailStyle = previews[0] && getComputedStyle(previews[0]);
 
+    const scrollArea = attachments.closest('[data-slot="composer-attachment-scroll-area"]');
+    if (!scrollArea || !previews[0]) throw new Error('Missing attachment scroll area');
+    const areaRect = scrollArea.getBoundingClientRect();
+    const firstCardRect = previews[0].getBoundingClientRect();
+    // Visible scrollbars must overlay the gutter rather than add height beneath the cards.
+    await expect(firstCardRect.top - areaRect.top).toBe(8);
+    await expect(areaRect.bottom - firstCardRect.bottom).toBe(4);
+
     await expect(thumbnailHeight).toBeGreaterThan(0);
     for (const preview of previews) {
       await expect(preview?.getBoundingClientRect().height).toBe(thumbnailHeight);
