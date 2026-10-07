@@ -747,6 +747,100 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  describe('getRepositoriesAccess', () => {
+    async function seed(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+      const register = async (externalId: string, accountName: string) =>
+        integration.versionControl.registerInstallation({
+          orgId: 'org-1',
+          userId: 'user-1',
+          installation: { externalId, accountName, accountType: 'Organization' },
+        });
+      const acme = await register('7', 'acme');
+      const repositories = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: [
+          { externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+          { externalId: '102', slug: 'acme/docs', defaultBranch: 'main' },
+        ],
+      });
+      return { integration, acme, repositories, register };
+    }
+
+    it('mints one token naming every repository of a single installation', async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, repositories } = await seed(fetchImpl);
+
+      const access = await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: repositories.map(repository => repository.id),
+      });
+      expect(access).toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_environment' },
+      });
+      expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toContain('/github-app/installations/7/token');
+      expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+        repositories: ['app', 'docs'],
+        permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+      });
+
+      // The grant is reused for the same set, in any order.
+      const again = await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: [...repositories.map(repository => repository.id)].reverse(),
+      });
+      expect(again).toBe(access);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('declines a set spanning two installations without minting', async () => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const { integration, repositories, register } = await seed(fetchImpl);
+      const other = await register('8', 'globex');
+      const [elsewhere] = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: other.id,
+        repositories: [{ externalId: '201', slug: 'globex/site', defaultBranch: 'main' }],
+      });
+
+      await expect(
+        integration.versionControl.getRepositoriesAccess!({
+          orgId: 'org-1',
+          repositoryIds: [repositories[0]!.id, elsewhere!.id],
+        }),
+      ).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('declines more than ten repositories without minting', async () => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const { integration, acme } = await seed(fetchImpl);
+      const many = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: Array.from({ length: 11 }, (_, index) => ({
+          externalId: String(300 + index),
+          slug: `acme/repo-${index}`,
+          defaultBranch: 'main',
+        })),
+      });
+
+      await expect(
+        integration.versionControl.getRepositoriesAccess!({
+          orgId: 'org-1',
+          repositoryIds: many.map(repository => repository.id),
+        }),
+      ).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+  });
+
   it('requests all write permissions when minting an installation token', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

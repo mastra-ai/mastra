@@ -211,6 +211,9 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   pull_requests: 'write',
 } as const;
 
+/** The Platform mints one installation token for at most this many named repositories. */
+const MAX_REPOSITORIES_PER_TOKEN = 10;
+
 function loose(c: unknown): Context {
   return c as Context;
 }
@@ -489,6 +492,44 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         });
         return access;
       }
+    },
+    getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
+      const ids = [...new Set(repositoryIds)];
+      if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
+      const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
+      const cached = this.#repositoryAccessCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) return cached.access;
+      this.#repositoryAccessCache.delete(cacheKey);
+
+      const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
+      if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
+      const found = repositories as NonNullable<(typeof repositories)[number]>[];
+      // One token covers one installation; an environment spanning several
+      // cannot be served by a single credential.
+      const installationIds = new Set(found.map(repository => repository.installationId));
+      if (installationIds.size !== 1) return undefined;
+      const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = parsePositiveInteger(installation.externalId);
+      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+
+      const token = await this.#client.request<{ token: string }>(
+        'POST',
+        `${API_PREFIX}/github-app/installations/${installationId}/token`,
+        {
+          repositories: found.map(repository => splitRepository(repository.slug).repo),
+          permissions: REPOSITORY_TOKEN_PERMISSIONS,
+        },
+      );
+      const access: RepositoryAccess = {
+        cloneUrl: `https://github.com/${found[0]!.slug}.git`,
+        authorization: { scheme: 'bearer', token: token.token },
+      };
+      setBounded(this.#repositoryAccessCache, cacheKey, {
+        access,
+        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+      });
+      return access;
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -1121,7 +1162,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async mintInstallationToken(installationId: number): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
-    if (repositories.length === 0 || repositories.length > 10) {
+    if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
     const result = await this.#client.request<{ token: string }>(

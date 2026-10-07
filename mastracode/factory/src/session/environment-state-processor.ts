@@ -25,6 +25,8 @@ export interface SessionEnvironmentState {
   /** The workspace root, the session's working directory; repositories sit beneath it. */
   workingDirectory: string;
   repositories: SessionEnvironmentRepositoryState[];
+  /** One free-form line the boot wants the agent to know (never a credential), rendered last. */
+  note?: string;
 }
 
 // The boot records what it materialized, keyed by the factory session id (the
@@ -71,6 +73,14 @@ export function updateSessionEnvironmentRepository(
     };
   });
   entry.state = { ...entry.state, repositories };
+}
+
+/** Set or clear the environment's note; a no-op when the session's environment is not recorded here. */
+export function setSessionEnvironmentNote(sessionId: string, note: string | null): void {
+  const entry = environments.get(sessionId);
+  if (!entry) return;
+  const { note: _previous, ...rest } = entry.state;
+  entry.state = note ? { ...rest, note } : rest;
 }
 
 export function clearSessionEnvironment(sessionId: string): void {
@@ -134,7 +144,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     const contents =
       `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n` +
       lines.join('\n') +
-      '\nRun git and project commands inside the repository directory they belong to.';
+      '\nRun git and project commands inside the repository directory they belong to.' +
+      (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,
       cacheKey,

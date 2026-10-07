@@ -14,6 +14,8 @@ type GithubTokenInjectorResolver = () => GithubTokenInjector;
 export interface GithubRefreshTarget {
   orgId: string;
   repositoryId: string;
+  /** Every environment repository `GH_TOKEN` should reach, the session's own first; absent for a single-repository session. */
+  repositoryIds?: string[];
 }
 
 /** Recorded by the workspace resolver once it has authorized a GitHub-backed
