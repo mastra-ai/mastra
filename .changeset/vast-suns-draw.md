@@ -2,27 +2,18 @@
 '@mastra/playground-ui': minor
 ---
 
-Composer attachments now reveal removal through a full-container sleeve by default, with optional editing below it and a native context menu on touch devices. Action button corners follow the attachment radius minus their inset for concentric curves. Existing previews and removal callbacks continue to work.
+Composer attachments now reveal a full-height remove action on hover or keyboard focus. An optional `onEdit` callback adds editing below removal. Touch devices use the shared context menu, available through the actions button or a long press.
 
-Attachment surfaces use the raised-container fill so they appear lighter than the composer in dark mode. In light mode they keep the white card surface, with the shared rim and shadow providing separation.
+Dismissing the menu returns focus to the control that opened it. Preview and edit dialogs retain their own focus.
 
-The action buttons fill their column with consistent spacing; when removal is the only action, it fills the available height. The attachment list keeps an even gutter around each row. The preview fills its cover without an extra strip of unused padding. Dismissing the context menu restores focus to the control that opened it.
-
-Applications can now supply an optional editor and override the context-menu preview:
+Existing preview children and removal callbacks continue to work. Use `onPreview` to override the context-menu preview when needed:
 
 ```tsx
-// Existing usage remains supported.
 <ComposerAttachment name={file.name} onRemove={removeFile}>
   {preview}
 </ComposerAttachment>
 
-// Add application-owned actions when available.
-<ComposerAttachment
-  name={file.name}
-  onRemove={removeFile}
-  onEdit={editFile}
-  onPreview={previewFile}
->
+<ComposerAttachment name={file.name} onRemove={removeFile} onEdit={editFile} onPreview={previewFile}>
   {preview}
 </ComposerAttachment>
 ```
