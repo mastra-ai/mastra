@@ -60,8 +60,8 @@ export interface KnowledgeAccessProfile {
   baselineScopes: MaterializeKnowledgeScopeInput[];
   intakeScopes?: MaterializeKnowledgeScopeInput[];
   /**
-   * Host-operator trust for this caller. Agentic import transcripts reflect the importer's
-   * authority rather than the viewer's, so they are returned only to operators.
+   * Host-operator trust for import status, runs, and transcripts, which reflect the importer's
+   * authority rather than the viewer's. Defaults to organization administrators.
    */
   importOperator?: boolean;
 }
@@ -305,6 +305,10 @@ function previewTranscriptMessage(content: unknown): { preview: string; truncate
   return { preview, truncated: true, omittedBytes };
 }
 
+function importOperatorRequired(c: Context): Response {
+  return c.json({ error: 'forbidden', message: 'Knowledge imports are visible to instance operators.' }, 403);
+}
+
 function loose(c: unknown): Context {
   return c as Context;
 }
@@ -337,8 +341,8 @@ interface ResolvedView {
   readableScopeIds: KnowledgeScopeIds;
   /** Binding scope addresses whose imports this view may list. */
   importScopeAddresses: ReadonlySet<string>;
-  /** Whether the host trusts this caller with import transcripts. */
-  importOperator: boolean;
+  /** Explicit host-operator trust from the access profile, when the host decided it. */
+  importOperator?: boolean;
   orgScopeId: string;
   resourceScopeId: string;
   threadScopeId?: string;
@@ -717,6 +721,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     );
   }
 
+  /** Import status, runs, and transcripts are host-operator data, gated at the view-as trust level. */
+  async #isImportOperator(c: Context, view: ResolvedView): Promise<boolean> {
+    if (view.importOperator !== undefined) return view.importOperator;
+    if (!this.deps.auth.enabled()) return true;
+    const tenant = this.deps.auth.tenant(c);
+    return tenant?.orgId !== undefined && (await this.deps.auth.isOrganizationAdmin(c, tenant.orgId));
+  }
+
   #importRunPayload(projectId: string, perspectiveKey: string, run: KnowledgeImportRun): KnowledgeImportRunPayload {
     const binding = importBinding(run.binding);
     return {
@@ -752,7 +764,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         vouchedScopes: Array<{ address: string; scopeId: string }>;
         rootScopeId: string;
         perspectiveKey: string;
-        importOperator: boolean;
+        importOperator?: boolean;
       }
     | undefined
   > {
@@ -810,7 +822,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       scopeIds,
       vouchedScopes,
       rootScopeId: rootScope.scopeNodeId,
-      importOperator: profile.importOperator === true,
+      ...(typeof profile.importOperator === 'boolean' ? { importOperator: profile.importOperator } : {}),
       perspectiveKey: `${input.projectId}\u0000${input.userId}\u0000${profile.id}\u0000${knowledgeScopeIdsKey(scopeIds)}`,
     };
   }
@@ -948,7 +960,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         perspectiveKey,
         readableScopeIds,
         importScopeAddresses,
-        importOperator: profile.importOperator,
+        ...(profile.importOperator === undefined ? {} : { importOperator: profile.importOperator }),
         orgScopeId,
         resourceScopeId: profile.rootScopeId,
         pinScopes: [{ level: 'resource', scopeId: profile.rootScopeId }],
@@ -967,7 +979,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       perspectiveKey,
       readableScopeIds,
       importScopeAddresses,
-      importOperator: profile.importOperator,
+      ...(profile.importOperator === undefined ? {} : { importOperator: profile.importOperator }),
       orgScopeId,
       resourceScopeId,
       threadScopeId,
@@ -1137,6 +1149,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const c = loose(raw);
           const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
+          if (!(await this.#isImportOperator(c, resolved))) return importOperatorRequired(c);
           const importers = await Promise.all(
             resolved.knowledge.listImporters().map(async importer => {
               const triggerKinds: KnowledgeImportTriggerKind[] = ['programmatic'];
@@ -1190,6 +1203,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const c = loose(raw);
           const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
+          if (!(await this.#isImportOperator(c, resolved))) return importOperatorRequired(c);
           const importerId = c.req.param('importerId');
           if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
           if (!resolved.knowledge.getImporter(importerId)) return c.json({ error: 'importer_not_found' }, 404);
@@ -1244,6 +1258,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const c = loose(raw);
           const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
+          if (!(await this.#isImportOperator(c, resolved))) return importOperatorRequired(c);
           const importerId = c.req.param('importerId');
           if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
           const importer = resolved.knowledge.getImporter(importerId);
@@ -1283,7 +1298,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               })
             : [];
           let transcript: KnowledgeImportRunDetailPayload['transcript'];
-          if (run.transcriptThreadId && resolved.importOperator) {
+          if (run.transcriptThreadId) {
             const memory = importer.agentic
               ? await importer.agentic.agent.getMemory().catch(() => undefined)
               : undefined;
