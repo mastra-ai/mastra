@@ -36,9 +36,10 @@ function stripFromOpenRouterCapabilities(modelId: string, dimension?: string) {
 function withReasoningData(reasoningByProvider: ReasoningCapabilities) {
   const originalReadFileSync = fs.readFileSync;
   vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
-    const content = originalReadFileSync(filePath, options);
-    const reasoning = typeof filePath === 'string' ? reasoningByProvider[path.basename(filePath, '.json')] : undefined;
-    if (!reasoning || typeof content !== 'string') return content;
+    const provider = typeof filePath === 'string' ? decodeURIComponent(path.basename(filePath, '.json')) : undefined;
+    const reasoning = provider ? reasoningByProvider[provider] : undefined;
+    if (!reasoning || typeof filePath !== 'string') return originalReadFileSync(filePath, options);
+    const content = fs.existsSync(filePath) ? String(originalReadFileSync(filePath, options)) : '{}';
     return JSON.stringify({ ...JSON.parse(content), reasoning });
   });
 }
@@ -259,6 +260,8 @@ describe('getModelReasoningOptions', () => {
       anthropic: { 'claude-haiku-4-5': haikuBudget },
       openai: { 'gpt-5': gpt5Efforts },
       openrouter: { 'anthropic/claude-haiku-4.5': gatewayToggle },
+      'acme/anthropic': { 'claude-haiku-4-5': gatewayToggle },
+      'aws-bedrock': { 'us.anthropic.claude-sonnet-4-5': gatewayToggle },
     });
   });
 
@@ -285,8 +288,16 @@ describe('getModelReasoningOptions', () => {
     expect(getModelReasoningOptions('netlify/openai/gpt-5')).toEqual(gpt5Efforts);
   });
 
+  it("answers with a gateway's per-provider data before the upstream provider's", () => {
+    expect(getModelReasoningOptions('acme/anthropic/claude-haiku-4-5')).toEqual(gatewayToggle);
+  });
+
   it('uses the vendor data for Bedrock-hosted models', () => {
     expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-haiku-4-5')).toEqual(haikuBudget);
+  });
+
+  it('prefers data Bedrock publishes under the full model id', () => {
+    expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-sonnet-4-5')).toEqual(gatewayToggle);
   });
 
   it('returns undefined when nothing describes the model', () => {

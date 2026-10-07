@@ -680,35 +680,46 @@ function loadReasoningByModel(provider: string): Record<string, ModelReasoningOp
   return loadProviderCapabilityFile(provider, useDynamicLoading)?.reasoning;
 }
 
-function splitNestedModelId(modelId: string): { provider: string; modelId: string } | undefined {
+type ReasoningSource = { provider: string; modelId: string };
+
+function splitNestedModelId(modelId: string): ReasoningSource | undefined {
   const delimiter = modelId.indexOf('/');
   if (delimiter <= 0 || delimiter === modelId.length - 1) return undefined;
   return { provider: modelId.substring(0, delimiter), modelId: modelId.substring(delimiter + 1) };
 }
 
+function reasoningSourcesInPrecedence(provider: string, modelId: string): ReasoningSource[] {
+  if (provider === 'aws-bedrock') {
+    const { vendor, shortId } = resolveBedrockVendorModel(modelId);
+    return [
+      { provider, modelId },
+      { provider, modelId: shortId },
+      ...(vendor ? [{ provider: vendor, modelId: shortId }] : []),
+    ];
+  }
+  const nested = splitNestedModelId(modelId);
+  if (!nested) return [{ provider, modelId }];
+  return [{ provider, modelId }, { provider: `${provider}/${nested.provider}`, modelId: nested.modelId }, nested];
+}
+
+function sourceAnswersForModel({ provider, modelId }: ReasoningSource): boolean {
+  const reasoningByModel = loadReasoningByModel(provider);
+  if (!reasoningByModel) return false;
+  return Object.hasOwn(reasoningByModel, modelId) || providerListsModel(provider, modelId);
+}
+
 /**
  * The reasoning controls a model accepts: effort values, a token budget, or an on/off toggle.
- * Returns `undefined` when no provider data describes the model. A gateway that publishes
- * reasoning data and lists the model answers for it; otherwise the nested or Bedrock vendor's
- * data is used.
+ * Returns `undefined` when no provider data describes the model. The first source that publishes
+ * reasoning data and lists the model answers for it: the provider itself, then a gateway's
+ * per-provider data, then the nested or Bedrock vendor's data.
  */
 export function getModelReasoningOptions(modelRouterId: string): ModelReasoningOption[] | undefined {
   const parsed = parseModelString(modelRouterId);
   if (!parsed.provider) return undefined;
   const provider = PROVIDER_ALIASES[parsed.provider] ?? parsed.provider;
-
-  if (provider === 'aws-bedrock') {
-    const { vendor, shortId } = resolveBedrockVendorModel(parsed.modelId);
-    return loadReasoningByModel(provider)?.[shortId] ?? (vendor ? loadReasoningByModel(vendor)?.[shortId] : undefined);
-  }
-
-  const reasoningByModel = loadReasoningByModel(provider);
-  const directOptions = reasoningByModel?.[parsed.modelId];
-  if (directOptions) return directOptions;
-  if (reasoningByModel && providerListsModel(provider, parsed.modelId)) return undefined;
-
-  const nested = splitNestedModelId(parsed.modelId);
-  return nested ? loadReasoningByModel(nested.provider)?.[nested.modelId] : undefined;
+  const answeringSource = reasoningSourcesInPrecedence(provider, parsed.modelId).find(sourceAnswersForModel);
+  return answeringSource && loadReasoningByModel(answeringSource.provider)?.[answeringSource.modelId];
 }
 
 /** @internal Reset capability caches. For testing only. */
