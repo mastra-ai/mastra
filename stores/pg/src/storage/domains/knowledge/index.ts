@@ -552,125 +552,161 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async init(): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
-    const snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
-    const existingNames = snapshot
-      ? new Set([...snapshot.tables].filter(table => table.startsWith('mastra_knowledge_')))
-      : new Set(
-          (
-            await this.#executor.execute({
-              sql: `SELECT table_name AS "tableName" FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%'`,
-              args: [this.#schemaName ?? null],
-            })
-          ).rows.map(row => String(row.tableName)),
-        );
-    if (existingNames.size > 0 && !existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
-      const dropped = await this.#replaceEmptyPublishedV1();
-      if (dropped) {
+    let snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
+    let existingNames = await this.#knowledgeTableNames(snapshot);
+    if (!existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
+      const dropped = await this.#initializeCanonicalSchema();
+      if (snapshot) {
         for (const table of dropped.tables) this.#db.noteTableDropped(table);
         for (const index of dropped.indexes) this.#db.noteIndexDropped(index);
-        existingNames.clear();
+      }
+      // The catalog snapshot predates first boot; verify against the live catalog instead.
+      snapshot = null;
+      existingNames = await this.#knowledgeTableNames(null);
+    }
+    const marker = await this.#executor.execute(
+      `SELECT "version" FROM "${TABLE_KNOWLEDGE_SCHEMA}" WHERE "id" = 'canonical'`,
+    );
+    if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+      throw new KnowledgeSchemaError(
+        `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
+      );
+    }
+    const missing = KNOWLEDGE_TABLE_NAMES.filter(table => !existingNames.has(table));
+    if (missing.length > 0)
+      throw new KnowledgeSchemaError(
+        `Knowledge schema reset required: the existing Knowledge schema is missing ${missing.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
+      );
+    const columnsByTable = snapshot?.columns ?? new Map<string, Set<string>>();
+    if (!snapshot) {
+      const existingColumns = await this.#executor.execute({
+        sql: `SELECT table_name AS "tableName", column_name AS "columnName" FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%'`,
+        args: [this.#schemaName ?? null],
+      });
+      for (const row of existingColumns.rows) {
+        const columns = columnsByTable.get(String(row.tableName)) ?? new Set<string>();
+        columns.add(String(row.columnName));
+        columnsByTable.set(String(row.tableName), columns);
       }
     }
-    if (existingNames.size > 0) {
-      if (!existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
+    for (const table of KNOWLEDGE_TABLE_NAMES) {
+      const actual = columnsByTable.get(table) ?? new Set<string>();
+      const missingColumns = Object.keys(TABLE_SCHEMAS[table]).filter(column => !actual.has(column));
+      if (missingColumns.length > 0) {
         throw new KnowledgeSchemaError(
-          `Knowledge schema reset required: the existing Knowledge schema has no completion marker. ${KNOWLEDGE_RESET_GUIDANCE}`,
+          `Knowledge schema reset required: the existing Knowledge table ${table} is missing ${missingColumns.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
         );
-      }
-      const marker = await this.#executor.execute(
-        `SELECT "version" FROM "${TABLE_KNOWLEDGE_SCHEMA}" WHERE "id" = 'canonical'`,
-      );
-      if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
-        throw new KnowledgeSchemaError(
-          `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
-        );
-      }
-      const missing = KNOWLEDGE_TABLE_NAMES.filter(table => !existingNames.has(table));
-      if (missing.length > 0)
-        throw new KnowledgeSchemaError(
-          `Knowledge schema reset required: the existing Knowledge schema is missing ${missing.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
-        );
-      const columnsByTable = snapshot?.columns ?? new Map<string, Set<string>>();
-      if (!snapshot) {
-        const existingColumns = await this.#executor.execute({
-          sql: `SELECT table_name AS "tableName", column_name AS "columnName" FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%'`,
-          args: [this.#schemaName ?? null],
-        });
-        for (const row of existingColumns.rows) {
-          const columns = columnsByTable.get(String(row.tableName)) ?? new Set<string>();
-          columns.add(String(row.columnName));
-          columnsByTable.set(String(row.tableName), columns);
-        }
-      }
-      for (const table of KNOWLEDGE_TABLE_NAMES) {
-        const actual = columnsByTable.get(table) ?? new Set<string>();
-        const missingColumns = Object.keys(TABLE_SCHEMAS[table]).filter(column => !actual.has(column));
-        if (missingColumns.length > 0) {
-          throw new KnowledgeSchemaError(
-            `Knowledge schema reset required: the existing Knowledge table ${table} is missing ${missingColumns.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
-          );
-        }
       }
     }
 
+    // Converge on an already-canonical schema; on a warm snapshot these are no-ops that need no CREATE privilege.
     for (const definition of knowledgeTableDefinitions) await this.#db.createTable(definition);
     await Promise.all(
       knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
     );
-    await this.#executor.execute(
-      `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id,epoch) VALUES ('global',0) ON CONFLICT (id) DO NOTHING`,
-    );
-    await this.#executor.execute(
-      `INSERT INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id,"version") VALUES ('canonical',${KNOWLEDGE_STORAGE_SCHEMA_VERSION}) ON CONFLICT (id) DO NOTHING`,
-    );
+  }
+
+  async #knowledgeTableNames(snapshot: ReturnType<typeof getSchemaSnapshot>): Promise<Set<string>> {
+    if (snapshot) return new Set([...snapshot.tables].filter(table => table.startsWith('mastra_knowledge_')));
+    const result = await this.#executor.execute({
+      sql: `SELECT table_name AS "tableName" FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%'`,
+      args: [this.#schemaName ?? null],
+    });
+    return new Set(result.rows.map(row => String(row.tableName)));
+  }
+
+  /**
+   * First boot runs in one transaction under a schema-wide advisory lock: replacing an empty published
+   * layout, creating every canonical table and index, and writing the completion marker either all
+   * commit or all roll back, and concurrent processes serialize so exactly one initializes while the
+   * rest observe the marker. Anything other than no Knowledge tables or the empty published layout is
+   * rejected without mutation.
+   */
+  async #initializeCanonicalSchema(): Promise<{ tables: string[]; indexes: string[] }> {
+    const { KnowledgeSchemaError } = await loadKnowledgeCore();
+    return this.#client.tx(async client => {
+      const tx = createExecutor(client, this.#schemaName);
+      await tx.execute({
+        sql: 'SELECT pg_advisory_xact_lock(hashtext(?))',
+        args: [`mastra-knowledge-init:${this.#schemaName ?? 'current_schema'}`],
+      });
+      if (this.#schemaName) await client.none(`CREATE SCHEMA IF NOT EXISTS "${parseSchemaName(this.#schemaName)}"`);
+      const existing = await tx.execute({
+        sql: `SELECT table_name AS "tableName" FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+        args: [this.#schemaName ?? null],
+      });
+      const names = new Set(existing.rows.map(row => String(row.tableName)));
+      if (names.has(TABLE_KNOWLEDGE_SCHEMA)) return { tables: [], indexes: [] };
+      let dropped: { tables: string[]; indexes: string[] } = { tables: [], indexes: [] };
+      if (names.size > 0) {
+        const replaced = await this.#replaceEmptyPublishedV1(tx);
+        if (!replaced) {
+          throw new KnowledgeSchemaError(
+            `Knowledge schema reset required: the existing Knowledge schema has no completion marker. ${KNOWLEDGE_RESET_GUIDANCE}`,
+          );
+        }
+        dropped = replaced;
+      }
+      for (const definition of knowledgeTableDefinitions) {
+        await client.none(generateTableSQL({ ...definition, schemaName: this.#schemaName }));
+      }
+      for (const index of knowledgeIndexes(this.#schemaName)) await client.none(index.sql);
+      await tx.execute(
+        `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id,epoch) VALUES ('global',0) ON CONFLICT (id) DO NOTHING`,
+      );
+      await tx.execute(
+        `INSERT INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id,"version") VALUES ('canonical',${KNOWLEDGE_STORAGE_SCHEMA_VERSION}) ON CONFLICT (id) DO NOTHING`,
+      );
+      return dropped;
+    });
   }
 
   /**
    * Earlier releases created empty Knowledge tables for every app. When exactly that layout and its
    * indexes are the only Knowledge objects in this store's schema, drop it so canonical storage can
    * initialize; replacing it loses nothing. Rows, partial or unfamiliar tables, views, triggers, and
-   * extra indexes all leave the database untouched.
+   * extra indexes all leave the database untouched. Runs inside the caller's first-boot transaction.
    */
-  async #replaceEmptyPublishedV1(): Promise<{ tables: string[]; indexes: string[] } | null> {
-    return this.#transaction(async tx => {
-      const schema = this.#schemaName ?? null;
-      const relations = await tx.execute({
-        sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
-        args: [schema],
-      });
-      const tables: string[] = [];
-      for (const row of relations.rows) {
-        const name = String(row.table_name);
-        if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(name)) return null;
-        tables.push(name);
-      }
-      if (tables.length === 0) return null;
-      const columns = await tx.execute({
-        sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
-        args: [schema, tables],
-      });
-      const columnsByTable = new Map<string, string[]>(tables.map(table => [table, []]));
-      for (const row of columns.rows) columnsByTable.get(String(row.table_name))?.push(String(row.column_name));
-      if (!isPublishedKnowledgeV1Layout(columnsByTable, { timestampShadows: true })) return null;
-      const indexes = await tx.execute({
-        sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
-        args: [schema, tables],
-      });
-      const indexNames = indexes.rows.map(row => String(row.indexname));
-      for (const name of indexNames) {
-        if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return null;
-      }
-      const dependents = await tx.execute({
-        sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
-        args: [schema, tables, schema, tables],
-      });
-      if (dependents.rows.length > 0) return null;
-      for (const table of tables) {
-        if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return null;
-      }
-      await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
-      return { tables, indexes: indexNames };
+  async #replaceEmptyPublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | null> {
+    const schema = this.#schemaName ?? null;
+    const relations = await tx.execute({
+      sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+      args: [schema],
     });
+    const tables: string[] = [];
+    for (const row of relations.rows) {
+      const name = String(row.table_name);
+      if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(name)) return null;
+      tables.push(name);
+    }
+    if (tables.length === 0) return null;
+    const columns = await tx.execute({
+      sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
+      args: [schema, tables],
+    });
+    const columnsByTable = new Map<string, string[]>(tables.map(table => [table, []]));
+    for (const row of columns.rows) columnsByTable.get(String(row.table_name))?.push(String(row.column_name));
+    if (!isPublishedKnowledgeV1Layout(columnsByTable, { timestampShadows: true })) return null;
+    const indexes = await tx.execute({
+      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
+      args: [schema, tables],
+    });
+    const indexNames = indexes.rows.map(row => String(row.indexname));
+    for (const name of indexNames) {
+      if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return null;
+    }
+    const dependents = await tx.execute({
+      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
+      args: [schema, tables, schema, tables],
+    });
+    if (dependents.rows.length > 0) return null;
+    // Block writers from an older release until the drop commits, so a row cannot land after the emptiness check.
+    await tx.execute(`LOCK TABLE ${tables.map(table => `"${table}"`).join(', ')} IN ACCESS EXCLUSIVE MODE`);
+    for (const table of tables) {
+      if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return null;
+    }
+    await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
+    return { tables, indexes: indexNames };
   }
 
   override async dangerouslyReset(): Promise<void> {
