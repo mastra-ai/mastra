@@ -3,13 +3,16 @@
     box-shadow: var(--elevation-lip), var(--elevation-raised);
   }
 
-  /* The outer surface clips this square highlight and all decoration once.
-   * Paint above the grain so it cannot obscure the light-catching edge. */
+  /* This highlight belongs to the frame, not the square background layers.
+   * Match its border box and radius; the transparent border keeps the white
+   * inset rim inside the existing surface border. Paint above the grain. */
   html.light [data-slot='notice']::after {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: -1px;
+    border: 1px solid transparent;
+    border-radius: inherit;
     pointer-events: none;
-    box-shadow: inset 0 1px 2px var(--color-white);
+    box-shadow: inset 0 0 0 0.5px var(--color-white);
   }
 }
