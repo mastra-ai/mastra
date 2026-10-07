@@ -4,13 +4,13 @@ import { PostgresStore } from '..';
 import { TEST_CONFIG } from '../test-utils';
 
 const { host, port, user, password, database } = TEST_CONFIG as any;
-const urlFor = (db: string) => `postgresql://${user}:${password}@${host}:${port}/${db}`;
+const configFor = (db: string) => ({ host, port, user, password, database: db });
 
 describe('schema setup across databases', () => {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const databaseA = `schema_setup_a_${suffix}`;
   const databaseB = `schema_setup_b_${suffix}`;
-  const admin = new Pool({ connectionString: urlFor(database) });
+  const admin = new Pool(configFor(database));
   const stores: PostgresStore[] = [];
 
   beforeAll(async () => {
@@ -27,14 +27,14 @@ describe('schema setup across databases', () => {
 
   it('creates the schema in a second database that shares the schema name', async () => {
     const schemaName = 'tenant_schema';
-    const storeA = new PostgresStore({ id: 'schema-setup-a', connectionString: urlFor(databaseA), schemaName });
-    const storeB = new PostgresStore({ id: 'schema-setup-b', connectionString: urlFor(databaseB), schemaName });
+    const storeA = new PostgresStore({ id: 'schema-setup-a', ...configFor(databaseA), schemaName });
+    const storeB = new PostgresStore({ id: 'schema-setup-b', ...configFor(databaseB), schemaName });
     stores.push(storeA, storeB);
 
     await storeA.init();
     await expect(storeB.init()).resolves.toBeUndefined();
 
-    const probe = new Pool({ connectionString: urlFor(databaseB) });
+    const probe = new Pool(configFor(databaseB));
     try {
       const { rows } = await probe.query(
         `SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema = $1`,
