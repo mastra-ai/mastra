@@ -43,6 +43,10 @@ export async function seedWelcomeThread(mastra: Mastra) {
  * voice and capabilities; a directive user turn gives the guidelines. If the
  * model call fails (no gateway key, offline, …) we fall back to a static
  * greeting so first boot still ends with a usable Welcome thread.
+ *
+ * The welcome generation runs on `mastra/deepseek/deepseek-flash-latest` — fast and
+ * cheap for a one-shot greeting — regardless of the agent's configured model,
+ * so first-boot latency and cost stay predictable.
  */
 async function composeWelcome(mastra: Mastra): Promise<string> {
   const agent = mastra.getAgent(AGENT_ID);
@@ -80,6 +84,7 @@ Guidelines:
       scratchThreadId = scratch.id;
     }
     const result = await agent.generate([{ role: 'user', content: directive }], {
+      model: 'mastra/deepseek/deepseek-flash-latest',
       activeTools: [],
       ...(scratchThreadId ? { memory: { thread: scratchThreadId, resource: AGENT_ID } } : {}),
     });
