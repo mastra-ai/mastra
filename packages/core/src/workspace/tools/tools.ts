@@ -107,43 +107,6 @@ function hasSandboxConfig(workspace: Workspace): boolean {
   return !!workspace.sandbox;
 }
 
-const WRITE_WORKSPACE_TOOLS = new Set<WorkspaceToolName>([
-  WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
-  WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
-  WORKSPACE_TOOLS.FILESYSTEM.DELETE,
-  WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
-  WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT,
-  WORKSPACE_TOOLS.SEARCH.INDEX,
-]);
-
-/**
- * Whether createWorkspaceTools would expose the given tool for this workspace
- * (ignoring per-tool `enabled` config). Mirrors its capability gates without building tools.
- */
-export function isWorkspaceToolAvailable(workspace: Workspace, name: WorkspaceToolName): boolean {
-  if (WRITE_WORKSPACE_TOOLS.has(name) && (workspace.filesystem?.readOnly ?? false)) return false;
-
-  if ((Object.values(WORKSPACE_TOOLS.FILESYSTEM) as string[]).includes(name)) {
-    if (!hasFilesystemConfig(workspace)) return false;
-    return name !== WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT || isAstGrepAvailable();
-  }
-  if ((Object.values(WORKSPACE_TOOLS.SEARCH) as string[]).includes(name)) {
-    return !!(workspace.canBM25 || workspace.canVector);
-  }
-  if ((Object.values(WORKSPACE_TOOLS.SANDBOX) as string[]).includes(name)) {
-    const sandbox = workspace.sandbox;
-    if (!sandbox) return hasSandboxConfig(workspace);
-    return name === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? !!sandbox.executeCommand : !!sandbox.processes;
-  }
-  if ((Object.values(WORKSPACE_TOOLS.COMPUTER) as string[]).includes(name)) {
-    return !!workspace.sandbox && supportsComputer(workspace.sandbox);
-  }
-  if ((Object.values(WORKSPACE_TOOLS.LSP) as string[]).includes(name)) {
-    return !!workspace.lsp;
-  }
-  return false;
-}
-
 /**
  * Normalize a requestContext value to a plain Record.
  * Callers may pass a Map-like RequestContext (with `.entries()`) or a plain

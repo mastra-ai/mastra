@@ -1804,34 +1804,49 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
 
   // Regression for #26160: under zod@3.25.x's `zod/v4` shim the global registry is a
   // strong Map, so any schema registered per conversion is retained forever.
-  it('does not register new schemas in the Zod global registry on repeated conversions', async () => {
-    const mockModel = new MockLanguageModelV2();
-    const subAgents = Object.fromEntries(
-      ['alpha', 'beta'].map(name => [
-        name,
-        new Agent({ id: name, name, instructions: `Desk ${name}`, model: mockModel }),
-      ]),
-    );
-    const parentAgent = new Agent({
-      id: 'parent-agent',
-      name: 'Parent Agent',
-      instructions: 'You are a parent agent',
-      model: mockModel,
-      agents: subAgents,
-    });
+  it.each([
+    { name: 'sub-agent tools', options: {} },
+    { name: 'sub-agent background derivation', options: { backgroundTaskEnabled: true } },
+    { name: 'autoResumeSuspendedTools', options: { autoResumeSuspendedTools: true } },
+  ])(
+    'does not register new schemas in the Zod global registry on repeated conversions ($name)',
+    async ({ options }) => {
+      const mockModel = new MockLanguageModelV2();
+      const work = createTool({
+        id: 'work',
+        description: 'Does work',
+        inputSchema: z.object({ task: z.string() }),
+        execute: async () => 'done',
+      });
+      const subAgents = Object.fromEntries(
+        ['alpha', 'beta'].map(name => [
+          name,
+          new Agent({ id: name, name, instructions: `Desk ${name}`, model: mockModel, tools: { work } }),
+        ]),
+      );
+      const parentAgent = new Agent({
+        id: 'parent-agent',
+        name: 'Parent Agent',
+        instructions: 'You are a parent agent',
+        model: mockModel,
+        agents: subAgents,
+        tools: { work },
+      });
 
-    const convert = () => parentAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate' });
+      const convert = () =>
+        parentAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate', ...options });
 
-    await convert();
+      await convert();
 
-    const addSpy = vi.spyOn(z.globalRegistry, 'add');
-    try {
-      for (let i = 0; i < 3; i++) {
-        await convert();
+      const addSpy = vi.spyOn(z.globalRegistry, 'add');
+      try {
+        for (let i = 0; i < 3; i++) {
+          await convert();
+        }
+        expect(addSpy).not.toHaveBeenCalled();
+      } finally {
+        addSpy.mockRestore();
       }
-      expect(addSpy).not.toHaveBeenCalled();
-    } finally {
-      addSpy.mockRestore();
-    }
-  });
+    },
+  );
 });

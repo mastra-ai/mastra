@@ -149,8 +149,8 @@ import {
 } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
-import type { AnyWorkspace, WorkspaceToolName } from '../workspace';
-import { WORKSPACE_TOOLS, createWorkspaceTools, isWorkspaceToolAvailable, resolveToolConfig } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
+import { createWorkspaceTools } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
@@ -1358,10 +1358,7 @@ export class Agent<
   private async deriveSubAgentBackgroundConfig(
     subAgent: SubAgent<string, TRequestContext>,
     requestContext: RequestContext,
-    visited: Set<SubAgent<string, TRequestContext>> = new Set(),
   ): Promise<ToolBackgroundConfig | undefined> {
-    if (visited.has(subAgent)) return undefined;
-    visited.add(subAgent);
     try {
       const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
 
@@ -1379,44 +1376,18 @@ export class Agent<
         }
       }
 
-      // 2. Any of a full Agent sub-agent's tools has background.enabled === true.
-      // Inspect the raw tool definitions instead of converting them: conversion
-      // rebuilds every schema, which zod's global registry retains forever (#26160).
+      // 2. Any of a full Agent sub-agent's tools has backgroundConfig.enabled === true
       if (subAgent instanceof Agent) {
-        const subAgentTools = await subAgent.listTools({ requestContext, resolveWebSearch: false });
-        const defaultOptions = await subAgent.getDefaultOptions({ requestContext });
-        // Same-name precedence matches convertTools: assigned < toolsets < client tools.
-        const effectiveTools: Record<string, unknown> = { ...subAgentTools };
-        for (const toolset of Object.values(defaultOptions?.toolsets ?? {})) {
-          Object.assign(effectiveTools, toolset);
-        }
-        Object.assign(effectiveTools, defaultOptions?.clientTools);
-        // Workspace tools are layered on top; read their per-tool config instead of building them.
-        const workspace = subAgent._agentNetworkAppend ? undefined : await subAgent.getWorkspace({ requestContext });
-        const workspaceToolsConfig = workspace?.getToolsConfig();
-        if (workspace && workspaceToolsConfig) {
-          const configContext = { requestContext: Object.fromEntries(requestContext.entries()), workspace };
-          for (const group of Object.values(WORKSPACE_TOOLS)) {
-            for (const name of Object.values(group) as WorkspaceToolName[]) {
-              if (!workspaceToolsConfig[name] || !isWorkspaceToolAvailable(workspace, name)) continue;
-              const config = await resolveToolConfig(workspaceToolsConfig, name, configContext);
-              if (config.enabled) effectiveTools[config.name ?? name] = { background: config.background };
+        const subAgentTools = await subAgent.getToolsForExecution({
+          requestContext,
+          backgroundTaskEnabled: true,
+        });
+        if (subAgentTools && typeof subAgentTools === 'object') {
+          for (const tool of Object.values(subAgentTools)) {
+            const bg = (tool as any)?.backgroundConfig as ToolBackgroundConfig | undefined;
+            if (bg?.enabled === true) {
+              return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
             }
-          }
-        }
-        for (const tool of Object.values(effectiveTools)) {
-          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
-          if (bg?.enabled === true) {
-            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
-          }
-        }
-
-        // 3. Background eligibility propagates up through nested sub-agents.
-        const nestedAgents = await subAgent.listAgents({ requestContext });
-        for (const nested of Object.values(nestedAgents)) {
-          const nestedBg = await this.deriveSubAgentBackgroundConfig(nested, requestContext, visited);
-          if (nestedBg?.enabled === true) {
-            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
           }
         }
       }

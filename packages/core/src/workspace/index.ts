@@ -33,7 +33,6 @@ export {
 export {
   createWorkspaceTools,
   resolveToolConfig,
-  isWorkspaceToolAvailable,
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
   type ExecuteCommandToolConfig,
