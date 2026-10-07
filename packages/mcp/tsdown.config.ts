@@ -11,7 +11,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@mastra/schema-compat'],
+    neverBundle: ['@mastra/schema-compat/validation-runtime'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['hono', 'hono-mcp-server-sse-transport']));

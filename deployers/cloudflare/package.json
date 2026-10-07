@@ -43,6 +43,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/core": "^8.0.1",
+    "@cfworker/json-schema": "4.1.1",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",

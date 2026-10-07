@@ -1,8 +1,9 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-import { Ajv } from 'ajv';
-import Ajv2020 from 'ajv/dist/2020.js';
+import type { Ajv } from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
+// eslint-disable-next-line import/order -- self-import ordering differs before and after workspace package linking
+import { compileDefault, createAjv } from '@mastra/schema-compat/validation-runtime';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -60,6 +61,7 @@ export interface JsonSchemaAdapterOptions {
 export class JsonSchemaWrapper<Input = unknown, Output = Input> implements StandardSchemaWithJSON<Input, Output> {
   readonly #schema: JSONSchema7;
   readonly #options: JsonSchemaAdapterOptions;
+  #defaultValidateCache: ReturnType<typeof compileDefault> | null = null;
   #ajvValidateCache: ReturnType<Ajv['compile']> | null = null;
   #ajvInstance: Ajv | null = null;
 
@@ -205,18 +207,25 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
    * The validator is cached for performance.
    */
   #getAjvValidator(): ReturnType<Ajv['compile']> {
-    if (!this.#ajvValidateCache) {
-      const is2020 = typeof this.#schema.$schema === 'string' && this.#schema.$schema.includes('2020-12');
-      const AjvClass = is2020 ? Ajv2020 : Ajv;
-      this.#ajvInstance = new AjvClass({
-        allErrors: true,
-        strict: false,
-        ...this.#options.ajvOptions,
-      });
-
-      this.#ajvValidateCache = this.#ajvInstance.compile(this.#schema);
+    if (this.#ajvInstance || this.#options.ajvOptions !== undefined) {
+      if (!this.#ajvInstance) {
+        this.#ajvInstance = createAjv(this.#schema, {
+          allErrors: true,
+          strict: false,
+          ...this.#options.ajvOptions,
+        });
+      }
+      const ajv = this.#ajvInstance!;
+      if (!this.#ajvValidateCache) {
+        this.#ajvValidateCache = ajv.compile(this.#schema);
+      }
+      return this.#ajvValidateCache;
     }
-    return this.#ajvValidateCache;
+
+    if (!this.#defaultValidateCache) {
+      this.#defaultValidateCache = compileDefault(this.#schema);
+    }
+    return this.#defaultValidateCache;
   }
 
   /**
@@ -231,8 +240,13 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
    * Useful for advanced use cases like adding custom formats or keywords.
    */
   getAjv(): Ajv {
-    // Ensure the validator is created (which creates the Ajv instance)
-    this.#getAjvValidator();
+    if (!this.#ajvInstance) {
+      this.#ajvInstance = createAjv(this.#schema, {
+        allErrors: true,
+        strict: false,
+        ...this.#options.ajvOptions,
+      });
+    }
     return this.#ajvInstance!;
   }
 }

@@ -5,8 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./replacement": {
-      "browser": "./src/replacement-browser.cjs",
-      "worker": "./src/replacement-browser.cjs",
+      "browser": "./src/replacement-browser.js",
+      "worker": "./src/replacement-browser.js",
       "node": "./src/replacement-node.js",
       "default": "./src/replacement-node.js"
     }
