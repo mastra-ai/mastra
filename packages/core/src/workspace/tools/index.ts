@@ -2,12 +2,7 @@
 export * from './types';
 
 // Factory + config
-export {
-  createWorkspaceTools,
-  resolveToolConfig,
-  isWorkspaceToolGroupAvailable,
-  type ResolvedToolConfig,
-} from './tools';
+export { createWorkspaceTools, resolveToolConfig, isWorkspaceToolAvailable, type ResolvedToolConfig } from './tools';
 
 // Individual standalone tools
 export { readFileTool } from './read-file';
