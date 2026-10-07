@@ -31,7 +31,6 @@ import {
   getStepIds,
   isSingleStepEntry,
   omitPriorCompletionFields,
-  resolveForeachConcurrency,
   validateStepResumeData,
 } from '../../utils';
 import { resolveCurrentState } from '../helpers';
@@ -2833,19 +2832,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           return;
         }
 
-        // A sequential foreach stops at the first suspended iteration, like the default engine:
-        // later items only start after the suspended one is resumed. Otherwise they would run and
-        // suspend in this segment, and a resume of the first item would never emit their suspension.
-        const haltOnSuspend =
-          prevResult.status === 'suspended' &&
-          resolveForeachConcurrency(step.opts, {
-            inputData: foreachResult?.payload,
-            getInitData: () => (stepResults as any)?.input,
-          }) === 1;
-
         // Check if there are more iterations to start before deciding to suspend
         // This handles partial concurrency: don't suspend until all iterations have been started
-        if (iterationsStarted < targetLen && !haltOnSuspend) {
+        if (iterationsStarted < targetLen) {
           // More iterations need to be started - call processWorkflowForEach to continue
           await processWorkflowForEach(
             {

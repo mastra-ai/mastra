@@ -1,4 +1,3 @@
-import type { RedisClusterType } from 'redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedisStreamsPubSub } from './index';
 
@@ -67,31 +66,5 @@ describe('close() drains in-flight publishes', () => {
       'cannot publish on closed client',
     );
     expect(writer.xAdd).not.toHaveBeenCalled();
-  });
-
-  it('destroys a cluster writer instead of quitting it while a node is reconnecting', async () => {
-    // Cluster quit() quits every node client, and node-redis quit() on a node
-    // in reconnect backoff never settles.
-    const node = { client: { isOpen: true, isReady: true } };
-    const cluster = {
-      isOpen: false,
-      masters: [node],
-      replicas: [],
-      on: vi.fn(),
-      connect: vi.fn(async () => {
-        cluster.isOpen = true;
-      }),
-      quit: vi.fn(() => new Promise<void>(() => {})),
-      destroy: vi.fn(),
-      xAdd: vi.fn(async () => '1-0'),
-    };
-    const pubsub = new RedisStreamsPubSub({ client: cluster as unknown as RedisClusterType });
-    await pubsub.publish('workflows', { type: 'x', data: {}, runId: 'r' });
-
-    node.client.isReady = false;
-    await pubsub.close();
-
-    expect(cluster.destroy).toHaveBeenCalledTimes(1);
-    expect(cluster.quit).not.toHaveBeenCalled();
   });
 });

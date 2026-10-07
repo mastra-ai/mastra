@@ -807,11 +807,10 @@ export class MemorySpanner extends MemoryStorage {
         types: whereTypes,
       } = this.db.prepareWhereClause(filters, TABLE_MESSAGES);
       const metadataWhere = buildSpannerMessageMetadataFilter(metadataFilter);
-      // `preparedWhereSql` already carries its own ` WHERE` when non-empty.
-      const whereSql = metadataWhere.clauses.reduce((sql, clause) => {
+      const whereSql = [preparedWhereSql, ...metadataWhere.clauses].reduce((sql, clause) => {
         if (!clause) return sql;
         return sql ? `${sql} AND ${clause}` : ` WHERE ${clause}`;
-      }, preparedWhereSql);
+      }, '');
       Object.assign(whereParams, metadataWhere.params);
 
       if (perPage === 0 && (!include || include.length === 0)) {
