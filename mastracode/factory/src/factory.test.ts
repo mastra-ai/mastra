@@ -477,6 +477,16 @@ describe('MastraFactory.prepare', () => {
     await expect(check('shared-workspace', 'org-1')).resolves.toBe(false);
   });
 
+  it('replaces its own resource policy when the same provider boots again', async () => {
+    const auth = resourceAuth();
+    await prepareFactory({ storage: fakeStorage(), auth });
+    const first = auth.authorizeUserResource;
+    prepareMock.mockClear();
+    await prepareFactory({ storage: fakeStorage(), auth });
+    expect(auth.authorizeUserResource).toBeTypeOf('function');
+    expect(auth.authorizeUserResource).not.toBe(first);
+  });
+
   it('keeps a resource policy the host already put on its auth provider', async () => {
     const own = vi.fn(() => true);
     const auth = { ...resourceAuth(), authorizeUserResource: own };

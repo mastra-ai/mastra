@@ -353,6 +353,8 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+/** Resource policies Factory installed on an auth provider, so a later boot can replace its own. */
+const factoryResourcePolicies = new WeakSet<object>();
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   readonly #boards: BoardRegistry;
@@ -632,9 +634,11 @@ export class MastraFactory {
     // asks this when a request names a session's resource; approve only when
     // the Factory access rule would let the caller open that session anyway.
     // An unready domain denies rather than provisioning storage from an
-    // authorization check. A host-supplied policy is kept as-is.
-    if (auth && !auth.authorizeUserResource) {
-      auth.authorizeUserResource = (_user, resourceId, requestContext) =>
+    // authorization check. A host-supplied policy is kept as-is; Factory's own
+    // policy is replaced on every boot so it never points at a previous boot's
+    // storage.
+    if (auth && (!auth.authorizeUserResource || factoryResourcePolicies.has(auth.authorizeUserResource))) {
+      const policy: NonNullable<IMastraAuthProvider['authorizeUserResource']> = (_user, resourceId, requestContext) =>
         canCallerActAsFactorySession(
           {
             ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
@@ -643,6 +647,8 @@ export class MastraFactory {
           resourceId,
           requestContext,
         );
+      factoryResourcePolicies.add(policy);
+      auth.authorizeUserResource = policy;
     }
 
     // Every integration uses generic integration storage. Version-control
