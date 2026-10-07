@@ -2704,7 +2704,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
       expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-a' }) }),
       expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-b', resumed: true }) }),
     ]);
-    expect(messageList.add).toHaveBeenCalledWith([message], 'response', { merge: false });
+    expect(messageList.add).toHaveBeenCalledWith([message], 'response');
     expect(flushMessages).toHaveBeenCalledTimes(1);
   });
 

@@ -328,8 +328,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         if (changedMessages.length === 0 || !saveQueueManager || !threadId) return matchedEntry;
-        // Replace by id; merging would copy earlier turns' parts into the current response message.
-        messageList.add(changedMessages, 'response', { merge: false });
+        messageList.add(changedMessages, 'response');
         try {
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
