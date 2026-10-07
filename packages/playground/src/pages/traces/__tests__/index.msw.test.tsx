@@ -948,6 +948,58 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the URL specifies matches for the feedback comment', () => {
+    it('sends the matches comment predicate to the trace query API', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=matches');
+
+      await waitFor(() =>
+        expect(bodies).toContainEqual(
+          expect.objectContaining({
+            where: {
+              op: 'and',
+              args: [
+                {
+                  feedback: {
+                    some: {
+                      op: 'matches',
+                      left: { path: 'comment' },
+                      right: { literal: 'wrong answer' },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+      );
+    });
+
+    it('shows the matches operator in the feedback comment chip', async () => {
+      setTracePageHandlers(metricsCapableCapabilities);
+
+      const { queryClient } = renderPage(
+        '/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=matches',
+      );
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Feedback commentmatcheswrong answer',
+      ]);
+    });
+  });
+
   describe('when the user changes the field of an existing chip', () => {
     it('keeps the chip with an empty value on the new field', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
