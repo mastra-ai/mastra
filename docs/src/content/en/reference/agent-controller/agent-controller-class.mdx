@@ -440,7 +440,8 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
   {
     name: 'ownerId',
     type: 'string',
-    description: 'Stable session owner identifier. Defaults to `id`.',
+    description:
+      'Stable identity of the process-local Session host. Defaults to `id`. New threads use it as their initial owner, but later transfers do not change this value.',
     isOptional: true,
   },
   {

@@ -135,7 +135,30 @@ const session = await controller.createSession({
 })
 ```
 
-Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
+Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-requestcontext-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-requestcontext-) to move one live Session between conversations.
+
+### Transfer thread ownership
+
+Each new thread stores its durable owner in `metadata.ownerId` and its original creator in `metadata.createdBy`. Both default to the Session host's `ownerId`. `createdBy` doesn't change when ownership transfers.
+
+Read and compare-and-set the owner through `session.thread`:
+
+```typescript
+const currentOwnerId = await session.thread.getOwner()
+
+const result = await session.thread.transferOwnership({
+  toOwnerId: 'user-456',
+  expectedOwnerId: currentOwnerId!,
+})
+
+if (!result.ok) {
+  console.log(`Owner changed to ${result.currentOwnerId}`)
+}
+```
+
+The compare-and-set is atomic within one process. Configure `threadLock` on the controller for coordination across processes. Hosts that require a durable cross-process compare-and-set should commit it in their own storage first, then call `transferOwnership()` to mirror the owner onto the thread.
+
+Every run snapshots the thread owner when it starts. Tools and other dynamic runtime code can read that value from `AgentControllerRequestContext.threadOwnerId`. If ownership changes during a run, the active run keeps the old snapshot and the next run receives the new owner. `context.session.ownerId` remains the identity of the process-local Session host.
 
 ### List stored messages from the client
 
