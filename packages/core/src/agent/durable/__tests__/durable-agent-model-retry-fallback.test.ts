@@ -20,9 +20,11 @@
  *   call-time            agent leaves maxRetries unset, call-time 2    -> 3 attempts, success
  *   fallback             [always-failing non-retryable, good]          -> the second model answers
  *
- * They will be added on durable and evented with a scenario-local `differences`
- * entry that derives the wrong values from plain once that ticket exists; nothing
- * is pinned per engine and the helper is not modified.
+ * They will be added once that ticket exists with plain's values pinned literally
+ * (measured by a direct plain drive, as the T18 and T23 anchors do) and durable
+ * plus evented declared scenario-locally through a `differences` entry whose
+ * `expect` derives the wrong values from plain. Nothing is pinned per engine and
+ * the helper is not modified.
  *
  * Deviation from the harness, stated per the case's port notes: the harness drives
  * `retry-zero` alongside the others and compares each cell's contract. Here the run
