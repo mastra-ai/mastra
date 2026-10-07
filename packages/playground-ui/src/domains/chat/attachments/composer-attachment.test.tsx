@@ -78,11 +78,15 @@ describe('ComposerAttachment', () => {
 
   describe('when the actions menu opens a preview', () => {
     it('shows the existing preview content without activating the file on menu open', async () => {
-      render(
-        <ComposerAttachment name="notes.txt" onRemove={() => {}}>
-          <TxtEntry name="notes.txt" data="The actual attached notes" />
-        </ComposerAttachment>,
-      );
+      function AttachmentWithPreview() {
+        const [open, setOpen] = useState(false);
+        return (
+          <ComposerAttachment name="notes.txt" onRemove={() => {}} onPreview={() => setOpen(true)}>
+            <TxtEntry name="notes.txt" data="The actual attached notes" open={open} onOpenChange={setOpen} />
+          </ComposerAttachment>
+        );
+      }
+      render(<AttachmentWithPreview />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Actions for notes.txt' }));
       expect(screen.queryByRole('dialog')).toBeNull();
@@ -92,6 +96,26 @@ describe('ComposerAttachment', () => {
       expect(dialog.textContent).toContain('The actual attached notes');
       expect(screen.queryByRole('menu')).toBeNull();
       await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Preview notes.txt' })),
+      );
+    });
+  });
+
+  describe('when attachment content contains an unrelated button', () => {
+    it('does not infer a preview action from the markup', async () => {
+      render(
+        <ComposerAttachment name="notes.txt" onRemove={() => {}}>
+          <button type="button">Show metadata</button>
+        </ComposerAttachment>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for notes.txt' }));
+      const menu = await screen.findByRole('menu');
+
+      expect(within(menu).queryByRole('menuitem', { name: 'Preview' })).toBeNull();
+      expect(within(menu).getByRole('menuitem', { name: 'Remove' })).not.toBeNull();
     });
   });
 
@@ -124,6 +148,23 @@ describe('ComposerAttachment', () => {
       const menu = await screen.findByRole('menu');
       expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
       expect(within(menu).getByRole('menuitem', { name: 'Remove' })).not.toBeNull();
+    });
+
+    it('returns focus to an attachment control after pointer dismissal without an opener', async () => {
+      render(
+        <ComposerAttachment name="archive.zip" onRemove={() => {}}>
+          <FileChipEntry name="archive.zip" />
+        </ComposerAttachment>,
+      );
+      const filename = screen.getByText('archive.zip');
+      fireEvent.contextMenu(filename);
+      const menu = await screen.findByRole('menu');
+      act(() => menu.focus());
+      fireEvent.keyDown(menu, { key: 'Escape' });
+
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove archive.zip' })),
+      );
     });
   });
 

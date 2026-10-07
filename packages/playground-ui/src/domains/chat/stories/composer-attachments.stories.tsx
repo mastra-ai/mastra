@@ -13,6 +13,7 @@ import {
 import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from '../attachments/attachment-preview-dialog';
 import { ComposerAttachment } from '../attachments/composer-attachment';
 import { ComposerAttachmentList } from '../attachments/composer-attachment-list';
+import type { AttachmentPreviewProps } from '../attachments/use-attachment-preview';
 import { Button } from '@/ds/components/Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 
@@ -46,7 +47,16 @@ function AttachmentComposer({
   onEdit?: () => void;
 }) {
   const [removed, setRemoved] = useState<string[]>([]);
+  const [previewName, setPreviewName] = useState<string>();
   const attachments = files.filter(name => !removed.includes(name));
+
+  function previewFile(name: string) {
+    if (name.endsWith('.pdf')) {
+      window.open('https://example.com/brief.pdf', '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setPreviewName(name);
+  }
 
   return (
     <Composer aria-label="Message composer" onSubmit={event => event.preventDefault()}>
@@ -58,10 +68,15 @@ function AttachmentComposer({
                 key={name}
                 name={name}
                 onEdit={onEdit}
+                onPreview={/\.(png|csv|txt|pdf)$/.test(name) ? () => previewFile(name) : undefined}
                 variant={name.endsWith('.csv') || name.endsWith('.txt') ? 'inline' : 'thumbnail'}
                 onRemove={() => setRemoved(current => [...current, name])}
               >
-                <AttachmentPreview name={name} />
+                <AttachmentPreview
+                  name={name}
+                  open={previewName === name}
+                  onOpenChange={open => setPreviewName(open ? name : undefined)}
+                />
               </ComposerAttachment>
             ))}
           </ComposerAttachmentList>
@@ -86,11 +101,11 @@ function AttachmentComposer({
   );
 }
 
-function AttachmentPreview({ name }: { name: string }) {
-  if (name.endsWith('.png')) return <ImageEntry src={imageSrc} name={name} />;
+function AttachmentPreview({ name, ...previewProps }: { name: string } & AttachmentPreviewProps) {
+  if (name.endsWith('.png')) return <ImageEntry src={imageSrc} name={name} {...previewProps} />;
   if (name.endsWith('.csv') || name.endsWith('.txt'))
-    return <TxtEntry name={name} data={'name,score\nZoë,12\n日本語,20'} />;
-  if (name.endsWith('.pdf')) return <PdfEntry data="" url="https://example.com/brief.pdf" />;
+    return <TxtEntry name={name} data={'name,score\nZoë,12\n日本語,20'} {...previewProps} />;
+  if (name.endsWith('.pdf')) return <PdfEntry data="" url="https://example.com/brief.pdf" {...previewProps} />;
   if (name.endsWith('.mp4')) return <FileChipEntry name={name} contentType="video/mp4" />;
   if (name.endsWith('.mp3')) return <FileChipEntry name={name} contentType="audio/mpeg" />;
   return <FileChipEntry name={name} contentType="application/octet-stream" />;

@@ -18,7 +18,7 @@ export interface ComposerAttachmentProps {
   onRemove: () => void;
   /** Optional application-owned editor, available in the sleeve and context menu. */
   onEdit?: () => void;
-  /** Overrides activation of the preview button or link supplied in children. */
+  /** Explicitly enables the context-menu preview action. Applications own preview state or navigation. */
   onPreview?: () => void;
   /** Inline entries allow a little more width for long filenames. */
   variant?: 'thumbnail' | 'inline';
@@ -32,20 +32,12 @@ export function ComposerAttachment({
   onPreview,
   variant = 'thumbnail',
 }: ComposerAttachmentProps) {
-  const contentRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const focusTargetRef = useRef<HTMLElement | undefined>(undefined);
   const menuContentRef = useRef<HTMLDivElement>(null);
   const actionSelected = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement>();
-  const [hasPreview, setHasPreview] = useState(false);
-
-  // Existing adapters own their preview dialogs and links. Activate that same
-  // control from the menu instead of duplicating preview state in the wrapper.
-  function previewControl() {
-    return contentRef.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]');
-  }
 
   function openMenu(anchor?: HTMLElement) {
     const focused = triggerRef.current?.ownerDocument.activeElement;
@@ -56,7 +48,6 @@ export function ComposerAttachment({
     }
     actionSelected.current = false;
     setMenuAnchor(anchor);
-    setHasPreview(Boolean(onPreview || previewControl()));
     setMenuOpen(true);
   }
 
@@ -67,14 +58,6 @@ export function ComposerAttachment({
     // The menu's focus trap may remain until its exit transition completes.
     // Remember a synchronous application focus change across that teardown.
     focusTargetRef.current = focusOutsideMenu() ?? focusTargetRef.current;
-  }
-
-  function openPreview() {
-    if (onPreview) {
-      onPreview();
-      return;
-    }
-    previewControl()?.click();
   }
 
   function focusOutsideMenu() {
@@ -93,7 +76,7 @@ export function ComposerAttachment({
     // Otherwise, an inline action still needs to return focus to its opener.
     if (actionSelected.current && focusOutsideMenu()) return false;
     if (focusTargetRef.current?.isConnected) return focusTargetRef.current;
-    return previewControl() ?? triggerRef.current;
+    return triggerRef.current;
   }
 
   return (
@@ -132,7 +115,6 @@ export function ComposerAttachment({
         }}
       >
         <div
-          ref={contentRef}
           data-slot="composer-attachment-cover"
           className={cn(
             attachmentSurfaceStyle,
@@ -199,8 +181,8 @@ export function ComposerAttachment({
         </Button>
       </ContextMenu.Trigger>
       <ContextMenu.Content ref={menuContentRef} anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
-        {hasPreview && (
-          <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(openPreview)}>
+        {onPreview && (
+          <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onPreview)}>
             <Eye />
             <span>Preview</span>
           </ContextMenu.Item>
@@ -211,7 +193,7 @@ export function ComposerAttachment({
             <span>Edit</span>
           </ContextMenu.Item>
         )}
-        {(hasPreview || onEdit) && <ContextMenu.Separator />}
+        {(onPreview || onEdit) && <ContextMenu.Separator />}
         <ContextMenu.Item className="min-h-11" variant="destructive" onSelect={() => runMenuAction(onRemove)}>
           <X />
           <span>Remove</span>
