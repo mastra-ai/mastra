@@ -58,11 +58,14 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
  * and into a notification's `lastDeliveryError`, and anything that treats the
  * string as NUL-terminated (SQLite text binding, terminals, the TUI) silently
  * drops everything after the resource id, including the thread id and the rest
- * of the message.
+ * of the message. Ids themselves may contain NUL, so it is escaped as well.
  */
 function describeThreadKey(key: string): string {
   const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
-  if (separator === -1) return `thread ${key}`;
+  // An id containing NUL makes the split ambiguous: show the whole key, escaped.
+  if (separator === -1 || key.lastIndexOf(AGENT_THREAD_KEY_SEPARATOR) !== separator) {
+    return `thread ${key.replaceAll(AGENT_THREAD_KEY_SEPARATOR, '\\0')}`;
+  }
   const resourceId = key.slice(0, separator);
   const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
   return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;

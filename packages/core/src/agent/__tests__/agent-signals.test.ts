@@ -3522,6 +3522,34 @@ describe('Agent signals', () => {
     expect(discoveryRequests).toBeLessThanOrEqual(4);
   });
 
+  it('escapes NUL characters inside ids in thread-owner errors', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const senderAgent = new Agent({
+      id: 'nul-id-sender-agent',
+      name: 'NUL Id Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+
+    const signalResult = new AgentThreadStreamRuntime().sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake nobody' },
+      {
+        resourceId: 'nul\0user',
+        threadId: 'nul\0thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+    const error = await signalResult.accepted.then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    expect(error?.message).toBe('No claimed thread owner responded for thread nul\\0user\\0nul\\0thread within 1000ms');
+    expect(error?.message).not.toContain('\0');
+  });
+
   it('clears the owner-discovery reply topic when discovery times out without an owner', async () => {
     const cleared: string[] = [];
     class RecordingPubSub extends EventEmitterPubSub {
