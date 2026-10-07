@@ -1,4 +1,15 @@
 {
   "temperature": ["Qwen3.8-27B"],
-  "structuredOutput": ["Qwen3.8-27B"]
+  "structuredOutput": ["Qwen3.8-27B"],
+  "reasoning": {
+    "Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ]
+  }
 }
