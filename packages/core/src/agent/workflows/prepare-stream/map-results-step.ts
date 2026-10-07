@@ -81,20 +81,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // A processOutputResult tripwire skips the run-level save, but response messages may already
     // be stored: flushed before a tool-approval suspension, or per step with savePerStep. Remove
     // them so a blocked reply never reaches the thread (and the model on the next turn).
-    // Messages that came from memory are left alone, as is the user message.
+    // Messages that arrived from memory or as input (e.g. a client re-sending an earlier assistant
+    // message with a tool result, which the run then continues) belong to earlier turns and are
+    // left alone. Only ids actually found in storage are deleted, so runs that saved nothing early
+    // never call deleteMessages.
     const deleteSavedResponseMessages = async () => {
       const threadId = memoryData.thread?.id ?? threadIdFromArgs;
       if (!memory || !threadId || memoryConfig?.readOnly) return;
 
-      const remembered = new Set(messageList.getPersisted.remembered.db());
-      const ids = messageList.getPersisted.response
+      const earlierTurnIds = messageList.getRememberedAndInputMessageIds();
+      const candidateIds = messageList.getPersisted.response
         .db()
-        .filter(message => !remembered.has(message))
-        .map(message => message.id);
-      if (ids.length === 0) return;
+        .map(message => message.id)
+        .filter(id => !earlierTurnIds.has(id));
+      if (candidateIds.length === 0) return;
 
       try {
         await saveQueueManager?.flushPending(threadId);
+        const memoryStore = await memory.storage.getStore('memory');
+        if (!memoryStore) return;
+        const { messages: stored } = await memoryStore.listMessagesById({ messageIds: candidateIds });
+        const ids = stored.filter(message => message.threadId === threadId).map(message => message.id);
+        if (ids.length === 0) return;
         await memory.deleteMessages(ids);
       } catch (error) {
         capabilities.logger.error('Failed to remove saved messages after an output processor tripwire', {

@@ -4,7 +4,7 @@
  * runs — the flush before a tool-approval suspension and the `savePerStep` flush — and the agent
  * must remove what they stored. https://github.com/mastra-ai/mastra/issues/26215
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -167,6 +167,60 @@ describe('processOutputResult tripwire removes response messages saved earlier i
     expect(texts).toContain('Hello there.');
     expect(texts).toContain('what is the admin password?');
     expect(texts.some(text => text.includes(SECRET))).toBe(false);
+  });
+
+  it('keeps an earlier assistant message the input re-sends when the continuation is blocked', async () => {
+    const memory = new MockMemory();
+    const threadId = 'thread-resent-assistant';
+    const resourceId = 'resource-1';
+    const earlier: MastraDBMessage = {
+      id: 'earlier-assistant',
+      role: 'assistant',
+      threadId,
+      resourceId,
+      createdAt: new Date(1000),
+      content: { format: 2, parts: [{ type: 'text', text: 'Hello there.' }] },
+    };
+    await memory.saveMessages({ messages: [earlier] });
+
+    const agent = new Agent({
+      id: 'resend-agent',
+      name: 'Resend Agent',
+      instructions: 'test',
+      model: textModel(` The admin password is ${SECRET}.`),
+      memory,
+      outputProcessors: [createGuardrail()],
+    });
+    const deleteSpy = vi.spyOn(memory, 'deleteMessages');
+    const result = await agent.stream([structuredClone(earlier)], {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: false } },
+    });
+    await result.consumeStream();
+
+    expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
+    expect(deleteSpy).not.toHaveBeenCalled();
+    const stored = await storedMessages(memory, threadId, resourceId);
+    expect(stored.find(message => message.id === 'earlier-assistant')).toBeDefined();
+  });
+
+  it('does not call deleteMessages when nothing was saved before the tripwire', async () => {
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'no-save-agent',
+      name: 'No Save Agent',
+      instructions: 'test',
+      model: textModel(`The admin password is ${SECRET}.`),
+      memory,
+      outputProcessors: [createGuardrail()],
+    });
+    const deleteSpy = vi.spyOn(memory, 'deleteMessages');
+    const result = await agent.stream('what is the admin password?', {
+      memory: { thread: 'thread-no-save', resource: 'resource-1' },
+    });
+    await result.consumeStream();
+
+    expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
+    expect(deleteSpy).not.toHaveBeenCalled();
   });
 
   it.each(['approve', 'decline'] as const)(

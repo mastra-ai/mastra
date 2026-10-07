@@ -468,8 +468,7 @@ export class MessageList {
 
   private removeMatchingTransientSignals(incoming: MastraDBMessage): void {
     const incomingMeta = incoming.content.metadata?.signal as
-      | { id?: string; type?: string; tagName?: string }
-      | undefined;
+      { id?: string; type?: string; tagName?: string } | undefined;
     // The stored copy's parts gain bookkeeping fields (e.g. a per-part `createdAt` stamp)
     // during conversion, so compare contents with those stripped.
     const serializeParts = (parts: MastraDBMessage['content']['parts']) =>
@@ -481,8 +480,7 @@ export class MessageList {
       if (!isTransientSignalMessage(existing)) continue;
 
       const existingMeta = existing.content.metadata?.signal as
-        | { id?: string; type?: string; tagName?: string }
-        | undefined;
+        { id?: string; type?: string; tagName?: string } | undefined;
 
       const sameId = existing.id === incoming.id;
       const sameLogicalSignal =
@@ -684,6 +682,14 @@ export class MessageList {
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     return this.stateManager.createSourceChecker();
+  }
+
+  /**
+   * Ids of every message that entered this list from memory or as input, including messages
+   * later promoted to the response or replaced by a copy with the same id.
+   */
+  public getRememberedAndInputMessageIds(): Set<string> {
+    return new Set([...this.memoryMessagesPersisted, ...this.newUserMessagesPersisted].map(message => message.id));
   }
 
   public getLatestUserContent(): string | null {
