@@ -99,7 +99,7 @@ describe('runDurableFinishSideEffects', () => {
     expect(flushMessages).not.toHaveBeenCalled();
   });
 
-  it('denies before durable title generation', async () => {
+  it('denies before durable title generation when memory reads are denied', async () => {
     const denial = new Error('memory read denied');
     authorizeDurableMemory.mockImplementation(async (_checks, input) => {
       if (input.permission === 'memory:read') throw denial;
@@ -120,6 +120,34 @@ describe('runDurableFinishSideEffects', () => {
       }),
     ).rejects.toBe(denial);
 
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('denies before durable title generation when memory writes are denied', async () => {
+    const denial = new Error('memory write denied');
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:write') throw denial;
+    });
+    const generateThreadTitle = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(authorizeDurableMemory).toHaveBeenCalledWith(
+      expect.any(Map),
+      expect.objectContaining({ permission: 'memory:read' }),
+    );
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
