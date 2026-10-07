@@ -1,9 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
-import { PoolAdapter } from '../../client';
+import { PoolAdapter, RoutingDbClient } from '../../client';
+import { loadSchemaSnapshot } from '../../db/schema-snapshot';
 import { connectionString } from '../../test-utils';
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
@@ -158,6 +160,103 @@ describe('KnowledgePG schema completion marker', () => {
     expect(views.rows.map(row => row.table_name)).toEqual(['unrelated_report']);
     const marker = await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
     expect(marker.rows.map(row => row.id)).toEqual(['canonical']);
+  });
+});
+
+async function createSchemaWithPublishedKnowledgeV1(prefix: string): Promise<string> {
+  const schemaName = `${prefix}_${process.pid}_${schemaCounter++}`;
+  schemas.push(schemaName);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  const sql = await readFile(new URL('./fixtures/published-1.29.0.sql', import.meta.url), 'utf8');
+  const client = await pool.connect();
+  try {
+    await client.query(`SET search_path TO "${schemaName}"`);
+    await client.query(sql);
+  } finally {
+    await client.query('RESET search_path');
+    client.release();
+  }
+  return schemaName;
+}
+
+async function knowledgeObjects(schemaName: string): Promise<string[]> {
+  const objects = await pool.query(
+    `SELECT 'table:' || table_name AS object FROM information_schema.tables WHERE table_schema = $1 UNION ALL SELECT 'index:' || indexname FROM pg_indexes WHERE schemaname = $1 ORDER BY object`,
+    [schemaName],
+  );
+  return objects.rows.map(row => String(row.object));
+}
+
+describe('KnowledgePG published v1 layout', () => {
+  it('replaces the empty tables every published PostgreSQL store created and keeps other storage', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_empty');
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_threads (id TEXT PRIMARY KEY)`);
+    await pool.query(`INSERT INTO "${schemaName}".mastra_threads (id) VALUES ('preserved')`);
+
+    await new KnowledgePG({ pool, schemaName }).init();
+
+    const marker = await pool.query(
+      `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
+    );
+    expect(marker.rows[0]?.version).toBe(1);
+    expect(await knowledgeObjects(schemaName)).not.toContain('table:mastra_knowledge_cursors');
+    const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
+    expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+  });
+
+  it('rebuilds same-named indexes when a catalog snapshot predates the replacement', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_snapshot');
+    const client = new RoutingDbClient(new PoolAdapter(pool));
+    client.setSchemaSnapshot(await loadSchemaSnapshot(client, schemaName));
+
+    await new KnowledgePG({ client, schemaName }).init();
+
+    const objects = await knowledgeObjects(schemaName);
+    expect(objects).toContain('index:idx_knowledge_outbox_idempotency');
+    expect(objects).toContain('index:idx_knowledge_records_node_latest');
+    const nodeColumns = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'mastra_knowledge_nodes'`,
+      [schemaName],
+    );
+    expect(nodeColumns.rows.map(row => row.column_name)).toContain('isScope');
+  });
+
+  it('rejects a populated published layout without mutation and names the reset call', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_rows');
+    await pool.query(
+      `INSERT INTO "${schemaName}".mastra_knowledge_nodes (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+    );
+    const before = await knowledgeObjects(schemaName);
+
+    const init = new KnowledgePG({ pool, schemaName }).init();
+    await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    await expect(init).rejects.toThrow(/Knowledge schema reset required.*dangerouslyReset\(\)/);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+    const nodes = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes`);
+    expect(nodes.rows.map(row => row.id)).toEqual(['legacy']);
+  });
+
+  it('rejects an empty published layout that a host view depends on', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_view');
+    await pool.query(
+      `CREATE VIEW "${schemaName}".host_report AS SELECT id FROM "${schemaName}".mastra_knowledge_nodes`,
+    );
+    const before = await knowledgeObjects(schemaName);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+  });
+
+  it('rejects an empty published layout carrying an unfamiliar index', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_index');
+    await pool.query(`CREATE INDEX host_knowledge_index ON "${schemaName}".mastra_knowledge_nodes (name)`);
+    const before = await knowledgeObjects(schemaName);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
   });
 });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
@@ -184,6 +184,96 @@ describe('KnowledgeLibSQL schema completion marker', () => {
       const threads = await client.execute('SELECT id FROM mastra_threads');
       expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
       await new KnowledgeLibSQL({ client }).init();
+    } finally {
+      client.close();
+    }
+  });
+});
+
+async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
+  const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
+  await client.batch(
+    sql
+      .split(';')
+      .map(statement => statement.trim())
+      .filter(Boolean),
+    'write',
+  );
+}
+
+async function knowledgeObjects(client: ReturnType<typeof createClient>): Promise<string[]> {
+  const objects = await client.execute(
+    "SELECT type || ':' || name AS object FROM sqlite_master WHERE name LIKE 'mastra_knowledge_%' OR name LIKE 'idx_knowledge_%' OR type = 'view' ORDER BY object",
+  );
+  return objects.rows.map(row => String(row.object));
+}
+
+describe('KnowledgeLibSQL published v1 layout', () => {
+  it('replaces the empty tables every published LibSQL store created and keeps other storage', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
+
+      await new KnowledgeLibSQL({ client }).init();
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+      expect(await knowledgeObjects(client)).not.toContain('table:mastra_knowledge_cursors');
+      const threads = await client.execute('SELECT id FROM mastra_threads');
+      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects a populated published layout without mutation and names the reset call', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute(
+        "INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'2026-01-01','2026-01-01')",
+      );
+      const before = await knowledgeObjects(client);
+
+      const init = new KnowledgeLibSQL({ client }).init();
+      await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      await expect(init).rejects.toThrow(/Knowledge schema reset required.*dangerouslyReset\(\)/);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
+      const nodes = await client.execute('SELECT id FROM mastra_knowledge_nodes');
+      expect(nodes.rows.map(row => row.id)).toEqual(['legacy']);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects an empty published layout that another object depends on', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute('CREATE VIEW host_report AS SELECT id FROM mastra_knowledge_nodes');
+      const before = await knowledgeObjects(client);
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects an empty published layout missing one of its tables', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute('DROP TABLE mastra_knowledge_mentions');
+      const before = await knowledgeObjects(client);
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
     } finally {
       client.close();
     }

@@ -18,8 +18,12 @@ import {
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
+  isPublishedKnowledgeV1Layout,
+  PUBLISHED_KNOWLEDGE_V1_COLUMNS,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
@@ -315,24 +319,37 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
     );
     const existingNames = new Set(existingTables.rows.map(row => String(row.name)));
+    if (
+      existingNames.size > 0 &&
+      !existingNames.has(TABLE_KNOWLEDGE_SCHEMA) &&
+      (await this.#replaceEmptyPublishedV1())
+    ) {
+      existingNames.clear();
+    }
     if (existingNames.size > 0) {
       if (!existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
-        throw new KnowledgeSchemaError('The existing Knowledge schema has no completion marker.');
+        throw new KnowledgeSchemaError(
+          `Knowledge schema reset required: the existing Knowledge schema has no completion marker. ${KNOWLEDGE_RESET_GUIDANCE}`,
+        );
       }
       const marker = await this.#client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
       if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
-        throw new KnowledgeSchemaError('The existing Knowledge schema version is unsupported.');
+        throw new KnowledgeSchemaError(
+          `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
+        );
       }
       const missing = KNOWLEDGE_TABLE_NAMES.filter(table => !existingNames.has(table));
       if (missing.length > 0)
-        throw new KnowledgeSchemaError(`The existing Knowledge schema is incomplete: ${missing.join(', ')}`);
+        throw new KnowledgeSchemaError(
+          `Knowledge schema reset required: the existing Knowledge schema is missing ${missing.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
+        );
       for (const table of KNOWLEDGE_TABLE_NAMES) {
         const columns = await this.#client.execute(`PRAGMA table_info("${table}")`);
         const actual = new Set(columns.rows.map(row => String(row.name)));
         const missingColumns = Object.keys(TABLE_SCHEMAS[table]).filter(column => !actual.has(column));
         if (missingColumns.length > 0) {
           throw new KnowledgeSchemaError(
-            `The existing Knowledge table ${table} is incomplete: ${missingColumns.join(', ')}`,
+            `Knowledge schema reset required: the existing Knowledge table ${table} is missing ${missingColumns.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
           );
         }
       }
@@ -446,6 +463,45 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
+  /**
+   * Earlier releases created empty Knowledge tables for every app. When exactly that layout and its
+   * indexes are the only Knowledge objects, drop it so canonical storage can initialize; replacing it
+   * loses nothing. Rows, partial or unfamiliar tables, views, triggers, and extra indexes all leave the
+   * database untouched.
+   */
+  async #replaceEmptyPublishedV1(): Promise<boolean> {
+    return this.#transaction(async tx => {
+      const objects = await tx.execute(
+        "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+      );
+      const tables: string[] = [];
+      for (const row of objects.rows) {
+        const type = String(row.type);
+        const name = String(row.name);
+        if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(name)) {
+          tables.push(name);
+          continue;
+        }
+        const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
+        if (type !== 'index' || !knownIndex) return false;
+      }
+      const columnsByTable = new Map<string, string[]>();
+      for (const table of tables) {
+        const columns = await tx.execute(`PRAGMA table_info("${table}")`);
+        columnsByTable.set(
+          table,
+          columns.rows.map(row => String(row.name)),
+        );
+      }
+      if (!isPublishedKnowledgeV1Layout(columnsByTable)) return false;
+      for (const table of tables) {
+        if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return false;
+      }
+      for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
+      return true;
+    });
+  }
+
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
@@ -489,10 +545,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch WHERE id='global'`);
         const scopes: Record<string, string> = {};
         const createdScopeIds: string[] = [];
-        const createdAddresses = new Set<string>();
-        const retrofit = plan.retrofit ?? true;
-        let structureChanged = false;
         const deletedScopeAddresses = new Set<string>();
+        let structureChanged = false;
         const resolveAddress = async (address: string): Promise<string | undefined> => {
           if (scopes[address]) return scopes[address];
           const result = await tx.execute({
@@ -528,13 +582,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             args: [scope.address, id],
           });
           scopes[scope.address] = id;
-          createdAddresses.add(scope.address);
           createdScopeIds.push(id);
           structureChanged = true;
         }
 
         for (const scope of plan.scopes) {
-          if (!createdAddresses.has(scope.address) && (!retrofit || deletedScopeAddresses.has(scope.address))) continue;
+          if (deletedScopeAddresses.has(scope.address)) continue;
           const scopeNodeId = scopes[scope.address]!;
           for (const parentAddress of scope.parentAddresses ?? []) {
             const parentId = await resolveAddress(parentAddress);
