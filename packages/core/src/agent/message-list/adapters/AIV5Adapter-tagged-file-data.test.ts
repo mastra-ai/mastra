@@ -51,6 +51,8 @@ describe('AIV5Adapter.fromModelMessage — AI SDK v7 tagged FileData', () => {
   it('throws for provider references and unknown shapes instead of sending empty data', () => {
     expect(() => getFileData({ type: 'reference', reference: { openai: 'file-1' } })).toThrow(/not supported/);
     expect(() => getFileData({ foo: 1 })).toThrow(/Unrecognized file data/);
+    expect(() => getFileData({ type: 'url', url: 42 })).toThrow(/Invalid "url" file data/);
+    expect(() => getFileData({ type: 'data', data: null })).toThrow(/Invalid "data" file data/);
   });
 
   it('keeps file content when added to a MessageList as input', () => {

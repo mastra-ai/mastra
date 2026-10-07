@@ -888,7 +888,10 @@ export class AIV5Adapter {
           id: 'MASTRA_AIV5_DATA_PART_INVALID',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
-          text: `Unsupported file data type "${tagged.type}" in message part. Provider file references are not supported as message input.`,
+          text:
+            tagged.type === 'reference'
+              ? 'Provider file references are not supported as message input.'
+              : `Invalid "${tagged.type}" file data in message part.`,
           details: { type: tagged.type },
         });
       }
