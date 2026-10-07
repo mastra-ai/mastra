@@ -28,7 +28,7 @@ export const automatedChatScenario: McE2eScenario = {
     await runtime.waitForScreenText(/MC automated chat smoke response/i, terminal);
     await runtime.waitForScreenText(/MC automated chat title/i, terminal, 10_000);
     runtime.printScreen('after automated prompt', terminal);
-    expect(terminal.serialize().view.match(/▐build▌/g) ?? []).toHaveLength(1);
+    expect(terminal.serialize().view.match(/\bbuild · /g) ?? []).toHaveLength(1);
 
     terminal.submit('/thread');
     await runtime.waitForScreenText(/Title: MC automated chat title/i, terminal);

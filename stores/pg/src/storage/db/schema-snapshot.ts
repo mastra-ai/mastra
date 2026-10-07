@@ -39,8 +39,14 @@ export interface SchemaSnapshot {
   columns: Map<string, Set<string>>;
   /** table name -> column name -> Postgres type name (`jsonb`, `text`, ...). */
   columnTypes: Map<string, Map<string, string>>;
-  /** Index names present in the schema, exactly as the catalog stores them. */
+  /**
+   * Valid index names present in the schema, exactly as the catalog stores them.
+   * Invalid indexes (left by an interrupted `CREATE INDEX CONCURRENTLY`) are
+   * excluded so init rebuilds them instead of treating them as present.
+   */
   indexes: Set<string>;
+  /** Invalid index names, which init drops and rebuilds. */
+  invalidIndexes: Set<string>;
   /** Names of indexes that are the replica identity of their table. */
   replicaIdentityIndexes: Set<string>;
   /**
@@ -99,8 +105,13 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     // indisreplident, which createTable needs to know whether the
     // workflow_snapshot unique index is already the table's replica identity,
     // and indisprimary, which answers primary-key constraint existence.
-    client.manyOrNone<{ indexname: string; is_replica_identity: boolean; is_primary: boolean }>(
-      `SELECT c.relname AS indexname, i.indisreplident AS is_replica_identity, i.indisprimary AS is_primary
+    client.manyOrNone<{
+      indexname: string;
+      is_replica_identity: boolean;
+      is_primary: boolean;
+      is_valid: boolean;
+    }>(
+      `SELECT c.relname AS indexname, i.indisreplident AS is_replica_identity, i.indisprimary AS is_primary, i.indisvalid AS is_valid
          FROM pg_catalog.pg_index i
          JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -130,8 +141,10 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
   const indexes = new Set<string>();
   const replicaIdentityIndexes = new Set<string>();
   const primaryKeyIndexes = new Set<string>();
+  const invalidIndexes = new Set<string>();
   for (const row of indexRows) {
-    indexes.add(row.indexname);
+    if (row.is_valid) indexes.add(row.indexname);
+    else invalidIndexes.add(row.indexname);
     if (row.is_replica_identity) {
       replicaIdentityIndexes.add(row.indexname);
     }
@@ -148,5 +161,6 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     indexes,
     replicaIdentityIndexes,
     primaryKeyIndexes,
+    invalidIndexes,
   };
 }

@@ -36,7 +36,8 @@ export const ctrlfQueuedCustomSlashScenario = {
     await runtime.waitForScreenText(/1 queued/i, terminal, 8_000);
     runtime.printScreen('after Ctrl+F queued custom slash command', terminal);
 
-    await runtime.waitForScreenText(/Queued custom slash autocomplete template\./i, terminal, 18_000);
+    // The command block stays collapsed to its header; verifyAimockRequests checks the template was sent.
+    await runtime.waitForScreenText(/• command \/queue-auto/i, terminal, 18_000);
     await runtime.waitForScreenText(/Queued custom slash autocomplete response\./i, terminal, 12_000);
     runtime.printScreen('after queued custom slash command drained', terminal);
 

@@ -14,6 +14,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
+import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -257,6 +258,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
+  'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
