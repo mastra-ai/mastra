@@ -776,6 +776,44 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(agent.recover('foreign-run')).rejects.toThrow(/does not contain a durable-agent workflow input/i);
   });
 
+  it('rejects recover() for a run that was not active, and leaves it resumable', async () => {
+    const runId = 'run-suspended-recover';
+    await seed(store, runId, 'suspended', 'agent-A');
+    const restart = vi.fn(async () => ({ status: 'success' as const }));
+    const resume = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { id: 'text-1', text: 'resumed once' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: 'resumed once', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, resume, runId })),
+      restart,
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    // The refusal is up front and actionable: `restart()` would otherwise only
+    // report "This workflow run was not active" asynchronously, inside the
+    // recovered stream, after `recover()` had already resolved.
+    await expect(agent.recover(runId)).rejects.toThrow(
+      /run status is "suspended", so the run cannot be recovered[\s\S]*resume\(/,
+    );
+    expect(restart).not.toHaveBeenCalled();
+
+    // Refusing recovery must not break the legitimate continuation.
+    const resumed = await agent.resume(runId, { confirmed: true }, { toolCallId: 'call-1' });
+    await vi.waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    expect(restart).not.toHaveBeenCalled();
+    resumed.cleanup();
+  });
+
   it('rehydrates the registry with backgroundTaskManager + backgroundTasksConfig so bg-task-check / tool-call / llm-execution steps can still see background state after recovery', async () => {
     const agentId = 'bg-recover-agent';
     const baseAgent = new Agent({
