@@ -962,18 +962,22 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the thread.
    * @param workingMemory - The new working memory content.
    * @param resourceId - Optional ID of the resource.
+   * @param mode - `replace` (default) or `merge` to atomically deep-merge a partial JSON object
+   * into resource-scoped schema working memory (requires storage support, e.g. PostgreSQL).
    */
   public updateWorkingMemory({
     agentId,
     threadId,
     workingMemory,
     resourceId,
+    mode,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
+    mode?: 'replace' | 'merge';
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
@@ -983,6 +987,7 @@ export class MastraClient extends BaseResource {
         body: {
           workingMemory,
           resourceId,
+          ...(mode ? { mode } : {}),
         },
       },
     );

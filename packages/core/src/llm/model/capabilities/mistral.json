@@ -1,6 +1,11 @@
 {
   "attachment": [
+    "labs-leanstral-1-5-1",
+    "magistral-medium-latest",
+    "ministral-14b-2512",
+    "ministral-3b-2512",
     "ministral-3b-latest",
+    "ministral-8b-2512",
     "ministral-8b-latest",
     "mistral-large-2512",
     "mistral-large-4",
@@ -13,9 +18,11 @@
     "mistral-small-latest",
     "pixtral-12b",
     "pixtral-large-latest",
+    "voxtral-small-2507",
     "voxtral-small-latest"
   ],
   "temperature": [
+    "codestral-2508",
     "codestral-latest",
     "devstral-2512",
     "devstral-latest",
@@ -23,9 +30,14 @@
     "devstral-medium-latest",
     "devstral-small-2505",
     "devstral-small-2507",
+    "glm-5-2",
     "labs-devstral-small-2512",
+    "labs-leanstral-1-5-1",
     "magistral-medium-latest",
+    "ministral-14b-2512",
+    "ministral-3b-2512",
     "ministral-3b-latest",
+    "ministral-8b-2512",
     "ministral-8b-latest",
     "mistral-large-2411",
     "mistral-large-2512",
@@ -45,9 +57,22 @@
     "open-mixtral-8x7b",
     "pixtral-12b",
     "pixtral-large-latest",
+    "voxtral-small-2507",
     "voxtral-small-latest",
     "zai-glm-5-2",
     "zai-glm-5-3"
   ],
-  "structuredOutput": ["mistral-large-4", "mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2", "zai-glm-5-3"]
+  "structuredOutput": [
+    "codestral-2508",
+    "glm-5-2",
+    "labs-leanstral-1-5-1",
+    "ministral-14b-2512",
+    "ministral-3b-2512",
+    "ministral-8b-2512",
+    "mistral-large-4",
+    "mistral-medium-2604",
+    "mistral-medium-latest",
+    "zai-glm-5-2",
+    "zai-glm-5-3"
+  ]
 }

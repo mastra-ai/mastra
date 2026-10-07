@@ -1,5 +1,321 @@
 # @mastra/connect
 
+## 1.0.0
+
+### Major Changes
+
+- **Breaking:** Discovered MCP tools no longer require approval by default, matching `@mastra/mcp`'s own default. Opt into approval per integration with the new `requireApproval` option. ([#25740](https://github.com/mastra-ai/mastra/pull/25740))
+
+  Previously, every MCP tool discovered through `connect()` was forced to require approval, with an `autoApproveTools` escape hatch to list specific keys that should skip it. The forced-approval policy made the typical case needlessly interactive and diverged from `@mastra/mcp`, whose default is "no approval unless the server definition opts in."
+
+  The new `requireApproval` option replaces `autoApproveTools` and applies to generated HTTP toolsets as well as discovered MCP tools:
+
+  - Omit (or pass `false`) → no approval required for any tool on this provider
+  - `true` → every tool on this provider requires approval
+  - `string[]` → approval required only for the listed tool keys
+
+  Unknown names in the array fail resolution with an `invalid_options` error instead of silently dropping the provider, so a typo can neither widen access nor remove the toolset. A config that still contains the removed `autoApproveTools` key throws at `tools()` call time with a migration hint, so loosely typed configs cannot carry the dead option forward and run previously-gated tools without a prompt.
+
+  If you relied on the old always-on default (for example, agents scaffolded from the connect templates), opt back in explicitly with `requireApproval: true` on the providers whose tools should prompt before running.
+
+  **Migration**
+
+  ```ts
+  // Before: approval required by default, allowlist of tools that skip it
+  connect({
+    integrations: {
+      neon: { autoApproveTools: ['neon_list_projects', 'neon_describe_project'] },
+    },
+  });
+
+  // After (conservative): gate every tool on the provider. This preserves the
+  // former approval policy, except the tools previously listed in
+  // autoApproveTools now prompt too.
+  connect({ integrations: { neon: { requireApproval: true } } });
+
+  // After (targeted): gate only the listed tools. Not equivalent to the old
+  // default; every tool missing from the list runs without a prompt, so list
+  // every tool that must stay gated.
+  connect({
+    integrations: {
+      neon: { requireApproval: ['neon_delete_project'] },
+    },
+  });
+  ```
+
+### Minor Changes
+
+- Reworked the `@mastra/connect` API ahead of the first stable release. Breaking: the package has not shipped stable, so no deprecation period applies. ([#26084](https://github.com/mastra-ai/mastra/pull/26084))
+
+  **Renamed `integrations` to `providers`**
+
+  The option on `tools()` and `channels()` is now called `providers`, with types renamed to match (`ToolsProviderOptions`, `ChannelsProviders`, `ChannelsProviderOptions`).
+
+  ```ts
+  // Before
+  const connectTools = tools({ integrations: { linear: { allowTools: ['linear_get_issue'] } } });
+
+  // After
+  const connectTools = tools({ providers: { linear: { allowTools: ['linear_get_issue'] } } });
+  ```
+
+  **Merge your own tools in a dynamic `tools` callback**
+
+  Spread the resolver's result alongside local tools; your tools win on key collision.
+
+  ```ts
+  const agent = new Agent({
+    // ...
+    tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
+  });
+  ```
+
+  A `.with()` convenience method also exists for the same merge (`tools: connectTools.with({ weatherTool })`); it accepts a static record or a (sync/async, optionally context-reading) function, and calls chain.
+
+  **Simpler provider selection**
+
+  The array form is now a real allowlist (only the listed providers resolve), and the record form accepts boolean shorthand:
+
+  ```ts
+  tools({ providers: ['linear', 'resend'] }); // only these resolve
+  tools({ providers: { linear: true, github: false } }); // enable / exclude
+  ```
+
+  Unknown provider ids now fail with `invalid_options` instead of silently resolving nothing. `channels()` throws at call time; `tools()` checks ids against the platform catalog when it resolves tools, and if the catalog can't be reached it logs a warning and skips the id.
+
+  In `channels()`, `slack` is accepted as an alias for the platform's `slack-channels` key, so the common spelling needs no quotes:
+
+  ```ts
+  channels({ providers: { slack: true, discord: true } });
+  ```
+
+  Both spellings configure the same channel; naming it twice throws.
+
+  **Glob filters and top-level defaults**
+
+  `allowTools`, `disallowTools`, and `requireApproval` accept `*` globs, and all three can be set at the top level of `tools()` as defaults for every provider. Per-provider options win, including `requireApproval: false` to opt out of a global policy.
+
+  ```ts
+  tools({
+    requireApproval: ['*_delete_*', '*_send_*'],
+    providers: { linear: { requireApproval: false } },
+  });
+  ```
+
+  A per-provider glob that matches nothing fails like an unknown literal name, so typos never silently widen access.
+
+  **Removed**
+
+  - The deprecated `connect()` alias of `tools()`.
+  - The `environment()` sandbox credential surface.
+  - The `MASTRA_<PROVIDER>_CONNECTION_ID` env-var pin is no longer documented (it keeps working); pass `connectionId` per provider instead.
+  - The `TOOLS` registry alias (use `PROVIDERS`) and the `findRegistration`/`findChannelRegistration` lookup helpers.
+  - Internal toolset plumbing (`defineProxyTool`, `applyAllowTools`, `resolveConnectionId` and their types) is no longer exported.
+  - The `disabled: true` per-provider field — use the `false` shorthand instead: `providers: { github: false }`.
+  - The resolver `invalidate()` method — call `refresh()` to force a fetch now, or lower `ttlMs` to control freshness.
+
+- Discord (channel **and** generated tools) now targets the platform's `discord` integration as a **single API-key connection** whose credential is the bot token, sourced from the encrypted `/credentials` endpoint on every call. The same connection powers both the channel and every generated tool from one credential. ([#25358](https://github.com/mastra-ai/mastra/pull/25358))
+
+  **Why:** connection metadata is treated as non-secret by the platform, so a bot token stored there was readable by any caller with project access. Every Discord surface now reads the bot token from the platform's encrypted, audited credentials path.
+
+  **Breaking:**
+
+  - The 33 generated Discord tools no longer read the bot token from connection metadata; they call `getConnectionWithCredentials()` and use `credentials.apiKey`.
+  - The `discord` integration on the platform is now API-key auth (Nango's `discord-bot` provider), not OAuth. OAuth-typed credentials on the channel are skipped with a warning — Discord rejects OAuth user tokens for bot authentication.
+
+  **Migration:**
+
+  1. Reconnect the `discord` integration on the platform against the new API-key auth flow (Nango's `discord-bot`) and paste the bot token when prompted. The token is now stored in the encrypted credential, not connection metadata.
+  2. Remove any `botToken` you were still writing to connection metadata — it is no longer read and, since metadata is non-secret, it should not be left behind.
+
+  Before:
+
+  ```ts
+  // Bot token was pulled from non-secret connection metadata.
+  // Tools called `getMetadata<{ botToken: string }>()` internally.
+  ```
+
+  After:
+
+  ```ts
+  import { channels, tools } from '@mastra/connect';
+
+  const projectId = 'proj_...';
+
+  // Generated Discord tools — bot token now comes from the encrypted
+  // `credentials.apiKey` on the `discord` connection.
+  const toolResolver = tools({
+    projectId,
+    integrations: { discord: { connectionId: 'conn_...' } },
+  });
+  const discordTools = await toolResolver();
+
+  // Discord channel — same `discord` connection, same credential.
+  const channelResolver = await channels({
+    projectId,
+    integrations: {
+      discord: { providerOptions: { commandScope: 'global' } },
+    },
+  });
+  const providers = await channelResolver(); // providers.discord
+  ```
+
+- Improved error handling across all providers and updated the Clerk tools, verified by a new live end-to-end test suite that exercises every tool of all 26 checked-in providers. ([#25815](https://github.com/mastra-ai/mastra/pull/25815))
+
+  **Clearer error messages** — errors returned as `{ errors: [{ message, long_message }] }` (Clerk, Linear, and other providers) now surface the human-readable message instead of a generic failure.
+
+  **Fixed error recovery in generated tools** — `MastraConnectError` now also exposes its HTTP status as `error.response.status`. Generated tools check this field in their error handlers (for example the create-vs-update fallback in `github_create_or_update_file`), which previously never matched and failed instead of recovering.
+
+  **Updated Clerk tools** (regenerated from the upstream template fix, NangoHQ/integration-templates#670):
+
+  - `clerk_list_sessions` now requires `client_id` or `user_id` and no longer returns `total`.
+  - `clerk_create_user` now requires at least one identifier (`email_address`, `phone_number`, or `username`).
+  - `clerk_list_users` now returns an accurate `total`.
+
+  ```ts
+  // Before: accepted by the schema, then rejected by the Clerk API
+  await toolset.clerk_list_sessions.execute({ status: 'active' });
+
+  // After: the input schema requires a client or user filter
+  await toolset.clerk_list_sessions.execute({ user_id: 'user_123', status: 'active' });
+  ```
+
+- Added Microsoft Teams to `channels()` and re-keyed the Slack channel from `slack` to `slack-channels`. ([#25332](https://github.com/mastra-ai/mastra/pull/25332))
+
+  **Microsoft Teams**: projects with an active `microsoft-teams` platform connection now resolve a `TeamsProvider` automatically — no bot credentials in your code. Connecting an agent provisions a dedicated Teams bot for it through the platform connection. Requires `MASTRA_ENCRYPTION_KEY` (a 32-byte value, base64-encoded) in the server environment: the Teams install store persists each provisioned bot's client secret at rest, so `channels()` refuses to construct the Teams provider without it and skips the integration with a warning until a key is configured.
+
+  **Breaking: Slack channel integration id renamed**. Use the `slack-channels` connection to hook the Slack channel up to agents; the existing `slack` connection continues to back the generated Slack **tools**. Two separate connections, one purpose each.
+
+  If you pass per-integration overrides to `channels()`, migrate the key:
+
+  ```diff
+   channels: await channels({
+     projectId: process.env.MASTRA_PROJECT_ID,
+     integrations: {
+  -    slack: { providerOptions: { defaultChannel: 'C123' } },
+  +    'slack-channels': { providerOptions: { defaultChannel: 'C123' } },
+     },
+   }),
+  ```
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { channels } from '@mastra/connect';
+
+  const mastra = new Mastra({
+    agents: { myAgent },
+    channels: await channels({ projectId: process.env.MASTRA_PROJECT_ID }),
+  });
+
+  // With `microsoft-teams` and `slack-channels` connections active, both
+  // channels resolve automatically and agents can be connected from Studio
+  // or via the API. Teams additionally requires MASTRA_ENCRYPTION_KEY set
+  // in the server environment.
+  ```
+
+- Connect tool calls now show up in traces. When observability is enabled, every platform API call and proxied vendor call appears as a child span under the tool call span, recording the method, a safe route template, connection id, and response status. Spans never include query strings, headers, bodies, or vendor path segments; apps without observability configured are unaffected. ([#26080](https://github.com/mastra-ai/mastra/pull/26080))
+
+- Add Google Analytics (GA4) provider to `@mastra/connect` with 11 generated tools from the Nango integration-templates upstream: `archive-conversion-event`, `batch-run-reports`, `create-conversion-event`, `create-data-stream`, `create-property`, `get-metadata`, `run-pivot-report`, `run-realtime-report`, `run-report`, `update-data-stream`, and `update-property`. ([#25743](https://github.com/mastra-ai/mastra/pull/25743))
+
+  Opt in by setting `MASTRA_GOOGLE_ANALYTICS_CONNECTION_ID` and selecting `google-analytics` in the `integrations` map.
+
+### Patch Changes
+
+- Fixed Jira issue creation so agents can discover project-specific issue types and their required fields. ([#26119](https://github.com/mastra-ai/mastra/pull/26119))
+
+- `@mastra/connect` now requires `@mastra/core` 1.75.0 or later, matching the `@mastra/mcp` version it depends on. ([#25985](https://github.com/mastra-ai/mastra/pull/25985))
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`b0d2c38`](https://github.com/mastra-ai/mastra/commit/b0d2c387ec339229d878fdd9bbf6b6f87ec308b8), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`79b3c78`](https://github.com/mastra-ai/mastra/commit/79b3c7875c511a718526020e3442bca433787199), [`6babc6d`](https://github.com/mastra-ai/mastra/commit/6babc6d526fc79c6633c796182de47a7a88d8bc1), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`d253891`](https://github.com/mastra-ai/mastra/commit/d2538914d2305d905bc9ed1dc7928b7f7ecc931a), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`e5f53fe`](https://github.com/mastra-ai/mastra/commit/e5f53fe5965b22b274435bde05fd75f0b851e1e5), [`9c5fd7d`](https://github.com/mastra-ai/mastra/commit/9c5fd7dd5468d4b029d1015a711b328010a71484), [`af5086d`](https://github.com/mastra-ai/mastra/commit/af5086da68bd70cd263d9234684e7fa5c90fc61d), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`3b03b05`](https://github.com/mastra-ai/mastra/commit/3b03b054281496e07201284f686b20b4dc2c51b1), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`bcc2ceb`](https://github.com/mastra-ai/mastra/commit/bcc2ceb951d5259d09cde558dd6b86015b096d5c), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`ce51958`](https://github.com/mastra-ai/mastra/commit/ce5195800c77c90141ee38684b4b163006dd56ff), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`832f57d`](https://github.com/mastra-ai/mastra/commit/832f57da36a03e5a90bf3ccc90e9df26ecf7d59d), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`a3d23f9`](https://github.com/mastra-ai/mastra/commit/a3d23f9c2ea1283001b06dffd5015f798bf75d9d), [`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`edf1ce6`](https://github.com/mastra-ai/mastra/commit/edf1ce69cc703f917cd2ee06488293a1f1d45597), [`824eb7f`](https://github.com/mastra-ai/mastra/commit/824eb7fef2eb3a52a63c59c2b879c7211294e5ae), [`648a4f3`](https://github.com/mastra-ai/mastra/commit/648a4f3ec442416816173e5fd64b97efd930df8d), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`01ac36b`](https://github.com/mastra-ai/mastra/commit/01ac36bf59295cf16d7a86c04f5776a4f1c98132), [`4c1bc9d`](https://github.com/mastra-ai/mastra/commit/4c1bc9d87fb5545b190e7e691331576781bffecf), [`f6fb6bc`](https://github.com/mastra-ai/mastra/commit/f6fb6bc2b0efadd6b744b6f73f07aa9800e5fc07), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`b0d2b33`](https://github.com/mastra-ai/mastra/commit/b0d2b336efd2a023a9f29218b442b386e42248f9), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`196fd89`](https://github.com/mastra-ai/mastra/commit/196fd89df87b1675adcff0d4eeb1cd75965e40cb), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`3acf1e3`](https://github.com/mastra-ai/mastra/commit/3acf1e36e26835caac9c22764bc87ee536ef5a62), [`7a046c6`](https://github.com/mastra-ai/mastra/commit/7a046c6a75c27d9859d695a59f6b3e8a96f6bfc8), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`6efbfad`](https://github.com/mastra-ai/mastra/commit/6efbfad1d763f54a2b346579d43a67ad0d92ce42), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`1d94199`](https://github.com/mastra-ai/mastra/commit/1d94199fbb65d5acbcd0101bcbac96876e35cac4), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`3e7a81b`](https://github.com/mastra-ai/mastra/commit/3e7a81b4e9b2c9de440b85b315a8297418afbaca), [`5054905`](https://github.com/mastra-ai/mastra/commit/5054905e5856fb8fe41c8d1b54859ad6e9169074), [`8fd2313`](https://github.com/mastra-ai/mastra/commit/8fd23138d68dd1b1b324a45db645c4968df45751), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`a4b2030`](https://github.com/mastra-ai/mastra/commit/a4b2030f6a1cb7123530f99d06f2b9e461e63932), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169), [`bb57489`](https://github.com/mastra-ai/mastra/commit/bb5748958b6d404619884f7e04a0d7619fdebae7), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d), [`4ec3ccd`](https://github.com/mastra-ai/mastra/commit/4ec3ccde9924c27e7320f7bbe26c932731b7b4cd), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936), [`b8be029`](https://github.com/mastra-ai/mastra/commit/b8be0295bf88782f95702e65349a714d03a787d1)]:
+  - @mastra/core@1.75.0
+  - @mastra/mcp@2.2.0
+  - @mastra/slack@1.7.2
+  - @mastra/telegram@0.2.2
+  - @mastra/teams@0.1.1
+  - @mastra/discord@1.3.0
+
+## 1.0.0-alpha.4
+
+### Minor Changes
+
+- Reworked the `@mastra/connect` API ahead of the first stable release. Breaking: the package has not shipped stable, so no deprecation period applies. ([#26084](https://github.com/mastra-ai/mastra/pull/26084))
+
+  **Renamed `integrations` to `providers`**
+
+  The option on `tools()` and `channels()` is now called `providers`, with types renamed to match (`ToolsProviderOptions`, `ChannelsProviders`, `ChannelsProviderOptions`).
+
+  ```ts
+  // Before
+  const connectTools = tools({ integrations: { linear: { allowTools: ['linear_get_issue'] } } });
+
+  // After
+  const connectTools = tools({ providers: { linear: { allowTools: ['linear_get_issue'] } } });
+  ```
+
+  **Merge your own tools in a dynamic `tools` callback**
+
+  Spread the resolver's result alongside local tools; your tools win on key collision.
+
+  ```ts
+  const agent = new Agent({
+    // ...
+    tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
+  });
+  ```
+
+  A `.with()` convenience method also exists for the same merge (`tools: connectTools.with({ weatherTool })`); it accepts a static record or a (sync/async, optionally context-reading) function, and calls chain.
+
+  **Simpler provider selection**
+
+  The array form is now a real allowlist (only the listed providers resolve), and the record form accepts boolean shorthand:
+
+  ```ts
+  tools({ providers: ['linear', 'resend'] }); // only these resolve
+  tools({ providers: { linear: true, github: false } }); // enable / exclude
+  ```
+
+  Unknown provider ids now fail with `invalid_options` instead of silently resolving nothing. `channels()` throws at call time; `tools()` checks ids against the platform catalog when it resolves tools, and if the catalog can't be reached it logs a warning and skips the id.
+
+  In `channels()`, `slack` is accepted as an alias for the platform's `slack-channels` key, so the common spelling needs no quotes:
+
+  ```ts
+  channels({ providers: { slack: true, discord: true } });
+  ```
+
+  Both spellings configure the same channel; naming it twice throws.
+
+  **Glob filters and top-level defaults**
+
+  `allowTools`, `disallowTools`, and `requireApproval` accept `*` globs, and all three can be set at the top level of `tools()` as defaults for every provider. Per-provider options win, including `requireApproval: false` to opt out of a global policy.
+
+  ```ts
+  tools({
+    requireApproval: ['*_delete_*', '*_send_*'],
+    providers: { linear: { requireApproval: false } },
+  });
+  ```
+
+  A per-provider glob that matches nothing fails like an unknown literal name, so typos never silently widen access.
+
+  **Removed**
+
+  - The deprecated `connect()` alias of `tools()`.
+  - The `environment()` sandbox credential surface.
+  - The `MASTRA_<PROVIDER>_CONNECTION_ID` env-var pin is no longer documented (it keeps working); pass `connectionId` per provider instead.
+  - The `TOOLS` registry alias (use `PROVIDERS`) and the `findRegistration`/`findChannelRegistration` lookup helpers.
+  - Internal toolset plumbing (`defineProxyTool`, `applyAllowTools`, `resolveConnectionId` and their types) is no longer exported.
+  - The `disabled: true` per-provider field — use the `false` shorthand instead: `providers: { github: false }`.
+  - The resolver `invalidate()` method — call `refresh()` to force a fetch now, or lower `ttlMs` to control freshness.
+
+### Patch Changes
+
+- Fixed Jira issue creation so agents can discover project-specific issue types and their required fields. ([#26119](https://github.com/mastra-ai/mastra/pull/26119))
+
+- Updated dependencies [[`6babc6d`](https://github.com/mastra-ai/mastra/commit/6babc6d526fc79c6633c796182de47a7a88d8bc1), [`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/slack@1.7.2-alpha.1
+  - @mastra/telegram@0.2.2-alpha.1
+  - @mastra/teams@0.1.1-alpha.0
+  - @mastra/core@1.75.0-alpha.8
+
 ## 1.0.0-alpha.3
 
 ### Minor Changes

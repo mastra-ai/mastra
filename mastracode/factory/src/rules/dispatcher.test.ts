@@ -2209,12 +2209,19 @@ describe('FactoryDecisionDispatcher', () => {
         ]);
 
         // A remote replica reading the ledger during the run must keep seeing a fresh claim.
-        await vi.advanceTimersByTimeAsync(25_000);
-        const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
-          heartbeatAt: number;
-        }>;
-        expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
-        expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        // The heartbeat interval is armed and its ledger write lands through
+        // async storage, either of which can trail a single fixed timer jump
+        // on a loaded runner. Step the clock one heartbeat period at a time
+        // until the renewed claim is visible.
+        const heartbeatPeriodMs = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
+        await vi.waitFor(async () => {
+          await vi.advanceTimersByTimeAsync(heartbeatPeriodMs);
+          const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
+            heartbeatAt: number;
+          }>;
+          expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
+          expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        });
 
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');

@@ -58,6 +58,7 @@ import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
@@ -548,9 +549,23 @@ export class MastraTUI {
   }
 
   private createPendingNewThread(): Promise<void> | undefined {
+    if (this.state.pendingNewThreadCreation) return this.state.pendingNewThreadCreation;
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
-    return this.state.session.thread.create().then(() => undefined);
+    const creation = this.state.session.thread.create().then(
+      () => undefined,
+      (error: unknown) => {
+        this.state.pendingNewThread = true;
+        throw error;
+      },
+    );
+    // Later submissions wait for this same creation instead of creating another thread.
+    this.state.pendingNewThreadCreation = creation;
+    const clear = () => {
+      if (this.state.pendingNewThreadCreation === creation) this.state.pendingNewThreadCreation = undefined;
+    };
+    creation.then(clear, clear);
+    return creation;
   }
 
   private sendOptimisticSignal(
@@ -637,7 +652,6 @@ export class MastraTUI {
       const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
       this.state.pendingSlashCommandMessageIds.push(messageId);
-      this.state.pendingQueuedActions.push('slash');
       addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
       return;
@@ -646,8 +660,21 @@ export class MastraTUI {
     const { content, images } = consumePendingImages(text, this.state.pendingImages);
     this.state.pendingImages = [];
 
-    this.state.pendingFollowUpMessages.push({ content, images });
-    this.state.pendingQueuedActions.push('message');
+    const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
+    // The Agent runtime owns queued-message ordering, including across aborts.
+    const queue = () => this.state.session.queueMessage({ content, files });
+    const pendingThread = this.createPendingNewThread();
+    // Queued slash commands wait until in-flight submissions reach the core queue.
+    this.state.pendingQueueSubmissions++;
+    (pendingThread ? pendingThread.then(queue) : queue())
+      .catch((error: unknown) => {
+        showSessionError(this.state, error);
+      })
+      .finally(() => {
+        this.state.pendingQueueSubmissions--;
+        // If no run picked the queue back up (e.g. the submission failed), run held slash commands now.
+        if (this.state.pendingQueueSubmissions === 0) drainQueuedActionIfIdle(this.getEventContext());
+      });
     updateStatusLine(this.state);
     flushRender(this.state);
   }
@@ -1173,8 +1200,9 @@ export class MastraTUI {
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
     if (!ownsUpdate()) return;
     const hasThreadPack = typeof metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] === 'string';
+    const hasPersistedModel = typeof metadata?.currentModelId === 'string' && metadata.currentModelId.length > 0;
     const resolvedPackId =
-      this.state.options.initialModelOverride && !hasThreadPack
+      (this.state.options.initialModelOverride || hasPersistedModel) && !hasThreadPack
         ? null
         : resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);

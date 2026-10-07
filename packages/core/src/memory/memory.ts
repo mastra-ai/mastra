@@ -745,6 +745,27 @@ https://mastra.ai/en/docs/memory/overview`,
   }): Promise<void>;
 
   /**
+   * Whether `mergeWorkingMemory` is available (atomic merge supported by storage).
+   */
+  async supportsAtomicWorkingMemoryMerge(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Atomically deep-merges a partial JSON object into resource-scoped working memory.
+   * Implementations without atomic merge support throw.
+   */
+  async mergeWorkingMemory(_: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string | Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<void> {
+    throw new Error(`Atomic working memory merge is not supported by ${this.constructor.name}`);
+  }
+
+  /**
    * @warning experimental! can be removed or changed at any time
    */
   abstract __experimental_updateWorkingMemoryVNext({

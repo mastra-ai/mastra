@@ -2,11 +2,12 @@ import { pathToFileURL } from 'node:url';
 import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
+import { askUserTool, webFetchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
+import { webSearchTool } from '../tools/web-search';
 
 const workspacePath = 'workspace';
 
@@ -88,7 +89,7 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
 `,
-  model: 'mastra/openai/gpt-5-mini',
+  model: 'mastra/openai/gpt-6-luna',
   defaultOptions: {
     maxSteps: 100,
     autoResumeSuspendedTools: true,
@@ -97,7 +98,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'mastra/openai/gpt-5-nano',
+        model: 'mastra/openai/gpt-6-luna',
       },
     },
   }),
