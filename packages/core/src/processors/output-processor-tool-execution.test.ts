@@ -492,7 +492,7 @@ describe('processToolResult lifecycle hook', () => {
         },
       });
 
-    const run = async (toolNames: string[]) => {
+    const run = async (toolNames: string[], streamOptions: Record<string, unknown> = {}) => {
       const seen: string[] = [];
       const modelCalls = { count: 0 };
       class AbortOnToolA implements Processor {
@@ -512,7 +512,7 @@ describe('processToolResult lifecycle hook', () => {
         outputProcessors: [new AbortOnToolA()],
       });
       const errorSpy = vi.spyOn(console, 'error');
-      const stream = await agent.stream('go', { maxSteps: 5 });
+      const stream = await agent.stream('go', { maxSteps: 5, ...streamOptions });
       const chunks: any[] = [];
       for await (const chunk of stream.fullStream) chunks.push(chunk);
       // The loop keeps running after the client stream closes; give it time to misbehave.
@@ -532,6 +532,12 @@ describe('processToolResult lifecycle hook', () => {
 
     it('does not call the model again after a single aborted tool call', async () => {
       const { modelCalls, chunks } = await run(['toolA']);
+      expect(chunks.filter(c => c.type === 'tripwire')).toHaveLength(1);
+      expect(modelCalls).toBe(1);
+    });
+
+    it('does not let onIterationComplete resume the run after an abort', async () => {
+      const { modelCalls, chunks } = await run(['toolA'], { onIterationComplete: () => ({ continue: true }) });
       expect(chunks.filter(c => c.type === 'tripwire')).toHaveLength(1);
       expect(modelCalls).toBe(1);
     });
