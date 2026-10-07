@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultMountableTemplate, DEFAULT_NODE_VERSION } from './template';
+import { createDefaultMountableTemplate, DEFAULT_NODE_VERSION, MOUNTABLE_TEMPLATE_VERSION } from './template';
 
 describe('createDefaultMountableTemplate', () => {
+  it('is on v4 so templates cached before the stale-npm cleanup rebuild', () => {
+    expect(MOUNTABLE_TEMPLATE_VERSION).toBe('v4');
+  });
+
   it('keys the id off machine resources — a resize is a new template, never a reuse', () => {
     const plain = createDefaultMountableTemplate();
     expect(createDefaultMountableTemplate({ memoryMB: 2048 }).id).not.toBe(plain.id);
