@@ -28,13 +28,10 @@
  * asked again and the call reaches its final persisted state), so nothing here
  * waits on a timer.
  *
- * The harness ends the case with `mastra.shutdown({ drainTimeout: 1000 })`. On
- * this pin that teardown throws on the evented engine — see COR-1391: the
- * resumed run's workflow finish tail reads `globalRunRegistry` after the run's
- * entry was deleted, and the cache's `updateAgeOnGet` refresh resurrects the key
- * as a valueless entry that `getActiveDurableAgentWorkflowExecutions`
- * dereferences. The evented variants assert today's rejection so this test goes
- * red once COR-1391 lands and the step can be restored unconditionally.
+ * The harness ends the case with `mastra.shutdown({ drainTimeout: 1000 })`, and
+ * so does this port: COR-1391 is fixed, so shutdown no longer trips over the
+ * valueless registry entry a finished run could leave behind, and the teardown
+ * runs unconditionally on all three engines.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -215,33 +212,11 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
       .map(part => ({ toolName: part.toolInvocation.toolName as string, state: part.toolInvocation.state as string }));
     userMessages = messages.filter(message => message.role === 'user').length;
   } finally {
-    // `cleanup()` + `pubsub.close()` release everything this case holds;
-    // `host.shutdown()` is the harness's teardown, asserted (evented) or run
-    // outright (plain, durable) below.
+    // `cleanup()` + `pubsub.close()` release everything this case holds, then
+    // `host.shutdown()` runs the harness's teardown on every engine.
     streamed.cleanup?.();
     await pubsub.close();
-
-    if (engine === 'evented') {
-      // COR-1391: the workflow finish tail re-reads `globalRunRegistry` after
-      // this run's entry was deleted, so the shutdown drain dereferences a
-      // valueless cache entry. Assert today's rejection; the step becomes an
-      // unconditional `await host.shutdown({ drainTimeout: 1000 })` again when
-      // COR-1391 lands.
-      await expect(host.shutdown({ drainTimeout: 1000 })).rejects.toThrow(/reading 'mastra'/);
-    } else {
-      // COR-1391: the harness runs one engine per process, but all three
-      // engines share this process, so the valueless key an earlier evented
-      // variant leaves behind makes this shutdown throw the same TypeError.
-      // Tolerating exactly that error is a consequence of the bug only — when
-      // COR-1391 lands, this try/catch goes away and the call becomes an
-      // unconditional `await host.shutdown({ drainTimeout: 1000 })` again,
-      // alongside the evented assertion above.
-      try {
-        await host.shutdown({ drainTimeout: 1000 });
-      } catch (error) {
-        expect(String(error)).toMatch(/reading 'mastra'/);
-      }
-    }
+    await host.shutdown({ drainTimeout: 1000 });
   }
 
   return {
