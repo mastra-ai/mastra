@@ -210,4 +210,44 @@ describe('applyBackgroundToolResult identity scan', () => {
     await expect(applyBackgroundToolResult(deps)).rejects.toThrow(/Background task status conflict for task "task-1"/);
     expect(flush).not.toHaveBeenCalled();
   });
+
+  it('falls back to the toModelOutput mapping when processModelOutput throws', async () => {
+    const messageList = new MessageList();
+    messageList.add(
+      makeAssistantMessage(
+        [
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-1',
+            status: 'running',
+            result: 'pending',
+          }),
+        ],
+        'msg-1',
+      ),
+      'response',
+    );
+
+    const { deps, flush } = makeDeps(messageList, { taskId: 'task-1', status: 'completed' });
+    const warn = vi.fn();
+    const mapped = { type: 'text', value: 'mapped' };
+
+    await expect(
+      applyBackgroundToolResult({
+        ...deps,
+        logger: { warn } as any,
+        toModelOutput: () => mapped,
+        processModelOutput: async () => {
+          throw new Error('hook failed');
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    const part = messageList.get.all.db()[0]?.content?.parts?.[0] as any;
+    expect(part.toolInvocation.result).toEqual({ done: true });
+    expect(part.providerMetadata.mastra.backgroundTask.status).toBe('completed');
+    expect(part.providerMetadata.mastra.modelOutput).toEqual(mapped);
+    expect(flush).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+  });
 });

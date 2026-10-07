@@ -139,7 +139,16 @@ export async function applyBackgroundToolResult(deps: {
     }
   }
   if (!failed && deps.processModelOutput) {
-    modelOutput = (await deps.processModelOutput({ result, modelOutput: modelOutput ?? undefined })) ?? null;
+    try {
+      modelOutput = (await deps.processModelOutput({ result, modelOutput: modelOutput ?? undefined })) ?? null;
+    } catch (processorError) {
+      // Keep the toModelOutput mapping so the invocation is still updated and
+      // the placeholder does not linger in history.
+      deps.logger?.warn?.(
+        `processToolModelOutput failed for background tool "${params.toolName}", falling back to the toModelOutput mapping`,
+        { toolCallId: params.toolCallId, error: processorError },
+      );
+    }
   }
   const providerMetadata = {
     ...transformed.providerMetadata,

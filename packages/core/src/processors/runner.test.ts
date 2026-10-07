@@ -284,45 +284,6 @@ describe('ProcessorRunner', () => {
       expect(onViolation).toHaveBeenCalled();
     });
 
-    it('should call onViolation when processToolModelOutput triggers abort()', async () => {
-      const onViolation = vi.fn();
-      const outputProcessors: Processor[] = [
-        {
-          id: 'mo-guard',
-          name: 'Model Output Guard',
-          onViolation,
-          processToolModelOutput: ({ abort }) => {
-            abort('Model output blocked', { metadata: { toolName: 'echoTool' } });
-          },
-        },
-      ];
-
-      runner = new ProcessorRunner({
-        inputProcessors: [],
-        outputProcessors,
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      await expect(
-        runner.runProcessToolModelOutput({
-          steps: [],
-          messageList,
-          stepNumber: 0,
-          toolName: 'echoTool',
-          toolCallId: 'call-1',
-          toolArgs: { text: 'hi' },
-          result: 'Echo: hi',
-          modelOutput: undefined,
-        }),
-      ).rejects.toThrow(TripWire);
-      expect(onViolation).toHaveBeenCalledWith({
-        processorId: 'mo-guard',
-        message: 'Model output blocked',
-        detail: { toolName: 'echoTool' },
-      });
-    });
-
     it('should skip processors that do not implement processInput', async () => {
       const executionOrder: string[] = [];
       const inputProcessors: Processor[] = [
@@ -715,6 +676,45 @@ describe('ProcessorRunner', () => {
         .map(part => (part as TextPart).text);
 
       expect(assistantTexts).toEqual(['initial response', 'message from processor 1', 'message from processor 3']);
+    });
+
+    it('should call onViolation when processToolModelOutput triggers abort()', async () => {
+      const onViolation = vi.fn();
+      const outputProcessors: Processor[] = [
+        {
+          id: 'mo-guard',
+          name: 'Model Output Guard',
+          onViolation,
+          processToolModelOutput: ({ abort }) => {
+            abort('Model output blocked', { metadata: { toolName: 'echoTool' } });
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      await expect(
+        runner.runProcessToolModelOutput({
+          steps: [],
+          messageList,
+          stepNumber: 0,
+          toolName: 'echoTool',
+          toolCallId: 'call-1',
+          toolArgs: { text: 'hi' },
+          result: 'Echo: hi',
+          modelOutput: undefined,
+        }),
+      ).rejects.toThrow(TripWire);
+      expect(onViolation).toHaveBeenCalledWith({
+        processorId: 'mo-guard',
+        message: 'Model output blocked',
+        detail: { toolName: 'echoTool' },
+      });
     });
   });
 

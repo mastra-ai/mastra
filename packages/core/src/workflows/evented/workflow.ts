@@ -1076,7 +1076,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
-                ...resolveProcessorSpanAttributes(processor, phase === 'toolModelOutput' ? 'toolResult' : phase),
+                ...resolveProcessorSpanAttributes(processor, phase),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,

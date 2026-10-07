@@ -2576,12 +2576,12 @@ export class ProcessorRunner {
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
-        name: resolveProcessorSpanName(processor, 'toolResult', `tool model output processor: ${processor.id}`),
+        name: resolveProcessorSpanName(processor, 'toolModelOutput', `tool model output processor: ${processor.id}`),
         entityType: EntityType.TOOL_RESULT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
-          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
+          ...resolveProcessorSpanAttributes(processor, 'toolModelOutput'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },

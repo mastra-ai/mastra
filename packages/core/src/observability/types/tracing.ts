@@ -597,6 +597,7 @@ export type ProcessorSpanPhase =
   | 'output'
   | 'outputStep'
   | 'toolResult'
+  | 'toolModelOutput'
   | 'requestError';
 
 /**
@@ -1235,6 +1236,13 @@ export interface ProcessorRunInputByPhase {
     providerExecuted?: boolean;
     retryCount?: number;
   };
+  toolModelOutput: {
+    stepNumber?: number;
+    toolName?: string;
+    toolCallId?: string;
+    providerExecuted?: boolean;
+    retryCount?: number;
+  };
   llmRequest: { prompt?: unknown; stepNumber?: number; retryCount?: number };
   llmResponse: { stepNumber?: number; retryCount?: number; fromCache?: boolean; chunkCount?: number };
   requestError: { messages: unknown[]; error: string; stepNumber?: number; messageId?: string; retryCount?: number };
@@ -1255,6 +1263,8 @@ export interface ProcessorRunOutputByPhase {
   outputResult: ProcessorMessageChanges;
   outputStep: ProcessorMessageChanges;
   toolResult: ProcessorMessageChanges;
+  /** Present only when the processor replaced the model-facing output. */
+  toolModelOutput: { modelOutput?: unknown };
   llmRequest: ProcessorMessageChanges;
   llmResponse: ProcessorMessageChanges;
   requestError: ProcessorMessageChanges;
