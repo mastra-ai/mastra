@@ -400,6 +400,40 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
       }
     }
   });
+
+  it('prunes agent instructions from persisted step results (#25977)', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-prune-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    const instructions = 'SECRET SYSTEM PROMPT';
+    const state = { agentSpanData: { attributes: { instructions } } };
+    const snapshot = {
+      runId: 'run-1',
+      status: 'success',
+      value: {},
+      context: {
+        input: state,
+        'init-iteration-state': { status: 'success', payload: state, output: state },
+        [InngestDurableStepIds.AGENTIC_EXECUTION]: { status: 'success', payload: state, output: state },
+        'map-final-output': { status: 'success', payload: state, output: {} },
+      },
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: [],
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
+
+    for (const wf of [workflow, iterationWorkflow]) {
+      expect(typeof wf.options.pruneSnapshot).toBe('function');
+      const pruned = wf.options.pruneSnapshot({ snapshot: structuredClone(snapshot), workflowStatus: 'success' });
+      const { input: _input, ...stepResults } = pruned.context;
+      expect(JSON.stringify(stepResults)).not.toContain(instructions);
+    }
+  });
 });
 
 describe('Inngest per-step processor history (#25193)', () => {
