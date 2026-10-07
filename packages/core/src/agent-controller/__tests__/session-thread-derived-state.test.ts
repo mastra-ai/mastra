@@ -194,6 +194,43 @@ describe('AgentController thread-derived session state', () => {
     expect(session.getTokenUsage()).toMatchObject({ promptTokens: 40, completionTokens: 50, totalTokens: 90 });
   });
 
+  it('does not promote a thread model to the host default when none is configured', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'no-default-model-agent',
+      name: 'No default model agent',
+      instructions: 'Test model isolation.',
+      model: new MastraLanguageModelV2Mock({}),
+    });
+    const controller = new AgentController({
+      id: 'no-default-model-controller',
+      agent,
+      workspace: createMockWorkspace(),
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true }],
+    });
+    await controller.init();
+    const session = await controller.createSession({
+      id: 'no-default-model-session',
+      resourceId: 'no-default-model-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+
+    const metadataLessThread = await session.thread.create({ id: 'metadata-less-thread' });
+    const configuredThread = await session.thread.create({ id: 'configured-thread' });
+    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+
+    await session.thread.create({ id: 'new-thread' });
+    expect(session.model.get()).toBe('');
+
+    await session.thread.switch({ threadId: configuredThread.id });
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+
+    await session.thread.switch({ threadId: metadataLessThread.id });
+    expect(session.model.get()).toBe('');
+  });
+
   it('hydrates the same thread settings in sessions with different scopes', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'scopes');
