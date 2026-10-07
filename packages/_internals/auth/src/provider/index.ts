@@ -1,5 +1,4 @@
 import { MastraBase } from '@internal/core/base';
-import type { RequestContext } from '@internal/core/request-context';
 import type {
   CredentialsResult,
   IAuthHttpHandler,
@@ -14,7 +13,7 @@ import type {
   SSOLoginConfig,
   User,
 } from '..';
-import type { AuthorizeUserFn, MastraAuthConfig, MastraAuthRequest } from '../types';
+import type { AuthorizeUserFn, AuthRequestContext, MastraAuthConfig, MastraAuthRequest } from '../types';
 import { getRequestHeader } from '../types';
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
@@ -27,7 +26,11 @@ export interface MastraAuthProviderOptions<TUser = unknown> {
    * requested resource. Any other result is denied with a 403. Without this method, the
    * mapped resource always wins.
    */
-  authorizeUserResource?(user: TUser, resourceId: string, requestContext: RequestContext): Promise<boolean> | boolean;
+  authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
   /**
    * Protected paths for the auth provider
    */
@@ -80,7 +83,11 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * requested resource. Any other result is denied with a 403. Without this method, the
    * mapped resource always wins.
    */
-  authorizeUserResource?(user: TUser, resourceId: string, requestContext: RequestContext): Promise<boolean> | boolean;
+  authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
@@ -90,7 +97,7 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
   public authorizeUserResource?(
     user: TUser,
     resourceId: string,
-    requestContext: RequestContext,
+    requestContext: AuthRequestContext,
   ): Promise<boolean> | boolean;
 
   constructor(options?: MastraAuthProviderOptions<TUser>) {
