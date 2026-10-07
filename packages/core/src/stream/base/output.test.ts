@@ -727,7 +727,8 @@ describe('MastraModelOutput', () => {
 
       const emitted: ChunkType[] = [];
       for await (const chunk of output.fullStream) {
-        emitted.push(chunk);
+        // Snapshot each chunk: a later mutation of an already-emitted chunk must not hide what consumers saw.
+        emitted.push(structuredClone(chunk));
       }
 
       const toolCallChunks = emitted.filter(chunk => chunk.type === 'tool-call');
