@@ -9,6 +9,7 @@ import type {
 } from '@internal/external-types';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
+import type { MastraDBMessage } from '../agent/message-list';
 import type { ActorSignal } from '../auth/ee';
 import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
@@ -209,6 +210,12 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
   agentId: string;
   toolCallId: string;
   messages: any[];
+  /**
+   * Reads the current in-memory conversation, including remembered messages and this run's responses.
+   * Reflects message-list removals, but not transient provider-prompt transforms. Treat messages as read-only.
+   * Not available outside a supported agent loop.
+   */
+  getMessages?: () => readonly MastraDBMessage[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
@@ -372,6 +379,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * stream is not memory-backed.
      */
     flushMessages?: () => Promise<void>;
+    /** Live conversation reader supplied by the agent loop. Never serialized in workflow state. */
+    getMessages?: AgentToolExecutionContext<unknown, unknown>['getMessages'];
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
     /** Set by the agent tool-call step when the tool runs as a background task. */
@@ -765,6 +774,15 @@ export interface ToolAction<
    * that exactly match the tool schema.
    */
   strict?: boolean;
+  /**
+   * How a result that fails `outputSchema` validation is handled.
+   * - `'strict'` (default): the result is replaced with a validation error object, so the
+   *   model is told the call failed.
+   * - `'warn'`: the failure is logged and the tool's actual result is returned unchanged.
+   *   Use this for tools whose side effects have already happened when the result is
+   *   produced (an order was placed, a message was sent), so the model does not retry them.
+   */
+  outputValidation?: 'strict' | 'warn';
   /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.

@@ -89,6 +89,8 @@ export type StreamTransportRef = {
 
 interface BaseChunkType {
   runId: string;
+  /** Trace ID of the run that produced this chunk. Undefined when tracing is disabled. */
+  traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
 }
@@ -833,6 +835,16 @@ interface ToolCallSuspendedPayload {
   resumeSchema: string;
 }
 
+interface ToolCallResumedPayload {
+  toolCallId: string;
+  toolName: string;
+  /** Whether the resumed pause was a `suspend()` call or a tool approval request. */
+  kind: 'suspension' | 'approval';
+  args?: Record<string, any>;
+  suspendPayload?: any;
+  resumeSchema?: string;
+}
+
 export type DataChunkType = {
   type: `data-${string}`;
   data: any;
@@ -840,6 +852,15 @@ export type DataChunkType = {
   /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
 };
+
+/**
+ * Whether a stream chunk or message part is a custom `data-*` chunk (e.g. written via `writer.custom()`).
+ * The `data-` type prefix is the discriminant for these chunks, shared with the AI SDK.
+ */
+export function isDataChunk<T>(value: T): value is T & { type: `data-${string}` } {
+  const type = (value as { type?: unknown } | null | undefined)?.type;
+  return typeof type === 'string' && type.startsWith('data-');
+}
 
 export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
@@ -891,6 +912,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
+  | (BaseChunkType & { type: 'tool-call-resumed'; payload: ToolCallResumedPayload })
   | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
@@ -971,11 +993,7 @@ export type WorkflowStreamEvent =
         workflowStatus: WorkflowRunStatus;
         finalWorkflowResult?: unknown;
         output: {
-          usage: {
-            inputTokens: number;
-            outputTokens: number;
-            totalTokens: number;
-          };
+          usage: LanguageModelUsage;
         };
         metadata: Record<string, any>;
       };
@@ -1065,7 +1083,13 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
-  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
+  | (DataChunkType & {
+      from: never;
+      runId: never;
+      traceId?: never;
+      metadata?: BaseChunkType['metadata'];
+      payload: never;
+    });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
@@ -1220,6 +1244,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  /** The run's abort signal, forwarded to output processors. */
+  abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;

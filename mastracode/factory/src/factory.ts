@@ -53,6 +53,8 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
+import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
@@ -61,6 +63,7 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
+import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -75,6 +78,7 @@ import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -85,13 +89,13 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
-import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -111,7 +115,7 @@ import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
-import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
+import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -208,6 +212,16 @@ export interface MastraFactoryConfig {
    * plaintext compatibility with a boot-time warning.
    */
   secretEncryption?: FactorySecretEncryption;
+  /**
+   * Model providers that authenticate with the server process's own
+   * credentials instead of per-account credentials. With auth enabled, these
+   * providers are only usable when listed here; the stored-key flow is never
+   * offered for them. Supported: `'amazon-bedrock'` (AWS credential chain —
+   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`).
+   * Every signed-in account can then run these models on the deployment's
+   * credentials. Default: none.
+   */
+  deploymentModelProviders?: readonly string[];
   /**
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
@@ -416,6 +430,7 @@ export class MastraFactory {
       );
     }
     const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
+    const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
@@ -485,7 +500,7 @@ export class MastraFactory {
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
-    const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
+    const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
@@ -504,7 +519,7 @@ export class MastraFactory {
     const domains = {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
-      modelPacks: modelPacksStorage,
+      modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       filesystem: filesystemStorage,
@@ -551,7 +566,7 @@ export class MastraFactory {
       if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
         throw new Error(
           `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })\n` +
+            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
             `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
         );
       }
@@ -593,7 +608,7 @@ export class MastraFactory {
     // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
     // same store the local /login and Settings pages read and write.
     if (auth) {
-      registerTenantCredentialResolver(modelCredentialsStorage);
+      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders);
     }
 
     // Custom providers: DB-backed in both modes (org rows in tenant mode, the
@@ -819,7 +834,15 @@ export class MastraFactory {
           }
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
-      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      ...(workItemsReady
+        ? {
+            workItems: workItemsStorage,
+            controller: {
+              getSessionByResource: async (resourceId: string) =>
+                this.#prepared?.base.controller.getSessionByResource(resourceId),
+            },
+          }
+        : {}),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -1038,6 +1061,35 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
+                  // Review-role sessions get `factory_review_source` so the
+                  // published review can carry the session URL that produced it
+                  // — the affordance that lets a suspicious review (e.g. one
+                  // that lands on the wrong PR) be traced back to its run.
+                  //
+                  // The session URL is browser-facing (a human opens it from a
+                  // GitHub/GitLab review comment), so it needs the UI host —
+                  // the same origin Slack session deep-links resolve against
+                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
+                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+                  // mirror Slack's behavior: when it is unset, pass `null` so
+                  // the tool is omitted from the toolset rather than fall back
+                  // to the API/localhost origin and publish that URL into a
+                  // public review body. The skill's tool-not-available branch
+                  // handles the absence as stop-don't-publish. Blank counts as
+                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+                  // empty/whitespace value must not register the tool with a
+                  // hostless `sessionUrl`.
+                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
+                  mergeTools(
+                    'factory-review-source',
+                    await createReviewSourceTool({
+                      requestContext,
+                      storage: workItemsStorage,
+                      uiOrigin: reviewSourceUiOrigin,
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+                    }),
+                  );
                   // The supervisor session has no seat, so it never gets the
                   // transition tool above; it gets the read surface instead,
                   // and only once the caller's org is shown to own the project.
@@ -1070,6 +1122,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
+                          boards: this.#boards,
                           audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
@@ -1168,6 +1221,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            deploymentModelProviders,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
@@ -1199,6 +1253,23 @@ export class MastraFactory {
                     memorySettings: memorySettingsStorage,
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
+                ...(githubIntegration
+                  ? {
+                      dismissStaleReviews: async decision => {
+                        await dismissStaleFactoryReviews(
+                          githubIntegration.versionControl,
+                          decision,
+                          login => isFactoryGithubLogin(githubIntegration, login),
+                          login =>
+                            trustedCollaborator(githubIntegration, {
+                              installationId: decision.installationId,
+                              repository: decision.repository,
+                              login,
+                            }),
+                        );
+                      },
+                    }
+                  : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
@@ -1331,14 +1402,14 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Personal model packs seed interactive user sessions only. Active Factory
+    // Personal default models seed interactive user sessions only. Active Factory
     // run bindings are excluded and continue to use the project default model.
     prepared.base.controller.onSessionCreated(
       session =>
-        hydrateSessionModelPack(session, {
+        hydrateSessionDefaultModel(session, {
           sourceControl: { sessions: sourceControlSessions },
           workItems: workItemsStorage,
-          modelPacks: modelPacksStorage,
+          modelDefaults: modelDefaultsStorage,
         }),
       { blocking: true },
     );

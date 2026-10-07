@@ -23,11 +23,10 @@ import { TripWire } from '@mastra/core/agent';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { listResolvableModePacks, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
-import { resolveModePackFallbackChain } from '../onboarding/packs.js';
-import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
+import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import {
   getRequestAccountSelection,
+  isRequestAccountRoutingExhausted,
   markRequestAccountRoutingExhausted,
   setRequestAccountSelection,
 } from './account-routing-context.js';
@@ -112,35 +111,25 @@ const NETWORK_MESSAGE_PATTERN =
 
 const MAX_CAUSE_DEPTH = 4;
 
-/** Persisted data-part type for a fallback-pack hop. */
-export const PACK_FALLBACK_PART_TYPE = 'data-mastracode-pack-fallback' as const;
+/** Persisted data-part type for a model-route hop. */
+export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
-/**
- * Payload of a pack-fallback part: the pack the cascade is leaving, the pack
- * core's fallback array advances to, and why. Labels and pack ids only —
- * never credential material.
- */
-export interface PackFallbackPartData {
-  from: { packId: string; label: string };
-  to: { packId: string; label: string };
+/** Non-secret transcript payload for a model-route hop. */
+export interface ModelFallbackPartData {
+  from: { entryId: string; label: string };
+  to: { entryId: string; label: string };
   reason: 'pool-exhausted' | 'persistent-outage';
   at: string;
 }
 
-/**
- * Session-state key the processor sets when a pack hop happens. The TUI
- * listens for it on the typed `state_changed` controller event (data parts
- * never ride controller message events) and applies thread stickiness.
- */
-export const PACK_FALLBACK_STATE_KEY = 'mastracodePendingPackFallback' as const;
+/** Session-state key set when account rotation advances the model route. */
+export const MODEL_FALLBACK_STATE_KEY = 'mastracodePendingModelFallback' as const;
 
-/** Payload written to session state under PACK_FALLBACK_STATE_KEY. */
-export interface PendingPackFallback {
-  fromPackId: string;
-  toPackId: string;
-  /** Landed pack's model for the mode the cascade is serving. */
+/** Payload written to session state under MODEL_FALLBACK_STATE_KEY. */
+export interface PendingModelFallback {
+  fromEntryId: string;
+  toEntryId: string;
   toModelId: string;
-  /** Originating thread. Absent only on pending hops written by older clients. */
   threadId?: string;
   reason: 'pool-exhausted' | 'persistent-outage';
   at: string;
@@ -386,20 +375,20 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   return `Switched ${provider} account: ${from} → ${data.to.label} (${reason})`;
 }
 
-/** Transcript line for a pack-fallback hop; shared by the live info event and the TUI's history render. */
-export function packFallbackNoticeText(data: PackFallbackPartData): string {
+/** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
+export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
   const reason = REASON_TEXT[data.reason] ?? data.reason;
-  return `Switched model pack: ${data.from.label} → ${data.to.label} (${reason})`;
+  return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
 }
 
 /**
- * Whether a persisted pack-fallback reason is one this build understands.
+ * Whether a persisted model-fallback reason is one this build understands.
  * `REASON_TEXT` also covers the account-switch reasons, so the notice text
  * alone would happily render a foreign value such as `rate-limit` as a
- * pack-fallback reason; history parsed from another build's part must be
+ * model-fallback reason; history parsed from another build's part must be
  * rejected instead.
  */
-export function isPackFallbackReason(value: unknown): value is PackFallbackPartData['reason'] {
+export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
   return value === 'pool-exhausted' || value === 'persistent-outage';
 }
 
@@ -444,27 +433,21 @@ function providerFromSession(
  * spent, which is exactly the hop condition. Implements `processAPIError`
  * ONLY (see the file header for the runner-order rationale).
  */
-/** Cached per-request pack cascade (state.packCascade). */
-interface PackCascade {
-  packs: Array<{ packId: string; label: string }>;
-  models: Record<string, Record<string, string>>;
-  modeId: string;
+/** Cached per-request model route cascade. */
+interface ModelRouteCascade {
+  entries: Array<{ id: string; label: string; modelId: string; accountId?: string }>;
   position: number;
 }
 
 interface AccountRoute {
-  packId: string;
+  entryId: string;
   modelId: string;
   providerId: string;
+  accountId?: string;
 }
 
 type RoutingProcessorArgs = Pick<ProcessAPIErrorArgs, 'requestContext' | 'state' | 'writer'> | ProcessInputArgs;
 
-/**
- * Controller-shaped accessors for a thread's routing metadata. Core supplies this
- * via `requestContext.get('controller')`; the TUI builds the same shape from its
- * session so both writers share one serialization key and one read source.
- */
 export type RoutingControllerContext = {
   session?: { modelId?: unknown; modeId?: unknown };
   threadId?: unknown;
@@ -481,19 +464,9 @@ function getRoutingController(
   return args.requestContext?.get('controller') as RoutingControllerContext | undefined;
 }
 
-/**
- * A12: the account a pack/model route targets, or `undefined` when the route
- * is `Automatic` (no entry — insertion order, full pool rotation).
- *
- * A targeted route is *exclusive*: only that account may serve the route, so
- * rotation must never spill the request onto a sibling subscription's quota.
- * A heavy model on one subscription can burn that subscription's quota in
- * hours; spilling it into a second subscription defeats the point of having
- * one.
- */
-function getRouteTargetAccountId(settingsPath: string | undefined, route: AccountRoute | null): string | undefined {
-  if (!route) return undefined;
-  return loadSettings(settingsPath).models.packAccountPreferences?.[route.packId]?.[route.modelId];
+/** A targeted route is exclusive; an entry without accountId uses automatic pool rotation. */
+function getRouteTargetAccountId(route: AccountRoute | null): string | undefined {
+  return route?.accountId;
 }
 
 function getRequestActiveAccount(
@@ -501,54 +474,45 @@ function getRequestActiveAccount(
   store: CredentialStore,
   providerId: string,
 ) {
+  if (isRequestAccountRoutingExhausted(args.requestContext, providerId)) return undefined;
   const selectedId = getRequestAccountSelection(args.requestContext, providerId);
-  return (
-    (selectedId ? store.listAccounts?.(providerId).find(account => account.id === selectedId) : undefined) ??
-    store.getActiveAccount?.(providerId) ??
-    store.listAccounts?.(providerId).find(account => account.active)
-  );
+  if (selectedId) return store.listAccounts?.(providerId).find(account => account.id === selectedId);
+  return store.getActiveAccount?.(providerId) ?? store.listAccounts?.(providerId).find(account => account.active);
 }
 
 function resolveAccountRoute(
   args: Pick<RoutingProcessorArgs, 'requestContext'>,
-  settingsPath?: string,
-  explicit?: { packId: string; modelId: string },
+  explicit?: { id: string; modelId: string; accountId?: string },
 ): AccountRoute | null {
   const controller = getRoutingController(args);
   const state = controller?.getState?.();
-  const pending = state?.mastracodePendingPackFallback as
-    | { toPackId?: unknown; toModelId?: unknown; threadId?: unknown }
+  const pending = state?.mastracodePendingModelFallback as
+    | { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown }
     | null
     | undefined;
   const pendingMatchesThread =
     pending &&
-    typeof pending.toPackId === 'string' &&
+    typeof pending.toEntryId === 'string' &&
     typeof pending.toModelId === 'string' &&
     (pending.threadId === undefined || pending.threadId === controller?.threadId);
-  const resolvedModelId =
-    explicit?.modelId ??
-    (pendingMatchesThread ? pending.toModelId : undefined) ??
-    (typeof controller?.session?.modelId === 'string' ? controller.session.modelId : undefined);
-  if (typeof resolvedModelId !== 'string' || resolvedModelId.length === 0) return null;
-  const modelId = resolvedModelId;
-
-  const settings = loadSettings(settingsPath);
-  const packs = listResolvableModePacks(settings);
-  const modeId =
-    typeof controller?.session?.modeId === 'string' && controller.session.modeId.length > 0
-      ? controller.session.modeId
-      : 'build';
-  const explicitPackId =
-    explicit?.packId ??
-    (pendingMatchesThread ? pending.toPackId : undefined) ??
-    (typeof state?.activeModelPackId === 'string' ? state.activeModelPackId : settings.models.activeModelPackId);
-  const pack = explicitPackId
-    ? packs.find(candidate => candidate.id === explicitPackId)
-    : findModePackForModel(settings, packs, modelId, modeId, undefined);
-  if (!pack || resolveModePackModels(settings, pack)[modeId] !== modelId) return null;
-
-  const providerId = providerFromModelId(modelId);
-  return providerId ? { packId: pack.id, modelId, providerId } : null;
+  const routeEntries = Array.isArray((state?.modelRoute as { entries?: unknown } | undefined)?.entries)
+    ? ((state?.modelRoute as { entries: Array<{ id?: unknown; modelId?: unknown; accountId?: unknown }> }).entries ??
+      [])
+    : [];
+  const entry = explicit
+    ? explicit
+    : pendingMatchesThread
+      ? routeEntries.find(candidate => candidate.id === pending.toEntryId && candidate.modelId === pending.toModelId)
+      : routeEntries.find(candidate => candidate.modelId === controller?.session?.modelId);
+  if (!entry || typeof entry.id !== 'string' || typeof entry.modelId !== 'string') return null;
+  const providerId = providerFromModelId(entry.modelId);
+  if (!providerId) return null;
+  return {
+    entryId: entry.id,
+    modelId: entry.modelId,
+    providerId,
+    ...(typeof entry.accountId === 'string' ? { accountId: entry.accountId } : {}),
+  };
 }
 
 /**
@@ -568,15 +532,15 @@ function orderAccountsFromActive(accounts: OAuthAccountRecord[], activeId: strin
 async function applyPreferredAccountRoute(
   args: RoutingProcessorArgs,
   store: CredentialStore,
-  settingsPath: string | undefined,
   route: AccountRoute,
 ): Promise<boolean> {
-  const preferredId = getRouteTargetAccountId(settingsPath, route);
+  store.reload();
+  const preferredId = getRouteTargetAccountId(route);
   const accounts = store.listAccounts?.(route.providerId) ?? [];
-  if (accounts.length === 0) return false;
+  if (accounts.length === 0 && preferredId === undefined) return false;
   const tried = getTriedInstances(args.state);
   const unavailable = new Set(accounts.filter(account => tried.has(account.id)).map(account => account.id));
-  const active = getRequestActiveAccount(args, store, route.providerId);
+  const active = getRequestActiveAccount(args, store, route.providerId) ?? store.getActiveAccount?.(route.providerId);
   const selected = // A12: a targeted route may use only the account it names. `Automatic`
     // keeps insertion order with full pool rotation (A10), starting from the
     // account the cursor already points at (A14).
@@ -599,16 +563,26 @@ async function applyPreferredAccountRoute(
   // Activate before recording the request-scoped selection: a failed
   // activation must not leave the selection claiming an account that never
   // became the provider's active credential.
-  const activated = store.activateAccount?.(route.providerId, selected.id) ?? selected;
+  const activated = store.activateAccount ? store.activateAccount(route.providerId, selected.id) : selected;
+  if (!activated) {
+    // Only a targeted route is out of options here. The exhausted marker is
+    // request-wide and fails every credential read closed, so setting it for
+    // `Automatic` would stop error recovery from retrying on a survivor.
+    if (preferredId !== undefined) markRequestAccountRoutingExhausted(args.requestContext, route.providerId);
+    return false;
+  }
   setRequestAccountSelection(args.requestContext, route.providerId, activated.id);
 
-  await emitAccountSwitchPart(args, {
-    provider: route.providerId,
-    from: active ? { id: active.id, label: active.label } : null,
-    to: { id: activated.id, label: activated.label },
-    reason: 'preferred-routing',
-    at: new Date().toISOString(),
-  });
+  // Applying an explicit account choice is routine, not a failover notice.
+  if (preferredId === undefined) {
+    await emitAccountSwitchPart(args, {
+      provider: route.providerId,
+      from: active ? { id: active.id, label: active.label } : null,
+      to: { id: activated.id, label: activated.label },
+      reason: 'preferred-routing',
+      at: new Date().toISOString(),
+    });
+  }
   return true;
 }
 
@@ -631,7 +605,7 @@ export class AccountRotationProcessor implements Processor {
     // canRetryError) — rotating the cursor or emitting a switch part for a
     // retry that will never run would lie to both auth.json and the
     // transcript. With a fallback chain configured, a bare `retry: false`
-    // here would silently hop packs for an error we never classified, so the
+    // here would silently advance the route for an error we never classified, so the
     // chain gate surfaces the error instead.
     if (args.retryCount >= this.options.maxProcessorRetries) {
       await this.gateChainHop(args, error);
@@ -639,10 +613,10 @@ export class AccountRotationProcessor implements Processor {
     }
 
     // Classify before attributing: an error from a provider outside the OAuth
-    // registry (API-key/router providers are valid pack members) still hops on
+    // registry (API-key/router providers are valid route entries) still hops on
     // rotate/hop classes — there is just no account cursor to advance.
     const classification = classifyRotationError(error);
-    // Q14: 400/unknown errors never rotate and never hop packs. With a chain
+    // Q14: 400/unknown errors never rotate and never advance routes. With a chain
     // active, core's fallback array would still advance on a bare
     // `retry: false` (it advances on any thrown non-TripWire error), so the
     // gate converts that into a surfaced error instead of a silent hop.
@@ -651,15 +625,14 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
-    const cascade = await this.getPackCascade(args);
-    const currentPack = cascade?.packs[cascade.position];
-    const cascadeModelId = currentPack ? cascade.models[currentPack.packId]?.[cascade.modeId] : undefined;
+    const cascade = await this.getModelRouteCascade(args);
+    const currentEntry = cascade?.entries[cascade.position];
     const providerId =
       providerFromError(error) ??
-      (typeof cascadeModelId === 'string' ? providerFromModelId(cascadeModelId) : undefined) ??
+      (currentEntry ? providerFromModelId(currentEntry.modelId) : undefined) ??
       (cascade ? undefined : providerFromSession(args));
     if (!providerId) {
-      await this.emitPackFallbackPart(args, classification.kind === 'hop' ? 'persistent-outage' : 'pool-exhausted');
+      await this.emitModelFallbackPart(args, classification.kind === 'hop' ? 'persistent-outage' : 'pool-exhausted');
       return { retry: false };
     }
 
@@ -670,12 +643,10 @@ export class AccountRotationProcessor implements Processor {
     // path below uses the optional `forceRefreshActiveAccount` when the host
     // provides it.
     const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    store.reload();
     const accounts = store.listAccounts?.(providerId) ?? [];
     const active = getRequestActiveAccount(args, store, providerId);
-    const route =
-      currentPack && typeof cascadeModelId === 'string'
-        ? resolveAccountRoute(args, this.options.settingsPath, { packId: currentPack.packId, modelId: cascadeModelId })
-        : resolveAccountRoute(args, this.options.settingsPath);
+    const route = currentEntry ? resolveAccountRoute(args, currentEntry) : resolveAccountRoute(args);
 
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
@@ -703,8 +674,7 @@ export class AccountRotationProcessor implements Processor {
     // can still describe the session model rather than the entry being retried;
     // when they differ the pin belongs to an unrelated route, so the provider
     // that failed keeps its normal pool handling.
-    const targetAccountId =
-      route?.providerId === providerId ? getRouteTargetAccountId(this.options.settingsPath, route) : undefined;
+    const targetAccountId = route?.providerId === providerId ? getRouteTargetAccountId(route) : undefined;
 
     if (classification.kind === 'hop') {
       return this.declarePoolUnavailable(args, providerId, 'persistent-outage', targetAccountId !== undefined);
@@ -712,21 +682,12 @@ export class AccountRotationProcessor implements Processor {
 
     // A12: a targeted route never activates a sibling subscription. A
     // rotate-classified failure on the account the route selected proceeds to
-    // the pack's fallback chain instead — the request hops, it does not spill
-    // onto another subscription's quota. `Automatic` keeps rotating, so this
-    // check sits above the pool-size test: a targeted route has nothing to
+    // the model route instead — the request hops, it does not spill
+    // onto another subscription's quota. A targeted route has nothing to
     // rotate to at any pool size. A stale id for an account the user removed
     // reads the same way: fail closed rather than silently land on a sibling.
     if (targetAccountId !== undefined) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted', true);
-    }
-
-    // A pool smaller than 2 has nothing to rotate to — it is exhausted by
-    // definition once a rotate-classified error arrives. Route through the
-    // pool-exhausted path so the notices (and any pack hop) still fire; with
-    // no registry at all this announces only a configured pack hop.
-    if (accounts.length < 2) {
-      return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
     // Count only this provider's instances: `tried` spans the whole request
@@ -736,13 +697,16 @@ export class AccountRotationProcessor implements Processor {
     const tried = getTriedInstances(state);
     if (active) tried.add(active.id);
     // The tried-set is request-global and shared across providers after a
-    // pack hop, so exhaustion must count only this provider's ids.
+    // route hop, so exhaustion must count only this provider's ids.
     const triedForProvider = accounts.filter(account => tried.has(account.id)).length;
     if (triedForProvider >= accounts.length) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    const nextCandidate = accounts.find(account => !tried.has(account.id));
+    // If the selected account was removed elsewhere, even a single survivor
+    // is still untried. Resume from the freshly loaded global cursor.
+    const candidates = active ? accounts : orderAccountsFromActive(accounts, store.getActiveAccount?.(providerId)?.id);
+    const nextCandidate = candidates.find(account => !tried.has(account.id));
 
     const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
     if (!next) {
@@ -768,75 +732,58 @@ export class AccountRotationProcessor implements Processor {
   }
 
   /**
-   * The request's pack cascade, computed once from the session's pack and
-   * cached in processor state. Truncated at the first pack that lacks the
-   * session mode's model — mirroring getDynamicModel's truncation — so the
-   * cascade never promises a hop core's fallback array cannot make. The
-   * position advances per hop, so a second hop in the same turn reports B→C
-   * even though the session modelId still points at pack A (stickiness lands
-   * TUI-side only after the part renders). Returns null when the session has
-   * no active pack or the pack has no fallback chain.
+   * Resolve the request's host-supplied model route once and cache the reachable
+   * prefix in processor state. Resolution mirrors getDynamicModel so a hop is
+   * never announced for an entry core cannot reach.
    */
-  private async getPackCascade(args: ProcessAPIErrorArgs): Promise<PackCascade | null> {
-    if (args.state.packCascade !== undefined) {
-      return (args.state.packCascade as PackCascade | null) ?? null;
+  private async getModelRouteCascade(args: ProcessAPIErrorArgs): Promise<ModelRouteCascade | null> {
+    if (args.state.modelRouteCascade !== undefined) {
+      return (args.state.modelRouteCascade as ModelRouteCascade | null) ?? null;
     }
-    const controller = args.requestContext?.get('controller') as
-      | {
-          session?: { modelId?: unknown; modeId?: unknown };
-          getState?: () => { activeModelPackId?: unknown; thinkingLevel?: unknown };
-        }
+    const controller = getRoutingController(args);
+    const state = controller?.getState?.();
+    const route = (
+      state?.modelRoute as
+        | { entries?: Array<{ id?: unknown; label?: unknown; modelId?: unknown; accountId?: unknown }> }
+        | undefined
+    )?.entries;
+    const pending = state?.mastracodePendingModelFallback as
+      | { toEntryId?: unknown; threadId?: unknown }
+      | null
       | undefined;
-    const modelId = controller?.session?.modelId;
-    if (typeof modelId !== 'string' || modelId.length === 0) {
-      args.state.packCascade = null;
+    const pendingMatchesThread =
+      pending &&
+      typeof pending.toEntryId === 'string' &&
+      (pending.threadId === undefined || pending.threadId === controller?.threadId);
+    const startIndex = pendingMatchesThread
+      ? route?.findIndex(entry => entry.id === pending.toEntryId)
+      : route?.findIndex(entry => entry.modelId === controller?.session?.modelId);
+    if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
+      args.state.modelRouteCascade = null;
       return null;
     }
-    const modeId =
-      typeof controller?.session?.modeId === 'string' && controller.session.modeId.length > 0
-        ? controller.session.modeId
-        : 'build';
-    const settings = loadSettings(this.options.settingsPath);
-    const packs = listResolvableModePacks(settings);
-    const controllerState = controller?.getState?.();
-    const statePackId = controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
-    const activePack = findModePackForModel(
-      settings,
-      packs,
-      modelId,
-      modeId,
-      typeof statePackId === 'string' ? statePackId : undefined,
+
+    const thinkingLevel = resolveRequestThinkingLevel(
+      {
+        state: { thinkingLevel: state?.thinkingLevel },
+        session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+      },
+      this.options.settingsPath,
     );
-    const chain = activePack
-      ? resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, activePack.id, settings.customModelPacks)
-      : [];
-    if (chain.length < 2) {
-      args.state.packCascade = null;
-      return null;
-    }
-    const resolvedPacks: Array<{ packId: string; label: string }> = [];
-    const models: Record<string, Record<string, string>> = {};
-    for (const packId of chain) {
-      const pack = packs.find(candidate => candidate.id === packId);
-      const packModels = pack ? resolveModePackModels(settings, pack) : {};
-      if (resolvedPacks.length > 0) {
-        const entryModelId = packModels[modeId];
-        if (!entryModelId) break;
-        // Mirror getDynamicModel's truncation: an entry whose model cannot
-        // resolve (e.g. unconnected provider in deployed fail-closed mode)
-        // ends the cascade here so a later hop is never announced for a pack
-        // core's fallback array cannot reach. Resolved with the exact options
-        // getDynamicModel uses (agents/model.ts) — including thinkingLevel —
-        // so the probe can't pass where the chain builder fails.
+    const entries: ModelRouteCascade['entries'] = [];
+    for (const entry of route.slice(startIndex)) {
+      if (
+        typeof entry.id !== 'string' ||
+        entry.id.length === 0 ||
+        typeof entry.modelId !== 'string' ||
+        entry.modelId.length === 0
+      ) {
+        break;
+      }
+      if (entries.length > 0) {
         try {
-          resolveModel(entryModelId, {
-            thinkingLevel: resolveRequestThinkingLevel(
-              {
-                state: { thinkingLevel: controllerState?.thinkingLevel },
-                session: { modeId },
-              },
-              this.options.settingsPath,
-            ),
+          resolveModel(entry.modelId, {
+            thinkingLevel,
             remapForCodexOAuth: true,
             requestContext: args.requestContext,
           });
@@ -844,22 +791,26 @@ export class AccountRotationProcessor implements Processor {
           break;
         }
       }
-      resolvedPacks.push({ packId, label: pack?.name ?? packId });
-      models[packId] = packModels;
+      entries.push({
+        id: entry.id,
+        label: typeof entry.label === 'string' && entry.label.length > 0 ? entry.label : entry.id,
+        modelId: entry.modelId,
+        ...(typeof entry.accountId === 'string' ? { accountId: entry.accountId } : {}),
+      });
     }
-    if (resolvedPacks.length < 2) {
-      args.state.packCascade = null;
+    if (entries.length < 2) {
+      args.state.modelRouteCascade = null;
       return null;
     }
-    const cascade: PackCascade = { packs: resolvedPacks, models, modeId, position: 0 };
-    args.state.packCascade = cascade;
+    const cascade: ModelRouteCascade = { entries, position: 0 };
+    args.state.modelRouteCascade = cascade;
     return cascade;
   }
 
   /**
-   * Q14 gate: 400/unknown/unattributable errors never hop packs. Core's
+   * Q14 gate: 400/unknown/unattributable errors never advance routes. Core's
    * fallback array advances on ANY thrown error except TripWire
-   * (llm-execution-step.ts), so when the session's pack has a chain and the
+   * (llm-execution-step.ts), so when the session route has another entry and the
    * current entry is non-last, a bare `retry: false` would silently hop on an
    * error class the user excluded from hop triggers. TripWire is the only
    * no-advance escape: the runner rethrows it and the fallback loop declines
@@ -867,37 +818,27 @@ export class AccountRotationProcessor implements Processor {
    * plain `retry: false` surface the error exactly as before.
    */
   private async gateChainHop(args: ProcessAPIErrorArgs, error: unknown): Promise<void> {
-    const cascade = await this.getPackCascade(args);
+    const cascade = await this.getModelRouteCascade(args);
     if (!cascade) return;
-    if (cascade.position >= cascade.packs.length - 1) return;
+    if (cascade.position >= cascade.entries.length - 1) return;
     const reason = error instanceof Error ? error.message : String(error);
     throw new TripWire(reason, {}, this.id);
   }
 
-  /**
-   * Emit the pack-fallback part when a configured chain has a next pack and
-   * queue the thread stickiness trigger. Core's fallback array does the hop
-   * itself on `retry: false`; this only announces it. The cascade is
-   * truncated exactly like getDynamicModel's chain (missing mode model or
-   * unresolvable model), so an announced hop is always one core can make;
-   * the toModelId guard stays as defense against a stale cache.
-   */
-  private async emitPackFallbackPart(
+  /** Announce and persist the next model-route hop before core advances. */
+  private async emitModelFallbackPart(
     args: ProcessAPIErrorArgs,
     reason: 'pool-exhausted' | 'persistent-outage',
   ): Promise<void> {
-    const cascade = await this.getPackCascade(args);
+    const cascade = await this.getModelRouteCascade(args);
     if (!cascade) return;
 
-    const from = cascade.packs[cascade.position];
-    const to = cascade.packs[cascade.position + 1];
+    const from = cascade.entries[cascade.position];
+    const to = cascade.entries[cascade.position + 1];
     if (!from || !to) return;
-    const toModelId = cascade.models[to.packId]?.[cascade.modeId];
-    if (!toModelId) return;
 
     const controller = args.requestContext?.get('controller') as
       | {
-          session?: { modeId?: unknown };
           threadId?: unknown;
           setState?: (updates: Record<string, unknown>) => Promise<void>;
           setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
@@ -907,58 +848,41 @@ export class AccountRotationProcessor implements Processor {
     const at = new Date().toISOString();
     const threadId = typeof controller?.threadId === 'string' ? controller.threadId : undefined;
     const pending = {
-      fromPackId: from.packId,
-      toPackId: to.packId,
-      toModelId,
+      fromEntryId: from.id,
+      toEntryId: to.id,
+      toModelId: to.modelId,
       ...(threadId ? { threadId } : {}),
       reason,
       at,
-    } satisfies PendingPackFallback;
-    // Persist the pending hop before announcing it. The TUI clears this marker
-    // only after applying every model/pack write, so a crash or immediate
-    // retrigger resumes on the landed fallback instead of the failed pack.
-    await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: pending });
-    const data: PackFallbackPartData = { from, to, reason, at };
+    } satisfies PendingModelFallback;
+    await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: pending });
+    const data: ModelFallbackPartData = {
+      from: { entryId: from.id, label: from.label },
+      to: { entryId: to.id, label: to.label },
+      reason,
+      at,
+    };
     try {
-      // Persist the transcript notice before notifying live state listeners.
-      // Session events do not await async handlers, so reversing these writes
-      // can apply a pack hop that never receives its required transcript part.
-      await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });
+      await args.writer?.custom({ type: MODEL_FALLBACK_PART_TYPE, data });
     } catch (error) {
-      await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+      await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
       throw error;
     }
-    // Keep the durable marker if live state persistence fails: the transcript
-    // already records the hop and thread hydration can safely resume it.
-    await controller?.setState?.({ [PACK_FALLBACK_STATE_KEY]: pending });
-    // Re-arm the start notice so the retried attempt on the target pack
-    // re-applies its preferred routing even if the attempt below fails —
-    // the flag may already be set by a switch on the original pack.
+    await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
     args.state.startNoticeEmitted = false;
-    // Activate the target pack's preferred account only after the hop is
-    // durable. A failure here must not strand a provider-global account
-    // switch with no durable fallback state — the start-notice processor
-    // re-applies routing when the retried request begins on the target pack.
-    const targetRoute = resolveAccountRoute(args, this.options.settingsPath, { packId: to.packId, modelId: toModelId });
+    const targetRoute = resolveAccountRoute(args, to);
     if (targetRoute) {
-      // Deployed requests must hop on the tenant store: activating the target
-      // pack's preferred account on the host registry would mutate a local
-      // account to serve a tenant request.
       const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
-      await applyPreferredAccountRoute(args, store, this.options.settingsPath, targetRoute).catch(() => undefined);
+      await applyPreferredAccountRoute(args, store, targetRoute).catch(() => undefined);
     }
-    // Live visibility: data parts never ride controller message events, so
-    // emit the same line as an info event (see emitAccountSwitchPart).
-    controller?.emitEvent?.({ type: 'info', message: packFallbackNoticeText(data) });
-    // Advance only after the part and stickiness landed — a throw mid-emit
-    // must not desync the cascade from what the transcript shows.
+    controller?.emitEvent?.({ type: 'info', message: modelFallbackNoticeText(data) });
     cascade.position++;
   }
 
   /**
    * Pool done for this request: every instance recorded in the tried-set and
    * a `to: null` part emitted. Returns `retry: false` so core's fallback
-   * array can hop to the next pack (announced by `emitPackFallbackPart`).
+   * array can hop to the next route entry (announced by `emitModelFallbackPart`).
    * Silent on the account part when the provider has no registry at all —
    * there are no accounts to declare unavailable, but the hop still applies.
    */
@@ -972,8 +896,8 @@ export class AccountRotationProcessor implements Processor {
     const accounts = store.listAccounts?.(providerId) ?? [];
     if (accounts.length === 0) {
       // No account registry (API-key-only provider): nothing rotated, but the
-      // hop still happens — announce the pack fallback before core advances.
-      await this.emitPackFallbackPart(args, reason);
+      // hop still happens — announce the model fallback before core advances.
+      await this.emitModelFallbackPart(args, reason);
       return { retry: false };
     }
 
@@ -991,7 +915,7 @@ export class AccountRotationProcessor implements Processor {
       ...(exclusive ? { exclusive: true } : {}),
     });
 
-    await this.emitPackFallbackPart(args, reason);
+    await this.emitModelFallbackPart(args, reason);
 
     return { retry: false };
   }
@@ -1009,7 +933,7 @@ export class AccountRotationProcessor implements Processor {
 export class AccountStartNoticeProcessor implements Processor {
   readonly id = 'mastracode-account-start-notice' as const;
 
-  constructor(private readonly options: { credentialStore: CredentialStore; settingsPath?: string }) {}
+  constructor(private readonly options: { credentialStore: CredentialStore }) {}
 
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     if (args.state.startNoticeEmitted) return args.messageList;
@@ -1019,20 +943,22 @@ export class AccountStartNoticeProcessor implements Processor {
     // the constructor's storage.
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
 
-    const route = resolveAccountRoute(args, this.options.settingsPath);
+    const route = resolveAccountRoute(args);
     if (route) {
-      const switched = await applyPreferredAccountRoute(args, store, this.options.settingsPath, route);
-      if (switched) {
+      const switched = await applyPreferredAccountRoute(args, store, route);
+      if (switched || getRouteTargetAccountId(route) !== undefined) {
         args.state.startNoticeEmitted = true;
         return args.messageList;
       }
+    } else {
+      store.reload();
     }
 
     // A14: a route whose accounts are all unavailable is not a pre-emptive
     // abort. `applyPreferredAccountRoute` marks the provider on the request so
     // credential reads fail closed rather than falling through to the active
     // account, and the request then runs and fails at the provider — which is
-    // what lets the error lane classify it and hand the turn to the pack's
+    // what lets the error lane classify it and hand the turn to the route's
     // configured fallback chain. The removed persisted set threw here instead,
     // before any socket opened, so the chain was never reached.
     const providerId = route?.providerId ?? providerFromSession(args);

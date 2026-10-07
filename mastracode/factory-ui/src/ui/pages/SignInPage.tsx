@@ -1,4 +1,7 @@
+import { CUSTOM_DOMAIN_UNSUPPORTED_ERROR, isPlatformAuthSupportedHost } from '@mastra/factory/platform-auth-host';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -30,6 +33,39 @@ export function safeReturnTo(raw?: string): string {
   }
 }
 
+function CustomDomainAuthError({ hostname }: { hostname: string }) {
+  return (
+    <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
+      <Txt as="h2" variant="subheading" className="text-destructive-foreground">
+        Mastra Platform sign-in isn&apos;t available on custom domains
+      </Txt>
+      <Txt as="p" variant="caption" tone="muted" className="mt-2">
+        This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
+        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
+        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
+      </Txt>
+      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+        <a
+          href="https://mastra.ai/docs/auth/overview"
+          target="_blank"
+          rel="noreferrer"
+          className="text-foreground hover:underline"
+        >
+          Auth overview
+        </a>
+        <a
+          href="https://mastra.ai/integrations/auth/workos"
+          target="_blank"
+          rel="noreferrer"
+          className="text-foreground hover:underline"
+        >
+          WorkOS integration
+        </a>
+      </Txt>
+    </div>
+  );
+}
+
 function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
   const { baseUrl } = useApiConfig();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
@@ -57,10 +93,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-5">
+    <Form onSubmit={handleSubmit} className="w-full gap-5">
       {mode === 'sign-up' ? (
-        <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-          Name
+        <Field>
+          <FieldLabel>Name</FieldLabel>
           <Input
             type="text"
             size="lg"
@@ -70,10 +106,11 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
             value={name}
             onChange={e => setName(e.target.value)}
           />
-        </label>
+          <FieldError />
+        </Field>
       ) : null}
-      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-        Email
+      <Field>
+        <FieldLabel>Email</FieldLabel>
         <Input
           type="email"
           size="lg"
@@ -83,9 +120,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
-      </label>
-      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-        Password
+        <FieldError />
+      </Field>
+      <Field>
+        <FieldLabel>Password</FieldLabel>
         <Input
           type="password"
           size="lg"
@@ -95,9 +133,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           value={password}
           onChange={e => setPassword(e.target.value)}
         />
-      </label>
+        <FieldError />
+      </Field>
       {error ? (
-        <Txt as="p" variant="caption" role="alert" className="text-destructive">
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
           {error}
         </Txt>
       ) : null}
@@ -122,7 +161,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           Account creation is managed by your administrator.
         </Txt>
       )}
-    </form>
+    </Form>
   );
 }
 
@@ -137,6 +176,11 @@ export function SignInPage() {
   const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
   const studioAuth = auth.data?.provider === 'mastra-studio';
+  const customDomainBlocked =
+    studioAuth &&
+    (auth.data?.customDomainUnsupported === true ||
+      authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
+      !isPlatformAuthSupportedHost(window.location.hostname));
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
@@ -148,42 +192,41 @@ export function SignInPage() {
     <main className="bg-background text-foreground min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
-          <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
+          <Txt as="h1" variant="hero" className="max-w-xl text-balance">
             Build with an agent factory
-          </h1>
-          <Txt
-            as="p"
-            variant="body"
-            tone="muted"
-            className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em]"
-          >
+          </Txt>
+          <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
             Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
             review.
           </Txt>
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
-            {authError ? (
-              <div role="alert" className="border-destructive/30 bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive">
+            {authError && !customDomainBlocked ? (
+              <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
+                <Txt as="p" variant="subheading" className="text-destructive-foreground">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
                     {authErrorDescription}
                   </Txt>
                 ) : null}
                 {accessDenied ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
                     Ask an organization admin to add your account, then sign in again.
                   </Txt>
                 ) : null}
               </div>
             ) : null}
-            {credentialForm ? (
+            {customDomainBlocked ? (
+              <CustomDomainAuthError hostname={window.location.hostname} />
+            ) : credentialForm ? (
               <>
                 <div className="mb-6">
-                  <h2 className="font-display text-title">Welcome back</h2>
-                  <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
+                  <Txt font="display" as="h2" variant="title">
+                    Welcome back
+                  </Txt>
+                  <Txt as="p" variant="body" tone="muted" className="mt-2">
                     Sign in to continue building with your team.
                   </Txt>
                 </div>

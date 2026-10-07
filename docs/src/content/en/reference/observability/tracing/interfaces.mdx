@@ -158,7 +158,7 @@ describeSpanError(span) // SpanErrorInfo | undefined
 
 ### Processor spans
 
-A processor span records which pipeline phase produced it, so a reader narrows its
+A processor span records which pipeline phase produced it. A reader narrows its
 payloads on that phase instead of on the payload's shape. The recorded phase is finer
 than the one a processor declares: `outputStream` and `outputResult` are separate
 here, because they record different payloads.
@@ -704,8 +704,8 @@ interface ModelGenerationAttributes {
   /**
    * Definitions of the tools made available to the model for this generation
    * (name, description, and JSON-schema parameters), captured once per
-   * generation. Per-step tool names live on MODEL_INFERENCE spans as
-   * `availableTools`.
+   * generation. The definitions sent on each provider call live on
+   * MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[]
 
@@ -783,6 +783,66 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+}
+```
+
+### `ModelInferenceAttributes`
+
+Model Inference attributes - for a single call to the model provider within a step. The span covers only the provider call, so it doesn't include processors or tool executions.
+
+```typescript
+interface ModelInferenceAttributes {
+  /** Model name (e.g., 'gpt-5.4', 'claude-opus-4-6') */
+  model?: string
+
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string
+
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number
+
+  /** Token usage statistics */
+  usage?: UsageStats
+
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string
+
+  /** Whether this was a streaming response */
+  streaming?: boolean
+
+  /** When the first token/chunk of the completion was received */
+  completionStartTime?: Date
+
+  /** Result warnings */
+  warnings?: Record<string, any>
+
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string
+
+  /** Unique identifier for the response */
+  responseId?: string
+
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>
+
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>
+
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[]
+
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, and JSON-schema parameters), after per-step changes
+   * from processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[]
+
+  /** How the model was instructed to choose tools */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
+
+  /** Requested response format */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string }
 }
 ```
 
@@ -1203,6 +1263,13 @@ interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string
+
+  /**
+   * Set to true together with parentSpanId to attach this run as a child of
+   * that span inside the existing trace. Exporters then keep the trace's own
+   * name, input, output, and tags. Ignored without a valid traceId and parentSpanId.
+   */
+  nestUnderParent?: boolean
 
   /**
    * Tags to apply to this trace.

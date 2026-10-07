@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
@@ -69,6 +70,11 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  // Stamps from the step's *effective* tool set so the durable foreach
+  // concurrency gate can see approval/suspension capability that the run-start
+  // `toolsMetadata` lacks (e.g. tools added by input processors, issue #24377).
+  requireApproval: z.boolean().optional(),
+  hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
 });
@@ -85,9 +91,16 @@ const durableToolCallInputSchema = z.object({
  * validation defaults). If validation is enabled, an undeclared field would
  * be silently stripped at the boundary — declare new output fields here.
  */
+const serializedErrorSchema = z.object({
+  name: z.string(),
+  message: z.string(),
+  stack: z.string().optional(),
+});
+
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  mappingError: serializedErrorSchema.optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema.
@@ -95,13 +108,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
-  error: z
-    .object({
-      name: z.string(),
-      message: z.string(),
-      stack: z.string().optional(),
-    })
-    .optional(),
+  error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
   approval: z
@@ -189,6 +196,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
+}
+
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
@@ -237,23 +258,32 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            try {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            } catch (error) {
+              throw new DurableChunkPublishError(error);
+            }
           },
         }
       : undefined,
     emitChunk: async c => {
       if (pubsub) {
-        await emitChunkEvent(pubsub, runId, c);
+        // Mark chunks the processors ran on so the stream consumer doesn't run
+        // them again. Without a runner (no processors, or none in this process)
+        // the chunk goes out unmarked and the consumer processes it.
+        try {
+          await emitChunkEvent(pubsub, runId, c, !!runner);
+        } catch (error) {
+          throw new DurableChunkPublishError(error);
+        }
       }
     },
     onProcessorError: error => {
-      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-      // Fail closed: drop the chunk instead of emitting the unprocessed
-      // original — a throwing redaction processor must not leak the raw
-      // value. The regular loop registers no fallback at all (processor
-      // failures propagate and fail the request); this engine keeps the
-      // run alive but suppresses the chunk.
-      return null;
+      // Publication failures keep the callers' non-fatal emission path.
+      if (error instanceof DurableChunkPublishError) {
+        throw error.cause;
+      }
+      throw new DurableOutputProcessorError(error);
     },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
@@ -318,7 +348,7 @@ export function createDurableToolCallStep() {
         args = argsFromInput;
         resumeDataFromArgs = resumeDataFromInput;
       }
-      // Non-transient data-* chunks emitted by output processors via
+      // Non-transient data-* chunks emitted by output processors or tools via
       // writer.custom() during this tool call. This step's messageList is a
       // local copy whose mutations don't cross the step boundary, so parts are
       // collected here and carried on the output record for the mapping step
@@ -453,24 +483,8 @@ export function createDurableToolCallStep() {
         ) as typeof tool;
       }
 
-      if (!tool) {
-        tool = resolveTool(toolName, mastra as Mastra);
-      }
-
-      if (!tool && mastra) {
-        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
-        if (mastraTools) {
-          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
-          if (!tool) {
-            tool = Object.values(mastraTools).find(
-              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
-            ) as typeof tool;
-          }
-        }
-      }
-
       // Cross-process fallback: workspace/skill tools are per-request closures
-      // never registered at the Mastra-instance level, so the lookups above miss
+      // never registered at the Mastra-instance level, so the registry lookups miss
       // them when the durable steps run on a separate process (e.g. the
       // @mastra/inngest connect() worker) whose registry is empty. Rebuild the
       // full toolset from the agent — the same rebuild the LLM step already does
@@ -518,6 +532,25 @@ export function createDurableToolCallStep() {
           }
           if (!tool) {
             tool = Object.values(rebuiltTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
+      // Mastra-wide lookup runs only after the owning agent's tools (registry or
+      // rebuild) miss: tool ids are not unique across agents, so a global lookup
+      // first could execute another agent's same-id tool on a cold worker.
+      if (!tool) {
+        tool = resolveTool(toolName, mastra as Mastra);
+      }
+
+      if (!tool && mastra) {
+        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
           }
@@ -717,6 +750,7 @@ export function createDurableToolCallStep() {
         };
 
         const changedMessages = [];
+        let matchedEntry: Record<string, any> | undefined;
         for (const message of messageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
@@ -729,6 +763,7 @@ export function createDurableToolCallStep() {
           if (entries) {
             for (const [key, entry] of Object.entries(entries)) {
               if (entryMatches(entry, key)) {
+                matchedEntry ??= { ...entry, toolCallId: entry?.toolCallId ?? key };
                 delete entries[key];
                 messageChanged = true;
               }
@@ -738,6 +773,7 @@ export function createDurableToolCallStep() {
 
           message.content.parts = message.content.parts?.map(part => {
             if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            matchedEntry ??= { ...(part.data as Record<string, any>) };
             if ((part.data as { resumed?: boolean }).resumed) return part;
             messageChanged = true;
             return { ...part, data: { ...(part.data as any), resumed: true } };
@@ -746,9 +782,49 @@ export function createDurableToolCallStep() {
           if (messageChanged) changedMessages.push(message);
         }
 
-        if (changedMessages.length === 0) return;
-        messageList.add(changedMessages, 'response');
-        await doFlush();
+        if (changedMessages.length > 0) {
+          messageList.add(changedMessages, 'response');
+          await doFlush();
+        }
+        // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
+        if (matchedEntry && pubsub) {
+          // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
+          const displayed = await applyToolPayloadTransformToChunk(
+            {
+              type: type === 'approval' ? ('tool-call-approval' as const) : ('tool-call-suspended' as const),
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: matchedEntry.toolCallId ?? toolCallId,
+                // Delegated approvals store the inner tool's name; policies select redaction by it.
+                toolName: matchedEntry.toolName ?? toolName,
+                args: matchedEntry.args,
+                ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
+                resumeSchema: matchedEntry.resumeSchema,
+              },
+              metadata: undefined as Record<string, any> | undefined,
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-call-resumed',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: matchedEntry.toolCallId ?? toolCallId,
+              toolName: matchedEntry.toolName ?? toolName,
+              kind: type,
+              args: displayed.payload.args,
+              ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
+              resumeSchema: displayed.payload.resumeSchema,
+            },
+            ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
+          });
+        }
       };
 
       const suspendedForApproval =
@@ -758,15 +834,6 @@ export function createDurableToolCallStep() {
       const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
 
       if (approvalGated && !approvalDecision) {
-        const resumeSchema = JSON.stringify({
-          type: 'object',
-          properties: {
-            approved: { type: 'boolean' },
-            reason: { type: 'string' },
-          },
-          required: ['approved'],
-        });
-
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
@@ -779,7 +846,7 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
+              payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
             },
             {
               policy: registryEntry?.toolPayloadTransform,
@@ -797,12 +864,12 @@ export function createDurableToolCallStep() {
             toolName,
             args,
             type: 'approval',
-            resumeSchema,
+            resumeSchema: approvalResumeSchema,
           });
         }
 
         // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema });
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
 
         // Flush messages before suspension
         await doFlush();
@@ -870,6 +937,9 @@ export function createDurableToolCallStep() {
                 collectProcessorDataPart,
               );
             } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
           }
@@ -945,6 +1015,14 @@ export function createDurableToolCallStep() {
       // fresh) or a delegated approval raised mid-execution by the sub-agent. A
       // framework-resolved inner run id disambiguates the delegated approval.
       const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
+      // Mirror the non-durable step: a bare `{ approved }` belongs to the gate and is
+      // dropped, but an approval carrying extra keys is caller data for the tool.
+      const hasCustomApprovalResumeData =
+        approvalGated &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        Object.keys(resumeData).length > 1;
       if ((isResumingFromSuspension || isDelegatedApprovalResume) && suspendedToolRunId) {
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
       }
@@ -998,8 +1076,13 @@ export function createDurableToolCallStep() {
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
+      // Non-transient data-* chunks are also collected for persistence, as the
+      // regular agent does for tool-written data parts (#25122).
       const outputWriter = pubsub
         ? async (chunk: any) => {
+            if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
+              collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
+            }
             await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
         : undefined;
@@ -1007,6 +1090,7 @@ export function createDurableToolCallStep() {
       const toolOptions = {
         toolCallId,
         messages: [],
+        getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
         mcp: registryEntry?.mcp,
@@ -1016,7 +1100,8 @@ export function createDurableToolCallStep() {
         actor,
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
-        resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        resumeData:
+          isResumingFromSuspension || isDelegatedApprovalResume || hasCustomApprovalResumeData ? resumeData : undefined,
         suspendedToolRunId,
         // The payload this tool call suspended with (see `toolCallSuspended` below), so a
         // resumed tool can continue from its own state — mirrors the non-durable step.
@@ -1058,15 +1143,6 @@ export function createDurableToolCallStep() {
             const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : args;
 
             // Tool is requesting approval during execution
-            const approvalResumeSchema = JSON.stringify({
-              type: 'object',
-              properties: {
-                approved: { type: 'boolean' },
-                reason: { type: 'string' },
-              },
-              required: ['approved'],
-            });
-
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
@@ -1325,6 +1401,7 @@ export function createDurableToolCallStep() {
                     args: cleanedArgs,
                     result: chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
+                    providerExecuted,
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
@@ -1493,6 +1570,7 @@ export function createDurableToolCallStep() {
             result: completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
+            ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
 
@@ -1535,6 +1613,7 @@ export function createDurableToolCallStep() {
         }
         return bailed;
       };
+      let mappingFailure: { error: unknown } | undefined;
 
       try {
         const outcome = await executeToolCall({
@@ -1602,7 +1681,8 @@ export function createDurableToolCallStep() {
             }
           } catch (mappingError) {
             mappingSpan?.error({ error: mappingError as Error, endSpan: true });
-            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
+            mappingFailure = { error: mappingError };
+            throw mappingError;
           }
         }
 
@@ -1722,10 +1802,11 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result },
+                payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
@@ -1748,6 +1829,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
         }
@@ -1763,11 +1847,18 @@ export function createDurableToolCallStep() {
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
-        // Re-throw FGA authorization errors instead of swallowing them —
-        // an authorization denial must fail the run, not be serialized as a
-        // recoverable tool error for the LLM to retry (mirrors the
-        // non-durable tool-call step).
-        if (error instanceof Error && error.name === 'FGADeniedError') {
+        if (mappingFailure?.error === error) {
+          return {
+            ...typedInput,
+            mappingError: serializeError(error),
+          };
+        }
+        // Output processor failures and authorization denials must fail the run
+        // instead of being serialized as recoverable tool errors.
+        if (
+          error instanceof DurableOutputProcessorError ||
+          (error instanceof Error && error.name === 'FGADeniedError')
+        ) {
           throw error;
         }
         const toolError = serializeError(error);
@@ -1785,6 +1876,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
@@ -1806,6 +1898,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
         }

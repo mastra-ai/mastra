@@ -5,16 +5,17 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useScorer, useScoresByScorerId } from '@mastra/playground-ui/domains/scores';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useScorer, useScoresByScorerId } from '@mastra/react/hooks/scores';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
@@ -24,7 +25,6 @@ import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
@@ -46,7 +46,7 @@ export default function Scorer() {
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({});
   const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
     data: loadedScores = [],

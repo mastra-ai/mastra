@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createReactionInputSchema = z.object({
   channel_id: z.string().describe('Channel ID where the message is located. Example: "1504364254634180618"'),
@@ -29,15 +30,7 @@ export function createReactionTool(proxy: PlatformProxy) {
     outputSchema: createReactionOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createReactionOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please configure the Discord bot token.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/channel#create-reaction
       await platformProxy.put({

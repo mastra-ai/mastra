@@ -118,6 +118,43 @@ Truncated text`;
     expect(stripObservationGroups(observations)).toContain('Truncated text');
   });
 
+  it('recovers a complete group after an incomplete group that quotes an opening tag inline', () => {
+    const quoted = '- The format is <observation-group id="example" range="2:3"> with attributes';
+    const observations = `<observation-group id="incomplete" range="1:2">
+${quoted}
+<observation-group id="complete" range="3:4">
+- A later fact
+</observation-group>`;
+
+    expect(parseObservationGroups(observations)).toEqual([
+      { id: 'complete', range: '3:4', kind: undefined, content: '- A later fact' },
+    ]);
+    expect(stripObservationGroups(observations)).toBe(`${quoted}\n- A later fact`);
+    expect(renderObservationGroupsForReflection(observations)).toBe(`${quoted}
+## Group \`complete\`
+_range: \`3:4\`_
+
+- A later fact`);
+  });
+
+  it('stays linear when no opening tag starts a line', () => {
+    // Every opening is inline and the content has newlines, so without the cached result each
+    // nested-opening search would walk every remaining newline to the end of the input.
+    const count = 80_000;
+    const observations = 'a<observation-group id="x" range="1:1">\nv\n</observation-group>'.repeat(count);
+
+    const started = performance.now();
+    const groups = parseObservationGroups(observations);
+    const elapsed = performance.now() - started;
+
+    expect(groups).toEqual(
+      Array.from({ length: count }, () => ({ id: 'x', range: '1:1', kind: undefined, content: 'v' })),
+    );
+    expect(stripObservationGroups(observations)).toBe('av'.repeat(count));
+    expect(renderObservationGroupsForReflection(observations)).toBe('a## Group `x`\n_range: `1:1`_\n\nv'.repeat(count));
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
   it('drops a lone unterminated opening tag and keeps its text', () => {
     const observations = `<observation-group id="only" range="1:2">
 Lone text`;

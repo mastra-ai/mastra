@@ -165,6 +165,7 @@ export class IncidentioIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildIncidentioRoutes({
       incidentio: this,
+      mode: 'api-key',
       auth: ctx.auth,
       intake: ctx.storage.intake,
       ingestFactoryIssues: attachIncidentioRules(this, ctx),

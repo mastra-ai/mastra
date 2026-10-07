@@ -26,6 +26,8 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /** AWS session token for temporary (STS) credentials. Requires accessKeyId and secretAccessKey. */
+  sessionToken?: string;
   /**
    * Optional prefix (subdirectory) to mount instead of the entire bucket.
    * Uses s3fs `bucket:/prefix` syntax. Leading/trailing slashes are normalized.
@@ -89,6 +91,10 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
   }
   const hasCredentials = hasAccessKey && hasSecretKey;
+  if (config.sessionToken && !hasCredentials) {
+    throw new Error('sessionToken requires accessKeyId and secretAccessKey.');
+  }
+  const useSessionToken = hasCredentials && !!config.sessionToken;
 
   // Use a per-mount credentials file. s3fs reads `passwd_file` at mount time, so a
   // single shared path (rewritten rm -> write -> chmod on every mount) lets
@@ -108,19 +114,51 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     );
   }
 
+  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax.
+  // Validated before credentials are written so invalid input can't leave them on disk.
+  let bucketArg = config.bucket;
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+  }
+
+  const removeSessionCredentials = async () => {
+    try {
+      await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
+    } catch {
+      logger.warn(`${LOG_PREFIX} Failed to remove S3 session credentials file`);
+    }
+  };
+
   if (hasCredentials) {
     // Write credentials file (remove old one first to avoid permission issues)
-    const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
+    // s3fs's colon-delimited passwd_file format cannot carry a session token, so temporary
+    // credentials are written as a sourceable env file instead (keeps secrets out of the command line).
+    const credentialsContent = useSessionToken
+      ? [
+          `export AWSACCESSKEYID=${shellQuote(config.accessKeyId!)}`,
+          `export AWSSECRETACCESSKEY=${shellQuote(config.secretAccessKey!)}`,
+          `export AWSSESSIONTOKEN=${shellQuote(config.sessionToken!)}`,
+          `export AWS_ACCESS_KEY_ID=${shellQuote(config.accessKeyId!)}`,
+          `export AWS_SECRET_ACCESS_KEY=${shellQuote(config.secretAccessKey!)}`,
+          `export AWS_SESSION_TOKEN=${shellQuote(config.sessionToken!)}`,
+        ].join('\n')
+      : `${config.accessKeyId}:${config.secretAccessKey}`;
     await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
-    await sandbox.files.write(credentialsPath, credentialsContent);
-    await sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+    try {
+      await sandbox.files.write(credentialsPath, credentialsContent);
+      await sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+    } catch (error) {
+      if (useSessionToken) await removeSessionCredentials();
+      throw error;
+    }
   }
 
   // Build mount options
   const mountOptions: string[] = [];
 
   if (hasCredentials) {
-    mountOptions.push(`passwd_file=${credentialsPath}`);
+    mountOptions.push(useSessionToken ? 'use_session_token' : `passwd_file=${credentialsPath}`);
   } else {
     // Public bucket mode - read-only access without credentials
     mountOptions.push('public_bucket=1');
@@ -151,15 +189,12 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
-  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
-  let bucketArg = config.bucket;
-  if (config.prefix) {
-    const normalizedPrefix = validatePrefix(config.prefix);
-    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
-  }
-
   // Mount with sudo (required for /dev/fuse access)
-  const mountCmd = `sudo s3fs ${shellQuote(bucketArg)} ${shellQuote(mountPath)} -o ${mountOptions.join(' -o ')}`;
+  const s3fsCmd = `s3fs ${shellQuote(bucketArg)} ${shellQuote(mountPath)} -o ${mountOptions.join(' -o ')}`;
+  // sudo resets the environment, so source the credentials inside the elevated shell.
+  const mountCmd = useSessionToken
+    ? `sudo sh -c ${shellQuote(`. ${credentialsPath} && exec ${s3fsCmd}`)}`
+    : `sudo ${s3fsCmd}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   try {
@@ -178,6 +213,9 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     const stdout = errorObj.result?.stdout || '';
     logger.error(`${LOG_PREFIX} s3fs error:`, { stderr, stdout, error: String(error) });
     throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
+  } finally {
+    // The s3fs daemon keeps the exported credentials in its environment; the staging file is no longer needed.
+    if (useSessionToken) await removeSessionCredentials();
   }
 
   // s3fs daemonizes before running its FUSE init, where the bucket check happens.

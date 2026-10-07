@@ -110,13 +110,17 @@ Piped stdin is added after a plain-text prompt in the same first message, and is
 
 Mastra Code provides built-in slash commands for managing sessions and settings:
 
+After exit, run `mastracode resume <thread-id>` to continue the same thread directly.
+
 | Command | Description |
 | - | - |
 | `/new` | Start a new conversation thread |
 | `/clone` | Clone the current thread (with optional rename) |
 | `/threads` | List all threads for this project |
+| `/resume` | Alias for `/threads` |
 | `/thread` | Show current thread info |
 | `/name` | Rename the current thread |
+| `/rename` | Alias for `/name` |
 | `/model` | Change the current mode model; create `Custom` when a built-in pack is active, or update the active custom pack |
 | `/models` | Switch the model pack for all modes |
 | `/packs` | Alias for `/models` |
@@ -133,6 +137,7 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | `/plugins` | Install or manage trusted plugins |
 | `/workflows` | List, inspect, run, or delete chat-built workflows |
 | `/profile` | Control process memory diagnostics |
+| `/prune` | Delete data older than the retention policies and exit; add `vacuum` to reclaim disk or `keep-memory` to keep chat history |
 | `/cost` | Show token usage and costs |
 | `/diff` | Show modified files or git diff |
 | `/resource` | Show or switch the resource ID (tag for sharing) |

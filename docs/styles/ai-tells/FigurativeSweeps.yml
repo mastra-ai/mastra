@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the literal action: is removed or is replaced. Disable this rule for housekeeping or weather prose."
+message: "AI overused verb: '%s'. Use the literal action: is removed or is replaced. Disable this rule for housekeeping or weather prose."
 level: error
 nonword: true
 ignorecase: true

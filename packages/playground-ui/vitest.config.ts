@@ -12,7 +12,10 @@ export default defineConfig({
   test: {
     name: 'unit:packages/playground-ui',
     environment: 'node',
-    setupFiles: ['./src/test/vitest-setup.ts'],
+    // Polyfills first: react-dom reads window globals such as AnimationEvent once, when it loads.
+    setupFiles: ['./src/test/jsdom-polyfills.ts', './src/test/vitest-setup.ts'],
+    // Must stay above the 3s Testing Library async timeout set in vitest-setup.ts.
+    testTimeout: 15000,
     env: { TZ: 'UTC' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],

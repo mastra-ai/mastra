@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-
 import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +10,6 @@ import type { ReactNode } from 'react';
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../test/msw-server';
 import { useDownloadTraceJson } from '../use-download-trace-json';
-import { useTraceSpans } from '../use-trace-spans';
 import { resumedTrace, suspendedTrace } from './fixtures/trace-spans';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
@@ -111,7 +110,10 @@ describe('useDownloadTraceJson', () => {
       );
       const { result } = renderHook(
         () => ({
-          trace: useTraceSpans(suspendedTrace.traceId),
+          trace: useTraceSpans({
+            traceId: suspendedTrace.traceId,
+            queryOptions: { enabled: !!suspendedTrace.traceId },
+          }),
           download: useDownloadTraceJson(),
         }),
         { wrapper: makeWrapper() },

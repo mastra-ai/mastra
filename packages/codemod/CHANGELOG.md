@@ -1,5 +1,41 @@
 # @mastra/codemod
 
+## 1.1.6
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
+## 1.1.5
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
+## 1.1.5-alpha.1
+
+### Patch Changes
+
+- Fixed large codemod previews so printed and verbose output completes without hitting the process buffer limit. ([#25244](https://github.com/mastra-ai/mastra/pull/25244))
+
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
 ## 1.1.4
 
 ### Patch Changes

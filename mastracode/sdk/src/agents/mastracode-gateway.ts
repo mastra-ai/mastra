@@ -20,12 +20,13 @@ import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
+import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
   createAnthropicThinkingMiddleware,
+  createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
-  promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
@@ -67,6 +68,8 @@ export type MastraCodeGatewayOptions = {
   mastraGatewayApiKey?: string;
   routeThroughMastraGateway: boolean;
   thinkingLevel?: ThinkingLevel;
+  /** Anthropic prompt-cache breakpoints to write. Defaults to `conversation`. */
+  anthropicPromptCacheScope?: AnthropicPromptCacheScope;
   customProviders?: MastraCodeCustomProvider[];
   settingsPath?: string;
   /**
@@ -138,14 +141,15 @@ export function getOpenAIApiKey(credentials: CredentialStore = getGlobalAuthStor
 function anthropicApiKeyProvider(
   modelId: string,
   apiKey: string,
-  headers?: ModelRequestHeaders,
-  thinkingLevel?: ThinkingLevel,
+  headers: ModelRequestHeaders | undefined,
+  thinkingLevel: ThinkingLevel | undefined,
+  promptCacheScope: AnthropicPromptCacheScope,
 ) {
   const anthropic = createAnthropic({ apiKey, headers });
   const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, thinkingLevel);
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
+    middleware: [createPromptCacheMiddleware(promptCacheScope), ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
 
@@ -279,6 +283,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   readonly #mastraGatewayApiKey?: string;
   readonly #routeThroughMastraGateway: boolean;
   readonly #thinkingLevel?: ThinkingLevel;
+  readonly #anthropicPromptCacheScope: AnthropicPromptCacheScope;
   readonly #customProviders?: MastraCodeCustomProvider[];
   readonly #settingsPath?: string;
   readonly #credentials: CredentialStore;
@@ -288,6 +293,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     mastraGatewayApiKey,
     routeThroughMastraGateway,
     thinkingLevel,
+    anthropicPromptCacheScope,
     customProviders,
     settingsPath,
     credentialStore,
@@ -298,6 +304,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#mastraGatewayApiKey = mastraGatewayApiKey;
     this.#routeThroughMastraGateway = routeThroughMastraGateway;
     this.#thinkingLevel = thinkingLevel;
+    this.#anthropicPromptCacheScope = anthropicPromptCacheScope ?? 'conversation';
     this.#customProviders = customProviders;
     this.#settingsPath = settingsPath;
     this.#credentials = credentialStore ?? getGlobalAuthStorage();
@@ -585,7 +592,7 @@ export class MastraCodeGateway extends MastraModelGateway {
           model: anthropic(bareModelId),
           middleware: [
             claudeCodeMiddleware,
-            promptCacheMiddleware,
+            createPromptCacheMiddleware(this.#anthropicPromptCacheScope),
             ...(thinkingMiddleware ? [thinkingMiddleware] : []),
           ],
         }) as unknown as GatewayLanguageModel;
@@ -607,6 +614,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         headers: args.headers,
         authStorage: this.#credentials,
         thinkingLevel: this.#thinkingLevel,
+        promptCacheScope: this.#anthropicPromptCacheScope,
       }) as unknown as GatewayLanguageModel;
     }
 
@@ -616,6 +624,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         storedCred.key.trim(),
         args.headers,
         this.#thinkingLevel,
+        this.#anthropicPromptCacheScope,
       ) as unknown as GatewayLanguageModel;
     }
 
@@ -626,6 +635,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey,
         args.headers,
         this.#thinkingLevel,
+        this.#anthropicPromptCacheScope,
       ) as unknown as GatewayLanguageModel;
     }
 
@@ -634,6 +644,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       headers: args.headers,
       authStorage: this.#credentials,
       thinkingLevel: this.#thinkingLevel,
+      promptCacheScope: this.#anthropicPromptCacheScope,
     }) as unknown as GatewayLanguageModel;
   }
 

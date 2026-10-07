@@ -69,6 +69,14 @@ const response = await agent.generate('Run npm install')
     isOptional: true,
   },
   {
+    name: 'outputEncoding',
+    type: 'string',
+    description:
+      "Encoding used to decode command stdout and stderr. Accepts any WHATWG encoding label, such as `'gbk'` for native Windows commands on a Chinese (code page 936) system.",
+    isOptional: true,
+    defaultValue: "'utf-8'",
+  },
+  {
     name: 'timeout',
     type: 'number',
     description: 'Default timeout for operations in milliseconds',

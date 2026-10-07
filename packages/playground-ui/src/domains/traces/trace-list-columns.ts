@@ -28,7 +28,7 @@ export const TRACE_CUSTOM_COLUMN_LABELS: Record<TraceCustomColumn, string> = {
   traceId: 'Trace ID',
   threadId: 'Thread ID',
   resourceId: 'Resource ID',
-  entityId: 'Entity ID',
+  entityId: 'Primitive ID',
 };
 
 export type TraceColumnPreferences = {
@@ -37,12 +37,8 @@ export type TraceColumnPreferences = {
   readonly metadataKeys: readonly string[];
 };
 
-export type TraceUsageSummary = {
-  inputTokens?: number;
-  outputTokens?: number;
-  estimatedCost?: number;
-  costUnit?: string;
-};
+import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
+export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
@@ -120,7 +116,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
   // without Input, Name is the flexible track that fills the grid.
-  const columns = ['9rem'];
+  const columns = ['11rem'];
 
   if (visible.has('type')) columns.push('7rem');
   columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
@@ -129,7 +125,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
-  if (visible.has('endTime')) columns.push('9rem');
+  if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('inputTokens')) columns.push('8rem');
   if (visible.has('outputTokens')) columns.push('8rem');
@@ -149,7 +145,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
 
 const RUN_PREFIX_PATTERN = /^(?:agent|workflow|scorer) run: '(.+?)'(.*)$/;
 
-/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Type column already carries
+/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Primitive type column already carries
  *  the kind, so the list shows just the id and any suffix. Core names are untouched for exporters. */
 export function displayTraceName<T extends string | null | undefined>(name: T): T {
   if (!name) return name;

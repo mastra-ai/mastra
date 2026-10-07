@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -8,8 +11,6 @@ import { CopySkillDialog } from '@/domains/agent-builder/components/skill-list/c
 import { SkillFavoriteButton } from '@/domains/agent-builder/components/skill-list/skill-favorite-button';
 import { useCopySkill } from '@/domains/agent-builder/hooks/use-copy-skill';
 import { useStoredSkill } from '@/domains/agent-builder/hooks/use-stored-skill';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsView() {
@@ -54,7 +55,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   const copySkill = useCopySkill();
 
   // Suggest a non-colliding copy name based on the caller's own skills.
-  const { data: ownSkillsData } = useStoredSkills({ enabled: canCopy });
+  const { data: ownSkillsData } = useStoredSkills({ queryOptions: { enabled: canCopy } });
   const ownSkillNames = (ownSkillsData?.skills ?? []).map(s => s.name);
 
   return (
@@ -72,17 +73,12 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-body text-foreground" data-testid="skill-view-title">
+          <Txt as="p" variant="body" tone="ink" data-testid="skill-view-title" className="min-w-0 truncate">
             {skill.name}
-          </div>
+          </Txt>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <SkillFavoriteButton
-            skillId={skill.id}
-            isFavorited={skill.isFavorited}
-            favoriteCount={skill.favoriteCount}
-            className=""
-          />
+          <SkillFavoriteButton skillId={skill.id} isFavorited={skill.isFavorited} favoriteCount={skill.favoriteCount} />
           {canCopy && (
             <Button
               type="button"
@@ -101,11 +97,13 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-sidebar">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-4 pb-10 md:px-10">
-          <h1 className="text-heading text-foreground">{skill.name}</h1>
+          <Txt as="h1" variant="heading" tone="ink">
+            {skill.name}
+          </Txt>
           {skill.description && (
-            <p className="mt-2 text-body text-muted-foreground" data-testid="skill-view-description">
+            <Txt tone="muted" className="mt-2" data-testid="skill-view-description">
               {skill.description}
-            </p>
+            </Txt>
           )}
           <div className="mt-6" data-testid="skill-view-instructions">
             <MarkdownRenderer>{skill.instructions ?? ''}</MarkdownRenderer>

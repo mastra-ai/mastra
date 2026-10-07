@@ -23,7 +23,11 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
+const OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE = 'span-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
+const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
+const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -42,6 +46,22 @@ export function supportsTraceQueryDiscoveryCore() {
     typeof coreStorage.planTraceQueryValues === 'function' &&
     typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
     typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
+
+export function supportsTraceAggregateCore() {
+  return (
+    coreStorage.traceAggregateRequestSchema !== undefined &&
+    coreStorage.traceAggregateResponseSchema !== undefined &&
+    typeof coreStorage.planTraceAggregate === 'function'
+  );
+}
+
+export function supportsSpanQueryCore() {
+  return (
+    coreStorage.spanQueryRequestSchema !== undefined &&
+    coreStorage.spanQueryResponseSchema !== undefined &&
+    typeof coreStorage.planSpanQuery === 'function'
   );
 }
 
@@ -105,6 +125,22 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Trace aggregation is not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilitySpanQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Span queries are not supported by the configured observability store',
+  });
+}
+
 function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
   if (!predicate) return false;
   if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
@@ -127,6 +163,33 @@ export function assertObservabilityTraceQueryRootDurationSupported(
 
   throw new HTTPException(501, {
     message: 'Root duration predicates are not supported by the configured observability store',
+  });
+}
+
+function usesContextId(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(usesContextId);
+  if (predicate.type === 'not') return usesContextId(predicate.arg);
+  if (predicate.type === 'relation') return usesContextId(predicate.predicate);
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(predicate.field);
+}
+
+export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE) === true;
+}
+
+export function isTraceQueryContextIdField(path: string): boolean {
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(path);
+}
+
+export function assertObservabilityTraceQueryContextIdsSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (!usesContextId(predicate) || supportsObservabilityTraceQueryContextIds(observabilityStore)) return;
+
+  throw new HTTPException(501, {
+    message: 'Context identifier predicates are not supported by the configured observability store',
   });
 }
 
@@ -205,9 +268,11 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
+  traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
+  spanQuery: boolean;
   feedback: boolean;
 };
 
@@ -225,9 +290,11 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryRootDuration: false,
+  traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  spanQuery: false,
   feedback: false,
 };
 
@@ -295,6 +362,8 @@ export function getObservabilityStorageCapabilities(
     traceQuery,
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
+    traceQueryContextIds:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:
@@ -302,6 +371,7 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
     threadQuery,
+    spanQuery: newApiCore && supportsSpanQueryCore() && declares(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
@@ -370,11 +440,28 @@ export const NEW_ROUTE_DEFS = {
     requiresPermission: 'observability:read',
   },
 
+  AGGREGATE_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/aggregate',
+    summary: 'Aggregate traces',
+    description:
+      'Returns grouped and optionally time-bucketed measures (counts, durations, error rates) over completed logical traces matching an advanced trace predicate',
+    requiresPermission: 'observability:read',
+  },
+
   QUERY_THREADS: {
     method: 'POST',
     path: '/observability/threads/query',
     summary: 'Query threads',
     description: 'Returns thread identities matching eligible trace and cross-trace predicates',
+    requiresPermission: 'observability:read',
+  },
+
+  QUERY_SPANS: {
+    method: 'POST',
+    path: '/observability/spans/query',
+    summary: 'Query spans',
+    description: 'Returns completed spans matching a span predicate, one row per span, with cursor pagination',
     requiresPermission: 'observability:read',
   },
 

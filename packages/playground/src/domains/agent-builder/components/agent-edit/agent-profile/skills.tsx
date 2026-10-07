@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -48,25 +49,23 @@ interface SkillItemProps {
 
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
-    <label className="flex cursor-pointer items-start gap-3 px-4 py-4 hover:bg-fill-subtle" aria-disabled={!editable}>
-      <div className="mt-0.5">
-        <Checkbox
-          checked={isChecked}
-          onCheckedChange={next => onToggle(skill.id, next === true)}
-          disabled={!editable}
-        />
-      </div>
-      <div className="flex min-w-0 flex-col">
-        <Txt variant="column" tone="ink">
-          {skill.name}
-        </Txt>
-        {skill.description && (
-          <Txt variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
-            {skill.description}
+    <Field disabled={!editable}>
+      <FieldLabel className="flex shrink items-start gap-3 px-4 py-4 hover:bg-fill-subtle">
+        <span className="mt-0.5 flex">
+          <Checkbox checked={isChecked} onCheckedChange={next => onToggle(skill.id, next === true)} />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <Txt as="span" variant="column" tone="ink">
+            {skill.name}
           </Txt>
-        )}
-      </div>
-    </label>
+          {skill.description && (
+            <Txt as="span" variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
+              {skill.description}
+            </Txt>
+          )}
+        </span>
+      </FieldLabel>
+    </Field>
   );
 };
 

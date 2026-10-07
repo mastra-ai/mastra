@@ -68,10 +68,18 @@ describe('TracesListView columns', () => {
       assert(grid);
       assert(top);
       const headers = Array.from(top.children).map(cell => cell.textContent);
-      expect(headers).toEqual(['Start', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
+      expect(headers).toEqual([
+        'Start',
+        'Primitive type',
+        'Primitive name',
+        'Input',
+        'Status',
+        'Duration',
+        'Est. cost',
+      ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -90,7 +98,7 @@ describe('TracesListView columns', () => {
       );
 
       expect(screen.queryByText('Input')).toBeNull();
-      expect(screen.queryByText('Type')).toBeNull();
+      expect(screen.queryByText('Primitive type')).toBeNull();
       expect(screen.getByText('Duration')).toBeTruthy();
       expect(screen.getByText('Input tokens')).toBeTruthy();
       expect(screen.getByText('Output tokens')).toBeTruthy();
@@ -99,7 +107,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });
@@ -136,6 +144,24 @@ describe('TracesListView — status column', () => {
 
     const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
     expect(statuses).toEqual(['-']);
+  });
+});
+
+describe('TracesListView — name column', () => {
+  it('shows the primitive name, falling back to the span name', () => {
+    render(
+      <TracesListView
+        traces={[
+          makeTrace({ traceId: 'trace-named', entityName: 'Chef Agent V2 Model', name: 'chef-model-v2-agent' }),
+          makeTrace({ traceId: 'trace-unnamed', name: 'custom span' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Chef Agent V2 Model')).not.toBeNull();
+    expect(screen.queryByText('chef-model-v2-agent')).toBeNull();
+    expect(screen.getByText('custom span')).not.toBeNull();
   });
 });
 
@@ -340,7 +366,7 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Total tokens']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Total tokens']);
       expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
@@ -434,14 +460,14 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Environment']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
   });
 
   describe('when the end time column is visible', () => {
-    it('formats the end timestamp like the start one', () => {
+    it('formats the end timestamp like the start one, without the year', () => {
       render(
         <TracesListView
           traces={[makeTrace({ traceId: 'trace-1', endedAt: new Date(2026, 5, 10, 13, 7, 47) })]}
@@ -460,7 +486,14 @@ describe('TracesListView — environment and end time cells', () => {
         minute: '2-digit',
         second: '2-digit',
       }).format(endedAt);
-      expect(screen.getByTitle(title).textContent).toBe(title);
+      const visible = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      expect(screen.getByTitle(title).textContent).toBe(visible);
     });
   });
 });
@@ -477,7 +510,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Thread ID']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 
@@ -523,44 +556,16 @@ describe('TracesListView — custom columns', () => {
   });
 });
 
-describe('TracesListView — scrolling back to the top', () => {
-  it('re-reads the scroll position once a fresh query resolves', () => {
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-    dispatchEvent.mockClear();
+describe('TracesListView — scroll container', () => {
+  const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
+
+  it('keeps the same scroll container once a query resolves', () => {
+    const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    const gridBefore = gridOf(container);
 
     rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
 
-    // The list swapped its scroll container, so the virtualizer has to be told
-    // to read the new element's scrollTop rather than keep the old offset.
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone while paginating', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
-        isFetchingNextPage
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone when a query starts', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(gridOf(container)).toBe(gridBefore);
   });
 });
 

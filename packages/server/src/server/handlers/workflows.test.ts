@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { listWorkflowRunsQuerySchema } from '../schemas/workflows';
 import { checkRouteFGA } from '../server-adapter';
 import { WORKFLOWS_ROUTES } from '../server-adapter/routes/workflows';
 import { getWorkflowInfo } from '../utils';
@@ -1261,6 +1262,32 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result.total).toEqual(1);
     });
+
+    it('should reduce snapshots to status and timestamp in summary mode', async () => {
+      const run = await mockWorkflow.createRun({ runId: 'test-run-summary' });
+      await run.start({ inputData: {} });
+
+      const summary = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        summary: true,
+      } as any);
+      expect(summary.total).toEqual(1);
+      expect(summary.runs[0]!.runId).toBe('test-run-summary');
+      expect(summary.runs[0]!.snapshot).toEqual({ status: 'success', timestamp: expect.any(Number) });
+
+      const full = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+      } as any);
+      expect(full.runs[0]!.snapshot).toMatchObject({ status: 'success', context: expect.any(Object) });
+    });
+
+    it('should parse the summary query param without treating "false" as true', () => {
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'false' }).summary).toBe(false);
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'true' }).summary).toBe(true);
+      expect(listWorkflowRunsQuerySchema.parse({}).summary).toBeUndefined();
+    });
   });
 
   describe('OBSERVE_STREAM_WORKFLOW_ROUTE', () => {
@@ -1341,6 +1368,12 @@ describe('vNext Workflow Handlers', () => {
       await run.start({ inputData: {} });
 
       const workflowsStore = (await mockMastra.getStorage()!.getStore('workflows'))!;
+      // Cancel leaves finished runs alone, so make the run active again before breaking storage
+      await workflowsStore.updateWorkflowState({
+        workflowName: 'test-workflow',
+        runId: 'test-run-cancel-failed',
+        opts: { status: 'running' },
+      });
       const spy = vi.spyOn(workflowsStore, 'updateWorkflowState').mockRejectedValue(new Error('db down'));
 
       try {

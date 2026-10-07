@@ -4,12 +4,14 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useTools } from '@mastra/react/hooks/tools';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -20,7 +22,6 @@ import { DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export function ToolsPage() {
   const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
@@ -153,14 +154,15 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-background">
         <EntityContent>
-          <EntityName className="! text-subheading!">{tool.label}</EntityName>
+          <EntityName className="text-subheading">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground focus:outline-1 focus:outline-white focus:outline-solid focus-visible:outline-1 focus-visible:outline-white focus-visible:outline-solid',
+                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground',
+                focusRing,
                 canEditToolDescriptions && 'hover:bg-fill-subtle focus:bg-fill-subtle',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -182,11 +184,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className={cn(
-              'rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
-              quietTextHover,
-              controlStateColorTransition,
-            )}
+            className={cn('rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="xs">
@@ -236,8 +234,14 @@ export function ToolsPage() {
                       onClick={() => handleAddTool(tool.value)}
                       className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-body text-foreground">{tool.label}</span>
-                      {tool.description && <span className="text-meta text-muted-foreground">{tool.description}</span>}
+                      <Txt as="span" tone="ink">
+                        {tool.label}
+                      </Txt>
+                      {tool.description && (
+                        <Txt as="span" variant="meta" tone="muted">
+                          {tool.description}
+                        </Txt>
+                      )}
                     </button>
                   ))}
                 </PopoverContent>

@@ -671,7 +671,7 @@ describe('AgentControllerChannels', () => {
       );
       const session = (await controller.getSessionByResource('channel:chan-1:t-live-hook'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
 
       await simulateAction(channels, adapter, 'chan-1:t-live-hook', `tool_approve:${toolCallId}`);
       await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved' });
@@ -841,7 +841,7 @@ describe('AgentControllerChannels', () => {
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'approval card posted' });
       expect(executeSpy).not.toHaveBeenCalled();
 
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
       await simulateAction(channels, adapter, 'chan-1:t-appr', `tool_approve:${toolCallId}`);
 
       // The engine (parked at the gate) drives the resume: tool executes,
@@ -910,7 +910,7 @@ describe('AgentControllerChannels', () => {
       const session = (await controller.getSessionByResource('channel:chan-1:t-deny'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
       await simulateAction(channels, adapter, 'chan-1:t-deny', `tool_deny:${toolCallId}`);
 
       await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved as decline' });
@@ -1079,4 +1079,119 @@ describe('AgentControllerChannels', () => {
       expect(renderContext).not.toBeNull();
     }, 30_000);
   });
+});
+
+describe('AgentControllerChannels thread history', () => {
+  const BASE_TIME = Date.UTC(2026, 8, 29, 11, 0, 0);
+
+  function historyMessage(i: number) {
+    return {
+      id: `h${i}`,
+      text: `earlier ${i}`,
+      formatted: undefined,
+      attachments: [],
+      author: { userId: `user-${i}`, userName: `u${i}`, fullName: `User ${i}`, isBot: false },
+      metadata: { dateSent: new Date(BASE_TIME + i * 1000), edited: false },
+    } as any;
+  }
+
+  /** A non-DM, not-yet-subscribed thread with `history` (oldest first) behind it. */
+  function createMentionThread(adapter: any, threadId: string, history: any[]) {
+    return {
+      ...createChatThread(adapter, threadId, { isDM: false }),
+      isSubscribed: vi.fn().mockResolvedValue(false),
+      messages: {
+        async *[Symbol.asyncIterator]() {
+          for (let i = history.length - 1; i >= 0; i--) yield history[i];
+        },
+      },
+    } as any;
+  }
+
+  it('writes history rows to the session thread before dispatching the trigger', async () => {
+    const agentMemory = new MockMemory();
+    const { adapter, controller, mastra, channels } = await createSetup({ agentMemory });
+    const history = [historyMessage(0), historyMessage(1), historyMessage(2)];
+    const chatThread = createMentionThread(adapter, 'chan-1:t-history', history);
+
+    const events: string[] = [];
+    const saveMessages = vi.spyOn(agentMemory, 'saveMessages');
+    saveMessages.mockImplementation(async function (this: any, ...args: any[]) {
+      events.push(`save:${args[0].messages.length}`);
+      return (MockMemory.prototype.saveMessages as any).apply(this, args);
+    });
+    const sends: any[] = [];
+    const originalGetSession = (channels as any).getSessionForThread.bind(channels);
+    vi.spyOn(channels as any, 'getSessionForThread').mockImplementation(async (...args: any[]) => {
+      const session = await originalGetSession(...args);
+      if (!vi.isMockFunction(session.sendSignal)) {
+        const original = session.sendSignal.bind(session);
+        vi.spyOn(session, 'sendSignal').mockImplementation((input: any, options: any) => {
+          events.push('send');
+          const result = original(input, options);
+          sends.push({ input, options, result });
+          return result;
+        });
+      }
+      return session;
+    });
+
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-trigger', '@TestBot hello'),
+      mastra,
+      new RequestContext(),
+    );
+    await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
+
+    // One batch write of the three history rows lands before the single trigger send,
+    // and the trigger wakes the session instead of attaching to an existing run.
+    expect(events.slice(0, 2)).toEqual(['save:3', 'send']);
+    expect(sends).toHaveLength(1);
+    expect(sends[0].options).toMatchObject({ requireDelivery: true });
+    expect(JSON.stringify(sends[0].input.contents)).not.toContain('[Thread context');
+    await expect(sends[0].result.accepted).resolves.toMatchObject({ action: 'wake' });
+
+    const session = await controller.getSessionByResource('channel:chan-1:t-history');
+    const threadId = session!.thread.getId()!;
+    const memoryStore = await (agentMemory as any).storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessages({ threadId, perPage: 50 });
+    const rows = messages
+      .filter((m: any) => m.id.startsWith('thread-history:'))
+      .sort((a: any, b: any) => +new Date(a.createdAt) - +new Date(b.createdAt));
+    expect(rows.map((m: any) => m.id)).toEqual([
+      `thread-history:${threadId}:h0`,
+      `thread-history:${threadId}:h1`,
+      `thread-history:${threadId}:h2`,
+    ]);
+    expect(rows.map((m: any) => new Date(m.createdAt).getTime())).toEqual([
+      BASE_TIME,
+      BASE_TIME + 1000,
+      BASE_TIME + 2000,
+    ]);
+    expect(rows[0].content.metadata.signal.attributes).toMatchObject({
+      messageId: 'h0',
+      authorName: 'User 0',
+      authorId: 'user-0',
+      source: 'thread-history',
+    });
+  }, 30_000);
+
+  it('lets a session refusal propagate once, persisting no history and dispatching nothing', async () => {
+    const resolveSession = vi.fn(() => {
+      throw new ChannelSessionRejectedError('not for you');
+    });
+    const { adapter, mastra, channels } = await createSetup({ resolveSession });
+    const chatThread = createMentionThread(adapter, 'chan-1:t-history-refused', [historyMessage(0), historyMessage(1)]);
+    const dispatch = vi.spyOn(channels as any, 'dispatchInboundMessage');
+
+    const rejection = await (channels as any)
+      .processChatMessage(chatThread, createMessage('m-trigger', '@TestBot hello'), mastra, new RequestContext())
+      .catch((err: unknown) => err);
+
+    expect(rejection).toBeInstanceOf(ChannelSessionRejectedError);
+    expect(resolveSession).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(chatThread.post).not.toHaveBeenCalled();
+  }, 30_000);
 });

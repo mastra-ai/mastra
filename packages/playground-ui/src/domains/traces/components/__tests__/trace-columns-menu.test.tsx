@@ -41,7 +41,7 @@ describe('TraceColumnsMenu', () => {
       const checked = async (name: string) =>
         (await screen.findByRole('menuitemcheckbox', { name })).getAttribute('aria-checked');
 
-      expect(await checked('Type')).toBe('true');
+      expect(await checked('Primitive type')).toBe('true');
       expect(await checked('Input')).toBe('true');
       expect(await checked('Duration')).toBe('true');
       expect(await checked('Estimated cost')).toBe('true');
@@ -90,7 +90,7 @@ describe('TraceColumnsMenu', () => {
       expect(threadId.getAttribute('aria-checked')).toBe('false');
       expect(screen.getByRole('menuitemcheckbox', { name: 'Resource ID' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Trace ID' })).toBeTruthy();
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Entity ID' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Primitive ID' })).toBeTruthy();
       // Start is already a fixed column, so it is not offered again as a custom one.
       expect(screen.queryByRole('menuitemcheckbox', { name: /start/i })).toBeNull();
 
@@ -279,11 +279,9 @@ describe('TraceColumnsMenu', () => {
       expect(field.getAttribute('aria-invalid')).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      // The combobox remounts inside an error wrapper, so query it again.
       const invalidField = screen.getByRole('combobox', { name: 'Metadata key' });
-      expect(invalidField.getAttribute('aria-describedby')).toBe('error-trace-metadata-key');
+      expect(invalidField.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByRole('alert').id);
       expect(invalidField.getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByRole('alert').getAttribute('id')).toBe('error-trace-metadata-key');
     });
 
     it('clears the error as soon as a key is picked', async () => {

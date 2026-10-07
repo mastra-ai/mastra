@@ -1,15 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { boardCardStatus } from '../boardCardStatus';
+import { boardCardState } from '../boardCardState';
+import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
+import type { DragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { itemBoard, itemStageLabel } from '../boardStages';
+import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
   cardActions,
@@ -17,7 +20,6 @@ import {
   cardPrimaryAction,
   resumeStage,
   retryButton,
-  runButton,
   sessionLink,
 } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
@@ -25,6 +27,7 @@ import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
+import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
@@ -35,6 +38,8 @@ import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { WorkItemListRow } from './WorkItemListRow';
+
 export function WorkItemCard({
   item,
   deepLinkRef,
@@ -58,6 +63,7 @@ export function WorkItemCard({
   onCreateSession,
   onMove,
   onRemove,
+  layout,
 }: {
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
@@ -88,8 +94,9 @@ export function WorkItemCard({
   sessionStatus?: SessionRowStatus;
   /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
+  onMove: (toStage: string) => void;
   onRemove: () => void;
+  layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph({ openFor: deepLinkCommentId });
@@ -98,52 +105,36 @@ export function WorkItemCard({
   const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
 
-  const evaluating = evaluatingStage !== undefined;
-  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
-  // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
-  // Then the first lane whose seat is still free, so a card never leads with a run it has already had.
-  const primaryMove =
-    moves.find(move => move.stage === columnStage) ?? moves.find(move => !(move.role in sessions)) ?? moves[0];
+  const primaryMove = primaryCardMove(moves, columnStage, sessions);
   const threadSession = itemThreadSession(sessions);
-  const nextPhaseId = definition?.phases.find(phase => phase.id === columnStage)?.transitions?.[0]?.to;
-  const nextPhaseDef = definition?.phases.find(phase => phase.id === nextPhaseId);
-  const nextPhase = nextPhaseDef === undefined ? undefined : { id: nextPhaseDef.id, label: nextPhaseDef.title };
-  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
+  const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
     threadSession === undefined
       ? undefined
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
-  const proposedRunLabel =
-    proposal === undefined
-      ? undefined
-      : custom
-        ? // A proposal for a role this board never declares is a leftover from another board.
-          definition?.phases.find(phase => phase.role === proposal.role)?.title
-        : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
+  const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
+  const proposedRunLabel = proposedRun?.label;
 
   const activity = workItemActivity(item, activityPage);
-  const status = boardCardStatus({
-    proposal:
-      proposal === undefined || proposedRunLabel === undefined
-        ? undefined
-        : { label: proposedRunLabel, decisionId: proposal.id },
-    moving:
-      evaluatingStage === undefined
-        ? undefined
-        : {
-            stage: evaluatingStage,
-            label:
-              definition?.phases.find(phase => phase.id === evaluatingStage)?.title ??
-              itemStageLabel(item, evaluatingStage),
-          },
-    preparing: busyLabel,
+  const state = boardCardState({
+    proposal: proposedRun,
+    moving: movingCardStatus(evaluatingStage, definition, item),
+    preparing: startingLabel,
+    retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
     transitionReason,
     sessionStatus,
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
+  const { status, owner, wick } = state;
+  const lockedByYou = owner.kind === 'you';
+  const busy = lockedByYou || owner.kind === 'automation';
+  const dragPayload: DragPayload | undefined = lockedByYou
+    ? undefined
+    : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: owner.kind };
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
@@ -165,6 +156,7 @@ export function WorkItemCard({
     proposal,
     proposedRunLabel,
     approvingDecisionId,
+    owner,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -179,9 +171,9 @@ export function WorkItemCard({
       morph.closeDetails();
       onApproveProposal(decisionId);
     },
-    onMove: (toStage, options) => {
+    onMove: toStage => {
       morph.closeDetails();
-      onMove(toStage, options);
+      onMove(toStage);
     },
     onRemove: () => {
       morph.closeDetails();
@@ -215,47 +207,77 @@ export function WorkItemCard({
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
-    running: wickStatus !== undefined,
-    waiting: status.kind === 'waiting' || status.kind === 'held',
+    state,
     session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    run: runButton({
-      action: primaryAction,
-      pending: busyLabel !== undefined,
-      suggestion: status.kind === 'waiting' ? status.label : undefined,
-    }),
+    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
+    run: primaryAction,
   });
+
+  const detailsPanel = (
+    <WorkItemDetailsPanel
+      item={item}
+      columnStage={columnStage}
+      projectRepositoryId={projectRepositoryId}
+      activityPage={activityPage}
+      morph={morph}
+      relatedLinks={relatedItems.map(relatedLink)}
+      status={status}
+      actions={actions}
+      menu={<WorkItemMenuItems {...panelMenu} />}
+    />
+  );
+
+  if (layout === 'list') {
+    return (
+      <>
+        <WorkItemListRow
+          item={item}
+          morph={morph}
+          deepLinkRef={deepLinkRef}
+          highlighted={highlighted}
+          locked={lockedByYou}
+          busy={busy}
+          dragPayload={dragPayload}
+          activity={activity}
+          actors={activityPage?.actors ?? {}}
+          status={status}
+          actions={actions}
+          menu={<WorkItemMenuItems {...menu} />}
+        />
+        {detailsPanel}
+      </>
+    );
+  }
 
   return (
     <>
       <article
         ref={morph.cardRef}
-        draggable={!evaluating}
+        draggable={dragPayload !== undefined}
         aria-label={item.title}
-        aria-busy={evaluating || busyLabel !== undefined || undefined}
+        aria-busy={busy || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}
         onDragStart={event => {
-          if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+          if (dragPayload) setDragPayload(event, dragPayload);
         }}
         className={cn(
-          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
+          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
-          wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
-          evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-          busyLabel !== undefined && 'opacity-70',
-          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
+          wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
+          lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
+          highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
         )}
       >
-        {wickStatus && <ActivityWick status={wickStatus} />}
+        {wick && <ActivityWick status={wick} />}
         <button
           ref={deepLinkRef}
           type="button"
           draggable={false}
           aria-label={`Details for ${item.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
         />
         <WorkItemCardRows
@@ -269,7 +291,7 @@ export function WorkItemCard({
           open={false}
           controls={
             <>
-              <CardDetailsHint />
+              <CardDetailsHint onOpen={morph.openDetails} />
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
@@ -277,7 +299,7 @@ export function WorkItemCard({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      disabled={evaluating}
+                      disabled={lockedByYou}
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
@@ -293,18 +315,7 @@ export function WorkItemCard({
           }
         />
       </article>
-
-      <WorkItemDetailsPanel
-        item={item}
-        columnStage={columnStage}
-        projectRepositoryId={projectRepositoryId}
-        activityPage={activityPage}
-        morph={morph}
-        relatedLinks={relatedItems.map(relatedLink)}
-        status={status}
-        actions={actions}
-        menu={<WorkItemMenuItems {...panelMenu} />}
-      />
+      {detailsPanel}
     </>
   );
 }

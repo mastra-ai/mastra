@@ -40,6 +40,139 @@ describe('buildTraceQueryRequest', () => {
     expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value' }], now }).where).toBeUndefined();
   });
 
+  describe('when a tags token carries in', () => {
+    it('emits includes for a single tag', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'tags', operatorId: 'in', value: ['production'] }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'includes', path: 'tags', value: 'production' }] });
+    });
+
+    it('emits an or of includes for several tags', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'tags', operatorId: 'in', value: ['production', 'manual-review'] }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'includes', path: 'tags', value: 'production' },
+              { op: 'includes', path: 'tags', value: 'manual-review' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a tags token has no operator', () => {
+    it('defaults to includes', () => {
+      expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'tags', value: ['production'] }], now }).where).toEqual({
+        op: 'and',
+        args: [{ op: 'includes', path: 'tags', value: 'production' }],
+      });
+    });
+  });
+
+  describe('when a tags token carries notIn', () => {
+    it('excludes every tag while keeping untagged traces', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'tags', operatorId: 'notIn', value: ['production', 'manual-review'] }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              {
+                op: 'and',
+                args: [
+                  { op: 'notIncludes', path: 'tags', value: 'production' },
+                  { op: 'notIncludes', path: 'tags', value: 'manual-review' },
+                ],
+              },
+              { op: 'notExists', path: 'tags' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a presence-only field carries a value operator (hand-edited URL)', () => {
+    it.each([
+      ['feedback.comment', 'is'],
+      ['feedback.comment', undefined],
+      ['feedback.comment', 'notIn'],
+      ['spans.error', 'is'],
+    ] as const)('drops the %s token with operator %s instead of sending it', (fieldId, operatorId) => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId, value: 'wrong answer', ...(operatorId ? { operatorId } : {}) }],
+          now,
+        }).where,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('when a presence-only field carries a presence operator', () => {
+    it('keeps the predicate', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', operatorId: 'exists', value: '' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [{ feedback: { some: { op: 'exists', path: 'comment' } } }],
+      });
+    });
+  });
+
+  describe('when a tags token carries notIn with a single tag', () => {
+    it('keeps untagged traces alongside traces without that tag', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'tags', operatorId: 'notIn', value: ['production'] }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'notIncludes', path: 'tags', value: 'production' },
+              { op: 'notExists', path: 'tags' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a tags token carries a presence operator', () => {
+    it('emits exists on the tags path', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'tags', operatorId: 'exists', value: [] }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'exists', path: 'tags' }] });
+    });
+  });
+
+  describe('when a tags token has no selected tag', () => {
+    it('contributes nothing to the where clause', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'tags', operatorId: 'in', value: [''] }], now }).where,
+      ).toBeUndefined();
+    });
+  });
+
   it('ignores unsupported running status filters', () => {
     expect(buildTraceQueryRequest({ tokens: [], status: 'running', now }).where).toBeUndefined();
     expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running'] }], now }).where).toBeUndefined();
@@ -229,11 +362,55 @@ describe('buildTraceQueryRequest', () => {
     ['scores', 'scores.scorerId'],
     ['feedback', 'feedback.feedbackType'],
   ] as const)('when a %s token carries a negative operator', (scope, fieldId) => {
-    it.each(['isNot', 'notIn', 'notExists'] as const)('%s never emits a negative op inside some', operatorId => {
-      const { where } = buildTraceQueryRequest({ tokens: [{ fieldId, value: ['v'], operatorId }], now });
-      const [arg] = (where as { args: Record<string, unknown>[] }).args;
-      expect(arg).toHaveProperty([scope, 'none']);
-      expect(JSON.stringify(arg)).not.toMatch(/"op":"(ne|notIn|notExists)"/);
+    it.each(['isNot', 'notIn', 'notExists', 'notMatches'] as const)(
+      '%s never emits a negative op inside some',
+      operatorId => {
+        const { where } = buildTraceQueryRequest({ tokens: [{ fieldId, value: ['v'], operatorId }], now });
+        const [arg] = (where as { args: Record<string, unknown>[] }).args;
+        expect(arg).toHaveProperty([scope, 'none']);
+        expect(JSON.stringify(arg)).not.toMatch(/"op":"(ne|notIn|notExists|notMatches)"/);
+      },
+    );
+  });
+
+  describe('when a token carries a text operator', () => {
+    it('drops a literal with no letters or digits instead of sending a query the server rejects', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: '!!! ---', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toBeUndefined();
+    });
+
+    it('keeps the word Any, which is only a neutral sentinel for pick lists', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'Any' } } } }],
+      });
+    });
+
+    it('emits matches with the field on the left and the words on the right', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: 'incorrect dosage', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            feedback: {
+              some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } },
+            },
+          },
+        ],
+      });
     });
   });
 
@@ -527,7 +704,7 @@ describe('buildTraceQueryRequest with groups', () => {
             id: 'g',
             logic: 'or',
             nodes: [
-              { id: 'a', fieldId: 'tags', value: ['x'] },
+              { id: 'a', fieldId: 'runId', value: 'x' },
               { id: 'b', fieldId: 'status', value: '' },
             ],
           },

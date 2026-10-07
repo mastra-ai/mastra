@@ -40,6 +40,12 @@ export interface DiscordApplication {
   id: string;
   /** The application's name. */
   name: string;
+  /**
+   * The Ed25519 public key used to verify interaction signatures. Discord
+   * includes it on every application object, so a bot token alone is enough to
+   * resolve the interaction-verification key.
+   */
+  verify_key: string;
 }
 
 /** Minimal Discord REST error envelope. */
@@ -140,6 +146,46 @@ export async function guildHealthCheck(
     return false;
   }
   throw new Error(`Discord guild lookup failed for "${guildId}": ${await describeError(response)}`);
+}
+
+/** Guilds-per-page for `GET /users/@me/guilds` (Discord's documented maximum). */
+const GUILD_PAGE_LIMIT = 200;
+
+/**
+ * Pages we're willing to walk when listing the bot's guilds. The listing feeds
+ * the pending-install snapshot diff, whose multiple-new-guilds guard keeps an
+ * *incomplete* listing safe (reconcile just stays pending) — so a hard cap is
+ * preferable to an unbounded walk on a bot in thousands of guilds.
+ */
+const GUILD_PAGE_MAX_PAGES = 10;
+
+/**
+ * The ids of every guild the bot is a member of, via `GET /users/@me/guilds`
+ * (Bot auth), following `after`-cursor pagination. Returns `null` instead of a
+ * partial listing when the bot is in more guilds than {@link GUILD_PAGE_MAX_PAGES}
+ * covers — callers diffing snapshots must not mistake a truncated page for the
+ * full membership. Throws on request failure.
+ *
+ * @see https://discord.com/developers/docs/resources/user#get-current-user-guilds
+ */
+export async function listBotGuildIds(
+  botToken: string,
+  apiBaseUrl: string = DISCORD_API_BASE_URL,
+): Promise<string[] | null> {
+  const ids: string[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < GUILD_PAGE_MAX_PAGES; page++) {
+    const query = `?limit=${GUILD_PAGE_LIMIT}${after ? `&after=${after}` : ''}`;
+    const response = await discordRequest(botToken, 'GET', `/users/@me/guilds${query}`, apiBaseUrl);
+    if (!response.ok) {
+      throw new Error(`Discord guild listing failed: ${await describeError(response)}`);
+    }
+    const batch = (await response.json()) as Array<{ id: string }>;
+    for (const guild of batch) ids.push(guild.id);
+    if (batch.length < GUILD_PAGE_LIMIT) return ids;
+    after = batch[batch.length - 1]!.id;
+  }
+  return null; // more guilds than we page — signal "unknown", not a partial list
 }
 
 /** Map normalized commands to the Discord bulk-overwrite `CHAT_INPUT` payload. */

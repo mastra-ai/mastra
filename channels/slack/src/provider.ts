@@ -98,7 +98,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(
+export function hashConfig(
   opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
   baseUrl: string,
   resolvedAppName: string,
@@ -171,8 +171,15 @@ export class SlackProvider implements ChannelProvider {
     this.#channelConfig = config;
     this.#baseUrl = config.baseUrl;
 
-    // If refresh token is provided at construction, initialize the manifest client immediately
-    if (config.refreshToken) {
+    if (config.tokenResolver) {
+      // Delegated mode: an external credential manager owns the refresh
+      // cycle. The manifest client asks the resolver for a fresh access
+      // token before each call and never rotates tokens itself.
+      this.#manifestClient = new SlackManifestClient({
+        tokenResolver: config.tokenResolver,
+      });
+    } else if (config.refreshToken) {
+      // If refresh token is provided at construction, initialize the manifest client immediately
       this.#initManifestClient(config.token ?? '', config.refreshToken);
     }
   }
@@ -195,6 +202,11 @@ export class SlackProvider implements ChannelProvider {
    * ```
    */
   async configure(credentials: { refreshToken: string; token?: string } | null): Promise<void> {
+    if (this.#channelConfig.tokenResolver) {
+      throw new Error(
+        'SlackProvider was constructed with a tokenResolver — credentials are managed externally and cannot be configured manually.',
+      );
+    }
     if (credentials === null) {
       this.#manifestClient = undefined;
       return this.#deleteConfigTokens();
@@ -604,7 +616,8 @@ export class SlackProvider implements ChannelProvider {
 
   /**
    * Get the base URL for webhook callbacks.
-   * Prefers explicit config, then derives from Mastra server config.
+   * Prefers explicit config, then Mastra server public-URL overrides, then the
+   * `MASTRA_SERVER_URL` env var, then derives from the server bind config.
    */
   #getBaseUrl(): string | undefined {
     // Explicit config takes precedence
@@ -612,10 +625,22 @@ export class SlackProvider implements ChannelProvider {
       return stripTrailingSlash(this.#baseUrl);
     }
 
+    const server = this.#mastra?.getServer();
+
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which is never reachable for OAuth callbacks or webhooks — but
+    // explicit `server.studio*` overrides in user config still win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) {
+      return stripTrailingSlash(envUrl);
+    }
+
     // Derive from Mastra server config + environment
     // process.env.PORT is set by the CLI with the actual resolved port
     // (e.g. 4112 if 4111 was taken), so it's more reliable than server config
-    const server = this.#mastra?.getServer();
     const protocol = server?.studioProtocol ?? 'http';
     const host = server?.studioHost ?? server?.host ?? process.env.MASTRA_HOST ?? 'localhost';
     const port = server?.studioPort ?? server?.port ?? (Number(process.env.PORT) || 4111);
@@ -664,8 +689,10 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async #doInitialize(): Promise<void> {
-    // Load stored tokens if available (these are fresher than constructor tokens)
-    const storedTokensEncrypted = await this.#getConfigTokens();
+    // Load stored tokens if available (these are fresher than constructor
+    // tokens). Skipped in delegated mode — the tokenResolver is the single
+    // source of truth and stored tokens must not override it.
+    const storedTokensEncrypted = this.#channelConfig.tokenResolver ? null : await this.#getConfigTokens();
     if (storedTokensEncrypted) {
       const storedTokens = this.#decryptConfigTokens(storedTokensEncrypted);
       console.log(`[Slack] Using stored config tokens (updated ${storedTokens.updatedAt.toISOString()})`);
@@ -1119,7 +1146,7 @@ export class SlackProvider implements ChannelProvider {
     const config = options ?? {};
 
     // Generate unique webhook ID for this installation
-    const webhookId = crypto.randomUUID();
+    const webhookId = globalThis.crypto.randomUUID();
 
     // Build manifest using the manifest builder (includes proper default scopes)
     const appName = config.name ?? agent?.name ?? agentId;
@@ -1164,7 +1191,7 @@ export class SlackProvider implements ChannelProvider {
     }
 
     // Generate installation ID
-    const installationId = crypto.randomUUID();
+    const installationId = globalThis.crypto.randomUUID();
 
     // Build authorization URL using the scopes from the manifest
     const scopes = manifest.oauth_config?.scopes?.bot?.join(',') ?? '';
@@ -1179,7 +1206,13 @@ export class SlackProvider implements ChannelProvider {
     const authorizationUrl = authUrl.toString();
 
     // Store pending installation (includes auth URL for UI to fetch later)
-    const configHash = hashConfig(config, baseUrl, appName, appDescription);
+    // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
+    const configHash = hashConfig(
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
+      baseUrl,
+      appName,
+      appDescription,
+    );
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
@@ -1239,6 +1272,16 @@ export class SlackProvider implements ChannelProvider {
         // Remove adapter and command handlers
         this.#adapters.delete(installation.id);
         this.#slashCommands.delete(installation.webhookId);
+      } else if (record.status === 'pending') {
+        // A pending installation already minted a real Slack app via the
+        // manifest API (OAuth was just never completed). Delete that app too,
+        // otherwise it is orphaned in the Slack workspace.
+        try {
+          const pending = this.#decryptPendingInstallation(this.#parsePendingInstallation(record));
+          await client.deleteApp(pending.appId);
+        } catch (err) {
+          console.warn(`[Slack] Failed to delete pending Slack app for "${agentId}":`, err);
+        }
       }
 
       // Remove from storage (active, pending, or error)

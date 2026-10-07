@@ -23,8 +23,10 @@ import {
   extractTasksFromToolResultChunk,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
+import { createUserMessage } from './user-message';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -375,18 +377,13 @@ export const useChat = ({
     lastHydration.current = { agentId, resourceId, threadId, initialMessages: hydratedMessages, formattedMessages };
 
     if (sameThread) {
-      // Accumulation replaces changed messages immutably. Keep those local edits
-      // over history snapshots, even if the request returns after the run finishes.
-      const previousById = new Map(previous.formattedMessages.map(message => [message.id, message]));
-      setMessages(current => {
-        const live = current.filter(message => previousById.get(message.id) !== message);
-        const liveById = new Map(live.map(message => [message.id, message]));
-        const historyIds = new Set(formattedMessages.map(message => message.id));
-        return [
-          ...formattedMessages.map(message => liveById.get(message.id) ?? message),
-          ...live.filter(message => !historyIds.has(message.id)),
-        ];
-      });
+      setMessages(current =>
+        mergeHistoryIntoConversation({
+          conversation: current,
+          history: formattedMessages,
+          previousHistory: previous.formattedMessages,
+        }),
+      );
       setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
       // History may arrive before the live approval event, but must not undo
       // a live approval decision or terminal event, nor switch the active run.
@@ -553,7 +550,28 @@ export const useChat = ({
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
+        // Some runs (e.g. Inngest durable agents) emit no `start` chunk, so the
+        // approval chunk is the only place the run ID reaches the client.
+        if (runId) {
+          if (!liveRunId.current || liveRunFinished.current) {
+            liveRunId.current = runId;
+            liveRunFinished.current = false;
+          }
+          if (liveRunId.current === runId) {
+            _currentRunId.current = runId;
+          }
+        }
         setIsRunning(false);
+      }
+
+      if (chunk.type === 'tool-call-resumed') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          // Keep it as a live decision so stale hydrated history can't re-mark it pending.
+          liveApprovalIds.current.add(toolCallId);
+          pendingToolApprovalIdsRef.current.delete(toolCallId);
+          setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        }
       }
 
       if (isTerminal) {
@@ -615,18 +633,10 @@ export const useChat = ({
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
-                  const previousById = new Map(
-                    (lastHydration.current?.formattedMessages ?? []).map(message => [message.id, message]),
+                  const previousHistory = lastHydration.current?.formattedMessages ?? [];
+                  setMessages(current =>
+                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
                   );
-                  setMessages(current => {
-                    const live = current.filter(message => previousById.get(message.id) !== message);
-                    const liveById = new Map(live.map(message => [message.id, message]));
-                    const historyIds = new Set(history.map(message => message.id));
-                    return [
-                      ...history.map(message => liveById.get(message.id) ?? message),
-                      ...live.filter(message => !historyIds.has(message.id)),
-                    ];
-                  });
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
@@ -1348,16 +1358,10 @@ export const useChat = ({
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
-    const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
-    const coreUserMessages = [nextMessage];
+    const coreUserMessages = [createUserMessage(args.message, args.coreUserMessages)];
 
-    if (args.coreUserMessages) {
-      coreUserMessages.push(...args.coreUserMessages);
-    }
-
-    // The whole user turn (text + any attachments) is merged into a single
-    // optimistic message so streaming renders one bubble, matching how
-    // memory/reload resolves the persisted multi-part user message.
+    // Use the same multipart message for the request and optimistic display.
+    // Sending separate attachment messages would persist separate rows on reload.
     const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
     const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled

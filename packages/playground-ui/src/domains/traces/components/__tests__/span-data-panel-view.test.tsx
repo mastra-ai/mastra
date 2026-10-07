@@ -115,3 +115,15 @@ describe('SpanDataPanelView — tabs', () => {
     expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
   });
 });
+
+describe('SpanDataPanelView — close', () => {
+  it('renders a close button only when onClose is provided, and calls it', () => {
+    const { rerender } = render(<SpanDataPanelView {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Close span' })).toBeNull();
+
+    const onClose = vi.fn();
+    rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

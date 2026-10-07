@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
+import { hasAbortInChain, isTransientLLMError, withRetry } from './retry';
 
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
@@ -13,11 +14,9 @@ export interface StructuredExtractionResult {
 }
 
 function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
-  return (
-    abortSignal?.aborted === true ||
-    (error instanceof DOMException && error.name === 'AbortError') ||
-    (error instanceof Error && error.name === 'AbortError')
-  );
+  // Chain-aware so a cancellation wrapped by the provider SDK still rethrows
+  // instead of degrading into the json-prompt-injection fallback.
+  return abortSignal?.aborted === true || hasAbortInChain(error);
 }
 
 function shouldRetryEmptyStructuredObject(
@@ -68,7 +67,17 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
 
-  const streamWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
+  const streamWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') =>
+    // OM agents pin model-level `maxRetries: 0`. Extraction failures are tolerated
+    // (returned as `failures`), so use a small fixed budget rather than the
+    // Observer/Reflector `maxRetries`, which only governs the stage's model call.
+    withRetry(() => streamOnce(jsonPromptInjection), {
+      label: `om-${opts.source}-structured-extraction`,
+      abortSignal: opts.abortSignal,
+      maxRetries: 1,
+    });
+
+  const streamOnce = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
     const output = await opts.agent.stream(prompt, {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
@@ -93,6 +102,16 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   } catch (error) {
     if (isAbortError(error, opts.abortSignal)) {
       throw error;
+    }
+
+    // The retry ladder already exhausted transient failures; the JSON-prompt
+    // fallback only helps providers that reject native structured output.
+    if (isTransientLLMError(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        values,
+        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+      };
     }
 
     try {

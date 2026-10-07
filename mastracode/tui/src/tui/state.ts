@@ -15,6 +15,7 @@ import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
 import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
+import type { ThreadScheduler } from '@mastra/code-sdk/schedules';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -50,7 +51,7 @@ import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
-import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
 export interface PendingSignalMessage {
@@ -135,6 +136,12 @@ export interface MastraTUIOptions {
   /** Initial message to send on startup */
   initialMessage?: string;
 
+  /** Thread ID requested by `mastracode resume`. */
+  resumeThreadId?: string;
+
+  /** Preserve an explicitly configured initial model until a thread selects a pack. */
+  initialModelOverride?: boolean;
+
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By
@@ -171,6 +178,9 @@ export interface MastraTUIOptions {
 
   /** Session-scoped, read-only Subconscious knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
+
+  /** Process-local scheduler behind /schedules. */
+  threadScheduler?: ThreadScheduler;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
@@ -319,13 +329,15 @@ export interface TUIState {
   lastAgentRunEndReason?: 'done' | 'aborted' | 'error';
 
   // ── Tokens/sec tracking ────────────────────────────────────────────────
-  /**
-   * Timestamp (ms) of the first streamed content delta of the current step —
-   * i.e. when decoding began. tokens/sec is measured over decode time only
-   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
-   */
+  /** Assistant message the decode window measures; a different message starts a new window. */
+  decodeMessageId: string | undefined;
+  /** First generation delta in the current model step; 0 means not started. */
   decodeStartedAt: number;
-  /** Current computed tokens/sec rate (0 when idle) */
+  /** Last generation delta, excluding subsequent tool execution and usage delivery. */
+  decodeLastDeltaAt: number;
+  /** Whether the measured window includes streamed reasoning. */
+  decodeHasReasoning: boolean;
+  /** Smoothed output tokens/sec over streamed generation time, retained until the next turn. */
   tokensPerSec: number;
   /** Prompt tokens reported for the most recently completed model step. */
   latestRequestPromptTokens: number | undefined;
@@ -343,8 +355,6 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
-  /** Track a goal started from plan approval — return to plan mode when it completes */
-  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -386,11 +396,8 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = options.terminal ?? new ProcessTerminal();
-  // Override columns getter to prevent line wrapping in nested terminal emulators
   if (!options.terminal) {
-    Object.defineProperty(terminal, 'columns', {
-      get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
-    });
+    Object.defineProperty(terminal, 'columns', { get: getTermWidth });
   }
   const ui = new TUI(terminal);
   const assistantRenderRegistry = new AssistantRenderRegistry();
@@ -481,13 +488,15 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     githubPrPollingActive: false,
 
     // Tokens/sec tracking
+    decodeMessageId: undefined,
     decodeStartedAt: 0,
+    decodeLastDeltaAt: 0,
+    decodeHasReasoning: false,
     tokensPerSec: 0,
     latestRequestPromptTokens: undefined,
 
     // Goal loop
     goalManager: new GoalManager(),
-    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],

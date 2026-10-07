@@ -67,9 +67,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'activateAfterIdle',
-    type: 'number | string | false | "auto"',
+    type: 'number | string | false | "auto" | Record<string, number | string | false | "auto">',
     description:
-      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, `false` to disable inherited observation idle activation, or an object of per-provider TTLs such as `{ default: "auto", anthropic: "1h" }`. Object keys match the actor model provider before the first `.`, case-insensitively, so `anthropic` covers the direct Anthropic provider but not Claude through another provider such as `amazon-bedrock`; `default` covers every other provider. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
     isOptional: true,
   },
   {
@@ -174,6 +174,22 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'true',
           },
           {
+            name: 'maxRetries',
+            type: 'number',
+            description:
+              "Retries after the initial Observer model call on transient provider errors. Governs OM's own retry ladder; the Observer model call itself is configured with no provider-level retries.",
+            isOptional: true,
+            defaultValue: '8',
+          },
+          {
+            name: 'failurePolicy',
+            type: "'abort' | 'continue'",
+            description:
+              "Terminal policy once Observer retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the existing failure diagnostic, keeps the failed input pending for a later cycle, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling, and it has no backstop for a sustained outage: pending messages keep accruing in the main agent's context until they reach the model's context limit.",
+            isOptional: true,
+            defaultValue: "'abort'",
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:
@@ -255,9 +271,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           },
           {
             name: 'activateAfterIdle',
-            type: 'number | string | false | "auto"',
+            type: 'number | string | false | "auto" | Record<string, number | string | false | "auto">',
             description:
-              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations. Currently only applied when using the standalone `ObservationalMemory` class; `new Memory(...)` applies the top-level `activateAfterIdle` only.',
+              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, `false`, or an object of per-provider TTLs. An object replaces the top-level value and is not merged with it. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations. Currently only applied when using the standalone `ObservationalMemory` class; `new Memory(...)` applies the top-level `activateAfterIdle` only.',
             isOptional: true,
           },
           {
@@ -271,7 +287,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'blockAfter',
             type: 'number',
             description:
-              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Above this point, activation uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Crossing `blockAfter` does not trigger a blocking observation. A synchronous (blocking) observation runs when the `messageTokens` threshold is reached and buffered activation did not happen. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
+              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Above this point, activation uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Crossing `blockAfter` does not trigger a blocking observation. A synchronous (blocking) observation runs when the `messageTokens` threshold is reached and activating buffered chunks doesn't bring pending tokens back under it, for example when a large tool result arrives after buffering has stopped. All remaining buffered chunks are activated first, so the synchronous observation only covers messages no chunk has observed. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
@@ -302,6 +318,22 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             description:
               'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
             isOptional: true,
+          },
+          {
+            name: 'maxRetries',
+            type: 'number',
+            description:
+              "Retries after the initial Reflector model call on transient provider errors. Governs OM's own retry ladder; the Reflector model call itself is configured with no provider-level retries.",
+            isOptional: true,
+            defaultValue: '8',
+          },
+          {
+            name: 'failurePolicy',
+            type: "'abort' | 'continue'",
+            description:
+              "Terminal policy once Reflector retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the failure diagnostic and allows the turn to continue, leaving already-persisted observations committed and deferring reflection to the next threshold crossing. A provider outage usually takes out both stages, so set the policy on `observation` too if the turn should survive one.",
+            isOptional: true,
+            defaultValue: "'abort'",
           },
           {
             name: 'instruction',
@@ -383,9 +415,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           },
           {
             name: 'activateAfterIdle',
-            type: 'number | string | false | "auto"',
+            type: 'number | string | false | "auto" | Record<string, number | string | false | "auto">',
             description:
-              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation. Currently only applied when using the standalone `ObservationalMemory` class; this setting has no effect through `new Memory(...)`.',
+              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, `false`, or an object of per-provider TTLs. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation. Currently only applied when using the standalone `ObservationalMemory` class; this setting has no effect through `new Memory(...)`.',
             isOptional: true,
           },
           {
@@ -689,7 +721,7 @@ export const agent = new Agent({
 
 Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Above `blockAfter`, activation may overshoot the retention target instead of activating fewer chunks. A synchronous observation runs if the threshold is reached without activating a buffered chunk.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Above `blockAfter`, activation may overshoot the retention target instead of activating fewer chunks. A synchronous observation runs if pending tokens are still at or above the threshold after all buffered chunks have been activated.
 
 Default settings:
 
@@ -935,6 +967,13 @@ Emitted when observation or reflection fails. The system falls back to synchrono
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted.' },
   { name: 'error', type: 'string', description: 'Error message.' },
   {
+    name: 'retrying',
+    type: 'true',
+    description:
+      'Set when a reflection attempt did not compress below its target and OM is retrying at a higher compression level. A new `start` marker follows, so this failure is not final. Absent on final failures.',
+    isOptional: true,
+  },
+  {
     name: 'observations',
     type: 'string',
     description: 'Any partial content available for display.',
@@ -1176,7 +1215,31 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. It also supports cross-thread search. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. The tool is automatically added to the agent.
 
-Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
+When retrieval is enabled, OM also injects instructions telling the agent how to use recall: when to verify details, how to search and page, and when to read raw messages. They're included from the first turn, including read-only runs, and only describe the modes that are configured. Reflected groups are marked `_kind: reflection_` so the agent treats them as lossy summaries. Use `retrieval: { instructions: '...' }` to append your own guidance after the built-in instructions.
+
+### Observation pages
+
+With vector search configured, `mode: "observations"` reads the original observation groups around a search hit, including groups that reflection condensed away and buffered groups that haven't been activated yet. Copy the hit's `groupId` exactly as shown and, in resource scope, its `threadId`:
+
+```json
+{
+  "mode": "observations",
+  "threadId": "source-thread-id",
+  "groupId": "group-id-from-search",
+  "direction": "after",
+  "limit": 5
+}
+```
+
+Use `direction: "before"` to page backward, or omit `direction` to include the anchor group itself. Pages return `{ results, count, hasMore }` with continuation calls, and say when newer messages haven't been observed yet.
+
+### Search results
+
+Search results are listed by date and share a 2,000-token text allowance, so long groups are shortened, starting at the line that best matches the query. Results already in the agent's context come back as short references, and lower-ranked hits fill the freed space. `limit` counts excerpts, not references, so `count` can exceed `limit`.
+
+### Storage requirements
+
+Group IDs in search results include the record that holds them (`groupId@recordId`), so paging reads a single record. Groups indexed before this change still work, but page by scanning the thread's observation history. Paging needs a storage adapter that supports observation history filters, so upgrade it together with `@mastra/memory`. Convex users need to redeploy their Mastra server functions.
 
 ### Parameters
 
@@ -1184,11 +1247,25 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
   content={[
   {
     name: 'mode',
-    type: "'messages' | 'threads' | 'search'",
+    type: "'messages' | 'threads' | 'search' | 'observations'",
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists all threads for the current user. `"search"` finds messages by semantic similarity across all threads (requires vector store and embedder).',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires vector store and embedder). `"observations"` pages original observation groups around a search hit.',
+  },
+  {
+    name: 'groupId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Required for observations mode. Copy the observation group ID exactly from a search result or continuation call. IDs shown as `groupId@recordId` let paging read the record directly; a plain group ID also works.',
+  },
+  {
+    name: 'direction',
+    type: "'before' | 'after'",
+    isOptional: true,
+    description:
+      'For observations mode: return groups strictly before or after the anchor group. Omit to include the anchor and following groups.',
   },
   {
     name: 'query',
@@ -1232,7 +1309,8 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     type: 'number',
     isOptional: true,
     defaultValue: '20',
-    description: 'Maximum number of items to return per page.',
+    description:
+      'Page size, from 1 to 20. Defaults to 20 for messages and 5 groups for observations. Search defaults to 10 excerpts, plus compact references for evidence already in context. Bounded backfill can return fewer excerpts.',
   },
   {
     name: 'detail',
@@ -1240,7 +1318,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: "'low'",
     description:
-      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints.",
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted. Pass `viewAttachment` with `cursor` and `partIndex` to send inline attachment data to the model.",
   },
   {
     name: 'partType',
@@ -1271,18 +1349,26 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
       'Character position to continue reading a truncated single part. Only applies with `cursor` and `partIndex`. When a part is larger than the token budget, the result includes `nextCharOffset` — pass that exact value here in the next call to read the following chunk. The chunks concatenate to the original part text.',
   },
   {
+    name: 'viewAttachment',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Show the attachment itself rather than only describing it. Requires `cursor` and `partIndex`, and applies when that part is an `image` or `file`. Inline data such as base64 or data URIs is sent as a native media part. Attachments stored as remote URLs or provider file IDs, media types outside `image/*` and `application/pdf`, and oversized payloads come back as an explanation instead.',
+  },
+  {
     name: 'before',
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created before this date. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
+      'Filter to threads created before this date in threads mode, or observations dated before it in search mode. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
   },
   {
     name: 'after',
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created after this date. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
+      'Filter to threads created after this date in threads mode, or observations dated after it in search mode. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
   },
 ]}
 />
@@ -1403,12 +1489,13 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     name: 'results',
     type: 'string',
     description:
-      'Formatted search results grouped by thread. Each result shows the thread title, thread ID, relevance score, message preview, and a cursor ID for browsing into that thread.',
+      'Search hits displayed by observation date, with excerpts or compact references for evidence already in context. Full entries include thread details, a relevance score, an observation group ID, and source message ranges.',
   },
   {
     name: 'count',
     type: 'number',
-    description: 'Number of matching messages found.',
+    description:
+      'Number of displayed observation groups, including compact references. Can exceed limit when search fills covered hits with additional excerpts.',
   },
 ]}
 />

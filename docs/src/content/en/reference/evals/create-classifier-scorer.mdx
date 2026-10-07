@@ -17,6 +17,7 @@ Agent scorer runs contain message objects that `Classifier.evaluate()` can't acc
 
 ```typescript title="src/mastra/scorers/response-quality.ts"
 import { Classifier } from '@mastra/core/classifier'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { createClassifierScorer } from '@mastra/core/evals'
 import {
   getAssistantMessageFromRunOutput,
@@ -25,7 +26,7 @@ import {
 
 const responseJudge = new Classifier({
   id: 'response-judge',
-  model,
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     quality: {
       type: 'score',

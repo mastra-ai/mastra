@@ -67,7 +67,16 @@ const componentEntries = (directory: string, prefix: string) => {
 const typeDeclarations = () =>
   dts({
     insertTypesEntry: true,
-    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    exclude: [
+      'vite.config.ts',
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/*.stories.ts',
+      'src/**/*.stories.tsx',
+      'src/**/__tests__/**',
+      'src/test/**',
+      '.storybook/**',
+    ],
     afterDiagnostic: diagnostics => {
       if (diagnostics.length > 0) {
         throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
@@ -105,9 +114,9 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/lib/keyboard', 'keyboard'),
         ...fileEntries('src/lib/sort', 'sort'),
         ...fileEntries('src/components', 'components'),
-        ...fileEntries('src/store', 'store'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
+        ...fileEntries('src/lib/form', 'lib/form'),
         ...componentEntries('src/ds/components', 'components'),
         ...componentEntries('src/ds/layout', 'layout'),
         ...componentEntries('src/ds/new', 'new'),

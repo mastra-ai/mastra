@@ -1,10 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
@@ -12,7 +15,6 @@ import { useNavigate } from 'react-router';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [
   {
@@ -113,11 +115,11 @@ export const SkillBuilderStarter = () => {
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-center font-display text-title tracking-tight text-foreground md:text-display">
+        <Txt font="display" as="h1" variant="title" tone="ink" className="starter-heading text-center">
           What skill do you want to build?
-        </h1>
+        </Txt>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <div
             className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
@@ -155,7 +157,7 @@ export const SkillBuilderStarter = () => {
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
 
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((example, i) => {
@@ -168,13 +170,15 @@ export const SkillBuilderStarter = () => {
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
                 className={cn(
-                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-caption hover:border-border-strong hover:bg-fill-subtle',
+                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 hover:border-border-strong hover:bg-fill-subtle',
                   quietTextHover,
                   controlStateColorTransition,
                 )}
               >
                 <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
-                {example.title}
+                <Txt as="span" variant="caption" className="block">
+                  {example.title}
+                </Txt>
               </button>
             );
           })}

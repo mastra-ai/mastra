@@ -1,27 +1,18 @@
-import { ToolCallMono } from './tool-call';
 import { ToolCallEdit } from './tool-call-edit';
-import { stringifyToolValue, toolEdit } from './tool-presentation';
+import { ToolCallMono } from './tool-call-mono';
+import { toolEdit, visibleToolArgumentsText } from './tool-presentation';
+import type { ToolArgumentsInput } from './tool-presentation';
 
-export interface ToolCallArgumentsProps {
-  toolName: string;
-  args: unknown;
-  argsText?: string;
-  hideArguments?: boolean;
+export interface ToolCallArgumentsProps extends ToolArgumentsInput {
   'data-testid'?: string;
+  showFullContent?: boolean;
 }
 
-export function ToolCallArguments({
-  toolName,
-  args,
-  argsText,
-  hideArguments,
-  'data-testid': testId,
-}: ToolCallArgumentsProps) {
-  const edit = toolEdit(toolName, args);
-  if (edit) return <ToolCallEdit edit={edit} />;
-  if (hideArguments) return null;
+export function ToolCallArguments({ 'data-testid': testId, showFullContent, ...input }: ToolCallArgumentsProps) {
+  const edit = toolEdit(input.toolName, input.args);
+  if (edit) return <ToolCallEdit edit={edit} showFullContent={showFullContent} />;
 
-  const text = args === undefined ? argsText : stringifyToolValue(args);
+  const text = visibleToolArgumentsText(input);
   if (!text) return null;
 
   return (

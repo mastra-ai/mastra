@@ -1504,6 +1504,46 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('step metadata cleanup', () => {
+    it('should strip the raw provider response body but keep response headers', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const headers = { 'x-request-id': 'req_1', 'x-ratelimit-remaining-tokens': '1000' };
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {},
+            stepResult: { reason: 'stop' },
+            metadata: {
+              modelMetadata: { modelId: 'gpt-4o-mini', modelProvider: 'openai' },
+              request: { body: '{}' },
+              body: { id: 'resp_1', output: [{ type: 'message', content: 'x'.repeat(1000) }] },
+              headers,
+            },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      const metadata = stepSpans[0]!.metadata as Record<string, unknown>;
+      expect(metadata).not.toHaveProperty('body');
+      expect(metadata).not.toHaveProperty('request');
+      expect(metadata.headers).toEqual(headers);
+      expect(metadata.modelMetadata).toEqual({ modelId: 'gpt-4o-mini', modelProvider: 'openai' });
+    });
+  });
+
   describe('tool-result preview in step input', () => {
     it('should show transformed tool-result providerOptions from final inputMessages', async () => {
       const modelSpan = tracing.startSpan({
@@ -1940,7 +1980,7 @@ describe('ModelSpanTracker', () => {
       modelSpan.end();
     });
 
-    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+    it('applies inference context (parameters / providerOptions / availableTools / tools / toolChoice / responseFormat) set via setInferenceContext', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1952,6 +1992,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -1978,6 +2019,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });

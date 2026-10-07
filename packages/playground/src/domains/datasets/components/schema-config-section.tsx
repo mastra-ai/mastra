@@ -1,18 +1,19 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
-import { useWorkflowSchema } from '../hooks/use-workflow-schema';
 import { SchemaField } from './schema-settings/schema-field';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';
@@ -48,13 +49,14 @@ export function SchemaConfigSection({
   const [scorerTargetType, setScorerTargetType] = useState<ScorerTargetType>('agent');
 
   // Fetch workflows for workflow source selection
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
-  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   // Static schemas for agent and scorer
   const agentSchema = useAgentSchema();
@@ -174,13 +176,12 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2 text-subheading')}>
+      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
         <ChevronRight className="h-4 w-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 
       <CollapsibleContent className="space-y-4 pt-4">
-        {/* JSON Schema info notification */}
         <Notice variant="info" title="JSON Schema Format">
           <Notice.Message>
             Schemas use{' '}
@@ -188,7 +189,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-accent5Lighter underline"
+              className="underline hover:text-info-indicator"
             >
               JSON Schema
             </a>{' '}
@@ -196,28 +197,26 @@ export function SchemaConfigSection({
           </Notice.Message>
         </Notice>
 
-        {/* Source selector */}
-        <div className="space-y-2">
-          <FieldBlock.Label name="schema-source" size="bigger">
-            Import From
-          </FieldBlock.Label>
-          <div className="flex items-center gap-2">
-            <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
-              <SelectTrigger id="input-schema-source" size="sm" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="custom">Custom</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-                <SelectItem value="workflow">Workflow</SelectItem>
-                <SelectItem value="scorer">Scorer</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <Field className="w-40">
+              <FieldLabel size="bigger">Import From</FieldLabel>
+              <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
+                <SelectTrigger size="sm" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="workflow">Workflow</SelectItem>
+                  <SelectItem value="scorer">Scorer</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
-            {/* Workflow picker when workflow source selected */}
             {sourceType === 'workflow' && (
               <Select value={selectedWorkflow ?? ''} onValueChange={setSelectedWorkflow} disabled={disabled}>
-                <SelectTrigger size="sm" className="w-48">
+                <SelectTrigger aria-label="Workflow" size="sm" className="w-48">
                   <SelectValue placeholder="Select workflow..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -240,19 +239,19 @@ export function SchemaConfigSection({
               </Select>
             )}
 
-            {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-caption text-muted-foreground">Loading schema...</span>
+              <Txt as="span" variant="caption" tone="muted">
+                Loading schema...
+              </Txt>
             )}
 
-            {/* Scorer target type picker */}
             {sourceType === 'scorer' && (
               <Select
                 value={scorerTargetType}
                 onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
                 disabled={disabled}
               >
-                <SelectTrigger size="sm" className="w-32">
+                <SelectTrigger aria-label="Scorer target type" size="sm" className="w-32">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -263,20 +262,17 @@ export function SchemaConfigSection({
             )}
           </div>
 
-          {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}
-            </p>
+            </Txt>
           )}
         </div>
 
-        {/* Schema fields */}
         <SchemaField
           label="Input Schema"
-          schemaType="input"
           value={inputSchema}
           onChange={handleInputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.inputSchema : undefined}
@@ -285,7 +281,6 @@ export function SchemaConfigSection({
 
         <SchemaField
           label="Ground Truth Schema"
-          schemaType="output"
           value={outputSchema}
           onChange={handleOutputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.outputSchema : undefined}
@@ -294,7 +289,6 @@ export function SchemaConfigSection({
 
         <SchemaField
           label="Request Context Schema"
-          schemaType="requestContext"
           value={requestContextSchema}
           onChange={handleRequestContextSchemaChange}
           autoPopulate={false}

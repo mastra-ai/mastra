@@ -189,7 +189,7 @@ describe('RerunExperimentButton', () => {
     await screen.findByRole('dialog', { name: /run experiment/i });
 
     // Then the name/description inputs are prefilled and sent with the new run
-    expect((screen.getByLabelText('Name *') as HTMLInputElement).value).toBe('Original run');
+    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Original run');
     expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Original description');
 
     await waitFor(() =>

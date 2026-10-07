@@ -396,6 +396,96 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
   it.each([
     ['default', createWorkflow],
     ['evented', createEventedWorkflow],
+  ] as const)('%s engine finishes a partial cancel when it is retried', async (_, create) => {
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const parent = (create as typeof createWorkflow)({ id: 'parent', inputSchema: schema, outputSchema: schema })
+      .then(createStep({ id: 'child', inputSchema: schema, outputSchema: schema, execute: async () => ({}) }))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { parent } });
+
+    await store.persistWorkflowSnapshot({
+      workflowName: 'parent',
+      runId: 'p1',
+      snapshot: seedParentWithChildren(['c-ok', 'c-broken']),
+    });
+    for (const id of ['c-ok', 'c-broken']) {
+      await store.persistWorkflowSnapshot({ workflowName: 'child', runId: id, snapshot: snapshot(id, 'suspended') });
+    }
+
+    const original = store.updateWorkflowState.bind(store);
+    let broken = true;
+    store.updateWorkflowState = async args => {
+      if (broken && args.runId === 'c-broken') throw new Error('write failed');
+      return original(args);
+    };
+
+    const first = await (await parent.createRun({ runId: 'p1' })).cancel();
+    expect(first.failed.map(f => f.runId)).toEqual(['c-broken']);
+    expect((await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: 'p1' }))?.status).toBe('canceled');
+
+    broken = false;
+    const retry = await (await parent.createRun({ runId: 'p1' })).cancel();
+
+    expect(retry.failed).toEqual([]);
+    expect((await store.loadWorkflowSnapshot({ workflowName: 'child', runId: 'c-broken' }))?.status).toBe('canceled');
+    expect((await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: 'p1' }))?.status).toBe('canceled');
+  });
+
+  it.each([
+    ['default', 'parallel'],
+    ['default', 'branch'],
+    ['evented', 'parallel'],
+    ['evented', 'branch'],
+  ] as const)('%s engine cancels a suspended nested run inside .%s() from a recreated run', async (engine, shape) => {
+    const evented = engine === 'evented';
+    const build = () => {
+      const wf = evented ? createEventedWorkflow : createWorkflow;
+      const step = evented ? createEventedStep : createStep;
+      const child = wf({ id: 'child', inputSchema: schema, outputSchema: schema })
+        .then(step({ id: 'wait', inputSchema: schema, outputSchema: schema, execute: async ({ suspend }) => suspend({}) }))
+        .commit();
+      const other = step({ id: 'other', inputSchema: schema, outputSchema: schema, execute: async () => ({}) });
+      const parent = (wf as typeof createWorkflow)({ id: 'parent', inputSchema: schema, outputSchema: z.any() });
+      return (
+        shape === 'parallel' ? parent.parallel([child, other]) : parent.branch([[async () => true, child]])
+      ).commit();
+    };
+
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const pubsub = () => (evented ? { pubsub: new EventEmitterPubSub() } : {});
+    const processA = new Mastra({ logger: false, storage, ...pubsub(), workflows: { parent: build() } });
+    const processB = new Mastra({ logger: false, storage, ...pubsub(), workflows: { parent: build() } });
+    if (evented) await processA.startWorkers();
+    try {
+      const run = await processA.getWorkflow('parent').createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      if (evented) await processA.stopWorkers();
+
+      const { runs } = await store.listWorkflowRuns({});
+      const nested = runs.filter(r => r.workflowName === 'child');
+      expect(nested.length).toBeGreaterThan(0);
+
+      if (evented) await processB.startWorkers();
+      const result = await (await processB.getWorkflow('parent').createRun({ runId: run.runId })).cancel();
+
+      expect(result.failed).toEqual([]);
+      for (const r of [{ workflowName: 'parent', runId: run.runId }, ...nested]) {
+        const snap = await store.loadWorkflowSnapshot({ workflowName: r.workflowName, runId: r.runId });
+        expect(snap?.status, r.workflowName).toBe('canceled');
+      }
+    } finally {
+      if (evented) {
+        await processA.stopWorkers();
+        await processB.stopWorkers();
+      }
+    }
+  });
+
+  it.each([
+    ['default', createWorkflow],
+    ['evented', createEventedWorkflow],
   ] as const)('%s engine reports the run itself when its cancellation cannot be persisted', async (_, create) => {
     const storage = new MockStore();
     const store = (await storage.getStore('workflows'))!;

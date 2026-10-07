@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../test/msw-server';
 import type { TraceSignalManagement } from '../../trace-intelligence-context';
@@ -12,12 +12,6 @@ import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityIndex } from '../trace-intelligence-entity-index';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from '../trace-intelligence-entity-index';
 import { customSignalEntityResponse, entityIndexResponse } from './fixtures/entity-index';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => cleanup());
 
@@ -166,12 +160,12 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('textbox', { name: 'Filter entities' }), { target: { value: 'billing' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'billing' } });
 
       await waitFor(() => expect(screen.queryByText('support-agent')).not.toBeTruthy());
       expect(screen.getByText('billing-agent')).toBeTruthy();
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Filter entities' }), { target: { value: 'missing' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'missing' } });
       expect(await screen.findByText('No entities match your search')).toBeTruthy();
     });
 
@@ -296,7 +290,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       );
 
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('textbox', { name: 'Filter entities' }), { target: { value: 'support' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter entities' }), { target: { value: 'support' } });
       await waitFor(() => expect(onSearchChange).toHaveBeenCalledWith('support'));
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
       expect(onViewChange).toHaveBeenCalledWith('compact');

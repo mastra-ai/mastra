@@ -5,14 +5,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
-import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }];
@@ -27,10 +26,23 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset, error } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
-  const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
-  const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
+  const versionA = useDatasetItems({
+    datasetId: datasetId ?? '',
+    search: undefined,
+    version: versionNumbers[0] ?? null,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+  const versionB = useDatasetItems({
+    datasetId: datasetId ?? '',
+    search: undefined,
+    version: versionNumbers[1] ?? null,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
   const itemsA = useMemo(() => versionA.data ?? [], [versionA.data]);
   const itemsB = useMemo(() => versionB.data ?? [], [versionB.data]);

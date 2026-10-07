@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteChannelInputSchema = z.object({
   channelId: z.string().describe('The ID of the channel to delete. Example: "41771983423143937"'),
@@ -61,15 +62,7 @@ export function deleteChannelTool(proxy: PlatformProxy) {
     outputSchema: deleteChannelOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteChannelOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please provide a Discord bot token.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/channel#deleteclose-channel
       const response = await platformProxy.delete({

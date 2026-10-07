@@ -1,9 +1,10 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, Code, FileText } from 'lucide-react';
+import { ChevronRight, Code as CodeIcon, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -40,12 +41,14 @@ function SkillContent({ content }: { content: string }) {
 
   return (
     <div className="group/content relative">
-      <ScrollArea maxHeight="24rem" viewPortClassName="px-4 pb-4" revealScrollbarOnHover={false}>
-        {raw ? (
-          <pre className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap">{content}</pre>
-        ) : (
-          <MarkdownRenderer className="text-caption text-muted-foreground">{content}</MarkdownRenderer>
-        )}
+      <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
+        <ScrollAreaViewport className="px-4 pb-4">
+          {raw ? (
+            <Code className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap" code={content} />
+          ) : (
+            <MarkdownRenderer className="text-muted-foreground text-caption">{content}</MarkdownRenderer>
+          )}
+        </ScrollAreaViewport>
       </ScrollArea>
       <Button
         size="icon-sm"
@@ -53,7 +56,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <Code />}
+        {raw ? <FileText /> : <CodeIcon />}
       </Button>
     </div>
   );
@@ -65,13 +68,13 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
       <Collapsible>
         <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <Txt as="span" variant="body" className="text-foreground">
+            <Txt tone="ink" as="span" variant="body">
               {title}
-              <Txt as="span" variant="caption" className="text-muted-foreground ml-2 font-mono">
+              <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
                 {skill.name}
               </Txt>
             </Txt>
-            <Txt as="span" variant="caption" className="text-muted-foreground">
+            <Txt tone="muted" as="span" variant="caption">
               {skill.description}
             </Txt>
           </div>
@@ -105,21 +108,21 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
     <SettingsContainer>
       <div className="flex flex-col gap-2 px-4 py-3">
         {roles.length === 0 ? (
-          <Txt as="p" variant="caption" className="text-muted-foreground">
+          <Txt tone="muted" as="p" variant="caption">
             This board declares no working roles.
           </Txt>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {roles.map(role => (
               <li key={role}>
-                <Txt as="span" variant="caption" className="text-muted-foreground font-mono">
+                <Txt font="mono" tone="muted" as="span" variant="caption">
                   {role}
                 </Txt>
               </li>
             ))}
           </ul>
         )}
-        <Txt as="p" variant="caption" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption">
           Kickoff instructions for this board are defined in code by its board definition; there is no skill to show
           here.
         </Txt>
@@ -131,7 +134,7 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
 function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
   return (
     <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
-      <Txt as="h4" variant="body" className="text-foreground m-0">
+      <Txt tone="ink" as="h4" variant="body" className="m-0">
         {board.title}
       </Txt>
       {isBuiltInBoard(board.id) ? (
@@ -156,24 +159,24 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
     >
       {skillsQuery.isPending && (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption" role="status">
           Loading skills…
         </Txt>
       )}
       {skillsQuery.error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
         </Txt>
       )}
       {catalog.error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           Installed boards could not be loaded; showing built-in skills ungrouped.
         </Txt>
       )}
       {boards === undefined ? (
         <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : boards.length === 0 ? (
-        <Txt as="p" variant="caption" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption">
           No boards are installed, so no board skills apply.
         </Txt>
       ) : (

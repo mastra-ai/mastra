@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
@@ -429,6 +430,35 @@ describe('TraceDataPanelView — the body', () => {
     expect(screen.queryByText('No spans match your search.')).toBeNull();
   });
 
+  it('keeps a single search field while loading, so the header does not jump when spans land', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+
+    expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
+    // The header owns the search; the tree placeholder starts straight at the legend, not with a second field.
+    const [placeholder] = screen.getAllByRole('status', { name: 'Loading spans' });
+    expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
+  });
+
+  it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
+    const { rerender } = render(
+      <TraceDataPanelView {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
+    );
+
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText('feedback body')).toBeNull();
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        feedbackTabSlot={() => <p>feedback body</p>}
+        messagesPanelSlot={<p>messages body</p>}
+      />,
+    );
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Messages', 'Feedback']);
+    expect(screen.getByText('messages body')).toBeTruthy();
+  });
+
   it('says a settled trace has no spans', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 
@@ -782,8 +812,7 @@ describe('TraceDataPanelView — messages column', () => {
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
       expect(columns().contains(messagesPanel)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
-      expect(columns().className).toContain('transition-[grid-template-columns]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
 
     it('orders the columns messages → trace → span', () => {
@@ -792,7 +821,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(2);
     });
 
     it('keeps the side column while the timeline view is active', () => {
@@ -823,7 +852,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
   });
 
@@ -833,7 +862,7 @@ describe('TraceDataPanelView — messages column', () => {
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
+      expect(within(columns()).queryAllByRole('separator', { hidden: true })).toHaveLength(0);
     });
   });
 });
@@ -853,7 +882,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(
       tree
         .closest('[data-slot="buttons-group"]')
-        ?.parentElement?.contains(screen.getByRole('textbox', { name: 'Search spans' })),
+        ?.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' })),
     ).toBe(true);
 
     fireEvent.click(timeline);
@@ -1034,7 +1063,7 @@ describe('TraceDataPanelView — side column views', () => {
 });
 
 describe('TraceDataPanelView — span search', () => {
-  const searchField = () => screen.getByRole('textbox', { name: /search spans/i }) as HTMLInputElement;
+  const searchField = () => screen.getByRole('searchbox', { name: /search spans/i }) as HTMLInputElement;
 
   const typeSearch = (value: string) => {
     fireEvent.change(searchField(), { target: { value } });
@@ -1057,7 +1086,7 @@ describe('TraceDataPanelView — span search', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 
     expect(screen.getByText(/no spans found for this trace/i)).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: /search spans/i })).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: /search spans/i })).toBeNull();
   });
 
   const renderDeep = (props: Partial<TraceDataPanelViewProps> = {}) =>

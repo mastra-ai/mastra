@@ -2,13 +2,13 @@ import type { BuilderAvailableModelsResponse, BuilderSettingsResponse } from '@m
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React, { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderAgentsPage from '..';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const builderEnabled: BuilderSettingsResponse = {
@@ -24,10 +24,6 @@ const unauthenticatedCapabilities = {
   enabled: true,
   login: { type: 'credentials' as const },
 } satisfies AuthCapabilities;
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
