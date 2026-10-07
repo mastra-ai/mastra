@@ -390,6 +390,12 @@ export interface SessionMachinery {
   getAgent(): Agent;
   /** Get the ephemeral state associated with an active or suspended run. */
   getRunScope(runId: string): RunScope | undefined;
+  /**
+   * Release a suspended run that was aborted instead of resumed: drop its
+   * run-scoped workflow registration and delete its snapshot rows, so it is no
+   * longer listed as suspended.
+   */
+  releaseSuspendedRun(runId: string): Promise<void>;
   /** Open a fresh subscription to a thread's agent event stream. */
   subscribeToThread(input: {
     agent?: Agent;
@@ -3772,6 +3778,7 @@ export class Session<TState = unknown> {
     const abortThreadId = this.thread.getId() ?? undefined;
     const wasGated = this.approval.isArmed({ threadId: abortThreadId });
     if (wasGated) {
+      const gatedRunId = this.run.getRunId();
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
       // start a successor run in that window, so bind it to this binding too.
@@ -3783,7 +3790,10 @@ export class Session<TState = unknown> {
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.#releaseApprovalGates({ threadId: abortThreadId }));
+        .finally(() => {
+          this.#releaseApprovalGates({ threadId: abortThreadId });
+          void this.#releaseSuspendedRuns(suspendedToolCalls, gatedRunId);
+        });
       return;
     }
 
@@ -3796,7 +3806,12 @@ export class Session<TState = unknown> {
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.completeDeferredAbort(origin));
+        .finally(() => {
+          this.completeDeferredAbort(origin);
+          // Release only after the teardown: a parked run's snapshot is kept so a
+          // later resume can find it, and this abort makes the run terminal.
+          void this.#releaseSuspendedRuns(suspendedToolCalls);
+        });
       return;
     }
 
@@ -3809,6 +3824,19 @@ export class Session<TState = unknown> {
    * claims it as soon as the gate releases, so a later abort of another run
    * cannot overwrite the origin this run's teardown is checked against.
    */
+  async #releaseSuspendedRuns(suspendedToolCalls: Array<{ runId: string }>, liveRunId?: string | null): Promise<void> {
+    const runIds = new Set(suspendedToolCalls.map(({ runId }) => runId));
+    for (const runId of runIds) {
+      // A live gated run finalizes (and cleans up) itself.
+      if (runId === liveRunId) continue;
+      try {
+        await this.machinery.releaseSuspendedRun(runId);
+      } catch (error) {
+        this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      }
+    }
+  }
+
   takeDeferredAbortOrigin(): { bindingGeneration: number; localOnly: boolean } | undefined {
     const origin = this.#deferredAbortOrigin;
     this.#deferredAbortOrigin = undefined;

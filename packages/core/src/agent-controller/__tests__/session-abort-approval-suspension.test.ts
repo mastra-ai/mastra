@@ -233,6 +233,39 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     });
   });
 
+  it.skipIf(durable)(
+    'Given a run parked in suspend(), When abort() is called, Then its registration and snapshot rows are released (#25903)',
+    async () => {
+      const { controller, session, agent, events } = await createHarness('abort-suspension-release', durable);
+      const mastra = controller.getMastra()!;
+
+      const ended = waitForAgentEnd(session, events);
+      let suspendedRunId: string | undefined;
+      session.subscribe((event: AgentControllerEvent) => {
+        if (event.type === 'tool_approval_required') {
+          void session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+        }
+        if (event.type === 'agent_end' && event.reason === 'suspended') {
+          suspendedRunId = session.suspensions.get({ toolCallId: 'call-1' })?.runId;
+          session.abort();
+        }
+      });
+
+      await session.sendMessage({ content: 'find dero' });
+      await ended;
+      expect(suspendedRunId).toBeDefined();
+
+      const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+      await vi.waitFor(async () => {
+        for (const workflowName of ['agentic-loop', 'executionWorkflow']) {
+          expect(await workflowsStore!.getWorkflowRunById({ runId: suspendedRunId!, workflowName })).toBeNull();
+        }
+        expect(mastra.__getRunScope(suspendedRunId!)).toBeUndefined();
+        expect((await agent.listSuspendedRuns({})).runs).toHaveLength(0);
+      });
+    },
+  );
+
   it('Given an approval gate and a retained suspended tool, When abort() is called, Then both tool calls are denied before teardown', async () => {
     const { controller, session, events } = await createHarness('abort-approval-and-suspension', durable);
 
