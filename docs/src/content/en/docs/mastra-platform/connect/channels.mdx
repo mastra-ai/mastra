@@ -7,58 +7,9 @@ packages:
 
 # Channels
 
-[Channels](/docs/channels) let people talk to your agents from Slack, Telegram, and Discord. Setting one up yourself means creating a bot in the vendor's console and passing its token to a channel package like `@mastra/telegram`. Using Connect, you can link provider accounts to your platform project. The platform stores the token, and [`channels()`](/reference/connect/channels) connects it to your Mastra project.
+[Channels](/docs/channels) let people talk to your agents from services such as Slack, Telegram, and Discord. Connect stores provider credentials on the platform and uses [`channels()`](/reference/connect/channels) to make those channels available in your Mastra application. It uses the same channel packages with platform-managed credentials, while vendor-side setup depends on the provider.
 
-Each platform's connection holds a different credential:
-
-- **Slack**: An app configuration token, from which Mastra creates a Slack app for each agent. Slack tools use a different kind of credential (a workspace authorization). The platform therefore lists Slack as two providers: **Slack channels** (`slack-channels`) for channels and **Slack** (`slack`) for [tools](/docs/mastra-platform/connect/tools).
-- **Discord**: A bot token from a Discord application you create. The same connection also gives agents Discord [tools](/docs/mastra-platform/connect/tools).
-- **Telegram**: A bot token from BotFather.
-
-## Set up a provider
-
-Create the vendor-side bot or app before adding its connection to your platform project.
-
-### Slack
-
-1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
-1. Generate an app configuration token for the workspace where the agent will run.
-1. Run `mastra connect add slack-channels` and complete the Slack authorization flow. The platform stores and rotates the configuration credential.
-1. Connect the channel to an agent in Studio. Mastra creates an app from a manifest and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
-
-The generated manifest subscribes to channel, group, direct-message, multi-person direct-message, and mention events. Its default bot scopes are `chat:write`, `chat:write.public`, `im:write`, `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `app_mentions:read`, `users:read`, `reactions:write`, `files:read`, and `assistant:write`. Slash commands also add the `commands` scope.
-
-The `slack-channels` connection is only for creating and installing channel apps. To give an agent Slack API tools, add a separate `slack` connection with workspace authorization.
-
-### Discord
-
-1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application.
-1. Open **Bot**, add a bot, then select **Reset Token** and copy the bot token.
-1. Under **Privileged Gateway Intents**, enable **Message Content Intent**. The Discord provider uses the Gateway for direct messages, mentions, and message events. Slash commands and button interactions use the HTTP interactions route instead.
-1. Run `mastra connect add discord` and enter the bot token.
-1. Connect the channel to an agent in Studio. If the bot isn't already in a server, open the generated authorization URL, choose the server, and approve the requested permissions.
-
-The generated authorization URL requests the `bot` and `applications.commands` scopes with these permissions:
-
-- **View Channels**
-- **Send Messages**
-- **Send Messages in Threads**
-- **Embed Links**
-- **Attach Files**
-- **Read Message History**
-- **Add Reactions**
-- **Use Application Commands**
-
-These permissions let the agent read and reply in channels and threads, send cards and files, add reactions, and register slash commands. They don't grant moderation or channel-management access. See the [Discord permissions reference](https://discord.com/developers/docs/topics/permissions#permissions-bitwise-permission-flags) to review or customize the permission bitfield.
-
-### Telegram
-
-1. Open [BotFather](https://t.me/botfather), run `/newbot`, and follow the prompts.
-1. Copy the bot token that BotFather returns.
-1. Run `mastra connect add telegram` and enter the bot token.
-1. Connect the channel to an agent in Studio. Mastra verifies the bot, creates a webhook secret, and registers the agent's public webhook URL with Telegram.
-
-Set `MASTRA_ENCRYPTION_KEY` on a persistent production server to encrypt Telegram's stored webhook secret. Mastra platform injects the public server URL used for webhook registration. A local server needs a public HTTPS tunnel for webhook delivery, or a self-managed `TelegramProvider` configured for polling.
+Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to install the package and configure your platform project.
 
 ## Add channels to Mastra
 
@@ -75,13 +26,64 @@ export const mastra = new Mastra({
 })
 ```
 
-`channels()` returns a promise. It creates a provider for each channel before `Mastra` starts. Their webhook routes exist from the first request. A provider starts working when the project gets an active connection for it, without a redeploy. A missing project ID or platform token makes the awaited call throw, which stops app startup. See the [errors table](/reference/connect/channels#errors) in the reference.
+This registers the channel providers and their routes. After adding a provider connection, use Studio to connect that channel to an agent. These are separate steps: the platform connection supplies credentials, and the agent's channel installation lets people message that agent.
 
-The providers are the same `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord` packages the [Channels](/docs/channels) guides configure by hand, installed for you by `@mastra/connect`. The only difference is where the credential comes from: your connection on the platform instead of an environment variable you manage.
+The channels available to your app are configured at startup, while their credentials resolve dynamically. See the [resolver reference](/reference/connect/channels#the-resolver) for route registration, connection refresh, and startup errors.
 
-## Configure a channel
+## Connect a provider
 
-Pass provider options under `providers`. `true` enables a channel with defaults, `false` leaves one out, and an options object configures it. Credentials always come from the connection, so options like `botToken` are ignored:
+The following steps cover Slack, Discord, and Telegram. Start your Mastra application before completing the agent connection in Studio.
+
+For webhook delivery and OAuth callbacks, your server needs a public URL reachable by the provider. Mastra platform supplies this URL. When hosting elsewhere, set `MASTRA_SERVER_URL` to your public server URL. Use a public HTTPS tunnel for local webhook development.
+
+### Slack
+
+Slack channels use an **app configuration token**, which lets Mastra create a Slack app for each agent. This is different from the workspace authorization used by Slack API tools:
+
+- `slack-channels` connects channel apps.
+- `slack` provides [Slack tools](/docs/mastra-platform/connect/tools).
+
+To use both, create a separate connection for each provider.
+
+1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
+1. Generate an app configuration token for the workspace where the agent will run.
+1. Run `mastra connect add slack-channels` and complete the authorization flow. The platform stores and rotates the configuration credential.
+1. Connect the channel to an agent in Studio. Mastra creates a Slack app and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
+
+See the [default Slack manifest](/reference/channels/slack-provider#default-manifest) for the requested scopes and event subscriptions.
+
+### Discord
+
+Create a Discord application and authorize it with a **bot token**, not a user OAuth token. The same `discord` connection can provide both a channel and Discord [tools](/docs/mastra-platform/connect/tools).
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application.
+1. Open **Bot**, add a bot, then select **Reset Token** and copy the bot token.
+1. Under **Privileged Gateway Intents**, enable **Message Content Intent**.
+1. Run `mastra connect add discord` and enter the bot token.
+1. Connect the channel to an agent in Studio. If the bot isn't already in a server, open the generated authorization URL, choose the server, and approve the requested permissions.
+
+Discord uses the Gateway for messages and the HTTP interactions route for slash commands and buttons. See [Discord permissions](/reference/connect/channels#discord-permissions) for the scopes and permissions requested by the bot invite.
+
+### Telegram
+
+Telegram uses a bot token from BotFather. Before connecting an agent, set `MASTRA_ENCRYPTION_KEY` on a persistent production server to encrypt the stored webhook secret. Without a key, the secret is stored unencrypted. Webhook mode also requires a public HTTPS server URL.
+
+1. Open [BotFather](https://t.me/botfather), run `/newbot`, and follow the prompts.
+1. Copy the bot token that BotFather returns.
+1. Run `mastra connect add telegram` and enter the bot token.
+1. Connect the channel to an agent in Studio. Mastra verifies the bot, creates a webhook secret, and registers the agent's public webhook URL with Telegram.
+
+For local development without a public webhook URL, the [Telegram provider reference](/reference/channels/telegram-provider) describes polling mode.
+
+## Configure available channels
+
+Use `providers` to select the channels your app exposes:
+
+```typescript
+channels({ providers: ['slack', 'discord'] })
+```
+
+Pass an object to configure a provider or pin a specific connection:
 
 ```typescript
 channels({
@@ -95,48 +97,11 @@ channels({
 })
 ```
 
-An array also works as an allowlist: `channels({ providers: ['discord', 'telegram'] })` exposes only those channels. The key for Slack is `slack`. The connection's provider ID `slack-channels` is also accepted, but using both spellings in one config throws. A provider ID that matches no channel throws when you call `channels()`.
+The configuration key `slack` refers to the `slack-channels` connection. Credentials come from the platform connection, not `providerOptions`. See the [`channels()` reference](/reference/connect/channels#parameters) for selection behavior, aliases, reserved options, and validation errors.
 
-See the [`channels()` reference](/reference/connect/channels) for every option. Which channels your app exposes is decided here, not per request: use `false` to leave one out.
+## Combine with a self-managed channel
 
-## Vary tools by channel
-
-When a message arrives through a channel, the agent runs with a `channel` entry on the [request context](/docs/server/request-context) that says where the message came from. Combine it with [`tools()`](/docs/mastra-platform/connect/tools#filter-tools-per-request) to give the agent a different toolset per conversation, such as read-only tools in group channels and the full set in direct messages:
-
-```typescript title="src/mastra/agents/assistant.ts"
-import { Agent } from '@mastra/core/agent'
-import type { ChannelContext } from '@mastra/core/channels'
-import { tools } from '@mastra/connect'
-
-const connected = tools()
-
-export const assistant = new Agent({
-  id: 'assistant',
-  name: 'assistant',
-  instructions: 'You help the team from Slack and Discord.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: async ({ requestContext }) => {
-    const channel = requestContext?.get('channel') as ChannelContext | undefined
-    const all = await connected()
-
-    // Anyone can talk to the agent in a group channel, so allow only read-only tools there.
-    // An allowlist is safer than blocking known write verbs: a tool the pattern
-    // doesn't anticipate, such as linear_archive_issue, stays excluded by default.
-    if (channel && !channel.isDM) {
-      return Object.fromEntries(
-        Object.entries(all).filter(([key]) => /_(get|list|search)_/.test(key)),
-      )
-    }
-    return all
-  },
-})
-```
-
-The channel context carries the platform, the channel and thread IDs, and the sender's identity, so the same pattern can branch per platform or per user. The [Slack guide](/integrations/channels/slack#request-context) lists every field.
-
-## Mix with a self-managed channel
-
-`new Mastra({ channels })` takes either a record of providers or one resolver. To run Connect channels next to a channel you configure yourself, merge them into one resolver: spread the Connect result in the callable and concatenate the routes:
+To use Connect for Slack and Discord while managing Telegram yourself, combine the providers in one resolver. Merge their routes too, so Mastra can register endpoints for both:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -144,15 +109,48 @@ import { channels } from '@mastra/connect'
 import { TelegramProvider } from '@mastra/telegram'
 import { assistant } from './agents/assistant'
 
-const connect = await channels({ providers: ['slack', 'discord'] })
+const connectChannels = await channels({ providers: ['slack', 'discord'] })
 const telegram = new TelegramProvider()
 
 export const mastra = new Mastra({
   agents: { assistant },
-  channels: Object.assign(async () => ({ ...(await connect()), telegram }), {
-    getRoutes: () => [...connect.getRoutes(), ...telegram.getRoutes()],
+  channels: Object.assign(async () => ({ ...(await connectChannels()), telegram }), {
+    getRoutes: () => [...connectChannels.getRoutes(), ...telegram.getRoutes()],
   }),
 })
 ```
 
-The self-managed provider keeps its own credential flow, so configure it as its [reference](/reference/channels/telegram-provider) describes. To configure every channel yourself, skip Connect entirely and follow the guides on [Channels](/docs/channels).
+Telegram is excluded from the Connect selection in this example. Configure the self-managed provider's credentials as described in the [Telegram provider reference](/reference/channels/telegram-provider).
+
+## Vary tools by channel
+
+Channel messages include a `channel` entry in [request context](/docs/server/request-context). Use it to vary an agent's tools by conversation type, alongside your application's access checks:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import type { ChannelContext } from '@mastra/core/channels'
+import { tools } from '@mastra/connect'
+
+const connectTools = tools({ providers: ['linear'] })
+const readTools = new Set(['linear_list_issues'])
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'You help the team track work in Linear from Slack and Discord.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: async ctx => {
+    const channel = ctx.requestContext?.get('channel') as ChannelContext | undefined
+    const all = await connectTools(ctx)
+
+    if (channel?.isDM && ctx.requestContext?.get('role') === 'operator') {
+      return all
+    }
+    return Object.fromEntries(Object.entries(all).filter(([key]) => readTools.has(key)))
+  },
+})
+```
+
+Only direct messages from users your application identifies as operators receive the full resolved Linear toolset. Other requests get only `linear_list_issues`. Set `role` in trusted server-side code after verifying the sender's identity and permissions, rather than granting write access based on conversation type alone.
+
+The channel context also includes the platform, channel and thread IDs, and sender identity. See the [channel context fields](/integrations/channels/slack#request-context) and [per-request tool filtering](/docs/mastra-platform/connect/tools#filter-tools-per-request).

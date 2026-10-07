@@ -105,6 +105,21 @@ Providers without an active connection don't appear in the resolved map. Their r
 
 Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, an unknown or malformed provider ID, both spellings of the Slack key) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `providers.<id>.connectionId` pins the choice. A failed background refresh also warns and keeps serving the cached snapshot; only an explicit `refresh()` rejects.
 
+## Discord permissions
+
+The Discord bot-invite URL requests the `bot` and `applications.commands` scopes with these permissions:
+
+- **View Channels**
+- **Send Messages**
+- **Send Messages in Threads**
+- **Embed Links**
+- **Attach Files**
+- **Read Message History**
+- **Add Reactions**
+- **Use Application Commands**
+
+These permissions support chat, threads, files, reactions, and slash commands without granting moderation or channel-management access. Override the permission bitfield through `providers.discord.providerOptions.permissions`. See the [Discord permissions reference](https://discord.com/developers/docs/topics/permissions#permissions-bitwise-permission-flags) for bit values.
+
 ## Errors
 
 Throws `MastraConnectError` with a `code` property:
