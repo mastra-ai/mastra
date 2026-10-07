@@ -57,7 +57,8 @@ describe('sub-agent background config derivation', () => {
 
     const tools = await parent.getToolsForExecution({ backgroundTaskEnabled: true });
 
-    expect(getChildTools).toHaveBeenCalledWith(expect.objectContaining({ backgroundTaskEnabled: true }));
+    // Converting child tools per call leaks schemas into zod's global registry (#26160)
+    expect(getChildTools).not.toHaveBeenCalled();
     expect(tools['agent-child']).toMatchObject({ backgroundConfig: { enabled: true } });
   });
 });

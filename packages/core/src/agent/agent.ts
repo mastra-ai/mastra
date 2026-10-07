@@ -1376,15 +1376,14 @@ export class Agent<
         }
       }
 
-      // 2. Any of a full Agent sub-agent's tools has backgroundConfig.enabled === true
+      // 2. Any of a full Agent sub-agent's tools has background.enabled === true.
+      // Inspect the raw tool definitions instead of converting them: conversion
+      // rebuilds every schema, which zod's global registry retains forever (#26160).
       if (subAgent instanceof Agent) {
-        const subAgentTools = await subAgent.getToolsForExecution({
-          requestContext,
-          backgroundTaskEnabled: true,
-        });
+        const subAgentTools = await subAgent.listTools({ requestContext, resolveWebSearch: false });
         if (subAgentTools && typeof subAgentTools === 'object') {
           for (const tool of Object.values(subAgentTools)) {
-            const bg = (tool as any)?.backgroundConfig as ToolBackgroundConfig | undefined;
+            const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
             if (bg?.enabled === true) {
               return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
             }
