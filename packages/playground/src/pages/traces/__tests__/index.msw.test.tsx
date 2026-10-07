@@ -10,8 +10,12 @@ import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
+  traceQueryFieldsWithTags,
+  traceQueryTagValues,
+  traceQueryWithoutDiscoveryCapabilities,
   traceQueryPage,
   traceQueryRegionValues,
   traceQuerySpanModelValues,
@@ -875,9 +879,14 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
-    it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
+  describe('when the URL carries filterTraceId, filterTags and filterEnvironment', () => {
+    it('renders one chip per filter in URL order, including tags', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
       await waitFor(() => {
@@ -885,11 +894,56 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      // Tags cannot be filtered by the trace query API, so no chip advertises them.
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
-        'Trace IDistrace-a',
-        'Environmentisprod',
-      ]);
+      const chips = Array.from(getFilterChips(), chip => chip.textContent).slice(1);
+      expect(chips).toHaveLength(3);
+      expect(chips[0]).toBe('Trace IDistrace-a');
+      expect(chips[1]).toContain('Tags');
+      expect(chips[1]).toContain('alpha');
+      expect(chips[2]).toBe('Environmentisprod');
+    });
+
+    it('sends the tag as an includes predicate to the trace query API', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?filterTags=alpha');
+
+      await waitFor(() => expect(JSON.stringify(bodies)).toContain('{"op":"includes","path":"tags","value":"alpha"}'));
+    });
+  });
+
+  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
+    it('loads the traces without sending the invalid comment predicate', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterFeedbackComment=wrong%20answer');
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(bodies.length).toBeGreaterThan(0);
+      expect(JSON.stringify(bodies)).not.toContain('"comment"');
+      expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
     });
   });
 
@@ -1475,6 +1529,80 @@ describe('Traces side panel span search', () => {
 
       await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
       expect(screen.getByText('weather tool')).toBeTruthy();
+    });
+  });
+});
+
+describe('Traces page tags filter', () => {
+  const renderAndSettle = async (path = '/traces') => {
+    const { queryClient } = renderPage(path);
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
+  };
+
+  describe('when the store supports trace query and discovery describes tags', () => {
+    it('offers Tags in the field step', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      expect(await screen.findByRole('option', { name: 'Tags' })).toBeTruthy();
+    });
+
+    it('suggests the tag values the store knows about', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/values`, () =>
+          HttpResponse.json(traceQueryTagValues),
+        ),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      fireEvent.click(await screen.findByRole('option', { name: 'Tags' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'is any of' }));
+      expect(await screen.findByRole('option', { name: 'production' })).toBeTruthy();
+      expect(screen.getByRole('option', { name: 'manual-review' })).toBeTruthy();
+    });
+  });
+
+  describe('when the store supports trace query but not discovery', () => {
+    it('never calls the fields endpoint and does not offer Tags', async () => {
+      let fieldRequests = 0;
+      setTracePageHandlers(traceQueryWithoutDiscoveryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () => {
+          fieldRequests++;
+          return HttpResponse.json(traceQueryFieldsWithTags);
+        }),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Tags' })).toBeNull();
+      expect(fieldRequests).toBe(0);
+    });
+  });
+
+  describe('when the store only supports the legacy list', () => {
+    it('does not offer Tags', async () => {
+      setTracePageHandlers(legacyTraceCapabilities);
+      await renderAndSettle();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Tags' })).toBeNull();
     });
   });
 });
