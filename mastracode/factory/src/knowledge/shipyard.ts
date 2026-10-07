@@ -78,6 +78,7 @@ export function createShipyardAccessProfile(options: { organizationId: string; m
       rootScopeAddress: maintainer ? 'org:mastra' : 'repo:mastra',
       baselineScopes: [],
       vouchedScopeAddresses: [maintainer ? 'principal:shipyard-maintainer' : 'principal:shipyard-public'],
+      importOperator: maintainer,
     };
   };
 }
