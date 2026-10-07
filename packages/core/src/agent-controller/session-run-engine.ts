@@ -228,6 +228,7 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 }
 
 type StreamState = {
+  resourceId: string;
   threadId?: string;
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
@@ -385,8 +386,12 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
-  createStreamState(threadId = this.#session.thread.getId() ?? undefined): StreamState {
+  createStreamState(
+    threadId = this.#session.thread.getId() ?? undefined,
+    resourceId = this.#session.identity.getResourceId(),
+  ): StreamState {
     return {
+      resourceId,
       threadId,
       currentMessage: this.createEmptyAssistantMessage(threadId),
       messageStarted: false,
@@ -1038,8 +1043,8 @@ export class SessionRunEngine {
         // a rebind during that await must not pair this run with the new
         // session's resource.
         const suspRunId = this.#session.run.getRunId();
-        const suspThreadId = this.#session.thread.getId();
-        const suspResourceId = this.#session.identity.getResourceId();
+        const suspThreadId = state.threadId;
+        const suspResourceId = state.resourceId;
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -1080,7 +1085,9 @@ export class SessionRunEngine {
 
         this.#session.emit({
           type: 'tool_suspended',
-          threadId: state.threadId,
+          resourceId: suspResourceId,
+          threadId: suspThreadId,
+          runId: suspRunId ?? undefined,
           toolCallId: suspToolCallId,
           toolName: suspToolName,
           args: suspArgs,
@@ -1096,6 +1103,7 @@ export class SessionRunEngine {
         this.#session.emit({ type: 'error', error: streamError });
         if (!(streamError instanceof AgentThreadLeaseLostError)) {
           this.retractFailedRunSuspensions({
+            resourceId: state.resourceId,
             threadId: state.threadId,
             runId: chunk.runId ?? this.#session.run.getRunId(),
             reason: streamError.message,
@@ -1718,27 +1726,32 @@ export class SessionRunEngine {
   }
 
   private retractFailedRunSuspensions({
+    resourceId,
     threadId,
     runId,
     reason,
   }: {
+    resourceId: string | undefined;
     threadId: string | undefined;
     runId: string | null;
     reason: string;
   }): void {
-    if (!threadId || !runId) return;
+    if (!resourceId || !threadId || !runId) return;
 
-    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ threadId, runId })) {
+    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
       this.#session.emit({
         type: 'tool_suspension_cancelled',
-        toolCallId,
-        toolName,
+        resourceId: suspension.resourceId,
+        threadId: suspension.threadId,
+        runId: suspension.runId,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
         reason,
       });
     }
   }
 
-  private async handleSubscribedStreamError(error: unknown, threadId: string | undefined): Promise<void> {
+  private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
@@ -1746,6 +1759,7 @@ export class SessionRunEngine {
       this.#session.emit({ type: 'error', error: streamError });
       if (!(streamError instanceof AgentThreadLeaseLostError)) {
         this.retractFailedRunSuspensions({
+          resourceId,
           threadId,
           runId: this.#session.run.getRunId(),
           reason: streamError.message,
@@ -1758,7 +1772,9 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
-    const threadId = this.#session.thread.getId() ?? undefined;
+    const binding = this.#session.stream.getBinding({ subscription });
+    if (!binding) return;
+    const { resourceId, threadId } = binding;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
@@ -1780,7 +1796,7 @@ export class SessionRunEngine {
         if (runId && abortedRunId) abortedRunId = undefined;
 
         if (!currentRun) {
-          currentRun = this.createStreamState(threadId);
+          currentRun = this.createStreamState(threadId, resourceId);
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
@@ -1840,7 +1856,7 @@ export class SessionRunEngine {
             }
           }
         } catch (error) {
-          await this.handleSubscribedStreamError(error, threadId);
+          await this.handleSubscribedStreamError(error, resourceId, threadId);
           currentRun = undefined;
         }
       }
@@ -1873,7 +1889,7 @@ export class SessionRunEngine {
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error, threadId);
+        await this.handleSubscribedStreamError(error, resourceId, threadId);
       }
     }
   }
