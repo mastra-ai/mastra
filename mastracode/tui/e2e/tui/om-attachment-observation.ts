@@ -75,7 +75,7 @@ export const omAttachmentObservationScenario = {
     await runtime.waitForScreenText(/\[image\]/i, terminal, 8_000);
 
     terminal.submit('');
-    await runtime.waitForScreenText(/OM_ATTACHMENT_STEP_DONE/i, terminal, 12_000);
+    await runtime.waitForScreenText(/OM_ATTACHMENT_STEP_DONE/i, terminal, 45_000);
     await runtime.waitForScreenText(/User submitted an image attachment for OM observation/i, terminal, 45_000);
     await runtime.waitForScreenText(/Current task:\s+OM attachment observation e2e complete/i, terminal, 45_000);
     await runtime.waitForScreenText(/Suggested response:\s+Continue the recovery loop/i, terminal, 45_000);

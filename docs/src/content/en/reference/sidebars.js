@@ -171,7 +171,6 @@ const sidebars = {
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
         { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
-
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
@@ -201,6 +200,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'connect/channels', label: 'channels()' },
+        { type: 'doc', id: 'connect/credential', label: 'credential()' },
+        { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
+        { type: 'doc', id: 'connect/tools', label: 'tools()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
@@ -225,7 +235,6 @@ const sidebars = {
         { type: 'doc', id: 'core/getScorerById', label: '.getScorerById()' },
         { type: 'doc', id: 'core/getServer', label: '.getServer()' },
         { type: 'doc', id: 'core/getStorage', label: '.getStorage()' },
-
         { type: 'doc', id: 'core/getTool', label: '.getTool()' },
         { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },

@@ -316,6 +316,8 @@ export async function runIdleLoop<
   hooks?: PostPipeHooks,
 ): Promise<TReturn> {
   const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
+  // Inner calls re-merge defaultOptions; force false so an inherited default cannot re-enter the wrapper.
+  (restStreamOptions as Record<string, any>).untilIdle = false;
 
   const defaultOptions = await agent.getDefaultOptions({
     requestContext: streamOptions?.requestContext,

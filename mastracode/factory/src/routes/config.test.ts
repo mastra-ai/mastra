@@ -7,12 +7,10 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
-import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { buildProviderAccess, ConfigRoutes, listProviders } from './config.js';
+import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
@@ -204,6 +202,44 @@ describe('listProviders', () => {
   });
 });
 
+describe('listProviders with deployment-provided providers', () => {
+  const controller = makeAgentController([
+    { provider: 'amazon-bedrock', hasApiKey: true },
+    { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+  ]);
+
+  it('omits Bedrock in tenant mode unless the deployment opted in', async () => {
+    const list = await listProviders({ controller, tenantCredentials: [] });
+    expect(list.map(p => p.provider)).toEqual(['anthropic']);
+  });
+
+  it("reports Bedrock as 'deployment' in tenant mode when opted in", async () => {
+    const list = await listProviders({
+      controller,
+      tenantCredentials: [],
+      deploymentProviders: new Set(['amazon-bedrock']),
+    });
+    expect(list.find(p => p.provider === 'amazon-bedrock')).toEqual({
+      provider: 'amazon-bedrock',
+      source: 'deployment',
+    });
+  });
+
+  it('omits Bedrock when opted in but the server has no AWS credentials', async () => {
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'amazon-bedrock', hasApiKey: false }]),
+      tenantCredentials: [],
+      deploymentProviders: new Set(['amazon-bedrock']),
+    });
+    expect(list).toEqual([]);
+  });
+
+  it('leaves local mode unchanged', async () => {
+    const list = await listProviders({ controller, authStorage: makeAuthStorage({}) });
+    expect(list.find(p => p.provider === 'amazon-bedrock')?.source).toBe('env');
+  });
+});
+
 describe('buildProviderAccess', () => {
   it('does not expose catalog or environment credentials in tenant mode', async () => {
     const access = await buildProviderAccess({
@@ -250,6 +286,56 @@ describe('buildProviderAccess', () => {
 
     expect(access.cerebras).toBe('apikey');
     expect(access.xai).toBe('apikey');
+  });
+
+  describe('deployment-provided providers', () => {
+    const bedrockCatalog = (hasApiKey: boolean) => makeAgentController([{ provider: 'amazon-bedrock', hasApiKey }]);
+    const bedrockKeyRow = [
+      {
+        provider: 'amazon-bedrock',
+        scope: 'org' as const,
+        credential: { type: 'api_key' as const, key: 'pasted-key' },
+        updatedAt: new Date(),
+      },
+    ];
+
+    it('grants Bedrock in tenant mode when the deployment opted in and has AWS credentials', async () => {
+      const access = await buildProviderAccess({
+        controller: bedrockCatalog(true),
+        tenantCredentials: [],
+        deploymentProviders: new Set(['amazon-bedrock']),
+      });
+      expect(access['amazon-bedrock']).toBe('apikey');
+    });
+
+    it('denies Bedrock in tenant mode without the opt-in, even with a stored tenant key', async () => {
+      const access = await buildProviderAccess({ controller: bedrockCatalog(true), tenantCredentials: bedrockKeyRow });
+      expect(access['amazon-bedrock']).toBe(false);
+    });
+
+    it('denies Bedrock when opted in but the server has no AWS credentials', async () => {
+      const access = await buildProviderAccess({
+        controller: bedrockCatalog(false),
+        tenantCredentials: bedrockKeyRow,
+        deploymentProviders: new Set(['amazon-bedrock']),
+      });
+      expect(access['amazon-bedrock']).toBe(false);
+    });
+
+    it('keeps local mode unchanged: server AWS credentials are enough', async () => {
+      const access = await buildProviderAccess({ controller: bedrockCatalog(true) });
+      expect(access['amazon-bedrock']).toBe('apikey');
+    });
+  });
+});
+
+describe('resolveDeploymentModelProviders', () => {
+  it('keeps supported providers and warns about the rest', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect([...resolveDeploymentModelProviders([' amazon-bedrock', 'openai', ''])]).toEqual(['amazon-bedrock']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"openai"'));
+    expect(resolveDeploymentModelProviders(undefined).size).toBe(0);
+    warn.mockRestore();
   });
 });
 
@@ -300,6 +386,17 @@ describe('provider key routes with a tenant', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+  it('rejects a per-account key for a deployment-provided provider', async () => {
+    const res = await buildApp(userA).request('/web/config/providers/amazon-bedrock/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'bedrock-key', scope: 'org' }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('provider_configured_by_deployment');
+    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock')).toBeUndefined();
+  });
 
   it('stores a user-scoped key by default, invisible to other members', async () => {
     const res = await putKey(buildApp(userA), { key: 'sk-mine' });
@@ -425,7 +522,7 @@ describe('provider key routes with a tenant', () => {
   });
 });
 
-// ── Available models + DB-backed model packs (tenant mode) ──────────────
+// ── Available models + DB-backed custom providers (tenant mode) ─────────
 
 describe('GET /web/config/models', () => {
   it('returns only credentialed models with their ids', async () => {
@@ -478,6 +575,49 @@ describe('GET /web/config/models', () => {
     });
   });
 
+  it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
+    const seed = await createFactoryStorageForTests();
+    const controller = {
+      listAvailableModels: async () => [
+        {
+          id: 'amazon-bedrock/anthropic.claude-x',
+          modelName: 'anthropic.claude-x',
+          provider: 'amazon-bedrock',
+          hasApiKey: true,
+        },
+      ],
+    };
+    const request = async (deploymentProviders?: ReadonlySet<string>) => {
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as any,
+        new ConfigRoutes({
+          auth: fakeRouteAuth(),
+          controller,
+          modelCredentials: seed.credentials,
+          deploymentProviders,
+        }).routes(),
+      );
+      return (await app.request('/web/config/models')).json();
+    };
+
+    expect(await request()).toEqual({ models: [] });
+    expect(await request(new Set(['amazon-bedrock']))).toEqual({
+      models: [
+        {
+          id: 'amazon-bedrock/anthropic.claude-x',
+          provider: 'amazon-bedrock',
+          modelName: 'anthropic.claude-x',
+          hasApiKey: true,
+        },
+      ],
+    });
+  });
+
   it('appends the caller org custom provider models from the DB', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.customProviders.upsert({
@@ -515,34 +655,13 @@ describe('GET /web/config/models', () => {
   });
 });
 
-describe('model pack routes with a tenant', () => {
+describe('default model routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
+  const controller = makeAgentController([]);
+  const userA = { workosId: 'user-a', organizationId: 'org1' };
+  const userB = { workosId: 'user-b', organizationId: 'org1' };
 
-  function sourceSession(sessionId: string): SourceControlSession {
-    const now = new Date();
-    return {
-      id: `row-${sessionId}`,
-      sessionId,
-      projectRepositoryId: 'repo-1',
-      orgId: 'org1',
-      userId: 'user-a',
-      branch: `user/${sessionId}`,
-      title: null,
-      baseBranch: 'main',
-      sandboxId: 'sandbox-1',
-      sandboxWorkdir: `/tmp/${sessionId}`,
-      materializedAt: null,
-      firstMessageAt: null,
-      firstMeaningfulExecAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-  }
-  const controller = makeAgentController([
-    { provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
-  ]);
-
-  function buildApp(user: { workosId: string; organizationId?: string } | null, routeController = controller) {
+  function buildApp(user: { workosId: string; organizationId?: string } | null, includeStorage = true) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       if (user) c.set('factoryAuthUser' as never, user as never);
@@ -552,27 +671,16 @@ describe('model pack routes with a tenant', () => {
       app as any,
       new ConfigRoutes({
         auth: fakeRouteAuth(),
-        controller: routeController,
-        modelPacks: seed.modelPacks,
-        sourceControlSessions: {
-          getBySessionId: vi.fn(async sessionId => (sessionId === 'session-1' ? sourceSession(sessionId) : null)),
-        },
+        controller,
+        modelDefaults: includeStorage ? seed.modelDefaults : undefined,
       }).routes(),
     );
     return app;
   }
 
-  const userA = { workosId: 'user-a', organizationId: 'org1' };
-  const userB = { workosId: 'user-b', organizationId: 'org1' };
-  const userOtherOrg = { workosId: 'user-c', organizationId: 'org2' };
-  const packBody = {
-    name: 'Team pack',
-    models: { build: 'anthropic/claude-fable-5', plan: 'anthropic/claude-fable-5', fast: 'anthropic/claude-haiku-4-5' },
-  };
-
-  const postPack = (app: Hono, body: unknown) =>
-    app.request('/web/config/model-packs', {
-      method: 'POST',
+  const putDefault = (app: Hono, body: unknown) =>
+    app.request('/web/config/default-model', {
+      method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -585,317 +693,72 @@ describe('model pack routes with a tenant', () => {
     vi.clearAllMocks();
   });
 
-  it('rejects unauthenticated pack access when web auth is enabled', async () => {
-    const res = await buildApp(null).request('/web/config/model-packs');
+  it('rejects unauthenticated access when web auth is enabled', async () => {
+    const res = await buildApp(null).request('/web/config/default-model');
     expect(res.status).toBe(401);
   });
 
-  it('includes only builtin packs reachable through tenant credentials', async () => {
-    const controllerWithoutEnv = makeAgentController([
-      { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
-      { provider: 'openai', hasApiKey: true, apiKeyEnvVar: 'OPENAI_API_KEY' },
-    ]);
-    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
-      type: 'oauth',
-      refresh: 'refresh',
-      access: 'access',
-      expires: Date.now() + 60_000,
+  it('returns 503 when default-model storage is unavailable', async () => {
+    const res = await buildApp(userA, false).request('/web/config/default-model');
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'model_defaults_unavailable' });
+  });
+
+  it('returns null when the user has no default model', async () => {
+    const res = await buildApp(userA).request('/web/config/default-model');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ modelId: null });
+  });
+
+  it('validates and persists a default model per user', async () => {
+    const invalid = await putDefault(buildApp(userA), { modelId: '   ' });
+    expect(invalid.status).toBe(400);
+
+    const nullBody = await putDefault(buildApp(userA), null);
+    expect(nullBody.status).toBe(400);
+    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+
+    const oversized = await putDefault(buildApp(userA), { modelId: 'm'.repeat(257) });
+    expect(oversized.status).toBe(400);
+    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+
+    const saved = await putDefault(buildApp(userA), { modelId: ' openai/gpt-5.6 ' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ ok: true, modelId: 'openai/gpt-5.6' });
+    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
+      modelId: 'openai/gpt-5.6',
     });
+
+    const userAResponse = await buildApp(userA).request('/web/config/default-model');
+    const userBResponse = await buildApp(userB).request('/web/config/default-model');
+    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6' });
+    expect(await userBResponse.json()).toEqual({ modelId: null });
+  });
+
+  it('clears a personal default model', async () => {
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const cleared = await buildApp(userA).request('/web/config/default-model', { method: 'DELETE' });
+    expect(cleared.status).toBe(200);
+    expect(await cleared.json()).toEqual({ ok: true, modelId: null });
+    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
+  });
+
+  it('uses the local sentinel org and user when auth is disabled', async () => {
     const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, userA as never);
-      await next();
-    });
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: fakeRouteAuth(),
-        controller: controllerWithoutEnv,
-        modelCredentials: seed.credentials,
-        modelPacks: seed.modelPacks,
+        auth: fakeRouteAuth({ enabled: false }),
+        controller,
+        modelDefaults: seed.modelDefaults,
       }).routes(),
     );
 
-    const listed = await app.request('/web/config/model-packs');
-    expect(listed.status).toBe(200);
-    const { packs } = await listed.json();
-    expect(packs.find((p: { id: string }) => p.id === 'anthropic')).toMatchObject({
-      name: 'Anthropic',
-      custom: false,
+    const saved = await putDefault(app, { modelId: 'anthropic/claude-sonnet-4-5' });
+    expect(saved.status).toBe(200);
+    expect(await seed.modelDefaults.get({ orgId: 'local', userId: 'local' })).toMatchObject({
+      modelId: 'anthropic/claude-sonnet-4-5',
     });
-    expect(packs.find((p: { id: string }) => p.id === 'openai')).toBeUndefined();
-  });
-
-  it('persists custom packs in the org-scoped storage domain', async () => {
-    const created = await postPack(buildApp(userA), packBody);
-    expect(created.status).toBe(200);
-    const { pack } = await created.json();
-    expect(pack).toMatchObject({ name: 'Team pack', models: packBody.models });
-    expect(pack.id).toMatch(/^custom:/);
-
-    const stored = await seed.modelPacks.list({ orgId: 'org1' });
-    expect(stored).toHaveLength(1);
-    expect(stored[0]).toMatchObject({ createdBy: 'user-a', name: 'Team pack' });
-
-    const listed = await buildApp(userA).request('/web/config/model-packs');
-    const { packs } = await listed.json();
-    expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true, active: false });
-  });
-
-  it('persists one personal active pack without requiring an open session', async () => {
-    const created = await postPack(buildApp(userA), packBody);
-    const { pack } = await created.json();
-    const activated = await buildApp(userA).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}/activate`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-
-    expect(activated.status).toBe(200);
-    expect(await activated.json()).toEqual({ ok: true, target: 'default', activePackId: pack.id });
-    expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
-      packId: pack.id,
-      models: packBody.models,
-    });
-
-    const userAList = await buildApp(userA).request('/web/config/model-packs');
-    const userBList = await buildApp(userB).request('/web/config/model-packs');
-    expect((await userAList.json()).activePackId).toBe(pack.id);
-    expect((await userBList.json()).activePackId).toBeNull();
-  });
-
-  it('clears a personal default pack', async () => {
-    const created = await postPack(buildApp(userA), packBody);
-    const { pack } = await created.json();
-    await buildApp(userA).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}/activate`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'default' }),
-    });
-
-    const cleared = await buildApp(userA).request('/web/config/model-packs/active', { method: 'DELETE' });
-
-    expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ok: true, activePackId: null });
-    expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-  });
-
-  it('rejects unknown activation targets', async () => {
-    const response = await buildApp(userA).request('/web/config/model-packs/anthropic/activate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'factory' }),
-    });
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'target must be "default" or "session"' });
-  });
-
-  it('applies a pack to a no-scope user session without changing the personal default', async () => {
-    const created = await postPack(buildApp(userA), packBody);
-    const { pack } = await created.json();
-    const modelSwitch = vi.fn().mockResolvedValue(undefined);
-    let sessionPackId: string | null = null;
-    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-      if (key === 'activeModelPackId' && typeof value === 'string') sessionPackId = value;
-    });
-    const sessionController = {
-      ...controller,
-      getSessionByResource: vi.fn().mockResolvedValue({
-        mode: { get: () => 'build' },
-        model: { switch: modelSwitch },
-        subagents: { model: { set: vi.fn().mockResolvedValue(undefined) } },
-        thread: { getId: () => 'session-1', getSetting: vi.fn().mockImplementation(() => sessionPackId), setSetting },
-      }),
-    };
-
-    const activated = await buildApp(userA, sessionController).request(
-      `/web/config/model-packs/${encodeURIComponent(pack.id)}/activate`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
-      },
-    );
-
-    expect(activated.status).toBe(200);
-    expect(await activated.json()).toEqual({ ok: true, target: 'session', sessionPackId: pack.id });
-    expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({ modelId: packBody.models.build });
-    expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
-    expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-
-    const listed = await buildApp(userA, sessionController).request('/web/config/model-packs?resourceId=session-1');
-    expect(await listed.json()).toMatchObject({ activePackId: null, sessionPackId: pack.id });
-  });
-
-  it('rejects a scoped request when only the persisted workdir column matches (fail closed)', async () => {
-    // The persisted sandboxWorkdir is observability, never an authorization
-    // input — a row written under a previous provider could authorize a
-    // stale scope. With no live memo entry, a scope matching the persisted
-    // column must NOT authorize.
-    __clearSessionSandboxesForTests();
-    const sessionController = { ...controller, getSessionByResource: vi.fn().mockResolvedValue({}) };
-    const app = buildApp(userA, sessionController);
-
-    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
-
-    expect(listed.status).toBe(404);
-    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
-  });
-
-  it('authorizes a scoped request against the live memoized workdir', async () => {
-    __clearSessionSandboxesForTests();
-    // Local-provider memo seed: the derived workdir is <workingDirectory>/<repo name>.
-    getSessionSandbox(
-      'row-session-1',
-      'seed/session-1',
-      () => ({ id: 'sb-live', provider: 'local', workingDirectory: '/live' }) as never,
-    );
-    const sessionController = {
-      ...controller,
-      getSessionByResource: vi.fn().mockResolvedValue({
-        thread: { getId: () => 'session-1', getSetting: vi.fn(() => null) },
-      }),
-    };
-    const app = buildApp(userA, sessionController);
-
-    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Flive%2Fsession-1');
-
-    expect(listed.status).toBe(200);
-    expect(sessionController.getSessionByResource).toHaveBeenCalledWith('session-1', '/live/session-1');
-  });
-
-  it("does not expose or mutate another user's session pack", async () => {
-    const sessionController = {
-      ...controller,
-      getSessionByResource: vi.fn().mockResolvedValue({}),
-    };
-    const app = buildApp(userB, sessionController);
-
-    const listed = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
-    const activated = await app.request('/web/config/model-packs/anthropic/activate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
-    });
-
-    expect(listed.status).toBe(404);
-    expect(activated.status).toBe(404);
-    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
-  });
-
-  it("does not expose or mutate another user's session pack when scope is omitted", async () => {
-    const sessionController = {
-      ...controller,
-      getSessionByResource: vi.fn().mockResolvedValue({}),
-    };
-    const app = buildApp(userB, sessionController);
-
-    const listed = await app.request('/web/config/model-packs?resourceId=session-1');
-    const activated = await app.request('/web/config/model-packs/anthropic/activate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
-    });
-
-    expect(listed.status).toBe(404);
-    expect(activated.status).toBe(404);
-    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
-  });
-
-  it('rejects a valid resource with a different session scope', async () => {
-    const sessionController = {
-      ...controller,
-      getSessionByResource: vi.fn().mockResolvedValue({}),
-    };
-
-    const response = await buildApp(userA, sessionController).request('/web/config/model-packs/anthropic/activate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/other-session' }),
-    });
-
-    expect(response.status).toBe(404);
-    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
-  });
-
-  it('fails closed when session authorization storage is unavailable', async () => {
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, userA as never);
-      await next();
-    });
-    mountApiRoutes(
-      app as any,
-      new ConfigRoutes({ auth: fakeRouteAuth(), controller, modelPacks: seed.modelPacks }).routes(),
-    );
-
-    const response = await app.request('/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1');
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'session_authorization_unavailable' });
-  });
-
-  it('keeps packs invisible across organizations', async () => {
-    await postPack(buildApp(userA), packBody);
-
-    const otherOrgList = await buildApp(userOtherOrg).request('/web/config/model-packs');
-    const { packs } = await otherOrgList.json();
-    expect(packs.filter((p: { custom: boolean }) => p.custom)).toEqual([]);
-  });
-
-  it('deletes a pack by its custom-prefixed id within the org only', async () => {
-    const created = await postPack(buildApp(userA), packBody);
-    const { pack } = await created.json();
-
-    const crossOrg = await buildApp(userOtherOrg).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, {
-      method: 'DELETE',
-    });
-    expect(crossOrg.status).toBe(404);
-    expect(await seed.modelPacks.list({ orgId: 'org1' })).toHaveLength(1);
-
-    const res = await buildApp(userA).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, {
-      method: 'DELETE',
-    });
-    expect(res.status).toBe(200);
-    expect(await seed.modelPacks.list({ orgId: 'org1' })).toEqual([]);
-  });
-
-  it('validates the pack payload', async () => {
-    expect((await postPack(buildApp(userA), { models: packBody.models })).status).toBe(400);
-    expect((await postPack(buildApp(userA), { name: 'x', models: { build: 'a/b' } })).status).toBe(400);
-  });
-
-  it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
-    const app = new Hono();
-    mountApiRoutes(
-      app as any,
-      new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller, modelPacks: seed.modelPacks }).routes(),
-    );
-
-    const created = await postPack(app, packBody);
-    expect(created.status).toBe(200);
-    const { pack } = await created.json();
-
-    const stored = await seed.modelPacks.list({ orgId: 'local' });
-    expect(stored).toHaveLength(1);
-    expect(stored[0]).toMatchObject({ createdBy: 'local', name: 'Team pack' });
-
-    const listed = await app.request('/web/config/model-packs');
-    const { packs } = await listed.json();
-    expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true });
-
-    const deleted = await app.request(`/web/config/model-packs/${encodeURIComponent(pack.id)}`, { method: 'DELETE' });
-    expect(deleted.status).toBe(200);
-    expect(await seed.modelPacks.list({ orgId: 'local' })).toEqual([]);
-  });
-
-  it('returns 503 when pack storage is unavailable', async () => {
-    const app = new Hono();
-    mountApiRoutes(app as any, new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller }).routes());
-    const res = await app.request('/web/config/model-packs');
-    expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: 'model_packs_unavailable' });
   });
 });
 

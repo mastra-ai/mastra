@@ -1,13 +1,20 @@
 {
-  "attachment": ["agent-max", "code-max", "text-max"],
+  "attachment": ["agent-max", "claude-opus-latest", "code-max", "gemini-pro-latest", "gpt-sol-latest", "text-max"],
   "temperature": ["agent-prime", "agent-standard", "code-prime", "code-standard", "text-prime", "text-standard"],
   "structuredOutput": [
     "agent-max",
     "agent-prime",
     "agent-standard",
+    "bytedance-pro-latest",
+    "claude-opus-latest",
     "code-max",
     "code-prime",
     "code-standard",
+    "deepseek-pro-latest",
+    "gemini-pro-latest",
+    "glm-latest",
+    "gpt-sol-latest",
+    "minimax-latest",
     "text-max",
     "text-prime",
     "text-standard"

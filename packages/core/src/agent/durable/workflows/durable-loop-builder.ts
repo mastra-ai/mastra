@@ -12,6 +12,7 @@ import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
@@ -878,14 +879,26 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               finalText = finishResult.outputText;
             }
 
+            const tripwire = finishResult.tripwire;
+            if (tripwire && pubsub) {
+              await emitChunkEvent(pubsub, state.runId, {
+                type: 'tripwire',
+                runId: state.runId,
+                from: ChunkFrom.AGENT,
+                payload: tripwire,
+              });
+            }
+
             const finalOutput = {
               messageListState: finishResult.messageListState,
               messageId: state.messageId,
-              stepResult: state.lastStepResult || {
-                reason: 'stop',
-                warnings: [],
-                isContinued: false,
-              },
+              stepResult: tripwire
+                ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
+                : state.lastStepResult || {
+                    reason: 'stop',
+                    warnings: [],
+                    isContinued: false,
+                  },
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,

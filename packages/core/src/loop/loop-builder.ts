@@ -650,6 +650,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return false;
       }
 
+      // A processor tripwire ends the run; the iteration hook cannot resume it.
+      if (reason === 'tripwire') {
+        typedInputData.stepResult!.isContinued = false;
+        return false;
+      }
+
       return typedInputData.stepResult?.isContinued ?? false;
     };
   }

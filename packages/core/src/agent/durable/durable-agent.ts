@@ -913,6 +913,35 @@ export class DurableAgent<
       });
     }
 
+    // Recovery re-drives the run with `restart()`, which the engine only accepts
+    // for runs that were active when the process stopped (`running`/`waiting`, or
+    // a nested `pending` run) plus the terminal snapshots `_restart` short-circuits
+    // (`success`/`failed`/`tripwire`). Every other status would otherwise surface
+    // as a single "This workflow run was not active" error chunk, asynchronously,
+    // long after `recover()` resolved. Reject up front and say what to do instead:
+    // a run suspended on a tool call or an approval is continued with `resume()`.
+    const restartable =
+      snapshot.status === 'running' ||
+      snapshot.status === 'waiting' ||
+      snapshot.status === 'success' ||
+      snapshot.status === 'failed' ||
+      snapshot.status === 'tripwire' ||
+      (snapshot.status === 'pending' &&
+        snapshot.context != null &&
+        Object.prototype.hasOwnProperty.call(snapshot.context, 'input'));
+    if (!restartable) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" recover(${runId}): run status is "${snapshot.status}", ` +
+          `so the run cannot be recovered. Runs suspended on a tool call or an approval are ` +
+          `continued with resume(${runId}, ...), not recover().`,
+        details: { agentName: this.name, runId, status: snapshot.status },
+      });
+    }
+
     return { snapshot, workflowInput };
   }
 
@@ -2077,7 +2106,7 @@ export class DurableAgent<
   #isRunExecuting(runId: string): boolean {
     return (
       this.#runRegistry.get(runId) !== undefined ||
-      globalRunRegistry.get(runId) !== undefined ||
+      (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) !== undefined) ||
       agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
     );
   }
@@ -2090,7 +2119,9 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
-    const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
+    const controller = (
+      this.#runRegistry.get(runId) ?? (globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined)
+    )?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
@@ -3919,6 +3950,37 @@ export class DurableAgent<
 
     const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
+    let structuredOutput = observedEntry?.structuredOutput;
+
+    if (!structuredOutput) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      let workflowInput: DurableAgenticWorkflowInput | undefined;
+
+      for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+        const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
+        if (!persisted) continue;
+
+        const snapshot =
+          typeof persisted.snapshot === 'string'
+            ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+            : persisted.snapshot;
+        const persistedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+        if (persistedInput?.__workflowKind !== 'durable-agent') continue;
+
+        workflowInput = persistedInput;
+        break;
+      }
+
+      if (workflowInput) {
+        const persistedStructuredOutput = workflowInput.options?.structuredOutput;
+        if (persistedStructuredOutput?.schema) {
+          structuredOutput = {
+            ...persistedStructuredOutput,
+            schema: toStandardSchema(persistedStructuredOutput.schema),
+          };
+        }
+      }
+    }
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -3957,7 +4019,7 @@ export class DurableAgent<
         }
       },
       onSuspended: options?.onSuspended,
-      structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
+      structuredOutput: structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
       processorStates: this.#runRegistry.get(runId)?.processorStates,
       returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
@@ -4115,8 +4177,12 @@ export class DurableAgent<
         // per-agent singleton. Without this, every run's events would be
         // unresolvable and the run would hang. Uses the resolved engine so
         // this stays consistent with the workflow instance just created.
+        //
+        // `distributed`: every process sharing this Mastra setup registers the
+        // same loop, so a dedicated worker process can run it. Keeping its
+        // events local would strand runs started in a process without workers.
         if (this.resolveWorkflowEngine() === 'evented') {
-          this.#mastra.__registerInternalWorkflow(this.#workflow);
+          this.#mastra.__registerInternalWorkflow(this.#workflow, undefined, { distributed: true });
         }
       }
     }

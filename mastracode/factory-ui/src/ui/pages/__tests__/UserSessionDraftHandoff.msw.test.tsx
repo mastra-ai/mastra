@@ -44,6 +44,7 @@ interface DraftRoute {
 interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
   failModeSwitch?: boolean;
+  defaultModelId?: string | null;
 }
 
 function readSentMessage(body: unknown): string {
@@ -51,7 +52,11 @@ function readSentMessage(body: unknown): string {
   return typeof body.message === 'string' ? body.message : '';
 }
 
-function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRouteOptions = {}): DraftRoute {
+function stubDraftRoute({
+  factoryProjectGate,
+  failModeSwitch = false,
+  defaultModelId = null,
+}: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
@@ -102,7 +107,7 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [] })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
     http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
@@ -211,6 +216,26 @@ describe('a user session draft on the real thread route', () => {
     route.finishWorkspace();
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
+  });
+
+  it('does not switch models when the draft already uses the personal default', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'keep the default');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['keep the default']));
+    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
   });
 
   it('keeps typing free while the draft model resolves, but holds the send', async () => {

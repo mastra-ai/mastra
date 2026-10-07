@@ -2,6 +2,7 @@ import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent } from '@mastra/c
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { __setObservabilityFeaturesForTest } from './features';
 import type { PosthogExporterConfig } from './tracing';
 import { PosthogExporter } from './tracing';
 
@@ -46,6 +47,9 @@ describe('PosthogExporter', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    // Default to the older pairing, where MODEL_GENERATION is the model call.
+    // The MODEL_INFERENCE mapping is covered in its own describe block.
+    __setObservabilityFeaturesForTest(undefined);
   });
 
   afterEach(async () => {
@@ -289,6 +293,337 @@ describe('PosthogExporter', () => {
       await exportSpanLifecycle(exporter, generation);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }));
+    });
+
+    describe('with MODEL_INFERENCE spans', () => {
+      beforeEach(() => {
+        __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+      });
+
+      const traceId = 'trace-inference';
+      const usage = { inputTokens: 10, outputTokens: 5 };
+      const generationMessages = [
+        { role: 'system', content: 'You are helpful' },
+        { role: 'user', content: 'Weather in Paris and Rome?' },
+      ];
+      const generation = createSpan({
+        id: 'generation',
+        traceId,
+        parentSpanId: 'agent-run',
+        type: SpanType.MODEL_GENERATION,
+        input: { messages: generationMessages },
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          usage: { inputTokens: 20, outputTokens: 10 },
+          tools: [
+            { type: 'function', name: 'a' },
+            { type: 'function', name: 'hidden' },
+          ],
+        },
+      });
+
+      interface ToolCallFixture {
+        id: string;
+        name: string;
+        args: Record<string, unknown>;
+        result?: unknown;
+        error?: string;
+        /**
+         * Export as a provider-executed PROVIDER_TOOL_CALL span. `success` is
+         * omitted when the span ended without a result.
+         */
+        provider?: { success?: boolean };
+        /** Milliseconds after the step started that the tool started. */
+        startedAfter: number;
+      }
+      interface CallFixture {
+        offered: string[];
+        text?: string;
+        toolCalls?: ToolCallFixture[];
+      }
+
+      /**
+       * Exports generation → step → inference (+ tools) per call in the order the
+       * loop emits them: the inference ends, then its tools run, then the step ends.
+       */
+      async function exportGeneration(calls: CallFixture[]) {
+        const { output: _output, endTime: _endTime, ...startedGeneration } = generation;
+        await exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: startedGeneration as AnyExportedSpan,
+        });
+        for (const [step, call] of calls.entries()) {
+          const stepSpan = createSpan({
+            id: `step-${step}`,
+            traceId,
+            parentSpanId: generation.id,
+            type: SpanType.MODEL_STEP,
+          });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: stepSpan });
+          const inferenceSpan = createSpan({
+            id: `inference-${step}`,
+            traceId,
+            parentSpanId: stepSpan.id,
+            type: SpanType.MODEL_INFERENCE,
+            output: {
+              text: call.text ?? '',
+              toolCalls: (call.toolCalls ?? []).map(tc => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
+            },
+            attributes: {
+              model: 'gpt-4o',
+              provider: 'openai',
+              usage,
+              tools: call.offered.map(name => ({ type: 'function', name })),
+            },
+          });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: inferenceSpan });
+          // Tools run in parallel; they end in array order but started at `startedAfter`.
+          const toolSpans = (call.toolCalls ?? []).map(tc =>
+            createSpan({
+              id: `tool-${tc.id}`,
+              traceId,
+              parentSpanId: stepSpan.id,
+              type: tc.provider ? SpanType.PROVIDER_TOOL_CALL : SpanType.TOOL_CALL,
+              name: `tool: '${tc.name}'`,
+              startTime: new Date(stepSpan.startTime.getTime() + tc.startedAfter),
+              input: tc.args,
+              output: tc.result,
+              ...(tc.error ? { errorInfo: { message: tc.error } } : {}),
+              attributes: {
+                toolCallId: tc.id,
+                ...(tc.provider?.success !== undefined ? { success: tc.provider.success } : {}),
+              },
+            }),
+          );
+          for (const toolSpan of toolSpans) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: toolSpan });
+          }
+          for (const toolSpan of toolSpans) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: toolSpan });
+          }
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: stepSpan });
+        }
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: generation });
+      }
+
+      const captured = (event: string) =>
+        mockCapture.mock.calls.map(([message]) => message).filter(message => message.event === event);
+
+      const systemAndUser = [
+        { role: 'system', content: [{ type: 'text', text: 'You are helpful' }] },
+        { role: 'user', content: [{ type: 'text', text: 'Weather in Paris and Rome?' }] },
+      ];
+
+      it('should export one $ai_generation per provider call with the tools sent on that call', async () => {
+        await exportGeneration([
+          { offered: ['a'], text: 'answer 0' },
+          { offered: ['hidden'], text: 'answer 1' },
+        ]);
+
+        const generations = captured('$ai_generation');
+        expect(generations.map(message => message.properties.$ai_generation_id)).toEqual([
+          'inference-0',
+          'inference-1',
+        ]);
+        expect(generations.map(message => message.properties.$ai_tools.map((tool: any) => tool.function.name))).toEqual(
+          [['a'], ['hidden']],
+        );
+        expect(generations[0].properties).toMatchObject({
+          $ai_model: 'gpt-4o',
+          $ai_provider: 'openai',
+          $ai_input_tokens: 10,
+          $ai_output_tokens: 5,
+          $ai_parent_id: 'step-0',
+          $ai_input: systemAndUser,
+          $ai_output_choices: [{ role: 'assistant', content: [{ type: 'text', text: 'answer 0' }] }],
+        });
+      });
+
+      it('should give each call the conversation it received, with full tool arguments and results', async () => {
+        await exportGeneration([
+          {
+            offered: ['weather'],
+            toolCalls: [
+              { id: 'call-1', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 0 },
+            ],
+          },
+          {
+            offered: ['weather'],
+            toolCalls: [
+              { id: 'call-2', name: 'weather', args: { city: 'Rome' }, result: { tempC: 25 }, startedAfter: 0 },
+            ],
+          },
+          { offered: ['weather'], text: 'Paris is 21C, Rome is 25C.' },
+        ]);
+
+        const firstCallTurns = [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', id: 'call-1', function: { name: 'weather', arguments: { city: 'Paris' } } }],
+          },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'weather', output: { tempC: 21 } }],
+          },
+        ];
+        const secondCallTurns = [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', id: 'call-2', function: { name: 'weather', arguments: { city: 'Rome' } } }],
+          },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'weather', output: { tempC: 25 } }],
+          },
+        ];
+        expect(captured('$ai_generation').map(message => message.properties.$ai_input)).toEqual([
+          systemAndUser,
+          [...systemAndUser, ...firstCallTurns],
+          [...systemAndUser, ...firstCallTurns, ...secondCallTurns],
+        ]);
+      });
+
+      it('should order the results of parallel tool calls by when each tool started', async () => {
+        await exportGeneration([
+          {
+            offered: ['weather'],
+            toolCalls: [
+              { id: 'paris', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 20 },
+              { id: 'rome', name: 'weather', args: { city: 'Rome' }, error: 'Rome is unavailable', startedAfter: 10 },
+            ],
+          },
+          { offered: ['weather'], text: 'Paris is 21C.' },
+        ]);
+
+        const secondInput = captured('$ai_generation')[1].properties.$ai_input;
+        expect(secondInput.slice(2)).toEqual([
+          {
+            role: 'assistant',
+            content: [
+              { type: 'tool-call', id: 'paris', function: { name: 'weather', arguments: { city: 'Paris' } } },
+              { type: 'tool-call', id: 'rome', function: { name: 'weather', arguments: { city: 'Rome' } } },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'rome',
+                toolName: 'weather',
+                output: 'Rome is unavailable',
+                isError: true,
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'paris', toolName: 'weather', output: { tempC: 21 } }],
+          },
+        ]);
+      });
+
+      it('should include the results of provider-executed tools, marking failures as errors', async () => {
+        await exportGeneration([
+          {
+            offered: ['web_search'],
+            toolCalls: [
+              {
+                id: 'search-ok',
+                name: 'web_search',
+                args: { query: 'Paris weather' },
+                result: { results: ['21C'] },
+                provider: { success: true },
+                startedAfter: 0,
+              },
+              {
+                id: 'search-failed',
+                name: 'web_search',
+                args: { query: 'Rome weather' },
+                result: { error: 'rate limited' },
+                provider: { success: false },
+                startedAfter: 10,
+              },
+            ],
+          },
+          { offered: ['web_search'], text: 'Paris is 21C.' },
+        ]);
+
+        const secondInput = captured('$ai_generation')[1].properties.$ai_input;
+        expect(secondInput.slice(3)).toEqual([
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'search-ok',
+                toolName: 'web_search',
+                output: { results: ['21C'] },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'search-failed',
+                toolName: 'web_search',
+                output: { error: 'rate limited' },
+                isError: true,
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should skip provider-executed tool spans that ended without a result', async () => {
+        await exportGeneration([
+          {
+            offered: ['web_search'],
+            toolCalls: [
+              { id: 'search', name: 'web_search', args: { query: 'Paris weather' }, provider: {}, startedAfter: 0 },
+            ],
+          },
+          { offered: ['web_search'], text: 'No results.' },
+        ]);
+
+        const secondInput = captured('$ai_generation')[1].properties.$ai_input;
+        expect(secondInput.map((message: { role: string }) => message.role)).toEqual(['system', 'user', 'assistant']);
+      });
+
+      it('should export the wrapping MODEL_GENERATION as $ai_span that keeps the run usage', async () => {
+        await exportGeneration([
+          { offered: ['a'], text: 'answer 0' },
+          { offered: ['hidden'], text: 'answer 1' },
+        ]);
+
+        const generationSpan = captured('$ai_span').find(message => message.properties.$ai_span_id === 'generation');
+        expect(generationSpan).toBeDefined();
+        // PostHog only adds up $ai_input_tokens / $ai_output_tokens on $ai_generation events.
+        expect(generationSpan.properties.usage).toEqual({ inputTokens: 20, outputTokens: 10 });
+        expect(generationSpan.properties).not.toHaveProperty('$ai_input_tokens');
+        expect(generationSpan.properties).not.toHaveProperty('$ai_generation_id');
+      });
+
+      it('should keep MODEL_GENERATION as $ai_generation with an older @mastra/observability', async () => {
+        __setObservabilityFeaturesForTest(undefined);
+        const legacy = createSpan({
+          id: 'legacy-generation',
+          traceId,
+          parentSpanId: 'agent-run',
+          type: SpanType.MODEL_GENERATION,
+          attributes: { model: 'gpt-4o', provider: 'openai', usage },
+        });
+        await exportSpanLifecycle(exporter, legacy);
+
+        expect(captured('$ai_generation').map(message => message.properties.$ai_generation_id)).toEqual([
+          'legacy-generation',
+        ]);
+        expect(captured('$ai_generation')[0].properties).toMatchObject({ $ai_input_tokens: 10, $ai_output_tokens: 5 });
+      });
     });
 
     it('should map MODEL_STEP to $ai_span (non-root)', async () => {
