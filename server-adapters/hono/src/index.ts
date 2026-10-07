@@ -777,7 +777,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
-        if (getFGAProvider(this.mastra, c.get('requestContext'))) {
+        if (
+          getFGAProvider(this.mastra, c.get('requestContext')) ||
+          this.mastra.getServer()?.auth?.authorizeUserResource
+        ) {
           const contentType = c.req.header('content-type');
           if (contentType?.includes('application/json')) {
             try {
