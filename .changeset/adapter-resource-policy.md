@@ -1,6 +1,6 @@
 ---
-'@mastra/nestjs': patch
 '@mastra/hono': patch
+'@mastra/nestjs': patch
 ---
 
-The server's `authorizeUserResource` check now runs on NestJS built-in and custom API routes. Hono custom routes now read the request body for the check even without FGA, so a `resourceId` sent in the body is checked.
+Run the server's `authorizeUserResource` policy on every route. NestJS now checks it in its route handler and custom-route chain (custom routes read JSON bodies). Hono custom routes now read the request body for this check even when FGA isn't configured.
