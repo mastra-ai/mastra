@@ -4,6 +4,7 @@
  * each bundled copy of the `RequestContext` class would be a distinct type.
  */
 export interface AuthRequestContext {
+  // Keep method syntax: typed `RequestContext<Values>` only fits through bivariant method parameters.
   get(key: string): unknown;
 }
 
