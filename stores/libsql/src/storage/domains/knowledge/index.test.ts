@@ -7,6 +7,8 @@ import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { LibSQLStore } from '../..';
+import { withClientWriteLock } from '../../db/write-lock';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 describe('InMemory canonical parity', () => {
@@ -264,6 +266,25 @@ describe('KnowledgeLibSQL published v1 layout', () => {
     }
   });
 
+  it('opens Knowledge through the store on a database an earlier release initialized', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-v1-upgrade-${randomUUID()}.db`);
+    const client = createClient({ url: `file:${path}` });
+    const store = new LibSQLStore({ id: 'upgraded', url: `file:${path}` });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await store.init();
+
+      await store.getStore('knowledge');
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    } finally {
+      await store.close();
+      client.close();
+      await rm(path, { force: true });
+    }
+  });
+
   it('rejects an empty published layout missing one of its tables', async () => {
     const client = createClient({ url: ':memory:' });
     try {
@@ -356,5 +377,70 @@ describe('KnowledgeLibSQL storage isolation', () => {
     expect(derived.stores.knowledge!.getStorageIsolationKey()).toBe(
       new KnowledgeLibSQL({ url: 'file:shared.db' }).getStorageIsolationKey(),
     );
+  });
+});
+
+describe('KnowledgeLibSQL shared-database concurrency', () => {
+  it('claims outbox work once across concurrent store instances', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-claim-${randomUUID()}.db`);
+    const firstClient = createClient({ url: `file:${path}` });
+    const secondClient = createClient({ url: `file:${path}` });
+    try {
+      const first = new KnowledgeLibSQL({ client: firstClient });
+      const second = new KnowledgeLibSQL({ client: secondClient });
+      await first.init();
+      await second.init();
+      const scope = await first.createNode({ name: 'Scope', isScope: true, scopeIds: [] });
+      await first.createNode({ name: 'Concurrent', kind: 'task', scopeIds: [scope.id] });
+      const pending = await first.listSemanticOutbox({ status: 'pending' });
+      expect(pending.length).toBeGreaterThan(0);
+      const now = new Date(Math.max(...pending.map(entry => entry.availableAt.getTime())) + 1);
+
+      const [claimedFirst, claimedSecond] = await Promise.all([
+        first.claimSemanticOutbox({ workerId: 'first', limit: 100, now }),
+        second.claimSemanticOutbox({ workerId: 'second', limit: 100, now }),
+      ]);
+
+      const claimedIds = [...claimedFirst, ...claimedSecond].map(entry => entry.id);
+      expect([...claimedIds].sort()).toEqual(pending.map(entry => entry.id).sort());
+    } finally {
+      firstClient.close();
+      secondClient.close();
+      await rm(path, { force: true });
+    }
+  });
+
+  it('queues Knowledge writes behind a locked transaction on the same client', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const scope = await store.createNode({ name: 'Scope', isScope: true, scopeIds: [] });
+
+      let releaseLock!: () => void;
+      const lockReleased = new Promise<void>(resolve => {
+        releaseLock = resolve;
+      });
+      const lockedWrite = withClientWriteLock(client, async () => {
+        const transaction = await client.transaction('write');
+        await transaction.execute('SELECT 1');
+        await lockReleased;
+        await transaction.commit();
+      });
+
+      let nodeCreated = false;
+      const create = store.createNode({ name: 'Queued write', kind: 'task', scopeIds: [scope.id] }).then(node => {
+        nodeCreated = true;
+        return node;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(nodeCreated).toBe(false);
+
+      releaseLock();
+      const [, node] = await Promise.all([lockedWrite, create]);
+      expect(await store.getNode(node.id)).toEqual(expect.objectContaining({ name: 'Queued write' }));
+    } finally {
+      client.close();
+    }
   });
 });

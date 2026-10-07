@@ -1,9 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
-import { KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
+import {
+  KnowledgeSchemaError,
+  MastraCompositeStore,
+  TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_SCHEMA,
+} from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { PostgresStore } from '../..';
 import { PoolAdapter, RoutingDbClient } from '../../client';
 import { loadSchemaSnapshot } from '../../db/schema-snapshot';
 import { connectionString } from '../../test-utils';
@@ -248,6 +254,80 @@ describe('KnowledgePG published v1 layout', () => {
     await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
 
     expect(await knowledgeObjects(schemaName)).toEqual(before);
+  });
+
+  it('keeps ordinary store init independent of Knowledge', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_store_init');
+    await pool.query(
+      `INSERT INTO "${schemaName}".mastra_knowledge_nodes (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+    );
+    const store = new PostgresStore({ id: 'knowledge-store-init', connectionString, schemaName });
+    // Published Core releases without the knowledge-v2 feature init every domain from super.init().
+    const preV2CoreInit = vi
+      .spyOn(MastraCompositeStore.prototype, 'init')
+      .mockImplementation(async function (this: MastraCompositeStore) {
+        await Promise.all(Object.values(this.stores ?? {}).map(domain => domain?.init()));
+      });
+    try {
+      const knowledgeInit = vi.spyOn(store.stores.knowledge!, 'init');
+
+      await store.init();
+      await store.stores.memory!.saveThread({
+        thread: {
+          id: 'thread-1',
+          resourceId: 'resource-1',
+          title: 'kept',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      expect(knowledgeInit).not.toHaveBeenCalled();
+      preV2CoreInit.mockRestore();
+      await expect(store.getStore('knowledge')).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    } finally {
+      preV2CoreInit.mockRestore();
+      await store.close();
+    }
+  });
+
+  it('keeps the retired cursor table of another schema when replacing or resetting', async () => {
+    const emptySchema = await createSchemaWithPublishedKnowledgeV1('knowledge_retired_empty');
+    const rowsSchema = await createSchemaWithPublishedKnowledgeV1('knowledge_retired_rows');
+    const otherSchema = await createSchemaWithPublishedKnowledgeV1('knowledge_retired_other');
+    const cursorRow = (schemaName: string) =>
+      pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_CURSORS}" ("sourceThreadId",agent,"lastKnowledgeId","updatedAt") VALUES ('thread','observer','k1',NOW())`,
+      );
+    const tableExists = async (schemaName: string, table: string) =>
+      (await pool.query('SELECT to_regclass($1) AS oid', [`"${schemaName}"."${table}"`])).rows[0]?.oid !== null;
+    const marker = async (schemaName: string) =>
+      (await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`))
+        .rows[0]?.version;
+    // Unqualified names resolve to otherSchema, standing in for the default `public` schema.
+    const searchPathPool = new Pool({ connectionString, options: `-c search_path=${otherSchema}` });
+    try {
+      await cursorRow(otherSchema);
+      await cursorRow(rowsSchema);
+
+      await new KnowledgePG({ pool: searchPathPool, schemaName: emptySchema }).init();
+      expect(await marker(emptySchema)).toBe(1);
+      expect(await tableExists(emptySchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
+
+      const rowsStore = new KnowledgePG({ pool: searchPathPool, schemaName: rowsSchema });
+      await expect(rowsStore.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      await rowsStore.dangerouslyReset();
+      expect(await marker(rowsSchema)).toBe(1);
+      expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
+
+      const otherCursors = await pool.query(
+        `SELECT "sourceThreadId" FROM "${otherSchema}"."${TABLE_KNOWLEDGE_CURSORS}"`,
+      );
+      expect(otherCursors.rows).toEqual([{ sourceThreadId: 'thread' }]);
+    } finally {
+      await searchPathPool.end();
+    }
   });
 
   it('rejects an empty published layout carrying an unfamiliar index', async () => {
