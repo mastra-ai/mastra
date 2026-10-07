@@ -51,18 +51,18 @@ function suspendedTool(prompt: unknown) {
   return { suspendedToolCallId: toolCallId, suspendedToolRunId: runId };
 }
 
-const displayProductsTool = createTool({
-  id: 'displayProductsTool',
-  description: 'Show the customer a product carousel.',
-  inputSchema: z.object({ products: z.array(z.string()) }),
+const lookupTool = createTool({
+  id: 'lookupTool',
+  description: 'Look up a record.',
+  inputSchema: z.object({ query: z.string() }),
   execute: async input => input,
 });
 
 const delegate = (toolCallId: string, extra: object = {}) => ({
   type: 'tool-call' as const,
   toolCallId,
-  toolName: 'agent-shop',
-  input: JSON.stringify({ prompt: 'Buy the senior food', ...extra }),
+  toolName: 'agent-worker',
+  input: JSON.stringify({ prompt: 'Complete the task', ...extra }),
 });
 
 const askUser = (toolCallId: string, question: string) => ({
@@ -79,49 +79,49 @@ const text = (id: string, value: string) => [
 ];
 
 function buildAgents(storage: InMemoryStore) {
-  const shop = new Agent({
-    id: 'shop',
-    name: 'Shop',
-    description: 'Handles purchases.',
-    instructions: 'Handle the purchase.',
+  const worker = new Agent({
+    id: 'worker',
+    name: 'Worker',
+    description: 'Completes delegated tasks.',
+    instructions: 'Complete the task.',
     model: scriptedModel([
-      () => [askUser('ask-1', 'Which size?'), finish('tool-calls')],
-      () => [askUser('ask-2', 'Auto-Delivery?'), finish('tool-calls')],
-      () => [...text('s0', 'Added the 12kg bag to your cart.'), finish('stop')],
+      () => [askUser('ask-1', 'Which option?'), finish('tool-calls')],
+      () => [askUser('ask-2', 'Confirm?'), finish('tool-calls')],
+      () => [...text('w0', 'Task complete.'), finish('stop')],
     ]),
     tools: { askUserTool },
     memory: new MockMemory({ storage }),
     defaultOptions: { autoResumeSuspendedTools: true },
   });
 
-  const owner = new Agent({
-    id: 'owner',
-    name: 'Owner',
-    instructions: 'Recommend food, delegate purchases to the shop agent.',
+  const supervisor = new Agent({
+    id: 'supervisor',
+    name: 'Supervisor',
+    instructions: 'Look things up, delegate tasks to the worker agent.',
     model: scriptedModel([
       () => [
-        ...text('v0', 'Here is a food that suits a senior dog.'),
+        ...text('s0', 'Here is what I found.'),
         {
           type: 'tool-call' as const,
-          toolCallId: 'carousel-1',
-          toolName: 'displayProductsTool',
-          input: JSON.stringify({ products: ['senior-food'] }),
+          toolCallId: 'lookup-1',
+          toolName: 'lookupTool',
+          input: JSON.stringify({ query: 'record' }),
         },
         delegate('delegate-1'),
         finish('tool-calls'),
       ],
-      prompt => [delegate('delegate-2', { resumeData: '12kg', ...suspendedTool(prompt) }), finish('tool-calls')],
+      prompt => [delegate('delegate-2', { resumeData: 'Option A', ...suspendedTool(prompt) }), finish('tool-calls')],
       prompt => [delegate('delegate-3', { resumeData: 'Yes', ...suspendedTool(prompt) }), finish('tool-calls')],
-      () => [...text('v1', 'Done, the 12kg bag is in your cart.'), finish('stop')],
+      () => [...text('s1', 'All done.'), finish('stop')],
     ]),
-    tools: { displayProductsTool },
-    agents: { shop },
+    tools: { lookupTool },
+    agents: { worker },
     memory: new MockMemory({ storage }),
     defaultOptions: { autoResumeSuspendedTools: true },
   });
 
-  new Mastra({ agents: { owner, shop }, logger: false, storage });
-  return owner;
+  new Mastra({ agents: { supervisor, worker }, logger: false, storage });
+  return supervisor;
 }
 
 async function savedAssistantMessages(storage: InMemoryStore) {
@@ -150,43 +150,18 @@ function toolCallIdOwners(assistants: Awaited<ReturnType<typeof savedAssistantMe
 describe('sub-agent delegation auto-resume persistence', () => {
   it('saves each tool call in exactly one assistant message across resumes', async () => {
     const storage = new InMemoryStore();
-    const owner = buildAgents(storage);
+    const supervisor = buildAgents(storage);
     const memory = { thread: 'thread-1', resource: 'user-1' };
 
-    for (const content of ['I want to buy the senior food', '12kg', 'Yes']) {
-      const stream = await owner.stream(content, { memory });
-      for await (const _chunk of stream.fullStream) {
-        // drain
-      }
+    for (const content of ['Start the task', 'Option A', 'Yes']) {
+      const stream = await supervisor.stream(content, { memory });
+      await stream.consumeStream();
     }
 
-    const assistants = await savedAssistantMessages(storage);
-    const owners = toolCallIdOwners(assistants);
+    const owners = toolCallIdOwners(await savedAssistantMessages(storage));
 
-    const duplicated = [...owners.entries()].filter(([, messageIds]) => messageIds.length > 1);
-    if (duplicated.length > 0) {
-      for (const message of assistants) {
-        console.log(
-          JSON.stringify(
-            {
-              id: message.id,
-              threadId: message.threadId,
-              parts: ((message.content as any)?.parts ?? []).map((p: any) =>
-                p.type === 'tool-invocation'
-                  ? { type: p.type, toolCallId: p.toolInvocation.toolCallId, state: p.toolInvocation.state }
-                  : { type: p.type, text: p.text },
-              ),
-            },
-            null,
-            2,
-          ),
-        );
-      }
-    }
-    expect(duplicated).toEqual([]);
-
-    // Every scripted tool call was saved exactly once.
-    for (const toolCallId of ['carousel-1', 'delegate-1', 'delegate-2', 'delegate-3', 'ask-1', 'ask-2']) {
+    expect([...owners.entries()].filter(([, messageIds]) => messageIds.length > 1)).toEqual([]);
+    for (const toolCallId of ['lookup-1', 'delegate-1', 'delegate-2', 'delegate-3', 'ask-1', 'ask-2']) {
       expect(owners.get(toolCallId)?.length).toBe(1);
     }
   });
