@@ -44,7 +44,7 @@ export async function seedWelcomeThread(mastra: Mastra) {
  * model call fails (no gateway key, offline, …) we fall back to a static
  * greeting so first boot still ends with a usable Welcome thread.
  *
- * The welcome generation runs on `mastra/deepseek/deepseek-flash` — fast and
+ * The welcome generation runs on `mastra/deepseek/deepseek-flash-latest` — fast and
  * cheap for a one-shot greeting — regardless of the agent's configured model,
  * so first-boot latency and cost stay predictable.
  */
