@@ -10,6 +10,7 @@ import {
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
@@ -837,7 +838,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             ]);
             const catalog = models
               .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
-              .map(m => ({ id: m.id!, provider: m.provider, modelName: m.modelName, hasApiKey: true }));
+              .map(m => ({
+                id: m.id!,
+                provider: m.provider,
+                modelName: m.modelName,
+                hasApiKey: true,
+                reasoningOptions: getModelReasoningOptions(m.id!),
+              }));
             // Append the caller's custom provider models (DB-backed, org rows in
             // tenant mode / sentinel `local` org in no-auth mode). The boot-time
             // gateway catalog only carries the local list, so tenant callers get
@@ -856,7 +863,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                       const id = `${record.providerId}/${model}`;
                       if (known.has(id)) continue;
                       known.add(id);
-                      catalog.push({ id, provider: record.providerId, modelName: model, hasApiKey: true });
+                      catalog.push({
+                        id,
+                        provider: record.providerId,
+                        modelName: model,
+                        hasApiKey: true,
+                        reasoningOptions: undefined,
+                      });
                     }
                   }
                 }

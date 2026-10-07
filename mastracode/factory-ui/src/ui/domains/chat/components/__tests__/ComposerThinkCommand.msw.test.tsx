@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
@@ -15,9 +16,11 @@ const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
 function useThinkingHandlers({
   initialThinkingLevel = 'medium',
   failThinkingConfig = false,
+  modelId = 'openai/gpt-4o-mini',
 }: {
   initialThinkingLevel?: string;
   failThinkingConfig?: boolean;
+  modelId?: string;
 } = {}) {
   let thinkingLevel: string | undefined = initialThinkingLevel;
   const stateUpdates: unknown[] = [];
@@ -27,7 +30,7 @@ function useThinkingHandlers({
         controllerId: 'code',
         resourceId: params.resourceId,
         modeId: 'build',
-        modelId: 'openai/gpt-4o-mini',
+        modelId,
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
       }),
@@ -130,5 +133,31 @@ describe('the /think command', () => {
       await screen.findByText('Thinking level set to default. Current default is unavailable.'),
     ).toBeInTheDocument();
     expect(input).toHaveValue('');
+  });
+
+  it('offers only the levels the active model runs', async () => {
+    const proModel: AvailableModelOption = {
+      id: 'openai/gpt-5-pro',
+      provider: 'openai',
+      modelName: 'gpt-5-pro',
+      hasApiKey: true,
+      reasoningOptions: [{ type: 'effort', values: ['high'] }],
+    };
+    useThinkingHandlers({ initialThinkingLevel: 'high', modelId: proModel.id });
+    server.use(http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [proModel] })));
+    const user = userEvent.setup();
+    renderWithProviders(
+      <OverlayTestProviders>
+        <Transcript />
+        <Composer />
+      </OverlayTestProviders>,
+    );
+    const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+    await waitFor(() => expect(input).toBeEnabled());
+
+    await user.type(input, '/think low');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Unknown thinking level: low. Use: off, high, default, status')).toBeInTheDocument();
   });
 });

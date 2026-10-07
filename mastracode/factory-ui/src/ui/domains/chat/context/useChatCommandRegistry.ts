@@ -21,6 +21,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
+import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { settingsSectionPath } from '../../settings/settingsSections';
@@ -57,6 +58,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { usage, omPhase } = useChatRuntime();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
+  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId);
+  const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -84,7 +87,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Mode or global default',
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
-    ...getAvailableThinkingLevelsForModel(activeModelId ?? '').map(level => ({
+    ...availableThinkingLevels.map(level => ({
       value: level,
       label: THINKING_LEVEL_LABELS[level],
       active: currentThinkingLevel === level,
@@ -193,8 +196,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       requiresSession: true,
       options: thinkingLevelOptions,
       execute: async (rawArguments, originalText) => {
-        const levels = getAvailableThinkingLevelsForModel(activeModelId ?? '');
-        const action = parseThinkCommand(rawArguments, levels);
+        const action = parseThinkCommand(rawArguments, availableThinkingLevels);
         try {
           if (action.kind === 'invalid') {
             prefillComposer(originalText);

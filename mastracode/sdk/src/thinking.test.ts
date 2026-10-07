@@ -4,8 +4,11 @@ import {
   getAvailableThinkingLevelsForModel,
   parseThinkCommand,
   resolveDefaultThinkingLevel,
+  runThinkingLevel,
   supportsMaxReasoningEffort,
 } from './thinking.js';
+
+const effort = (...values: string[]) => [{ type: 'effort' as const, values }];
 
 describe('parseThinkCommand', () => {
   it.each(['', 'status'])('parses %j as a status request', input => {
@@ -38,8 +41,84 @@ describe('thinking model capabilities', () => {
     expect(supportsMaxReasoningEffort('openai/gpt-5.5')).toBe(false);
   });
 
-  it('keeps max for non-OpenAI models', () => {
-    expect(getAvailableThinkingLevelsForModel('anthropic/claude-opus-4-6')).toContain('max');
+  it.each([
+    [
+      'budget-era Claude drops max, which sends the xhigh budget',
+      'anthropic/claude-haiku-4-5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'gateway-prefixed ids follow the routed provider',
+      'mastra/anthropic/claude-haiku-4-5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'adaptive Claude offers the efforts the model publishes',
+      'anthropic/claude-sonnet-4-6',
+      effort('low', 'medium', 'high', 'max'),
+      ['off', 'low', 'medium', 'high', 'max'],
+    ],
+    [
+      'adaptive Claude without data drops xhigh before Opus 4.7',
+      'anthropic/claude-opus-4-6',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'max'],
+    ],
+    [
+      'OpenAI offers the efforts the model publishes',
+      'openai/gpt-5',
+      effort('minimal', 'low', 'medium', 'high'),
+      ['off', 'low', 'medium', 'high'],
+    ],
+    [
+      'OpenAI without data drops max before GPT-5.6',
+      'openai/gpt-5.5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'OpenAI without data keeps max from GPT-5.6',
+      'openai/gpt-5.6-sol',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+    ],
+    [
+      'Gemini 3 Pro has no medium whatever the data says',
+      'google/gemini-3-pro-preview',
+      effort('low', 'medium', 'high'),
+      ['off', 'low', 'high'],
+    ],
+    [
+      'other providers offer the efforts the model publishes',
+      'xai/grok-3-mini',
+      effort('low', 'high'),
+      ['off', 'low', 'high'],
+    ],
+    [
+      'other providers without data keep every level',
+      'xai/grok-3-mini',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+    ],
+  ])('%s', (_, modelId, reasoningOptions, levels) => {
+    expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
+  });
+
+  it.each([
+    ['max on budget-era Claude', 'anthropic/claude-haiku-4-5', 'max', undefined, 'xhigh'],
+    [
+      'xhigh on a model topping out at high',
+      'anthropic/claude-sonnet-4-6',
+      'xhigh',
+      effort('low', 'medium', 'high', 'max'),
+      'high',
+    ],
+    ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
+    ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+  ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
+    expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });
 });
 

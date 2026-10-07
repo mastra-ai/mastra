@@ -440,7 +440,15 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+      models: [
+        {
+          id: 'anthropic/claude-fable-5',
+          provider: 'anthropic',
+          modelName: 'claude-fable-5',
+          hasApiKey: true,
+          reasoningOptions: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+        },
+      ],
     });
   });
 
@@ -472,7 +480,15 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+      models: [
+        {
+          id: 'anthropic/claude-fable-5',
+          provider: 'anthropic',
+          modelName: 'claude-fable-5',
+          hasApiKey: true,
+          reasoningOptions: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+        },
+      ],
     });
   });
 

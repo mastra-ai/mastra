@@ -112,8 +112,9 @@ describe('handleThinkCommand', () => {
     await handleThinkCommand(ctx, ['turbo']);
 
     expect(stateSet).not.toHaveBeenCalled();
-    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
-    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('max'));
+    expect(showInfo).toHaveBeenCalledWith(
+      "Invalid thinking level: turbo. Use one of: off, low, medium, high, xhigh, 'default', or 'status'.",
+    );
   });
 
   it('rejects trailing arguments consistently with other interfaces', async () => {

@@ -9,6 +9,7 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
 import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { getModelReasoningOptions } from '@mastra/core/llm';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
@@ -47,7 +48,7 @@ function isOpenAIModel(modelId: string): boolean {
 }
 
 export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
-  const availableLevels = getAvailableThinkingLevelsForModel(modelId);
+  const availableLevels = getAvailableThinkingLevelsForModel(modelId, getModelReasoningOptions(modelId));
   const levels = BASE_THINKING_LEVELS.filter(level => availableLevels.some(available => available === level.id));
   if (!modelId.startsWith('openai/')) return [...levels];
   return levels.map(level => ({ ...level, label: level.providerValue }));
