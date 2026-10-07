@@ -49,7 +49,7 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             name: 'providers',
             type: 'string[] | Record<string, boolean | ToolsProviderOptions>',
             description:
-              'Providers to resolve, keyed by provider ID. The array form is an allowlist: only the listed providers resolve, with default options. The record form configures providers individually: true (or {}) enables one with defaults, false excludes it even when connected, and an options object adds per-provider settings. An enabled ID that matches no provider fails resolution with an invalid_options error. See Per-provider options below.',
+              'Providers to resolve, keyed by provider ID. The array form is an allowlist: only the listed providers resolve, with default options. The record form leaves unlisted providers enabled and configures listed providers individually: true (or {}) enables one with defaults, false excludes it even when connected, and an options object adds per-provider settings. An enabled ID that matches no provider fails resolution with an invalid_options error. See Per-provider options below.',
             isOptional: true,
           },
           {
@@ -70,7 +70,7 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             name: 'requireApproval',
             type: 'boolean | string[]',
             description:
-              'Default tool-approval policy applied to every provider without its own requireApproval. true gates every tool; an array of keys or * globs gates matching tools. A provider opts out with requireApproval: false.',
+              'Default tool-approval policy applied to every provider without its own requireApproval. true gates every provider tool except the synthetic <provider>__list_connections helper; an array of keys or * globs gates matching provider tools, with the same exception. A provider opts out with requireApproval: false.',
             isOptional: true,
           },
           {
@@ -123,7 +123,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ToolsProvide
     name: 'requireApproval',
     type: 'boolean | string[]',
     description:
-      'Tool-approval policy for this provider, applied to discovered MCP tools and generated HTTP tools alike. Tools require no approval by default. Pass true to require approval for every tool from this provider, or an array of tool keys or * globs to require approval only for those. An unknown name, or a glob matching nothing, fails resolution with an invalid_options error, so a typo never silently widens access. Setting it (including false) opts the provider out of the top-level requireApproval default.',
+      'Tool-approval policy for this provider, applied to discovered MCP tools and generated HTTP tools alike. Tools require no approval by default. Pass true to require approval for every provider tool except the synthetic <provider>__list_connections helper, or an array of tool keys or * globs to require approval only for matching provider tools. An unknown name, or a glob matching nothing, fails resolution with an invalid_options error, so a typo never silently widens access. Setting it (including false) opts the provider out of the top-level requireApproval default.',
     isOptional: true,
   },
 ]}
@@ -196,6 +196,15 @@ Errors fall into four groups:
 
 The `providers` array form is an allowlist: only listed providers are returned. Without the option, every connected provider with a supported toolset is included. A listed provider with no connection in the project yet is skipped and included automatically once a connection is attached. In the record form, `false` excludes a provider and never errors, even for IDs that match nothing.
 
+Use an array to restrict discovery to named providers. A record configures named providers without excluding the others:
+
+```typescript
+const onlyLinear = tools({ providers: ['linear'] })
+const allWithLinearApproval = tools({
+  providers: { linear: { requireApproval: true } },
+})
+```
+
 Tool keys for `allowTools` and `disallowTools` are listed per provider in the [provider toolsets reference](/reference/connect/providers).
 
 ## Connection resolution
@@ -205,6 +214,8 @@ For each provider present in the project's connections:
 1. An explicit `connectionId` option wins.
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
+
+The synthetic `list_connections` helper doesn't require approval and remains available even when top-level `allowTools` or `disallowTools` filters would exclude it.
 
 Connections in `needs_reauth` status are skipped with a warning until someone [replaces them](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization).
 

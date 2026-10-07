@@ -143,7 +143,7 @@ for (const provider of providers) {
 
 const header = `---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset included in @mastra/connect: provider IDs and the full tool list per provider."
+description: "Documented provider toolsets in @mastra/connect: provider IDs and the full tool list for each listed provider."
 packages:
   - "@mastra/connect"
 ---
@@ -152,7 +152,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-\`@mastra/connect\` includes generated toolsets for ${providers.length} providers (${total} tools in this version). [\`tools()\`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for ${providers.length} providers (${total} tools in this version of \`@mastra/connect\`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [\`tools()\`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form \`<provider>_<action>\` and are the values accepted by \`allowTools\` and \`disallowTools\`. Toolsets are versioned with the package: the exact list depends on the installed \`@mastra/connect\` version, and this page reflects the version it was generated from.
 

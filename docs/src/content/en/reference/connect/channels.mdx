@@ -7,7 +7,7 @@ packages:
 
 # channels()
 
-Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
+Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Enabled provider instances are constructed once, without credentials, so their webhook and OAuth routes can mount at `Mastra` construction. The resolver caches the project's connections and binds credentials to these instances as connections change, without redeploying the app.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -21,7 +21,9 @@ export const mastra = new Mastra({
 
 Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
 
-The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly when you want to configure a channel outside the platform connection flow.
+The [documented channel setup](/docs/mastra-platform/connect/channels#connect-a-provider) covers Slack, Telegram, and Discord. Their implementations come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
+
+The SDK also registers `microsoft-teams`, backed by `@mastra/teams`. SDK registration doesn't guarantee availability in the platform catalog. Constructing the Teams provider requires `MASTRA_ENCRYPTION_KEY`, a base64-encoded 32-byte value for protecting stored bot secrets. Without it, the resolver warns and skips Teams, including its routes.
 
 ## Parameters
 
@@ -46,7 +48,7 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
             name: 'providers',
             type: 'string[] | ChannelsProviders',
             description:
-              'Channels to expose, keyed by provider ID (slack-channels, telegram, discord). slack is accepted as an alias for slack-channels; using both spellings throws. The array form is an allowlist: only the listed channels are constructed. The record form configures channels individually: true (or {}) enables one with defaults, false excludes it, and an options object configures it. An ID that matches no channel provider throws at call time. See Per-provider options below.',
+              'Channels to expose, keyed by registered provider ID (slack-channels, telegram, discord, microsoft-teams). slack is accepted as an alias for slack-channels; using both spellings throws. The array form is an allowlist: only the listed channels are constructed. The record form leaves unlisted registered channels enabled and configures listed channels individually: true (or {}) enables one with defaults, false excludes it, and an options object configures it. An ID that matches no channel provider throws at call time. See Per-provider options below.',
             isOptional: true,
           },
           {
@@ -69,6 +71,13 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
   },
 ]}
 />
+
+Use the array form to mount only the named channels. The record form leaves other registered channels enabled:
+
+```typescript
+const onlyDiscord = await channels({ providers: ['discord'] })
+const allExceptTelegram = await channels({ providers: { telegram: false } })
+```
 
 ### Per-provider options
 
@@ -103,7 +112,7 @@ The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver con
 
 Providers without an active connection don't appear in the resolved map. Their routes stay mounted and begin working once a connection is attached.
 
-Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, an unknown or malformed provider ID, both spellings of the Slack key) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `providers.<id>.connectionId` pins the choice. A failed background refresh also warns and keeps serving the cached snapshot; only an explicit `refresh()` rejects.
+Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, an unknown or malformed provider ID, both spellings of the Slack key) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `providers.<id>.connectionId` pins the choice. The initial resolution rejects if its platform fetch fails. A failed background refresh warns and preserves the cached snapshot, while an explicit `refresh()` rejects on fetch failure.
 
 ## Discord permissions
 
