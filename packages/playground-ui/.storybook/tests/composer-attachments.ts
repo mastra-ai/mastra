@@ -124,13 +124,16 @@ export async function verifyContextMenu({ canvasElement }: { canvasElement: HTML
   for (const action of canvas.getAllByRole('button', { name: /^(Remove |Edit |Actions for )/ })) {
     action.focus();
     await userEvent.keyboard('{Shift>}{F10}{/Shift}');
-    await body.findByRole('menu');
+    const keyboardMenu = await body.findByRole('menu');
+    keyboardMenu.focus();
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(keyboardMenu).not.toBeInTheDocument());
     await waitFor(() => expect(action).toHaveFocus());
     fireEvent.contextMenu(action);
     const pointerMenu = await body.findByRole('menu');
     pointerMenu.focus();
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(pointerMenu).not.toBeInTheDocument());
     await waitFor(() => expect(action).toHaveFocus());
   }
   const preview = canvas.getByRole('button', { name: 'Preview project-notes.txt' });
