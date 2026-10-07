@@ -27,6 +27,7 @@ import {
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
+import { hasBoardSourceFilters } from '../boardSourceFilters';
 import { hasLabel, isPersistedCandidate } from '../boardItems';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
@@ -206,9 +207,7 @@ export function useBoardIntake({
   );
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
-  const sourceFiltered = Boolean(
-    sourceFilters && (sourceFilters.sources.size > 0 || sourceFilters.linearProjectIds.size > 0),
-  );
+  const sourceFiltered = sourceFilters !== undefined && hasBoardSourceFilters(sourceFilters);
   const browsedSources = available.filter(source => {
     if (!sourceFiltered) return source === active;
     const provider = source.split('-')[0];

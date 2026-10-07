@@ -17,6 +17,12 @@ export function boardSource(source: WorkItemSource): string {
   return source.split('-')[0];
 }
 
+/** Source and project filters browse matching feeds rather than the Intake selector. */
+export function hasBoardSourceFilters(filters: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>): boolean {
+  if (filters.sources.size > 0) return true;
+  return filters.linearProjectIds.size > 0;
+}
+
 /** Live metadata wins, including an issue moved out of a project; stored metadata covers older pages. */
 export function cardMatchesSourceFilters(
   card: Pick<WorkItem, 'source' | 'metadata'>,
