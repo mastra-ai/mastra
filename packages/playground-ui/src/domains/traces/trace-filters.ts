@@ -423,6 +423,26 @@ const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error', 'fee
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
 
+/** The Tags field, or `undefined` until the backend describes `tags`: its operators
+ *  can't be inferred safely from the static catalog. Only UI operators whose query
+ *  operator the backend accepts are offered, and suggestions are wired only when the
+ *  backend says the field has them. */
+function createTagsFilterBarField(
+  canonicalTraceFields: readonly TraceQueryCanonicalFieldDescriptor[],
+  valueSuggestions?: (scope: 'trace', path: string) => FilterBarSuggestionsResolver,
+): FilterBarField | undefined {
+  const descriptor = canonicalTraceFields.find(field => field.path === 'tags');
+  if (!descriptor) return undefined;
+
+  const operators = TRACE_TAGS_OPERATORS.filter(op =>
+    descriptor.operators.includes(TRACE_TAGS_OPERATOR_TO_QUERY_OP[op] ?? ''),
+  );
+  if (operators.length === 0) return undefined;
+
+  const suggestions = descriptor.valueSuggestions ? valueSuggestions?.('trace', 'tags') : undefined;
+  return { ...traceFieldBase('tags'), operators, ...(suggestions ? { suggestions } : {}) };
+}
+
 /** FilterBar field definitions for the trace pages. Fields the query API cannot
  *  filter on (see `TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS`) are omitted, as is the
  *  `running` status, so no chip advertises a filter that has no effect. Hidden
@@ -524,23 +544,8 @@ export function createTraceFilterBarFields({
       suggestions,
     }));
 
-  // Tags are only offered once the backend has described them: their operators
-  // can't be inferred safely from the static catalog.
-  const tagsDescriptor = canonicalTraceFields.find(field => field.path === 'tags');
-  const tagsOperators = tagsDescriptor
-    ? TRACE_TAGS_OPERATORS.filter(op => tagsDescriptor.operators.includes(TRACE_TAGS_OPERATOR_TO_QUERY_OP[op] ?? ''))
-    : [];
-  const tagsResolver = tagsDescriptor?.valueSuggestions ? valueSuggestions?.('trace', 'tags') : undefined;
-  const tagsFields: FilterBarField[] =
-    tagsOperators.length > 0
-      ? [
-          {
-            ...traceFieldBase('tags'),
-            operators: tagsOperators,
-            ...(tagsResolver ? { suggestions: tagsResolver } : {}),
-          },
-        ]
-      : [];
+  const tagsField = createTagsFilterBarField(canonicalTraceFields, valueSuggestions);
+  const tagsFields = tagsField ? [tagsField] : [];
 
   const hidden = new Set(hiddenFieldIds);
   if (!withQueryTrace) {
