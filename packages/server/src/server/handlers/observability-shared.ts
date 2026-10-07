@@ -27,6 +27,7 @@ const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE = 'span-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
+const OBSERVABILITY_TRACE_QUERY_SELECT_STORAGE_FEATURE = 'trace-query-select';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
@@ -122,6 +123,18 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
 
   throw new HTTPException(501, {
     message: 'Advanced trace queries are not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityTraceQuerySelectSupported(
+  observabilityStore: ObservabilityStorage,
+  select: readonly coreStorage.TraceQuerySelectField[] | undefined,
+) {
+  if (!select?.length) return;
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_SELECT_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Selected trace fields are not supported by the configured observability store',
   });
 }
 

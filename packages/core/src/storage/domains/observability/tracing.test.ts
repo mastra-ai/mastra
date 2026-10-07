@@ -4,6 +4,8 @@ import {
   BATCH_DELETE_TRACES_MAX_IDS,
   batchDeleteTracesArgsSchema,
   buildInputPreview,
+  buildErrorPreview,
+  buildOutputPreview,
   extractBranchSpans,
   getTraceLightResponseSchema,
   INPUT_PREVIEW_MAX_LENGTH,
@@ -366,5 +368,22 @@ describe('buildInputPreview', () => {
   it('falls back to the raw value when input is not a message list', () => {
     expect(buildInputPreview('plain prompt text')).toBe('plain prompt text');
     expect(buildInputPreview({ query: 'lookup' })).toBe('{"query":"lookup"}');
+  });
+});
+
+describe('trace output previews', () => {
+  it('extracts output text and bounds the result', () => {
+    expect(buildOutputPreview({ text: 'answer' })).toBe('answer');
+    expect(buildOutputPreview({ messages: [{ role: 'assistant', content: 'done' }] })).toBe('done');
+    expect(buildOutputPreview({ text: 'x'.repeat(150) })).toBe(`${'x'.repeat(100)}…`);
+    expect(buildOutputPreview('{"text":"cut off')).toBeUndefined();
+  });
+
+  it('extracts error name and message without the stack', () => {
+    expect(buildErrorPreview({ name: 'TypeError', message: 'bad input', stack: 'secret' })).toBe(
+      'TypeError: bad input',
+    );
+    expect(buildErrorPreview({ name: 'Error', message: 'failed' })).toBe('failed');
+    expect(buildErrorPreview('not-json')).toBeUndefined();
   });
 });

@@ -126,6 +126,13 @@ const TRACE_SELECT = `
   r."environment" AS "environment",
   ${TRACE_STATUS_SQL} AS "status"`;
 
+function traceSelect(plan: TrustedTraceQueryPlan): string {
+  if (plan.result !== 'traces') return TRACE_SELECT;
+  return `${TRACE_SELECT}${plan.select?.includes('outputPreview') ? ', r."output" AS "output"' : ''}${
+    plan.select?.includes('errorPreview') ? ', r."error" AS "selectedError"' : ''
+  }`;
+}
+
 function fieldSql<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
   field: TraceQueryCanonicalField,
@@ -674,7 +681,7 @@ export function compilePostgresTraceQuery(
   const { ctes, values } = compilePostgresTraceCandidates(
     schema,
     plan,
-    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
+    `${traceSelect(plan)}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
     deltaWindow,
   );
   const candidates = `WITH ${ctes.join(',\n')}`;
@@ -983,7 +990,7 @@ async function setRemainingTimeout(transaction: TxClient, deadline: number): Pro
   await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
 }
 
-function traceRowToResult(row: Record<string, unknown>) {
+function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
   return {
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
@@ -1001,6 +1008,12 @@ function traceRowToResult(row: Record<string, unknown>) {
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(plan.select?.includes('outputPreview')
+      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      : {}),
+    ...(plan.select?.includes('errorPreview')
+      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      : {}),
   };
 }
 
@@ -1031,7 +1044,7 @@ export async function queryTraces(
         const visible = rows.slice(0, plan.limit);
         const last = visible.at(-1);
         return coreStorage.traceQueryResponseSchema.parse({
-          traces: visible.map(traceRowToResult),
+          traces: visible.map(row => traceRowToResult(row, plan)),
           delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
           deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(
             plan,
@@ -1069,7 +1082,7 @@ export async function queryTraces(
       },
       { repeatableRead: true },
     );
-    const traces = rows.map(traceRowToResult);
+    const traces = rows.map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       ...(deltaCursor === undefined ? {} : { deltaCursor }),
@@ -1102,7 +1115,7 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(traceRowToResult);
+  const traces = visibleRows.map(row => traceRowToResult(row, plan));
   const last = traces.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
     traces,

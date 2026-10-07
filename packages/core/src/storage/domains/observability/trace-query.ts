@@ -22,12 +22,17 @@ export const TRACE_QUERY_DISCOVERY_MAX_LIMIT = 100;
 export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
+export const TRACE_QUERY_SELECT_MAX_PAGE_SIZE = 100;
+export const TRACE_QUERY_SELECT_FIELDS = ['outputPreview', 'errorPreview'] as const;
+export type TraceQuerySelectField = (typeof TRACE_QUERY_SELECT_FIELDS)[number];
 
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
 const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
 const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
+const SELECT_GROUP_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support `select`';
+const SELECT_PAGE_TOO_LARGE_MESSAGE = `Requests with \`select\` are limited to ${TRACE_QUERY_SELECT_MAX_PAGE_SIZE} traces per page`;
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -315,9 +320,25 @@ const traceQueryRequestObjectSchema = z
     mode: z.literal('delta').optional(),
     after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
+    /** Optional root-span previews to add to every returned trace. */
+    select: z.array(z.enum(TRACE_QUERY_SELECT_FIELDS)).optional(),
   })
   .strict()
   .superRefine((request, context) => {
+    if (request.select?.length) {
+      if (request.group) {
+        context.addIssue({ code: 'custom', path: ['select'], message: SELECT_GROUP_NOT_SUPPORTED_MESSAGE });
+      }
+      const pageSize =
+        request.mode === 'delta'
+          ? (request.limit ?? defaultDeltaLimit)
+          : request.pagination
+            ? request.pagination.perPage
+            : (request.page?.limit ?? 100);
+      if (pageSize > TRACE_QUERY_SELECT_MAX_PAGE_SIZE) {
+        context.addIssue({ code: 'custom', path: ['select'], message: SELECT_PAGE_TOO_LARGE_MESSAGE });
+      }
+    }
     if (request.mode === 'delta') {
       for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
         if (request[field] !== undefined) {
@@ -391,6 +412,8 @@ export const traceQueryTraceSchema = z
     entityType: z.string().nullable(),
     environment: z.string().nullable(),
     status: z.enum(['success', 'error']),
+    outputPreview: z.string().nullable().optional(),
+    errorPreview: z.string().nullable().optional(),
   })
   .strict();
 
@@ -707,6 +730,7 @@ interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
   };
+  select?: TraceQuerySelectField[];
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
@@ -1114,6 +1138,8 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  const select = TRACE_QUERY_SELECT_FIELDS.filter(field => request.select?.includes(field));
+  const selection = select.length ? { select } : {};
   const deltaBinding = digestBinding({
     timeRange,
     where,
@@ -1128,6 +1154,7 @@ export function planTraceQuery(
       where,
       scope,
       orderBy,
+      ...selection,
       paginationMode: 'delta',
       limit: request.limit ?? defaultDeltaLimit,
       binding: deltaBinding,
@@ -1141,6 +1168,7 @@ export function planTraceQuery(
       where,
       scope,
       orderBy,
+      ...selection,
       paginationMode: 'page',
       page: request.pagination.page,
       perPage: request.pagination.perPage,
@@ -1164,6 +1192,7 @@ export function planTraceQuery(
     where,
     scope,
     orderBy,
+    ...selection,
     paginationMode: 'keyset',
     limit: page.limit,
     binding,

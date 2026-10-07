@@ -23,6 +23,7 @@ import {
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryObservedFields,
   compileClickHouseTraceQueryValues,
+  compileClickHouseTraceRootPayloads,
   queryThreads,
   queryTraces,
   runWithClickHouseTraceQueryTimeout,
@@ -40,6 +41,22 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('ClickHouse advanced trace query', () => {
+  it('hydrates selected root previews after page selection', () => {
+    const selectedPlan = plan({ select: ['outputPreview', 'errorPreview'] });
+    const keyset = compileClickHouseTraceQuery(selectedPlan);
+    expect(keyset.query).toContain('r.output AS output');
+    expect(keyset.query).toContain('r.error AS selectedError');
+
+    const pagePlan = plan({ pagination: { page: 0, perPage: 25 }, select: ['outputPreview', 'errorPreview'] });
+    const page = compileClickHouseTraceQuery(pagePlan);
+    expect(page.query).not.toContain('r.output AS output');
+    const payload = compileClickHouseTraceRootPayloads(
+      [{ traceId: 'trace', rootSpanId: 'root', startedAt: TIME_RANGE.from, endedAt: TIME_RANGE.to }],
+      pagePlan.result === 'traces' ? pagePlan : undefined,
+    );
+    expect(payload.query).toContain('input, output, error AS selectedError');
+  });
+
   it('compiles root duration predicates from root timestamps', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),

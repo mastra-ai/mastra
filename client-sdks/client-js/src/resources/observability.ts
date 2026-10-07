@@ -170,7 +170,7 @@ export type QueryTracesDeltaInput = Omit<QueryTracesBaseInput, 'orderBy'> & {
   orderBy?: never;
 };
 
-export type QueryTracesGroupedInput = QueryTracesBaseInput & {
+export type QueryTracesGroupedInput = Omit<QueryTracesBaseInput, 'select'> & {
   /**
    * @deprecated Use `queryTraceThreads()` instead. Grouped trace queries remain supported until the next major release.
    */

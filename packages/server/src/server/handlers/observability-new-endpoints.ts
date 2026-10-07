@@ -100,6 +100,7 @@ import {
   assertObservabilityTraceQueryRootDurationSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQuerySupported,
+  assertObservabilityTraceQuerySelectSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
@@ -313,6 +314,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     mode,
     after,
     limit,
+    select,
   }) => {
     let plan;
     try {
@@ -333,7 +335,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
             })
           : undefined;
       plan = coreStorage.planTraceQuery(
-        { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
+        { timeRange, where, group, orderBy, page, pagination, mode, after, limit, select },
         { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
@@ -353,6 +355,10 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
+      assertObservabilityTraceQuerySelectSupported(
+        observabilityStore,
+        plan.result === 'traces' ? plan.select : undefined,
+      );
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);

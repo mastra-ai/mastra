@@ -131,6 +131,13 @@ const TRACE_SELECT = `
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
 
+function traceSelect(plan: TrustedTraceQueryPlan): string {
+  if (plan.result !== 'traces' || plan.paginationMode === 'page') return TRACE_SELECT;
+  return `${TRACE_SELECT}${plan.select?.includes('outputPreview') ? ', r.output AS output' : ''}${
+    plan.select?.includes('errorPreview') ? ', r.error AS selectedError' : ''
+  }`;
+}
+
 /** Candidate columns carried through the page-mode window sort (no payload blobs). */
 const TRACE_PAGE_COLUMNS = [
   'traceId',
@@ -546,7 +553,7 @@ export function compileClickHouseTraceQuery(
   deltaHead?: DeltaWatermark,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceCandidates(plan, TRACE_SELECT, parameters);
+  const ctes = compileClickHouseTraceCandidates(plan, traceSelect(plan), parameters);
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
@@ -650,6 +657,7 @@ LIMIT ${limit}`,
  */
 export function compileClickHouseTraceRootPayloads(
   keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
+  plan?: coreStorage.TrustedTraceQueryTracesPlan,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const tuples = keys.map(
@@ -657,7 +665,9 @@ export function compileClickHouseTraceRootPayloads(
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input
+    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input${
+      plan?.select?.includes('outputPreview') ? ', output' : ''
+    }${plan?.select?.includes('errorPreview') ? ', error AS selectedError' : ''}
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
@@ -870,6 +880,33 @@ export async function getTraceQueryValues(
   });
 }
 
+function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+    ...(plan.select?.includes('outputPreview')
+      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      : {}),
+    ...(plan.select?.includes('errorPreview')
+      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      : {}),
+  };
+}
+
 export async function queryTraces(
   client: ClickHouseClient,
   plan: TrustedTraceQueryPlan,
@@ -932,30 +969,14 @@ export async function queryTraces(
             startedAt: asIsoTimestamp(row.startedAt),
             endedAt: asIsoTimestamp(row.endedAt),
           })),
+          plan,
         ),
       );
       for (const payload of payloadRows) payloads.set(`${payload.traceId}\u0000${payload.rootSpanId}`, payload);
     }
     const traces = pageRows
       .map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }))
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
+      .map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       ...(deltaHead
@@ -991,24 +1012,7 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = visibleRows.map(row => traceRowToResult(row, plan));
   const last = traces.at(-1);
   if (plan.paginationMode === 'delta') {
     const lastRow = visibleRows.at(-1);

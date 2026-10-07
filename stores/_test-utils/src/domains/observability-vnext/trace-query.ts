@@ -1,5 +1,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import {
+  buildErrorPreview,
+  buildOutputPreview,
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
@@ -63,6 +65,7 @@ export interface RawTraceQuerySpan {
   userId?: string | null;
   sessionId?: string | null;
   experimentId?: string | null;
+  output?: unknown;
 }
 
 export interface RawTraceQueryScore {
@@ -2726,7 +2729,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     const candidates = roots.filter(root => root.cursorId > after).sort((a, b) => a.cursorId - b.cursorId);
     const visible = candidates.slice(0, plan.limit);
     return {
-      traces: visible.map(toTraceQueryTrace),
+      traces: visible.map(root => toTraceQueryTrace(root, plan)),
       delta: { limit: plan.limit, hasMore: candidates.length > plan.limit },
       deltaCursor: encodeTraceQueryDeltaCursor(
         plan,
@@ -2735,7 +2738,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
       ),
     };
   }
-  let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
+  let traces = roots.map(root => toTraceQueryTrace(root, plan)).sort((left, right) => compareTraces(left, right, plan));
   if (plan.paginationMode === 'page') {
     const total = traces.length;
     const start = plan.page * plan.perPage;
@@ -3124,7 +3127,10 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
   };
 }
 
-function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
+function toTraceQueryTrace(
+  root: RawTraceQuerySpan,
+  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
+): TraceQueryTrace {
   return {
     traceId: root.traceId!,
     rootSpanId: root.spanId,
@@ -3142,6 +3148,8 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
+    ...(plan.select?.includes('outputPreview') ? { outputPreview: buildOutputPreview(root.output) ?? null } : {}),
+    ...(plan.select?.includes('errorPreview') ? { errorPreview: buildErrorPreview(root.error) ?? null } : {}),
   };
 }
 

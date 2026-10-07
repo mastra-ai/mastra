@@ -3601,6 +3601,8 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  outputPreview?: (string | null) | undefined;
+  errorPreview?: (string | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -10325,6 +10327,7 @@ export type PostObservabilityTracesQuery_Body = {
   after?: string | undefined;
   /** Maximum number of updates to return in one delta poll */
   limit?: number | undefined;
+  select?: ('outputPreview' | 'errorPreview')[] | undefined;
 };
 
 export type PostObservabilityTracesQuery_Response =

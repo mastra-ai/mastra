@@ -45,6 +45,14 @@ describe('Postgres advanced trace query', () => {
     if (wasEnabled) coreFeatures.add('observability-delta-polling');
     vi.restoreAllMocks();
   });
+  it('projects root output and error only when selected', () => {
+    const plain = compilePostgresTraceQuery('custom', plan());
+    const selected = compilePostgresTraceQuery('custom', plan({ select: ['outputPreview', 'errorPreview'] }));
+    expect(plain.text).not.toContain('AS "selectedError"');
+    expect(plain.text).not.toContain('AS "output"');
+    expect(selected.text).toContain('r."output" AS "output"');
+    expect(selected.text).toContain('r."error" AS "selectedError"');
+  });
   it('rejects invalid trace-query timeout configuration at construction', () => {
     expect(
       () =>

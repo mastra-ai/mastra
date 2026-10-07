@@ -36,6 +36,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('projects root output and error only when selected', () => {
+    const plain = compileDuckDBTraceQuery(plan());
+    const selected = compileDuckDBTraceQuery(plan({ select: ['outputPreview', 'errorPreview'] }));
+    expect(plain.sql).not.toContain('AS selectedError');
+    expect(plain.sql).not.toContain('AS output');
+    expect(selected.sql).toContain("NULLIF(r.output, 'null') AS output");
+    expect(selected.sql).toContain("NULLIF(r.error, 'null') AS selectedError");
+  });
+
   it('compiles root duration predicates from root timestamps', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),

@@ -541,6 +541,77 @@ export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_
   return truncatePreview(JSON.stringify(value) ?? '', maxLength);
 }
 
+/** Maximum length of the rendered `outputPreview` text. */
+export const OUTPUT_PREVIEW_MAX_LENGTH = INPUT_PREVIEW_MAX_LENGTH;
+
+/** Maximum length of the rendered `errorPreview` text. */
+export const ERROR_PREVIEW_MAX_LENGTH = 200;
+
+/** Builds the short error text shown in a trace list without exposing the stack. */
+export function buildErrorPreview(error: unknown, maxLength = ERROR_PREVIEW_MAX_LENGTH): string | undefined {
+  let value: unknown = error;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!value || typeof value !== 'object') return undefined;
+  const { message, name } = value as { message?: unknown; name?: unknown };
+  const text = typeof message === 'string' ? message.trim() : '';
+  if (!text) return undefined;
+  const label =
+    typeof name === 'string' && name.trim() && name.trim() !== 'Error' && !text.startsWith(name.trim())
+      ? `${name.trim()}: `
+      : '';
+  return truncatePreview(`${label}${text}`, maxLength);
+}
+
+/** Builds the short output text shown in a trace list. */
+export function buildOutputPreview(output: unknown, maxLength = OUTPUT_PREVIEW_MAX_LENGTH): string | undefined {
+  if (output == null) return undefined;
+
+  let value = output;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        return undefined;
+      }
+    } else if (trimmed.startsWith('"')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // Treat an incomplete JSON string as plain text.
+      }
+    }
+  }
+
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
+  const messages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
+      ? (value as { messages: unknown[] }).messages
+      : null;
+  if (messages?.some(message => message !== null && typeof message === 'object' && 'role' in message)) {
+    const text = (messages as PreviewMessage[])
+      .filter(message => message?.role === 'assistant')
+      .map(message => previewTextFromContent(message.content))
+      .filter(Boolean)
+      .join(' | ');
+    return truncatePreview(text, maxLength);
+  }
+  if (value && typeof value === 'object') {
+    const text = (value as { text?: unknown }).text;
+    if (typeof text === 'string') return truncatePreview(text, maxLength);
+  }
+  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+}
+
 /**
  * Projects a full span record down to the lightweight row a trace list renders,
  * deriving `inputPreview` from `input`.

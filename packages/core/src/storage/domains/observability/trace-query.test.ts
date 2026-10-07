@@ -138,6 +138,56 @@ describe('trace delta contract', () => {
   });
 });
 
+describe('trace select contract', () => {
+  it('normalizes supported fields and keeps them out of cursor membership', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, select: ['errorPreview', 'outputPreview', 'errorPreview'] }));
+    expect(plan).toMatchObject({ select: ['outputPreview', 'errorPreview'] });
+
+    const plain = planTraceQuery(parsed(baseRequest));
+    if (plan.paginationMode !== 'keyset' || plain.paginationMode !== 'keyset') throw new Error('Expected keyset plans');
+    expect(plan.binding).toBe(plain.binding);
+  });
+
+  it('rejects grouped selections, unknown fields, and pages over 100 rows', () => {
+    expect(
+      traceQueryRequestSchema.safeParse({ ...baseRequest, group: { by: ['threadId'] }, select: ['outputPreview'] })
+        .success,
+    ).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, select: ['model'] }).success).toBe(false);
+    expect(
+      traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: 101 }, select: ['errorPreview'] }).success,
+    ).toBe(false);
+  });
+
+  it('accepts selected previews in trace responses while leaving them optional', () => {
+    const trace = {
+      traceId: 'trace',
+      rootSpanId: 'root',
+      name: 'run',
+      entityId: null,
+      parentSpanId: null,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      metadata: null,
+      inputPreview: null,
+      threadId: null,
+      resourceId: null,
+      startedAt: '2026-08-01T00:00:00.000Z',
+      endedAt: '2026-08-01T00:00:01.000Z',
+      entityName: null,
+      entityType: null,
+      environment: null,
+      status: 'success',
+    };
+    expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [{ ...trace, outputPreview: 'answer', errorPreview: null }],
+        page: { next: null },
+      }).success,
+    ).toBe(true);
+  });
+});
+
 function parsedThreads(request: unknown = baseThreadRequest) {
   return parseQueryThreadsInput(request);
 }

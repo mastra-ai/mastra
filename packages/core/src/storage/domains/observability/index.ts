@@ -80,6 +80,8 @@ export {
   planTraceQuerySelectionPredicate,
   normalizeTraceQueryPath,
   normalizeTraceQueryText,
+  TRACE_QUERY_SELECT_MAX_PAGE_SIZE,
+  TRACE_QUERY_SELECT_FIELDS,
 } from './trace-query';
 export type {
   TraceQueryLiteral,
@@ -104,6 +106,7 @@ export type {
   TraceQueryResponse,
   TraceQueryOperator,
   TraceQueryValueKind,
+  TraceQuerySelectField,
   TraceQueryPredicateScope,
   TraceQueryField,
   TraceQuerySpanField,

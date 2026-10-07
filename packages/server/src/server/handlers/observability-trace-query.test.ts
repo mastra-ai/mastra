@@ -714,6 +714,23 @@ describe('QUERY_TRACES', () => {
     }
   });
 
+  it('requires the select capability only when previews are requested', async () => {
+    const legacy = createHarness(['trace-query']);
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, select: ['outputPreview'] })),
+    );
+    expect(error.status).toBe(501);
+    expect(legacy.observabilityStore.queryTraces).not.toHaveBeenCalled();
+
+    const supported = createHarness(['trace-query', 'trace-query-select']);
+    await QUERY_TRACES.handler(
+      params(supported.mastra, { timeRange: TIME_RANGE, select: ['errorPreview', 'outputPreview'] }),
+    );
+    expect(supported.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ select: ['outputPreview', 'errorPreview'] }),
+    );
+  });
+
   it('passes context identifier predicates to stores that advertise support', async () => {
     const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-context-ids']);
 

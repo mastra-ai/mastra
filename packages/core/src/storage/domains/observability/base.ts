@@ -122,6 +122,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `trace-query-select`: optional root-span previews on trace-query rows
  * - `feedback`: the feedback CRUD, review-status and analytics methods
  */
 export type ObservabilityStorageFeature =
@@ -142,7 +143,8 @@ export type ObservabilityStorageFeature =
   | 'thread-query'
   | 'trace-query-tenant-scope'
   | 'feedback'
-  | 'trace-query-context-ids';
+  | 'trace-query-context-ids'
+  | 'trace-query-select';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
