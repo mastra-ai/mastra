@@ -202,90 +202,122 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
-    it('should fetch only the requested page for unfiltered queries', async () => {
-      const logs = Array.from({ length: 2 }, (_, index) =>
-        JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),
-      );
-      fetchMock.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ result: 5 }, { result: logs }]),
-        }),
-      );
+    describe('with a simulated Redis list', () => {
+      let list: string[];
+      const sentCommands = () =>
+        fetchMock.mock.calls.flatMap((call: any[]) => JSON.parse(call[1].body) as (string | number)[][]);
+      const lrangeWindows = () => sentCommands().filter(command => command[0] === 'LRANGE');
 
-      const result = await transport.listLogs({ page: 2, perPage: 2 });
+      beforeEach(() => {
+        list = [];
+        fetchMock.mockImplementation((_url: string, init: { body: string }) => {
+          const commands = JSON.parse(init.body) as [string, string, number?, number?][];
+          const results = commands.map(([name, , start, stop]) => {
+            if (name === 'LLEN') return { result: list.length };
+            const from = start!;
+            const to = stop! < 0 ? list.length + stop! : stop!;
+            return { result: list.slice(from, to + 1) };
+          });
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(results) });
+        });
+      });
 
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
-        ['LLEN', 'test-logs'],
-        ['LRANGE', 'test-logs', 2, 3],
-      ]);
-      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
-      expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
-    });
+      it('should never request the full list', async () => {
+        list = Array.from({ length: 3 }, (_, i) => JSON.stringify({ msg: `m${i}`, level: LogLevel.INFO }));
 
-    it('should read run ID queries from a single snapshot', async () => {
-      const logs = [
-        JSON.stringify({ msg: 'other', runId: 'other-run-id', time: 1 }),
-        JSON.stringify({ msg: 'wanted1', runId: 'test-run-id', time: 2 }),
-        JSON.stringify({ msg: 'wanted2', runId: 'test-run-id', time: 3 }),
-      ];
-      fetchMock.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ result: logs }]),
-        }),
-      );
+        await transport.listLogs();
+        await transport.listLogs({ logLevel: LogLevel.INFO });
+        await transport.listLogs({ returnPaginationResults: false });
+        await transport.listLogsByRunId({ runId: 'run' });
 
-      const result = await transport.listLogsByRunId({ runId: 'test-run-id', page: 2, perPage: 1 });
+        expect(lrangeWindows()).toContainEqual(['LRANGE', 'test-logs', 0, 99]);
+        for (const [, , start, stop] of lrangeWindows()) {
+          expect(stop).toBeGreaterThanOrEqual(0);
+          expect((stop as number) - (start as number) + 1).toBeLessThanOrEqual(1000);
+        }
+      });
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
-      expect(result).toMatchObject({ total: 2, page: 2, perPage: 1, hasMore: false });
-      expect(result.logs[0]?.msg).toBe('wanted2');
-    });
+      it('should page unfiltered queries with LLEN and an exact LRANGE', async () => {
+        list = Array.from({ length: 5 }, (_, i) => JSON.stringify({ msg: `m${i}` }));
 
-    it('should read filtered queries from a single snapshot', async () => {
-      const logs = [
-        JSON.stringify({ msg: 'info', level: LogLevel.INFO, time: 1 }),
-        JSON.stringify({ msg: 'error', level: LogLevel.ERROR, time: 2 }),
-      ];
-      fetchMock.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ result: logs }]),
-        }),
-      );
+        const last = await transport.listLogs({ page: 3, perPage: 2 });
 
-      const result = await transport.listLogs({ logLevel: LogLevel.ERROR, page: 1, perPage: 1 });
+        expect(sentCommands()).toEqual([
+          ['LLEN', 'test-logs'],
+          ['LRANGE', 'test-logs', 4, 5],
+        ]);
+        expect(last).toEqual({ logs: [{ msg: 'm4' }], total: 5, page: 3, perPage: 2, hasMore: false });
+      });
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
-      expect(result).toMatchObject({ total: 1, page: 1, perPage: 1, hasMore: false });
-      expect(result.logs.map(log => log.msg)).toEqual(['error']);
-    });
+      it('should scan filtered queries in bounded windows and count every match', async () => {
+        list = Array.from({ length: 2500 }, (_, i) =>
+          JSON.stringify({ msg: `m${i}`, level: i % 3 === 0 ? LogLevel.ERROR : LogLevel.INFO }),
+        );
+        const errorMessages = list.map(raw => JSON.parse(raw)).filter(log => log.level === LogLevel.ERROR);
 
-    it('should return every log when pagination results are disabled', async () => {
-      const logs = [JSON.stringify({ msg: 'message1', time: 1 }), JSON.stringify({ msg: 'message2', time: 2 })];
-      fetchMock.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ result: logs }]),
-        }),
-      );
+        const result = await transport.listLogs({ logLevel: LogLevel.ERROR, page: 400, perPage: 2 });
 
-      const result = await transport.listLogs({ returnPaginationResults: false, page: 2, perPage: 1 });
+        expect(lrangeWindows()).toEqual([
+          ['LRANGE', 'test-logs', 0, 999],
+          ['LRANGE', 'test-logs', 1000, 1999],
+          ['LRANGE', 'test-logs', 2000, 2999],
+        ]);
+        expect(result.total).toBe(errorMessages.length);
+        expect(result.logs).toEqual(errorMessages.slice(798, 800));
+        expect(result.hasMore).toBe(true);
+      });
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
-      expect(result).toEqual({
-        logs: [
-          { msg: 'message1', time: 1 },
-          { msg: 'message2', time: 2 },
-        ],
-        total: 2,
-        page: 2,
-        perPage: 2,
-        hasMore: false,
+      it('should request the next window only after a full chunk', async () => {
+        list = Array.from({ length: 1000 }, (_, i) => JSON.stringify({ msg: `m${i}`, level: LogLevel.INFO }));
+
+        const result = await transport.listLogs({ logLevel: LogLevel.INFO, page: 1, perPage: 1 });
+
+        expect(lrangeWindows()).toEqual([
+          ['LRANGE', 'test-logs', 0, 999],
+          ['LRANGE', 'test-logs', 1000, 1999],
+        ]);
+        expect(result).toMatchObject({ total: 1000, hasMore: true });
+      });
+
+      it('should page run ID queries from bounded windows', async () => {
+        list = [
+          JSON.stringify({ msg: 'other', runId: 'other-run-id' }),
+          JSON.stringify({ msg: 'wanted1', runId: 'test-run-id' }),
+          JSON.stringify({ msg: 'wanted2', runId: 'test-run-id' }),
+          JSON.stringify({ msg: 'wanted3', runId: 'test-run-id' }),
+        ];
+
+        const result = await transport.listLogsByRunId({ runId: 'test-run-id', page: 2, perPage: 2 });
+
+        expect(lrangeWindows()).toEqual([['LRANGE', 'test-logs', 0, 999]]);
+        expect(result).toEqual({
+          logs: [{ msg: 'wanted3', runId: 'test-run-id' }],
+          total: 3,
+          page: 2,
+          perPage: 2,
+          hasMore: false,
+        });
+      });
+
+      it('should return every match when pagination results are disabled', async () => {
+        list = Array.from({ length: 1500 }, (_, i) => JSON.stringify({ msg: `m${i}` }));
+
+        const result = await transport.listLogs({ returnPaginationResults: false, page: 2, perPage: 1 });
+
+        expect(lrangeWindows()).toEqual([
+          ['LRANGE', 'test-logs', 0, 999],
+          ['LRANGE', 'test-logs', 1000, 1999],
+        ]);
+        expect(result).toMatchObject({ total: 1500, page: 2, perPage: 1500, hasMore: false });
+        expect(result.logs).toHaveLength(1500);
+      });
+
+      it('should keep handling malformed and non-object entries as before', async () => {
+        list = ['not-json', JSON.stringify(null), JSON.stringify({ msg: 'ok', level: LogLevel.INFO })];
+
+        const result = await transport.listLogs({ returnPaginationResults: false });
+
+        expect(result.logs).toEqual([{}, { msg: 'ok', level: LogLevel.INFO }]);
       });
     });
 

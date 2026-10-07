@@ -1,6 +1,16 @@
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
+const SCAN_CHUNK_SIZE = 1000;
+
+type LogCriteria = {
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, any>;
+  runId?: string;
+};
+
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
   upstashToken: string;
@@ -160,22 +170,7 @@ export class UpstashTransport extends LoggerTransport {
     });
   }
 
-  private matchesLog(
-    log: BaseLogMessage,
-    {
-      fromDate,
-      toDate,
-      logLevel,
-      filters,
-      runId,
-    }: {
-      fromDate?: Date;
-      toDate?: Date;
-      logLevel?: LogLevel;
-      filters?: Record<string, any>;
-      runId?: string;
-    },
-  ): boolean {
+  private matchesLog(log: BaseLogMessage, { fromDate, toDate, logLevel, filters, runId }: LogCriteria): boolean {
     if (runId !== undefined && log.runId !== runId) return false;
     if (logLevel && log.level !== logLevel) return false;
     const logTime = new Date(log.time).getTime();
@@ -183,6 +178,35 @@ export class UpstashTransport extends LoggerTransport {
     if (toDate && !(logTime <= toDate.getTime())) return false;
 
     return !filters || Object.entries(filters).every(([key, value]) => log[key as keyof BaseLogMessage] === value);
+  }
+
+  /**
+   * Reads the list in bounded LRANGE windows, counting every match but keeping
+   * only those inside `window` (or all matches when `window` is null).
+   */
+  private async scanLogs(
+    criteria: LogCriteria,
+    window: { start: number; end: number } | null,
+  ): Promise<{ logs: BaseLogMessage[]; total: number }> {
+    const logs: BaseLogMessage[] = [];
+    let total = 0;
+
+    for (let offset = 0; ; offset += SCAN_CHUNK_SIZE) {
+      const response = await this.executeUpstashCommands([
+        ['LRANGE', this.listName, offset, offset + SCAN_CHUNK_SIZE - 1],
+      ]);
+      const chunk = response?.[0]?.result;
+
+      for (const log of this.parseLogs(chunk)) {
+        if (!this.matchesLog(log, criteria)) continue;
+        if (!window || (total >= window.start && total < window.end)) logs.push(log);
+        total++;
+      }
+
+      if (!Array.isArray(chunk) || chunk.length < SCAN_CHUNK_SIZE) break;
+    }
+
+    return { logs, total };
   }
 
   async listLogs(params?: {
@@ -235,27 +259,25 @@ export class UpstashTransport extends LoggerTransport {
         };
       }
 
-      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
-      const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
-        this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
-      );
+      const criteria = { fromDate, toDate, logLevel, filters };
 
       if (!returnPaginationResults) {
+        const { logs, total } = await this.scanLogs(criteria, null);
         return {
-          logs: filteredLogs,
-          total: filteredLogs.length,
+          logs,
+          total,
           page,
-          perPage: filteredLogs.length,
+          perPage: logs.length,
           hasMore: false,
         };
       }
 
-      const total = filteredLogs.length;
       const start = (page - 1) * perPage;
       const end = start + perPage;
+      const { logs, total } = await this.scanLogs(criteria, { start, end });
 
       return {
-        logs: filteredLogs.slice(start, end),
+        logs,
         total,
         page,
         perPage,
@@ -300,14 +322,12 @@ export class UpstashTransport extends LoggerTransport {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
       const perPage = perPageInput || 100;
 
-      const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
-      const logs = allLogs.logs.filter(log => this.matchesLog(log, { runId }));
-      const total = logs.length;
       const start = (page - 1) * perPage;
       const end = start + perPage;
+      const { logs, total } = await this.scanLogs({ fromDate, toDate, logLevel, filters, runId }, { start, end });
 
       return {
-        logs: logs.slice(start, end),
+        logs,
         total,
         page,
         perPage,
