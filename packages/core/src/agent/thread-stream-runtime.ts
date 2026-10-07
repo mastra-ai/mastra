@@ -354,9 +354,9 @@ type AgentThreadRuntimeState = {
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
-  // Signal IDs this runtime queued locally before publishing them. Retained replays of these are
-  // echoes; signals this runtime only forwarded to another owner must not be listed here.
-  locallyQueuedSignalIdsByThread: Map<string, Set<string>>;
+  // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
+  // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
+  locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -766,7 +766,7 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (data?.type === 'signal-enqueued') {
         if (
-          (data.sourceId === this.#id && state.locallyQueuedSignalIdsByThread.get(key)?.has(data.signal.id)) ||
+          (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
           subscription.admittedSignalIds.has(data.signal.id)
         )
           return;
@@ -1760,12 +1760,17 @@ export class AgentThreadStreamRuntime {
   }
 
   #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
-    const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Set<string>();
+    const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
     ids.delete(signalId);
-    ids.add(signalId);
+    ids.set(signalId, undefined);
     // Bound memory: retained replays of very old local signals are vanishingly rare, so evict oldest first.
-    if (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.values().next().value!);
+    if (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.keys().next().value!);
     state.locallyQueuedSignalIdsByThread.set(key, ids);
+  }
+
+  #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    return !!ids?.has(signalId) && ids.get(signalId) !== runId;
   }
 
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
@@ -3270,8 +3275,10 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.delete(key);
           if (owns.owner) {
             // Forwarding is a handoff: the signal is no longer locally cancellable.
-            // The new owner consumes it, so a later retained replay here is not a self-echo.
-            state.locallyQueuedSignalIdsByThread.get(key)?.delete(signal.id);
+            // Echoes of the original enqueue stay suppressed, but the forwarded event must be
+            // queued if this runtime later takes over the owner run.
+            const ids = state.locallyQueuedSignalIdsByThread.get(key);
+            if (ids?.has(signal.id)) ids.set(signal.id, owns.owner);
             await this.#publishAndWait(pubsub, key, {
               type: 'signal-enqueued',
               runId: owns.owner,

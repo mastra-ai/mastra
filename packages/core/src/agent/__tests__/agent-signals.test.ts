@@ -7922,16 +7922,21 @@ describe('Agent signals', () => {
       pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run'),
     );
     expect(streamMock).not.toHaveBeenCalled();
+    const forwarded = pubsub.publishedData.find(
+      data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run',
+    );
 
-    // The other owner dies before consuming it; this runtime takes over and the retained event replays.
+    // The other owner dies before consuming it; this runtime takes over its run and retained events replay.
     pubsub.owners.clear();
-    runtime.registerRun(agent, createFakeThreadRun('takeover-run', new Promise<void>(() => {})), options, pubsub);
+    runtime.registerRun(agent, createFakeThreadRun('other-owner-run', new Promise<void>(() => {})), options, pubsub);
     const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
-    await pubsub.publish(topic, { type: 'signal-enqueued', data: { ...enqueued, runId: 'takeover-run' } });
+    // The original local enqueue is still a self-echo and must not be queued again.
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: enqueued });
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: forwarded });
     await pubsub.flush();
     await nextTick();
 
-    const restored = runtime.drainPendingSignals('takeover-run', pubsub);
+    const restored = runtime.drainPendingSignals('other-owner-run', pubsub);
     expect(restored).toHaveLength(1);
     expect(restored[0]).toMatchObject({ contents: 'drained notification' });
   });
