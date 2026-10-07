@@ -407,16 +407,21 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
     const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
 
     const instructions = 'SECRET SYSTEM PROMPT';
-    const state = { agentSpanData: { attributes: { instructions } } };
+    const state = () => ({ agentSpanData: { attributes: { instructions } } });
     const snapshot = {
       runId: 'run-1',
       status: 'success',
       value: {},
       context: {
-        input: state,
-        'init-iteration-state': { status: 'success', payload: state, output: state },
-        [InngestDurableStepIds.AGENTIC_EXECUTION]: { status: 'success', payload: state, output: state },
-        'map-final-output': { status: 'success', payload: state, output: {} },
+        input: state(),
+        'init-iteration-state': { status: 'success', payload: state(), prevOutput: state(), output: state() },
+        [InngestDurableStepIds.AGENTIC_EXECUTION]: {
+          status: 'success',
+          payload: state(),
+          prevOutput: state(),
+          output: state(),
+        },
+        'map-final-output': { status: 'success', payload: state(), prevOutput: state(), output: {} },
       },
       activePaths: [],
       activeStepsPath: {},
@@ -430,7 +435,9 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
     for (const wf of [workflow, iterationWorkflow]) {
       expect(typeof wf.options.pruneSnapshot).toBe('function');
       const pruned = wf.options.pruneSnapshot({ snapshot: structuredClone(snapshot), workflowStatus: 'success' });
-      const { input: _input, ...stepResults } = pruned.context;
+      const { input, ...stepResults } = pruned.context;
+      expect(input.agentSpanData.attributes.instructions).toBe(instructions);
+      expect(Object.keys(stepResults)).toHaveLength(3);
       expect(JSON.stringify(stepResults)).not.toContain(instructions);
     }
   });
