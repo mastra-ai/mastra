@@ -55,7 +55,7 @@ export function useTraceThreadsQuery({
 
   return {
     threadIds,
-    isLoading: result.isLoading,
+    isLoading: result.isLoading || result.isPlaceholderData,
     isFetchingNextPage: result.isFetchingNextPage,
     hasNextPage: result.hasNextPage,
     error: result.error,
