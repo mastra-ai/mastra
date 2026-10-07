@@ -120,6 +120,55 @@ describe('ObservationStep step > 0 save', () => {
     ).toEqual(['background-call', 'reply-2', 'user-2']);
   });
 
+  it('merges a background tool result into a message that is being saved', async () => {
+    const threadId = 'thread-saving-message-result';
+    const { storage, om } = await setup(threadId);
+
+    const t0 = Date.now() - 60_000;
+    const user = textMessage('user-1', 'user', 'start the task', new Date(t0), threadId);
+    // The previous step's response: its background tool call is still running.
+    const backgroundCall = pendingToolCallMessage('background-call', 'call-bg', new Date(t0 + 1000), threadId);
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(user, 'input');
+    messageList.add(backgroundCall, 'response');
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+
+    let releaseSave!: () => void;
+    const saveStarted = new Promise<void>(resolveStarted => {
+      const realSave = storage.saveMessages.bind(storage);
+      vi.spyOn(storage, 'saveMessages').mockImplementationOnce(async args => {
+        resolveStarted();
+        await new Promise<void>(release => (releaseSave = release));
+        return realSave(args);
+      });
+    });
+
+    const prepared = turn.step(1).prepare();
+    await saveStarted;
+
+    // The message holding the call is in the save batch, but it must still be in the list for the
+    // result to merge into it rather than land as a separate message.
+    const merged = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId: 'call-bg', toolName: 'slowTask', args: {}, result: 'done' },
+    });
+    expect(merged).toBe(true);
+
+    releaseSave();
+    await prepared;
+
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['user-1', 'background-call']);
+    expect(messageList.get.all.db()[1]!.content.parts[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', result: 'done' },
+    });
+    // The merged result is queued for the next save.
+    expect(messageList.get.response.db().map(m => m.id)).toEqual(['background-call']);
+  });
+
   it('puts the drained messages back into their buckets when the save fails', async () => {
     const threadId = 'thread-failed-save';
     const { storage, om } = await setup(threadId);
