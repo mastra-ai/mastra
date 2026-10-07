@@ -627,6 +627,23 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    // Under `mapUserToResourceId` a signed-in caller carries a mapped resource,
+    // but Factory sessions own their threads under the session id. Server auth
+    // asks this when a request names a session's resource; approve only when
+    // the Factory access rule would let the caller open that session anyway.
+    // An unready domain denies rather than provisioning storage from an
+    // authorization check. A host-supplied policy is kept as-is.
+    if (auth && !auth.authorizeUserResource) {
+      auth.authorizeUserResource = (_user, resourceId, requestContext) =>
+        canCallerActAsFactorySession(
+          {
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+            ...(storage.isDomainReady('projects') ? { projects: factoryProjectsStorage } : {}),
+          },
+          resourceId,
+          requestContext,
+        );
+    }
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -652,8 +669,7 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
@@ -938,31 +954,12 @@ export class MastraFactory {
           if (!storage.isDomainReady('source-control')) return;
           await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
         },
-        // Under `mapUserToResourceId` a signed-in caller carries a mapped
-        // resource, but Factory sessions own their threads under the session
-        // id. Let the caller act as the session only when the Factory access
-        // rule would let them open it anyway.
-        // An unready domain denies rather than provisioning storage from an
-        // authorization check, leaving the caller on main's behavior: runs fail
-        // the thread-ownership check. The workspace factory keys on the
-        // session's own resource and checks the caller itself, so this answer
-        // never changes which workspace a session gets.
-        authorizeSessionResource: ({ resourceId, requestContext }) =>
-          canCallerActAsFactorySession(
-            {
-              ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-              ...(storage.isDomainReady('projects') ? { projects: factoryProjectsStorage } : {}),
-            },
-            resourceId,
-            requestContext,
-          ),
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
+            AgentControllerRequestContext<MastraCodeState> | undefined;
           if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has

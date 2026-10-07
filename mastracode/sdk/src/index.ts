@@ -179,8 +179,7 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
   return agentControllerContext?.getState();
 }
 
@@ -314,8 +313,7 @@ export interface MastraCodeConfig {
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
-    | string
-    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+    string | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -395,12 +393,6 @@ export interface MastraCodeConfig {
     resourceId: string;
     threadId: string;
   }) => void | Promise<void>;
-  /**
-   * Let a caller whose auth maps them to a different resource run a session
-   * under the session's own resource. Passed through to the controller; see
-   * `AgentControllerConfig.authorizeSessionResource`.
-   */
-  authorizeSessionResource?: AgentControllerConfig<MastraCodeState>['authorizeSessionResource'];
 }
 
 export function createAuthStorage() {
@@ -1527,7 +1519,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
-    authorizeSessionResource: config?.authorizeSessionResource,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
