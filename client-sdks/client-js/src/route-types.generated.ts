@@ -3697,7 +3697,7 @@ type Shared_Type_67 = {
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
   /** Fields `select` can add to trace query rows. Send only these; servers without this list reject `select`. */
-  traceQuerySelect: string[];
+  traceQuerySelect?: string[] | undefined;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
