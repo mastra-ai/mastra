@@ -28,7 +28,7 @@ import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic
 import type { Mastra } from '../../../../mastra';
 import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import { getRootExportSpan } from '../../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
@@ -1254,42 +1254,51 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const releaseModelCallActivity = markRunActive(runId);
               try {
                 inferenceStartedAt = Date.now();
-                modelResult = execute({
-                  runId,
-                  model: currentModel,
-                  providerOptions: currentProviderOptions,
-                  inputMessages,
-                  tools: currentTools,
-                  toolChoice: currentToolChoice,
-                  activeTools: currentActiveTools,
-                  options: { abortSignal: executionAbortSignal },
-                  headers: mergeLlmCallHeaders({
-                    memoryHeaders: buildMemoryHeaders({
-                      threadId: typedInput.state?.threadId,
-                      resourceId: typedInput.state?.resourceId,
+                modelResult = executeWithContextSync({
+                  span: modelSpanTracker?.getTracingContext()?.currentSpan,
+                  fn: () =>
+                    execute({
+                      runId,
+                      model: currentModel,
+                      providerOptions: currentProviderOptions,
+                      inputMessages,
+                      tools: currentTools,
+                      toolChoice: currentToolChoice,
+                      activeTools: currentActiveTools,
+                      options: { abortSignal: executionAbortSignal },
+                      headers: mergeLlmCallHeaders({
+                        memoryHeaders: buildMemoryHeaders({
+                          threadId: typedInput.state?.threadId,
+                          resourceId: typedInput.state?.resourceId,
+                        }),
+                        modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                        callTimeHeaders:
+                          registryEntry?.callTimeHeaders || currentModelSettings?.headers
+                            ? {
+                                ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                                ...(currentModelSettings?.headers as Record<string, string> | undefined),
+                              }
+                            : undefined,
+                      }),
+                      modelSettings: {
+                        ...currentModelSettings,
+                        maxRetries: 0,
+                      },
+                      includeRawChunks: execOptions.includeRawChunks,
+                      methodType: 'stream',
+                      structuredOutput: structuredOutput as any,
+                      onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
+                        warnings = w || [];
+                        request = r || {};
+                        rawResponse = rr || {};
+                        modelSpanTracker?.updateStep?.({
+                          request,
+                          inputMessages,
+                          warnings,
+                          messageId: currentMessageId,
+                        });
+                      },
                     }),
-                    modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
-                    callTimeHeaders:
-                      registryEntry?.callTimeHeaders || currentModelSettings?.headers
-                        ? {
-                            ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                            ...(currentModelSettings?.headers as Record<string, string> | undefined),
-                          }
-                        : undefined,
-                  }),
-                  modelSettings: {
-                    ...currentModelSettings,
-                    maxRetries: 0,
-                  },
-                  includeRawChunks: execOptions.includeRawChunks,
-                  methodType: 'stream',
-                  structuredOutput: structuredOutput as any,
-                  onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
-                    warnings = w || [];
-                    request = r || {};
-                    rawResponse = rr || {};
-                    modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-                  },
                 });
               } finally {
                 releaseModelCallActivity();

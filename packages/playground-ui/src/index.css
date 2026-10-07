@@ -233,6 +233,31 @@
   --xy-controls-button-border-color: transparent;
 }
 
+/* Skeleton highlight: enters off the left edge and leaves off the right before it loops. It
+   moves `translate` (what Tailwind v4's translate utilities set), so it doesn't stack on the
+   skeleton's own `-translate-x-full` start position. */
+@keyframes shimmer {
+  from {
+    translate: -100% 0;
+  }
+
+  to {
+    translate: 100% 0;
+  }
+}
+
+/* Chart ghost sweep, in SVG user units (a 0-100 viewBox): a 40-unit band of light from off the
+   left edge to off the right, on the same 2s loop as the skeleton shimmer. */
+@keyframes chart-ghost-sweep {
+  from {
+    transform: translateX(-40px);
+  }
+
+  to {
+    transform: translateX(140px);
+  }
+}
+
 @keyframes click-ripple {
   0% {
     transform: scale(0);
