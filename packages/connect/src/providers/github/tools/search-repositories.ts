@@ -17,7 +17,11 @@ export const searchRepositoriesInputSchema = z.object({
     .describe('What to sort results by. Default: best match.'),
   order: z.enum(['asc', 'desc']).optional().describe('The direction to sort the results by. Default: desc.'),
   per_page: z.number().int().min(1).max(100).optional().describe('The number of results per page (max 100).'),
-  cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a page number.')
+    .optional()
+    .describe('Pagination cursor (page number). Omit for the first page.'),
 });
 
 const SearchRepositorySchema = z.object({
@@ -89,7 +93,10 @@ export function searchRepositoriesTool(proxy: PlatformProxy) {
         updated_at: item.updated_at,
       }));
 
-      const hasMore = page * perPage < (data.total_count ?? 0) && items.length === perPage;
+      // GitHub's search API only exposes the first 1,000 results; never emit
+      // a cursor pointing past that window.
+      const reachableResults = Math.min(data.total_count ?? 0, 1000);
+      const hasMore = page * perPage < reachableResults && items.length === perPage;
 
       return {
         total_count: data.total_count ?? 0,

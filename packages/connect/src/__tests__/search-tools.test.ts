@@ -46,7 +46,7 @@ describe('slack_search_channels', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('stops early and returns a cursor once the match limit is reached', async () => {
+  it('stops early mid-page and resumes from the remaining channels without skipping matches', async () => {
     const page = {
       channels: [
         { id: 'C1', name: 'team-a', created: 1, creator: 'U1', is_archived: false },
@@ -57,15 +57,29 @@ describe('slack_search_channels', () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(page));
 
     const tools = createSlackTools({ connectionId: 'connection', client: client(fetchMock) });
-    const result = await tools.slack_search_channels!.execute!(
+    const first = await tools.slack_search_channels!.execute!(
       { query: 'team', limit: 1 },
       { requestContext: new RequestContext() },
     );
 
-    expect(result.total).toBe(1);
-    expect(result.conversations[0]!.id).toBe('C1');
-    expect(result.next_cursor).toBe('cursor-2');
+    expect(first.total).toBe(1);
+    expect(first.conversations[0]!.id).toBe('C1');
+    // Stopped mid-page: the cursor must re-enter this page at the next
+    // channel, not jump to the following Slack page and skip C2.
+    expect(first.next_cursor).toBe('offset:1:');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const second = await tools.slack_search_channels!.execute!(
+      { query: 'team', limit: 1, cursor: first.next_cursor },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(second.total).toBe(1);
+    expect(second.conversations[0]!.id).toBe('C2');
+    // C2 was the last channel on the page, so the continuation advances to
+    // Slack's own next page cursor.
+    expect(second.next_cursor).toBe('cursor-2');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -152,6 +166,35 @@ describe('github search tools', () => {
 
     expect(result.items[0]).toMatchObject({ full_name: 'mastra-ai/mastra', owner_login: 'mastra-ai' });
     expect(result.next_cursor).toBe('2');
+  });
+
+  it("does not emit a cursor past GitHub's 1,000-result search window", async () => {
+    const items = Array.from({ length: 10 }, (_, index) => ({
+      id: index,
+      number: index,
+      title: `Issue ${index}`,
+      state: 'open',
+      html_url: `https://github.com/o/r/issues/${index}`,
+      repository_url: 'https://api.github.com/repos/o/r',
+      labels: [],
+      comments: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    }));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => Response.json({ total_count: 5000, incomplete_results: false, items }));
+
+    const tools = createGithubTools({ connectionId: 'connection', client: client(fetchMock) });
+    const result = await tools.github_search_issues!.execute!(
+      // Page 100 of 10 per page is the last page GitHub will serve.
+      { q: 'repo:o/r is:issue', per_page: 10, cursor: '100' },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(result.total_count).toBe(5000);
+    expect(result.items).toHaveLength(10);
+    expect(result.next_cursor).toBeUndefined();
   });
 
   it('searches code and surfaces the owning repository', async () => {

@@ -8,7 +8,13 @@ import { resolveDiscordBotToken } from './_bot-token.js';
 export const searchMembersInputSchema = z.object({
   guild_id: z.string().describe('Guild ID. Example: "197038439483310086"'),
   query: z.string().min(1).describe('Username or nickname prefix to search for.'),
-  limit: z.number().min(1).max(1000).optional().describe('Max number of members to return (1-1000). Default: 25.'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe('Max number of members to return (1-1000). Default: 25.'),
 });
 
 const ProviderUserSchema = z.object({

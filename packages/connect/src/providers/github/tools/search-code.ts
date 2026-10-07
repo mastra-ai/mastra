@@ -12,7 +12,11 @@ export const searchCodeInputSchema = z.object({
       'GitHub code search query. Must include at least one qualifier such as repo:owner/name, org:name, or user:name. Example: "createTool repo:mastra-ai/mastra language:typescript".',
     ),
   per_page: z.number().int().min(1).max(100).optional().describe('The number of results per page (max 100).'),
-  cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a page number.')
+    .optional()
+    .describe('Pagination cursor (page number). Omit for the first page.'),
 });
 
 const SearchCodeItemSchema = z.object({
@@ -62,7 +66,10 @@ export function searchCodeTool(proxy: PlatformProxy) {
         repository_full_name: item.repository?.full_name ?? undefined,
       }));
 
-      const hasMore = page * perPage < (data.total_count ?? 0) && items.length === perPage;
+      // GitHub's search API only exposes the first 1,000 results; never emit
+      // a cursor pointing past that window.
+      const reachableResults = Math.min(data.total_count ?? 0, 1000);
+      const hasMore = page * perPage < reachableResults && items.length === perPage;
 
       return {
         total_count: data.total_count ?? 0,

@@ -56,6 +56,19 @@ export const searchChannelsOutputSchema = z.object({
 const PAGE_SIZE = 200;
 const MAX_PAGES_PER_CALL = 10;
 
+/**
+ * The continuation cursor is either a raw Slack conversations.list cursor or,
+ * when a call stopped mid-page because the match limit was reached, an
+ * `offset:<n>:<slack cursor>` composite that re-fetches the same page and
+ * resumes from channel index `<n>` so no matches are skipped.
+ */
+function parseContinuationCursor(raw: string | undefined): { pageCursor: string | undefined; offset: number } {
+  if (!raw) return { pageCursor: undefined, offset: 0 };
+  const match = /^offset:(\d+):(.*)$/.exec(raw);
+  if (match) return { pageCursor: match[2] || undefined, offset: Number.parseInt(match[1]!, 10) };
+  return { pageCursor: raw, offset: 0 };
+}
+
 export function searchChannelsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'slack_search_channels',
@@ -69,7 +82,7 @@ export function searchChannelsTool(proxy: PlatformProxy) {
       const maxMatches = input.limit ?? 20;
 
       const matches: Array<z.infer<typeof ConversationSchema>> = [];
-      let cursor = input.cursor;
+      let { pageCursor, offset } = parseContinuationCursor(input.cursor);
       let nextCursor: string | undefined;
 
       for (let page = 0; page < MAX_PAGES_PER_CALL; page++) {
@@ -79,15 +92,19 @@ export function searchChannelsTool(proxy: PlatformProxy) {
           params: {
             types: input.types || 'public_channel',
             limit: PAGE_SIZE,
-            ...(cursor && { cursor }),
+            ...(pageCursor && { cursor: pageCursor }),
           },
           retries: 3,
         };
 
         const response = await platformProxy.get(config);
 
-        const channels = response.data.channels || [];
-        for (const channel of channels as any[]) {
+        const channels: any[] = response.data.channels || [];
+        const responseMetadata = response.data.response_metadata || {};
+        const slackNextCursor: string | undefined = responseMetadata.next_cursor || undefined;
+
+        for (let index = offset; index < channels.length; index++) {
+          const channel = channels[index];
           const name: string = channel.name || '';
           if (!name.toLowerCase().includes(query)) continue;
           matches.push({
@@ -102,17 +119,25 @@ export function searchChannelsTool(proxy: PlatformProxy) {
             is_im: channel.is_im || false,
             num_members: channel.num_members,
           });
-          if (matches.length >= maxMatches) break;
+          if (matches.length >= maxMatches) {
+            // Stopped mid-page: point the continuation at the remainder of
+            // this page so the unscanned channels are not skipped.
+            nextCursor = index + 1 < channels.length ? `offset:${index + 1}:${pageCursor ?? ''}` : slackNextCursor;
+            return {
+              conversations: matches,
+              total: matches.length,
+              ...(nextCursor !== undefined && { next_cursor: nextCursor }),
+            };
+          }
         }
 
-        const responseMetadata = response.data.response_metadata || {};
-        cursor = responseMetadata.next_cursor || undefined;
-
-        if (matches.length >= maxMatches || !cursor) {
-          nextCursor = cursor;
+        offset = 0;
+        if (!slackNextCursor) {
+          nextCursor = undefined;
           break;
         }
-        nextCursor = cursor;
+        pageCursor = slackNextCursor;
+        nextCursor = slackNextCursor;
       }
 
       return {
