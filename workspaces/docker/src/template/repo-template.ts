@@ -104,6 +104,12 @@ export interface DockerRepoTemplateOptions {
    * @default 'node:22-slim'
    */
   baseImage?: string;
+  /**
+   * Owner of the checkout, as `user[:group]` or `uid[:gid]`. Set this to the
+   * base image's `USER` when it is non-root so git and writes work as that user.
+   * @default root
+   */
+  owner?: string;
   /** Pass-through dockerode connection options. */
   dockerOptions?: DockerOptions;
 }
@@ -171,6 +177,7 @@ async function resolveRepoTemplate(
     setupCommand: options.setupCommand,
     workingDirectory,
     baseImage: options.baseImage,
+    owner: options.owner,
     dockerOptions: options.dockerOptions,
   });
 }
@@ -183,6 +190,7 @@ interface RepoTemplateInputs {
   setupCommand?: string | string[];
   workingDirectory: string;
   baseImage?: string;
+  owner?: string;
   dockerOptions?: DockerOptions;
 }
 
@@ -219,7 +227,11 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
   ];
 
   template = template
-    .runWithSecrets(clone, { secrets: tokenEnv ? [tokenEnv] : [], output: destination })
+    .runWithSecrets(clone, {
+      secrets: tokenEnv ? [tokenEnv] : [],
+      output: destination,
+      ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}),
+    })
     .setWorkdir(destination);
 
   const setupCommands = normalizeSetupCommands(inputs.setupCommand);

@@ -27,10 +27,10 @@ vi.mock('../../theme.js', () => ({
 import { TaskProgressComponent } from '../task-progress.js';
 
 describe('TaskProgressComponent', () => {
-  it('reserves one blank line above the input when no tasks are visible', () => {
+  it('renders nothing when no tasks are visible (the idle row is the gap above the input)', () => {
     const component = new TaskProgressComponent();
 
-    expect(component.render(120)).toEqual(['']);
+    expect(component.render(120)).toEqual([]);
   });
 
   it('keeps current task rendering when tasks are active', () => {
@@ -135,12 +135,12 @@ describe('TaskProgressComponent', () => {
     expect(quietLines[1]).toContain('Do the next thing');
   });
 
-  it('reserves one blank line again after all tasks complete', () => {
+  it('renders nothing again after all tasks complete', () => {
     const component = new TaskProgressComponent();
     component.setQuietMode(true);
 
     component.updateTasks([{ id: 'one', content: 'Done', activeForm: 'Doing', status: 'completed' }]);
 
-    expect(component.render(120)).toEqual(['']);
+    expect(component.render(120)).toEqual([]);
   });
 });

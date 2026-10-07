@@ -14,14 +14,14 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
 
     // Switch to plan mode
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     // Submit initial prompt — AIMock returns submit_plan with the initial plan
     terminal.submit('Create a concise plan for the plan request-changes e2e test.');
     await runtime.waitForScreenText(/Plan: E2E Request Changes Plan/i, terminal, 10_000);
     await runtime.waitForScreenText(/Initial plan for the request-changes e2e test/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Approve\s+— switch to Build mode and implement/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Request changes\s+— reject and provide feedback via chat/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and implement/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Request changes\s+reject and give feedback in chat/i, terminal, 10_000);
 
     // Navigate to "Request changes" (3rd option: Down, Down, Enter)
     terminal.write('\x1b[B'); // Down
@@ -48,12 +48,12 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Write integration tests/i, terminal, 10_000);
 
     // The 3 approval options should appear again below the diff
-    await runtime.waitForScreenText(/Approve\s+— switch to Build mode and implement/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and implement/i, terminal, 10_000);
 
     // Approve the revised plan (Enter on first option)
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
-    await runtime.waitForScreenText(/▐build▌/i, terminal, 10_000);
+    await runtime.waitForScreenText(/\bbuild · /i, terminal, 10_000);
     await runtime.sleep(1_000);
 
     terminal.keyCtrlC();
