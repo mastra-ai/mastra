@@ -182,6 +182,29 @@ describe('DurableAgent.recover(runId)', () => {
     cleanup();
   });
 
+  it('marks a recovered run with call-time toolsets as a placeholder so tools are rebuilt and checked', async () => {
+    const workflows = (await store.getStore('workflows'))!;
+    for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+      const snapshot = makeSnapshot('run-toolsets', 'running', 'agent-A');
+      (snapshot.context.input as any).options = { toolsetToolNames: ['shout'] };
+      await workflows.persistWorkflowSnapshot({ workflowName, runId: 'run-toolsets', resourceId: 'r', snapshot });
+    }
+    stubWorkflow(agent, 'success');
+
+    const withToolsets = await agent.recover('run-toolsets');
+    expect(globalRunRegistry.get('run-toolsets')?.isPlaceholder).toBe(true);
+    await globalRunRegistry.get('run-toolsets')?.workflowExecution;
+    withToolsets.cleanup();
+
+    const control = createDurableWithStore('agent-A');
+    await seed(control.store, 'run-no-toolsets', 'running', 'agent-A');
+    stubWorkflow(control.agent, 'success');
+    const withoutToolsets = await control.agent.recover('run-no-toolsets');
+    expect(globalRunRegistry.get('run-no-toolsets')?.isPlaceholder).toBe(false);
+    await globalRunRegistry.get('run-no-toolsets')?.workflowExecution;
+    withoutToolsets.cleanup();
+  });
+
   it('rehydrates signal draining for signals delivered after recovery', async () => {
     const runId = 'run-recovered-signal';
     await seed(store, runId, 'running', 'agent-A');

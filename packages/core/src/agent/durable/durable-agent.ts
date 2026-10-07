@@ -1225,6 +1225,10 @@ export class DurableAgent<
     recoveryLease.assertOwned();
 
     const registryEntry = {
+      // Call-time toolset tools died with the original process. Mark the entry
+      // as a placeholder so the first step rebuilds tools and fails loudly
+      // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
+      isPlaceholder: (workflowInput.options?.toolsetToolNames?.length ?? 0) > 0,
       // Restore the original run's flag from the persisted snapshot so a
       // warm resume after recovery keeps returning scoringData without the
       // caller re-passing the option.
