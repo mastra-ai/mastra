@@ -44,9 +44,6 @@ The agent asks for approval before it changes files or runs commands. When it cr
 - Add tools under `src/mastra/tools/`
 - Register everything in `src/mastra/index.ts`
 
-> [!NOTE]
-> This template tracks `@mastra` **alpha** releases, and the included `.npmrc` sets `legacy-peer-deps=true` so npm accepts prerelease `@mastra/core` against the peer ranges of already-published packages. Once the dependencies move back to stable versions, both can be removed.
-
 ## Learn more
 
 To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/mastra-ai) community to get help and share your projects.

@@ -16,17 +16,17 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/connect": "alpha",
-    "@mastra/core": "alpha",
-    "@mastra/loggers": "alpha",
-    "@mastra/memory": "alpha",
-    "@mastra/observability": "alpha",
-    "@mastra/pg": "alpha",
+    "@mastra/connect": "latest",
+    "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/pg": "latest",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.9",
-    "mastra": "alpha",
+    "mastra": "latest",
     "typescript": "^5.9.3"
   }
 }
