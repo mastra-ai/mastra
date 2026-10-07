@@ -2890,7 +2890,9 @@ export class AgentThreadStreamRuntime {
       const state = this.#getState(pubsub);
       const runId = output.runId;
       const finalizerToken = {};
-      const preparedRun = state.preparedRunsById.get(runId);
+      const preparedRun = streamOptions.abortSignal
+        ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
+        : undefined;
       if (preparedRun) {
         preparedRun.finalizerToken = finalizerToken;
         this.#threadlessRunFinalizer.register(output, { state, runId, token: finalizerToken }, finalizerToken);

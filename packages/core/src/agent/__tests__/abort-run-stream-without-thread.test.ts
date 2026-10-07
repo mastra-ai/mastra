@@ -273,6 +273,35 @@ describe('Agent.abortRunStream without a thread', () => {
     expect(secondOptions.abortSignal?.aborted).toBe(true);
   });
 
+  it('does not bind an earlier late registration to a newer thread-less run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'late-registration-threadless-run';
+    const firstCaller = new AbortController();
+    const firstOptions = runtime.prepareRunOptions({ runId, abortSignal: firstCaller.signal }, pubsub);
+    const secondOptions = runtime.prepareRunOptions({ runId }, pubsub);
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      finishFirst = resolve;
+    });
+    const agent = new Agent({
+      id: 'late-registration-no-thread',
+      name: 'Late registration cleanup test',
+      instructions: 'Test',
+      model: createParkedModel().model,
+    });
+
+    runtime.registerRun(agent, { runId, _waitUntilFinished: () => firstFinished } as any, firstOptions, pubsub);
+    finishFirst();
+    await firstFinished;
+    await Promise.resolve();
+    firstCaller.abort();
+
+    expect(firstOptions.abortSignal?.aborted).toBe(false);
+    expect(runtime.abortRun(runId, pubsub)).toBe(true);
+    expect(secondOptions.abortSignal?.aborted).toBe(true);
+  });
+
   it('removes a thread-less prepared run when its unconsumed output is collected', async () => {
     // Isolate forced garbage collection so the test suite does not need to run with --expose-gc.
     const fixture = new URL('./fixtures/threadless-unconsumed-run-gc.ts', import.meta.url);
