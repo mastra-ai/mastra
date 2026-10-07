@@ -1,6 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { DelegationStartResult } from '../agent.types';
 
@@ -142,5 +146,116 @@ describe('delegation threadMetadata (issue #24956)', () => {
     for (const t of children) {
       expect(t.metadata?.tenantId).toBeUndefined();
     }
+  });
+});
+
+describe('delegation threadMetadata on resume (issue #24956)', () => {
+  function buildApprovalSubAgent() {
+    return new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      description: 'Processes a single order.',
+      instructions: 'Process the order by calling process-order.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          const done = JSON.stringify(prompt).includes('"processed"');
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: done
+              ? textStream('Processed.')
+              : convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'sub', modelId: 'mock', timestamp: new Date(0) },
+                  { type: 'tool-call', toolCallId: 'tc-1', toolName: 'process-order', input: '{"orderId":"o1"}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ]),
+          };
+        },
+      }),
+      tools: {
+        processOrder: createTool({
+          id: 'process-order',
+          description: 'Process an order. Requires approval.',
+          inputSchema: z.object({ orderId: z.string() }),
+          requireApproval: true,
+          execute: async ({ orderId }) => ({ orderId, processed: true }),
+        }),
+      },
+    });
+  }
+
+  it('keeps the metadata from the first leg when the sub-agent resumes', async () => {
+    const memory = new MockMemory();
+    let step = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doStream: async () => {
+        step++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream:
+            step === 1
+              ? convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'sup', modelId: 'mock', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'sup-tc-A',
+                    toolName: 'agent-subAgent',
+                    input: JSON.stringify({ prompt: 'Process order o1.', maxSteps: 3 }),
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ])
+              : textStream('Done.'),
+        };
+      },
+    });
+    const sup = new Agent({
+      id: 'supervisor',
+      name: 'Supervisor',
+      instructions: 'Delegate to the sub agent.',
+      model: supervisorModel,
+      agents: { subAgent: buildApprovalSubAgent() },
+      memory,
+    });
+    const mastra = new Mastra({ agents: { supervisor: sup }, logger: false, storage: new InMemoryStore() });
+    const supervisor = mastra.getAgent('supervisor');
+
+    let delegationCalls = 0;
+    const delegation = {
+      onDelegationStart: (): DelegationStartResult => {
+        delegationCalls++;
+        return { threadMetadata: { tenantId: delegationCalls === 1 ? 'original' : 'replaced' } };
+      },
+    };
+
+    const stream = await supervisor.stream('Process the order.', {
+      maxSteps: 6,
+      memory: { resource: 'r1', thread: 'parent-thread' },
+      delegation,
+    });
+    const initial: any[] = [];
+    for await (const c of stream.fullStream) initial.push(c);
+    expect(initial.some(c => c.type === 'tool-call-approval')).toBe(true);
+
+    const resumed = await supervisor.approveToolCall({ runId: stream.runId, toolCallId: 'sup-tc-A', delegation });
+    const resumedChunks: any[] = [];
+    for await (const c of resumed.fullStream) resumedChunks.push(c);
+    expect(resumedChunks.filter(c => c.type === 'tool-error' || c.type === 'error')).toEqual([]);
+    expect(resumedChunks.map(c => c.type)).toContain('tool-result');
+    expect(delegationCalls).toBe(2);
+
+    const children = await childThreads(memory);
+    expect(children.length).toBe(1);
+    expect(children[0]!.metadata?.tenantId).toBe('original');
   });
 });
