@@ -3,7 +3,7 @@ import type { MemoryStorage, RunFence, WorkflowsStorage } from '@mastra/core/sto
 import { isRunFenceConflictError } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PostgresStore } from '../index';
 import { connectionString, TEST_CONFIG } from '../test-utils';
 
@@ -16,6 +16,7 @@ import { connectionString, TEST_CONFIG } from '../test-utils';
 describe('PostgreSQL run fencing: a takeover racing an in-flight write', () => {
   const schemaName = `run_fence_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const LEASE_MS = 30_000;
+  const heldLocks = new Set<() => Promise<void>>();
   let storeA: PostgresStore;
   let storeB: PostgresStore;
   let pool: Pool;
@@ -26,6 +27,11 @@ describe('PostgreSQL run fencing: a takeover racing an in-flight write', () => {
     storeB = new PostgresStore({ ...TEST_CONFIG, id: 'run-fence-b', schemaName });
     await storeA.init();
     await storeB.init();
+  });
+
+  // A failed assertion must not leave a lock behind for the next test to hang on.
+  afterEach(async () => {
+    await Promise.all([...heldLocks].map(release => release()));
   });
 
   afterAll(async () => {
@@ -40,13 +46,16 @@ describe('PostgreSQL run fencing: a takeover racing an in-flight write', () => {
     await client.query('BEGIN');
     await client.query(`SELECT 1 FROM "${schemaName}"."${table}" WHERE ${where} FOR UPDATE`, params);
     const { rows } = await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
-    return {
-      pid: rows[0]!.pid,
-      release: async () => {
+    const release = async () => {
+      if (!heldLocks.delete(release)) return;
+      try {
         await client.query('ROLLBACK');
+      } finally {
         client.release();
-      },
+      }
     };
+    heldLocks.add(release);
+    return { pid: rows[0]!.pid, release };
   }
 
   /** Resolves with the pid of a backend blocked by `pid`, or null if `settled()` turns true first. */

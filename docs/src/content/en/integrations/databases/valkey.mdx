@@ -51,6 +51,8 @@ const storage = new ValkeyStore({
 
 For an existing `GlideClient`, connect it before passing it to `ValkeyStore`. The caller remains responsible for closing injected clients.
 
+`ValkeyStore` needs a standalone Valkey server. Valkey Cluster and `GlideClusterClient` aren't supported.
+
 ## Constructor parameters
 
 <PropertiesTable

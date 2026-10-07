@@ -1,6 +1,6 @@
 ---
 title: "Redis | Database"
-description: "Store Mastra application data in Redis using connection strings, host settings, or custom clients, including Sentinel and Cluster deployments."
+description: "Store Mastra application data in Redis using connection strings, host settings, or custom clients, including Sentinel deployments."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -9,7 +9,7 @@ packages:
 
 # Redis
 
-The Redis storage implementation provides a high-performance storage solution using direct Redis connections via [`node-redis`](https://github.com/redis/node-redis) (the official Redis client for Node.js). It supports standalone Redis, and through custom client configuration, Redis Sentinel and Cluster deployments.
+The Redis storage implementation provides a high-performance storage solution using direct Redis connections via [`node-redis`](https://github.com/redis/node-redis) (the official Redis client for Node.js). It supports standalone Redis and, through a custom client, Redis Sentinel. Redis Cluster isn't supported.
 
 ## Installation
 
@@ -50,7 +50,7 @@ await storage.init()
 
 ### Using Pre-configured Client
 
-For advanced configurations like Sentinel or Cluster, you can pass a pre-configured Redis client:
+For advanced configurations such as Sentinel, you can pass a pre-configured Redis client:
 
 ```typescript
 import { RedisStore } from '@mastra/redis'
@@ -164,27 +164,7 @@ const storage = new RedisStore({
 
 ### Redis Cluster
 
-For Redis Cluster deployments, use the cluster client:
-
-```typescript
-import { RedisStore } from '@mastra/redis'
-import { createCluster } from 'redis'
-
-const cluster = createCluster({
-  rootNodes: [
-    { url: 'redis://node-1:6379' },
-    { url: 'redis://node-2:6379' },
-    { url: 'redis://node-3:6379' },
-  ],
-})
-
-await cluster.connect()
-
-const storage = new RedisStore({
-  id: 'redis-cluster-storage',
-  client: cluster,
-})
-```
+Redis Cluster isn't supported. `RedisStore` accepts only a standalone client from `createClient()`, and several operations read or write keys that hash to different slots, which Redis Cluster rejects with a `CROSSSLOT` error.
 
 ### Accessing the Underlying Client
 
