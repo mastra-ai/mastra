@@ -1442,6 +1442,51 @@ describe('UnixSocketPubSub', () => {
       });
     });
 
+    it('finishes a release that started before close', async () => {
+      const pubsub = new UnixSocketPubSub(await socketPath('first.sock'));
+      pubsubs.push(pubsub);
+      const key = 'released-at-shutdown';
+      const leasePath = join(tempDir!, 'leases', `${createHash('sha256').update(key).digest('hex')}.json`);
+      await pubsub.acquireLease(key, 'owner', 10_000);
+      await expect(readFile(leasePath, 'utf8')).resolves.toContain('owner');
+
+      // A fast shutdown: a claim's release is fired, then the pubsub closes before it settles.
+      const release = pubsub.releaseLease(key, 'owner');
+      await pubsub.close();
+
+      await expect(release).resolves.toBeUndefined();
+      await expect(readFile(leasePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(pubsub.releaseLease(key, 'owner')).rejects.toThrow('UnixSocketPubSub is closed');
+    });
+
+    it('stops waiting for a release blocked on a held mutation lock once close gives up', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'held-release-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'held-token' }));
+
+      const releaseResult = Promise.allSettled([second.releaseLease(key, 'second-owner')]);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const closeResult = await Promise.race([
+        second.close().then(() => 'closed'),
+        new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 3_000)),
+      ]);
+
+      await rm(lockPath);
+      const [release] = await releaseResult;
+      expect(closeResult).toBe('closed');
+      expect(release).toMatchObject({ status: 'rejected', reason: new Error('UnixSocketPubSub is closed') });
+    });
+
     it('renews, transfers, and owner-guards release without an unowned gap', async () => {
       const first = new UnixSocketPubSub(await socketPath('first.sock'));
       const second = new UnixSocketPubSub(await socketPath('second.sock'));

@@ -104,7 +104,7 @@ export const mastra = new Mastra({
 
 ### `close()`
 
-Closes the socket connection and, when this instance is the broker, releases the broker role. Call this during graceful shutdown.
+Closes the socket connection and, when this instance is the broker, releases the broker role. Call this during graceful shutdown. Lease releases that started before `close()` still complete, and `close()` waits for them. Lease operations started after `close()` throw.
 
 ```typescript
 await pubsub.close()

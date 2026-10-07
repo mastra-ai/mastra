@@ -76,6 +76,9 @@ const DEFAULT_BROKER_PATH_CHECK_INTERVAL_MS = 2_000;
 const CONNECT_RETRY_DELAYS_MS = [50, 100, 200];
 const NEWLINE_BYTE = 0x0a;
 const LEASE_LOCK_RETRY_MS = 10;
+// How long close() keeps waiting for a release that started before it. Mutation
+// locks are held for milliseconds; past this, a held lock must not hang close().
+const LEASE_RELEASE_CLOSE_GRACE_MS = 1_000;
 const PROCESS_NONCE_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/process-nonce');
 const LEASE_RECOVERY_OWNERS_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/lease-recovery-owners');
 const processGlobals = globalThis as typeof globalThis & {
@@ -328,6 +331,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #clientSocket?: net.Socket;
   #isBroker = false;
   #closed = false;
+  #closedAt = 0;
   #starting?: Promise<void>;
   #subscriptions = new Map<string, Map<EventCallback, LocalSubscription>>();
   // Subscriptions whose unsubscribe is in flight. A reconnect must not
@@ -422,16 +426,25 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     );
   }
 
-  /** Releases the lease only when `owner` still matches the stored owner. */
+  /**
+   * Releases the lease only when `owner` still matches the stored owner. A
+   * release that started before close() runs to completion (close() awaits it):
+   * shutdown fires releases and closes right after, and an aborted release
+   * leaves the lease file behind until another process notices the holder died.
+   */
   async releaseLease(key: string, owner: string): Promise<void> {
     this.#throwIfClosed();
     await this.#trackLeaseOperation(
-      this.#withLeaseMutation(key, async leasePath => {
-        const existing = await this.#readLease(leasePath);
-        if (existing?.owner === owner) {
-          await unlink(leasePath).catch(() => {});
-        }
-      }),
+      this.#withLeaseMutation(
+        key,
+        async leasePath => {
+          const existing = await this.#readLease(leasePath);
+          if (existing?.owner === owner) {
+            await unlink(leasePath).catch(() => {});
+          }
+        },
+        { finishAfterClose: true },
+      ),
     );
   }
 
@@ -623,8 +636,20 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     await this.#leaseDirectoriesReady;
   }
 
-  /** Serializes one lease key's read-modify-write operation across processes. */
-  async #withLeaseMutation<T>(key: string, mutate: (leasePath: string) => Promise<T>): Promise<T> {
+  /**
+   * Serializes one lease key's read-modify-write operation across processes.
+   * Waiting for the mutation lock stops once the pubsub closes, unless
+   * `finishAfterClose` is set, in which case it continues for up to
+   * LEASE_RELEASE_CLOSE_GRACE_MS after close.
+   */
+  async #withLeaseMutation<T>(
+    key: string,
+    mutate: (leasePath: string) => Promise<T>,
+    { finishAfterClose = false }: { finishAfterClose?: boolean } = {},
+  ): Promise<T> {
+    const throwIfAborted = () => {
+      if (!finishAfterClose || Date.now() - this.#closedAt > LEASE_RELEASE_CLOSE_GRACE_MS) this.#throwIfClosed();
+    };
     await this.#ensureLeaseDirectories();
     const fileName = leaseFileName(key);
     const leasePath = join(this.#leaseDirectory, `${fileName}.json`);
@@ -636,9 +661,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     };
 
     while (true) {
-      this.#throwIfClosed();
-      await this.#completeLeaseMutationRecoveries(lockPath);
-      this.#throwIfClosed();
+      throwIfAborted();
+      await this.#completeLeaseMutationRecoveries(lockPath, throwIfAborted);
+      throwIfAborted();
       const candidatePath = `${lockPath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
       await writeFile(candidatePath, JSON.stringify(lockRecord), { flag: 'wx' });
       let installed = false;
@@ -653,7 +678,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
           continue;
         }
         if (await this.#isLeaseMutationLockStale(existingLock)) {
-          await this.#startLeaseMutationRecovery(lockPath, existingLock);
+          await this.#startLeaseMutationRecovery(lockPath, existingLock, throwIfAborted);
         } else {
           await delay(LEASE_LOCK_RETRY_MS);
         }
@@ -664,8 +689,8 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       if (!installed) continue;
       let currentLock: FileLeaseMutationLock | undefined;
       try {
-        await this.#completeLeaseMutationRecoveries(lockPath);
-        this.#throwIfClosed();
+        await this.#completeLeaseMutationRecoveries(lockPath, throwIfAborted);
+        throwIfAborted();
         currentLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
       } catch (error) {
         const heldLock = await this.#readJson<FileLeaseMutationLock>(lockPath).catch(() => undefined);
@@ -692,13 +717,16 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   /** Completes any in-progress recovery before acquisition or release touches the canonical lock path. */
-  async #completeLeaseMutationRecoveries(lockPath: string): Promise<void> {
+  async #completeLeaseMutationRecoveries(
+    lockPath: string,
+    throwIfAborted = () => this.#throwIfClosed(),
+  ): Promise<void> {
     while (true) {
-      this.#throwIfClosed();
+      throwIfAborted();
       const recoveryPaths = await this.#leaseMutationRecoveryPaths(lockPath);
       if (recoveryPaths.length === 0) return;
       for (const recoveryPath of recoveryPaths) {
-        await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
+        await this.#completeLeaseMutationRecovery(lockPath, recoveryPath, throwIfAborted);
       }
       if ((await this.#leaseMutationRecoveryPaths(lockPath)).length > 0) {
         await delay(LEASE_LOCK_RETRY_MS);
@@ -755,7 +783,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   /** Elects one immutable owner generation to finish a stale-lock recovery. */
-  async #ownsLeaseMutationRecovery(recoveryPath: string): Promise<boolean> {
+  async #ownsLeaseMutationRecovery(recoveryPath: string, throwIfAborted: () => void): Promise<boolean> {
     const ownerDirectory = `${recoveryPath}.owners`;
     const self = this.#leaseMutationRecoveryOwner();
     const recoveryStillExists = async () => {
@@ -771,7 +799,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     await mkdir(ownerDirectory, { recursive: true });
 
     while (true) {
-      this.#throwIfClosed();
+      throwIfAborted();
       if (!(await recoveryStillExists())) {
         await rm(ownerDirectory, { recursive: true, force: true });
         return false;
@@ -809,7 +837,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   /** Creates the immutable recovery marker before electing the generation's recovery owner. */
-  async #startLeaseMutationRecovery(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
+  async #startLeaseMutationRecovery(
+    lockPath: string,
+    expected: FileLeaseMutationLock,
+    throwIfAborted: () => void,
+  ): Promise<void> {
     const recoveryDirectory = `${lockPath}.recoveries`;
     const recoveryPath = join(recoveryDirectory, `${await this.#leaseMutationLockGeneration(expected)}.marker`);
     await mkdir(recoveryDirectory, { recursive: true });
@@ -823,12 +855,16 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       if (code === 'ENOENT') return;
       if (code !== 'EEXIST') throw error;
     }
-    await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
+    await this.#completeLeaseMutationRecovery(lockPath, recoveryPath, throwIfAborted);
   }
 
   /** Removes one stale generation; every other contender waits while its marker remains. */
-  async #completeLeaseMutationRecovery(lockPath: string, recoveryPath: string): Promise<void> {
-    if (!(await this.#ownsLeaseMutationRecovery(recoveryPath))) return;
+  async #completeLeaseMutationRecovery(
+    lockPath: string,
+    recoveryPath: string,
+    throwIfAborted: () => void,
+  ): Promise<void> {
+    if (!(await this.#ownsLeaseMutationRecovery(recoveryPath, throwIfAborted))) return;
     const expectedGeneration = basename(recoveryPath, '.marker');
     const expected = await this.#readJson<FileLeaseMutationLock>(recoveryPath);
     if (
@@ -979,6 +1015,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   async close(): Promise<void> {
+    if (!this.#closed) this.#closedAt = Date.now();
     this.#closed = true;
     this.#subscriptions.clear();
     this.#localGroupCursors.clear();
