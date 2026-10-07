@@ -431,6 +431,7 @@ async function resolveSessionEnvironment(
     .filter(link => link.inEnvironment)
     .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
   const repos: SessionEnvironmentRepo[] = [];
+  const directories = new Set<string>();
   for (const link of links) {
     const repository = await storage.repositories.get({ orgId: session.orgId, id: link.repositoryId });
     if (!repository) {
@@ -441,6 +442,23 @@ async function resolveSessionEnvironment(
       });
       continue;
     }
+    // Two repositories that share a directory name would clobber each other's
+    // checkout under the root (and the template refuses them); the earlier
+    // position wins, the later link is left out of this boot.
+    const directory = repositoryDirectoryName(repository.slug);
+    if (directories.has(directory)) {
+      console.warn(
+        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
+        {
+          orgId: session.orgId,
+          factoryProjectId: project.id,
+          projectRepositoryId: link.id,
+          directory,
+        },
+      );
+      continue;
+    }
+    directories.add(directory);
     repos.push({
       projectRepositoryId: link.id,
       repositoryId: repository.id,
@@ -1115,108 +1133,118 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
       let primaryError: unknown;
-      for (const repo of repos) {
-        const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
-        if (!entry) continue;
-        const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
-        const state: SessionEnvironmentRepositoryState = {
-          slug: repo.slug,
-          dir: entry.dir,
-          branch: null,
-          defaultBranch: repo.defaultBranch,
-          position: repo.position,
-          setupStatus: repo.setupCommand ? 'ok' : 'skipped',
-        };
-        states.push(state);
-        if (isPrimary) {
+      // Recorded whatever happens: once a repository is materialized and set
+      // up, retirement must tear it down even when this boot fails later.
+      const record = () =>
+        recordSessionEnvironment(
+          session.sessionId,
+          { workingDirectory: gate.root, repositories: states },
+          states.flatMap(state => {
+            const command = repos.find(repo => repo.slug === state.slug)?.teardownCommand;
+            return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
+          }),
+        );
+      try {
+        for (const repo of repos) {
+          const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
+          if (!entry) continue;
+          const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
+          const state: SessionEnvironmentRepositoryState = {
+            slug: repo.slug,
+            dir: entry.dir,
+            branch: null,
+            defaultBranch: repo.defaultBranch,
+            position: repo.position,
+            setupStatus: repo.setupCommand ? 'ok' : 'skipped',
+          };
+          states.push(state);
+          if (isPrimary) {
+            try {
+              await runSessionSetup(target, primaryDir, entry.gate);
+              state.branch = session.branch;
+              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand))
+                state.setupStatus = 'failed';
+            } catch (error) {
+              if (!(error instanceof SetupCommandError)) throw error;
+              state.branch = session.branch;
+              state.setupStatus = 'failed';
+              primaryError = error;
+            }
+            continue;
+          }
           try {
-            await runSessionSetup(target, primaryDir, entry.gate);
-            state.branch = session.branch;
-            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) state.setupStatus = 'failed';
+            const access = await sourceControl.versionControl.getRepositoryAccess({
+              orgId: session.orgId,
+              repositoryId: repo.repositoryId,
+            });
+            const token = access.authorization?.token;
+            if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
+            await materializeRepo({
+              row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
+              repoInfo: {
+                repoFullName: repo.slug,
+                defaultBranch: repo.defaultBranch,
+                cloneUrl: access.cloneUrl,
+                authUsername: access.authorization?.username,
+              },
+              sandbox: target,
+              token,
+              // `materialized_at` is the session's own repository's.
+              storage: { markMaterialized: async () => {} },
+            });
+            const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
+              syncEnvironmentRepository(target, entry.dir, {
+                branch: session.branch,
+                defaultBranch: repo.defaultBranch,
+                token,
+                repoFullName: repo.slug,
+                cloneUrl: access.cloneUrl,
+                authUsername: access.authorization?.username,
+              }),
+            );
+            state.branch = synced.branch;
+          } catch (error) {
+            console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              projectRepositoryId: repo.projectRepositoryId,
+              error: error instanceof Error ? error.message.slice(-2000) : String(error),
+            });
+            // The checkout may be missing or stale and its setup never ran.
+            state.setupStatus = 'failed';
+            continue;
+          }
+          if (!repo.setupCommand || entry.gate.setupDone) continue;
+          if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
+            state.setupStatus = 'failed';
+            continue;
+          }
+          try {
+            await timedPhase(`workspace.setup(${repo.slug})`, () =>
+              runSetupCommand(target, entry.dir, repo.setupCommand!),
+            );
+            await entry.gate.markSetupDone();
           } catch (error) {
             if (!(error instanceof SetupCommandError)) throw error;
-            state.branch = session.branch;
+            recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
-            primaryError = error;
+            console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              projectRepositoryId: repo.projectRepositoryId,
+              error: error.message.slice(-2000),
+            });
           }
-          continue;
         }
-        try {
-          const access = await sourceControl.versionControl.getRepositoryAccess({
-            orgId: session.orgId,
-            repositoryId: repo.repositoryId,
-          });
-          const token = access.authorization?.token;
-          if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
-          await materializeRepo({
-            row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
-            repoInfo: {
-              repoFullName: repo.slug,
-              defaultBranch: repo.defaultBranch,
-              cloneUrl: access.cloneUrl,
-              authUsername: access.authorization?.username,
-            },
-            sandbox: target,
-            token,
-            // `materialized_at` is the session's own repository's.
-            storage: { markMaterialized: async () => {} },
-          });
-          const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
-            syncEnvironmentRepository(target, entry.dir, {
-              branch: session.branch,
-              defaultBranch: repo.defaultBranch,
-              token,
-              repoFullName: repo.slug,
-              cloneUrl: access.cloneUrl,
-              authUsername: access.authorization?.username,
-            }),
+        if (environment!.workspaceSetupCommand && !gate.workspace.setupDone) {
+          await timedPhase('workspace.setup(workspace)', () =>
+            runSetupCommand(target, gate.root, environment!.workspaceSetupCommand!),
           );
-          state.branch = synced.branch;
-        } catch (error) {
-          console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
-            orgId: session.orgId,
-            sessionId: session.sessionId,
-            projectRepositoryId: repo.projectRepositoryId,
-            error: error instanceof Error ? error.message.slice(-2000) : String(error),
-          });
-          continue;
+          await gate.workspace.markSetupDone();
         }
-        if (!repo.setupCommand || entry.gate.setupDone) continue;
-        if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
-          state.setupStatus = 'failed';
-          continue;
-        }
-        try {
-          await timedPhase(`workspace.setup(${repo.slug})`, () =>
-            runSetupCommand(target, entry.dir, repo.setupCommand!),
-          );
-          await entry.gate.markSetupDone();
-        } catch (error) {
-          if (!(error instanceof SetupCommandError)) throw error;
-          recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
-          state.setupStatus = 'failed';
-          console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
-            orgId: session.orgId,
-            sessionId: session.sessionId,
-            projectRepositoryId: repo.projectRepositoryId,
-            error: error.message.slice(-2000),
-          });
-        }
+      } finally {
+        record();
       }
-      if (environment!.workspaceSetupCommand && !gate.workspace.setupDone) {
-        await timedPhase('workspace.setup(workspace)', () =>
-          runSetupCommand(target, gate.root, environment!.workspaceSetupCommand!),
-        );
-        await gate.workspace.markSetupDone();
-      }
-      recordSessionEnvironment(
-        session.sessionId,
-        { workingDirectory: gate.root, repositories: states },
-        states.flatMap(state => {
-          const command = repos.find(repo => repo.slug === state.slug)?.teardownCommand;
-          return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
-        }),
-      );
       if (primaryError) throw primaryError;
     };
     // The session's real sandbox goes straight onto the Workspace. Providers

@@ -3352,7 +3352,54 @@ describe('factory environment sandbox context', () => {
       expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
         slug: 'octocat/docs',
         branch: null,
+        setupStatus: 'failed',
       });
+      warn.mockRestore();
+    });
+
+    it('records the environment for teardown even when the workspace setup command fails', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'touch .workspace-ready') {
+          throw new SetupCommandError('Setup command failed (exit 1)', 'setup-failed');
+        }
+      });
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+      ]);
+      mocks.runSetupCommand.mockReset();
+    });
+
+    it('leaves out a later repository whose directory name collides with an earlier one', async () => {
+      const { resolver } = environmentFixture({
+        links: [
+          ...twoLinks,
+          { id: 'link-4', repositoryId: 'repository-4', slug: 'someone-else/docs', position: 4, inEnvironment: true },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
+        expect.objectContaining({ projectRepositoryId: 'link-4', directory: 'docs' }),
+      );
+      const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+      expect(ctx.repos).toHaveLength(2);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+      ]);
       warn.mockRestore();
     });
 
