@@ -54,6 +54,20 @@ describe('saveTraceFiltersToStorage', () => {
 
     expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error');
   });
+
+  describe('when a tags filter carries an operator', () => {
+    it.each([
+      ['filterTags=production&filterTags=staging&filterTags.op=notIn', 'notIn'],
+      ['filterTags=&filterTags.op=exists', 'exists'],
+      ['filterTags=&filterTags.op=notExists', 'notExists'],
+    ])('restores %s with its operator', (query, operatorId) => {
+      saveTraceFiltersToStorage(new URLSearchParams(query), KEY);
+
+      const restored = loadTraceFiltersFromStorage(KEY);
+      expect(restored?.get('filterTags.op')).toBe(operatorId);
+      expect(restored?.getAll('filterTags')).toEqual(new URLSearchParams(query).getAll('filterTags'));
+    });
+  });
 });
 
 describe('TRACE_FILTER_BAR_OPERATORS', () => {
@@ -70,6 +84,8 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
       gte: 'at least',
       lt: 'less than',
       lte: 'at most',
+      matches: 'matches',
+      notMatches: 'does not match',
     });
   });
 });
@@ -91,7 +107,74 @@ describe('createTraceFilterBarFields', () => {
   it('omits fields the query API cannot filter on', () => {
     expect(byId('runId')).toBeUndefined();
     expect(byId('serviceName')).toBeUndefined();
-    expect(byId('tags')).toBeUndefined();
+  });
+
+  describe('when the backend has not described the tags field', () => {
+    it('does not offer tags', () => {
+      expect(byId('tags')).toBeUndefined();
+    });
+  });
+
+  describe('when the backend describes the tags field', () => {
+    const tagsDescriptor = {
+      path: 'tags',
+      operators: ['includes', 'notIncludes', 'exists', 'notExists'],
+      valueSuggestions: true,
+    };
+
+    it('offers tags with the operators the backend allows', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.operators).toEqual(['in', 'notIn', 'exists', 'notExists']);
+    });
+
+    it('drops operators the backend does not allow', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [{ ...tagsDescriptor, operators: ['includes', 'exists'] }],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.operators).toEqual(['in', 'exists']);
+    });
+
+    it('suggests tag values from the trace scope', () => {
+      const resolver = async () => [];
+      const calls: [string, string][] = [];
+      const withSuggestions = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
+        valueSuggestions: (scope, path) => {
+          calls.push([scope, path]);
+          return resolver;
+        },
+      });
+      expect(withSuggestions.find(f => f.id === 'tags')?.suggestions).toBe(resolver);
+      expect(calls).toContainEqual(['trace', 'tags']);
+    });
+
+    it('does not suggest tag values when the backend has no value suggestions for it', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [{ ...tagsDescriptor, valueSuggestions: false }],
+        valueSuggestions: () => async () => [],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.suggestions).toBeUndefined();
+    });
+
+    it('still omits tags on the legacy path', () => {
+      const legacy = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
+        withQueryTrace: false,
+      });
+      expect(legacy.find(f => f.id === 'tags')).toBeUndefined();
+    });
   });
 
   it('does not suggest the unsupported running status', () => {
@@ -198,7 +281,34 @@ describe('createTraceFilterBarFields', () => {
 
   it('offers only presence operators on presence fields', () => {
     expect(byId('spans.error')?.operators).toEqual(['exists', 'notExists']);
-    expect(byId('feedback.comment')?.operators).toEqual(['exists', 'notExists']);
+  });
+
+  it('offers word matching on human-text fields', () => {
+    const text = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'];
+    expect(byId('feedback.comment')?.operators).toEqual(text);
+    expect(byId('spans.name')?.operators).toEqual(text);
+    expect(byId('spans.model')?.operators).toEqual(['is', 'isNot', 'in', 'notIn', 'exists', 'notExists']);
+  });
+
+  it('marks the text operators as free text so strict fields still accept typed words', () => {
+    const byOperatorId = Object.fromEntries(TRACE_FILTER_BAR_OPERATORS.map(o => [o.id, o]));
+    expect(byOperatorId.matches?.freeText).toBe(true);
+    expect(byOperatorId.notMatches?.freeText).toBe(true);
+    expect(byOperatorId.is?.freeText).toBeUndefined();
+  });
+
+  it('keeps feedback comment free text because the values endpoint rejects it', () => {
+    const fields = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      metadataFields: [],
+      valueSuggestions: () => async () => [],
+      withQueryTrace: true,
+    });
+    const find = (id: string) => fields.find(field => field.id === id);
+    expect(find('feedback.comment')?.strict).toBeUndefined();
+    expect(find('feedback.comment')?.suggestions).toBeUndefined();
+    expect(find('spans.name')?.strict).toBe(true);
   });
 
   it('lists picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {
@@ -416,6 +526,47 @@ describe('filter group URL params', () => {
   });
 });
 
+describe('presence-only filter URL params', () => {
+  describe('when a hand-edited URL gives the feedback comment a text value', () => {
+    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
+      'drops the token for %s',
+      query => {
+        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+          { fieldId: 'traceId', value: 'abc' },
+        ]);
+      },
+    );
+  });
+
+  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
+    it.each([
+      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
+      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
+      'filterSpanError=boom&filterSpanError.op=in',
+    ])('drops the token for %s', query => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+        { fieldId: 'traceId', value: 'abc' },
+      ]);
+    });
+  });
+
+  describe('when the feedback comment carries a presence operator', () => {
+    it('keeps the token', () => {
+      expect(
+        getTracePropertyFilterTokens(new URLSearchParams('filterFeedbackComment=&filterFeedbackComment.op=exists')),
+      ).toEqual([{ fieldId: 'feedback.comment', value: '', operatorId: 'exists' }]);
+    });
+  });
+
+  describe('when the feedback comment was just added without an operator', () => {
+    it('keeps the pending token', () => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams('filterFeedbackComment='))).toEqual([
+        { fieldId: 'feedback.comment', value: '' },
+      ]);
+    });
+  });
+});
+
 describe('filter operator URL params', () => {
   describe('when the URL carries a .op param next to a value param', () => {
     it('reads the operator onto the token', () => {
@@ -562,11 +713,13 @@ describe('traceTokensToFilterBarItems', () => {
         { fieldId: 'traceId', value: '' },
         { fieldId: 'status', value: 'Any' },
         { fieldId: 'tags', value: [] },
+        { fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' },
       ]),
     ).toEqual([
       { id: 'traceId', fieldId: 'traceId', operatorId: 'is', value: '' },
       { id: 'status', fieldId: 'status', operatorId: 'is', value: '' },
       { id: 'tags', fieldId: 'tags', operatorId: 'in', value: [] },
+      { id: 'feedback.comment', fieldId: 'feedback.comment', operatorId: 'matches', value: 'Any' },
     ]);
   });
 });

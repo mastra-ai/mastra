@@ -312,6 +312,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "requestContext",
       "runId",
       "toolCallId"
@@ -332,6 +334,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "reason",
       "requestContext",
       "runId",
@@ -6696,9 +6700,8 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "modeId",
       "modelId",
-      "scope"
+      "thinkingLevel"
     ],
     "hasQuery": true,
     "hasBody": true,

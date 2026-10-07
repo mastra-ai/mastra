@@ -945,6 +945,30 @@ describe('Thread', () => {
   });
 
   describe('when a text attachment is added by URL', () => {
+    it('keeps the attachment in the same composer surface as the draft', async () => {
+      const url = 'https://files.example.com/leads.csv';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, () => new HttpResponse(null, { headers: { 'content-type': 'text/csv' } })),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      const input = await screen.findByLabelText('Public URL');
+      fireEvent.change(input, { target: { value: url } });
+      const form = input.closest('form');
+      if (!form) throw new Error('Attachment form is missing');
+      fireEvent.submit(form);
+
+      const attachments = await screen.findByTestId('composer-attachments');
+      const draft = screen.getByPlaceholderText('Enter your message...');
+      const composerBox = draft.closest('[data-slot="composer-box"]');
+      expect(composerBox).not.toBeNull();
+      expect(composerBox?.contains(attachments)).toBe(true);
+      expect(attachments.parentElement?.closest('[data-slot="composer-attachments"]')).toBeNull();
+    });
+
     it('links to the original URL instead of offering an empty file preview', async () => {
       const url = 'https://files.example.com/leads.csv';
       server.use(

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -8,6 +8,7 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { WorkItemStageEntry } from '../../domains/factory/services/workItems';
 import { OverviewContent } from '../OverviewPage';
+import { emptyBoard, emptyCommits } from './fixtures/overview-loading';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY = { projectRepositoryId: 'repository-1', slug: 'acme/app' };
@@ -48,6 +49,7 @@ function stubBoard(workItems: unknown[], runningSessionIds: string[] = [], findi
     'label-drift': 0,
   };
   server.use(
+    http.get('*/web/github/projects/:id/commits', () => HttpResponse.json(emptyCommits)),
     http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds })),
     http.get('*/web/factory/projects/:id/supervisor/health', () =>
       HttpResponse.json({ checkedAt: new Date().toISOString(), findings, counts }),
@@ -140,7 +142,7 @@ describe('Overview', () => {
     renderOverview();
 
     expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your pipeline starts here', level: 4 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Your pipeline starts here', level: 4 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open board' })).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
     expect(screen.getByRole('link', { name: 'Link repository' })).toHaveAttribute(
       'href',
@@ -188,5 +190,35 @@ describe('Overview', () => {
 
     expect(await screen.findByRole('img', { name: /1 items entered/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /No new work/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('Overview query loading', () => {
+  describe('when work items are still loading', () => {
+    it('starts the commits request before work items resolve', async () => {
+      stubBoard([]);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let commitsRequested = false;
+      server.use(
+        http.get('*/web/factory/projects/:id/work-items', async () => {
+          await held;
+          return HttpResponse.json(emptyBoard);
+        }),
+        http.get('*/web/github/projects/:id/commits', () => {
+          commitsRequested = true;
+          return HttpResponse.json(emptyCommits);
+        }),
+      );
+      const { unmount } = renderOverview(REPOSITORY);
+      try {
+        await waitFor(() => expect(commitsRequested).toBe(true));
+      } finally {
+        release();
+        unmount();
+      }
+    });
   });
 });

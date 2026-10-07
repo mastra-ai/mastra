@@ -78,7 +78,6 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     allSystemReminderComponents: [],
     allShellComponents: [],
     ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
-    planStartedGoalId: undefined,
     ...rest,
   } as unknown as TUIState;
 }
@@ -719,11 +718,10 @@ describe('MastraTUI queueing', () => {
     expect(state.ui.requestRender).not.toHaveBeenCalled();
   });
 
-  it('switches to plan mode when a plan-started goal completes with status=done', () => {
+  it('does not switch modes when a goal started from plan approval is judged done', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const applyEvaluation = vi.fn();
     const state = createQueueState({
-      planStartedGoalId: 'plan-goal-456',
       session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation,
@@ -741,180 +739,8 @@ describe('MastraTUI queueing', () => {
     handleGoalEvaluation(ctx, createGoalPayload({ iteration: 3, status: 'done', passed: true }));
 
     expect(applyEvaluation).toHaveBeenCalledWith({ runsUsed: 3, status: 'done' });
-    expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
-    expect(state.planStartedGoalId).toBeUndefined();
+    expect(switchMode).not.toHaveBeenCalled();
     expect(state.activeGoalJudge).toBeUndefined();
-  });
-
-  it('does not switch to plan mode for non-plan goals even when they complete', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const state = createQueueState({
-      planStartedGoalId: undefined,
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'manual-goal-789',
-          status: 'done',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 2,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 2, status: 'done', passed: true }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-  });
-
-  it('does not switch to plan mode when goal evaluation reports status=active (was decision=waiting)', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const state = createQueueState({
-      planStartedGoalId: 'plan-goal-123',
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'plan-goal-123',
-          status: 'active',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 1,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'active' }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe('plan-goal-123');
-    expect(state.activeGoalJudge).toBeUndefined();
-  });
-
-  it('does not switch to plan mode when goal evaluation reports status=paused', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const state = createQueueState({
-      planStartedGoalId: 'plan-goal-321',
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'plan-goal-321',
-          status: 'paused',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 5,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 5, status: 'paused' }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe('plan-goal-321');
-    expect(state.activeGoalJudge).toBeUndefined();
-  });
-
-  it('does not switch to plan mode when completed goal ID does not match planStartedGoalId', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const state = createQueueState({
-      planStartedGoalId: 'plan-goal-xyz',
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'different-goal-abc',
-          status: 'done',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 1,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe('plan-goal-xyz');
-  });
-
-  it('restores planStartedGoalId if mode switch fails', async () => {
-    const switchMode = vi.fn().mockRejectedValue(new Error('Switch failed'));
-    const showError = vi.fn();
-    const state = createQueueState({
-      planStartedGoalId: 'plan-goal-failed',
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'plan-goal-failed',
-          status: 'done',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 1,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state, { showError });
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
-
-    await vi.waitFor(() => {
-      expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
-    });
-    await vi.waitFor(() => {
-      expect(showError).toHaveBeenCalledWith('Failed to switch to Plan mode: Switch failed');
-    });
-    expect(state.planStartedGoalId).toBe('plan-goal-failed');
-  });
-
-  it('does not switch mode when the goal was replaced before evaluation completed', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const originalGoalId = 'original-goal-123';
-    const state = createQueueState({
-      planStartedGoalId: originalGoalId,
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'new-goal-456',
-          status: 'done',
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-          turnsUsed: 0,
-          maxTurns: 20,
-        })),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 0, status: 'done', passed: true }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe(originalGoalId);
-  });
-
-  it('does not switch mode when the goal was cleared before evaluation completed', () => {
-    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const originalGoalId = 'original-goal-123';
-    const state = createQueueState({
-      planStartedGoalId: originalGoalId,
-      session: { mode: { switch: switchMode } } as any,
-      goalManager: {
-        applyEvaluation: vi.fn(),
-        getGoal: vi.fn(() => null),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
-
-    expect(switchMode).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe(originalGoalId);
   });
 
   it('does not pause an active goal when a user-initiated abort ends the agent turn', () => {
@@ -1024,8 +850,8 @@ describe('syncInitialThreadState', () => {
 
   it('restores a durable pending pack hop into session state', async () => {
     const pending = {
-      fromPackId: 'anthropic',
-      toPackId: 'openai',
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
       toModelId: 'openai/gpt-5.6-sol',
       reason: 'pool-exhausted',
       at: '2026-09-14T20:00:00.000Z',
@@ -1044,7 +870,7 @@ describe('syncInitialThreadState', () => {
               id: 'thread-1',
               title: 'Pending fallback',
               metadata: {
-                mastracodePendingPackFallback: pending,
+                mastracodePendingModelFallback: pending,
                 mastracodeAccountRoutingExhausted: exhaustedRouting,
               },
             },
@@ -1065,7 +891,7 @@ describe('syncInitialThreadState', () => {
     // A14: the persisted exhausted-route map is no longer restored — a stale
     // mark must not come back as routing state. The durable pending hop is.
     expect(stateSet).toHaveBeenCalledWith({
-      mastracodePendingPackFallback: pending,
+      mastracodePendingModelFallback: pending,
     });
   });
 
@@ -1074,7 +900,7 @@ describe('syncInitialThreadState', () => {
     const state = {
       session: {
         state: {
-          get: () => ({ mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai' } }),
+          get: () => ({ mastracodePendingModelFallback: { fromEntryId: 'anthropic', toEntryId: 'openai' } }),
           set: stateSet,
         },
         thread: {
@@ -1093,7 +919,7 @@ describe('syncInitialThreadState', () => {
 
     await syncInitialThreadState(state);
 
-    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingModelFallback: null });
   });
 
   it('does not apply hydration when the active thread changes during the thread lookup', async () => {

@@ -46,6 +46,7 @@ import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
 import { BoardStages } from './BoardStages';
+import { isPullRequestSource } from '../../domains/factory/services/workItems';
 
 export function BoardContent({
   factory,
@@ -159,6 +160,7 @@ export function BoardContent({
       if (!itemAppearsInStage(item, stage, stages)) return false;
       if (item.id === targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
+      if (isPullRequestSource(item.source) || item.source === 'slack-thread') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';

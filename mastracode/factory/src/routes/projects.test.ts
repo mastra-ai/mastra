@@ -218,20 +218,24 @@ describe('ProjectRoutes', () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         modelId: 'anthropic/claude-opus-4-6',
-        applied: ['thread-applied'],
+        applied: ['thread-applied', 'thread-mode-unknown'],
         skipped: [
           { threadId: 'thread-no-item', reason: 'work-item-missing' },
           { threadId: 'thread-inactive', reason: 'stage-inactive' },
           { threadId: 'thread-not-running', reason: 'not-running' },
           { threadId: 'thread-missing', reason: 'thread-missing' },
-          { threadId: 'thread-mode-unknown', reason: 'mode-unknown' },
           { threadId: 'thread-apply-failed', reason: 'apply-failed' },
         ],
       });
-      expect(setSettingOn).toHaveBeenCalledTimes(1);
-      expect(setSettingOn).toHaveBeenCalledWith({
+      expect(setSettingOn).toHaveBeenCalledTimes(2);
+      expect(setSettingOn).toHaveBeenNthCalledWith(1, {
         threadId: 'thread-applied',
-        key: 'modeModelId_plan',
+        key: 'currentModelId',
+        value: 'anthropic/claude-opus-4-6',
+      });
+      expect(setSettingOn).toHaveBeenNthCalledWith(2, {
+        threadId: 'thread-mode-unknown',
+        key: 'currentModelId',
         value: 'anthropic/claude-opus-4-6',
       });
     });

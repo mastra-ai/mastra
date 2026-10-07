@@ -1,4 +1,7 @@
+import { join } from 'node:path';
+
 import * as p from '@clack/prompts';
+import { config as loadDotenv } from 'dotenv';
 import pc from 'picocolors';
 
 import { getToken, openBrowser } from '../auth/credentials.js';
@@ -36,7 +39,41 @@ interface ConnectContext {
   projectName: string;
 }
 
+/**
+ * Env vars the `mastra connect` commands look at. We intentionally keep this
+ * list narrow so loading `.env` can't quietly inject unrelated env into the
+ * CLI's process.
+ */
+const CONNECT_ENV_KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
+
+/**
+ * Load `.env` and `.env.local` from the current working directory, but only
+ * promote the specific keys in `CONNECT_ENV_KEYS` into `process.env`. The
+ * dotenv file may hold anything (database URLs, third-party keys, …); only
+ * the three Mastra Connect vars are copied over.
+ *
+ * Already-exported env vars still win: if the caller already set
+ * `MASTRA_PROJECT_ID` in their shell, the value in `.env` is ignored.
+ * The loader is a no-op when the files are missing.
+ */
+function loadConnectEnv(): void {
+  const cwd = process.cwd();
+  const parsed: Record<string, string> = {};
+  loadDotenv({
+    path: [join(cwd, '.env'), join(cwd, '.env.local')],
+    override: false,
+    quiet: true,
+    processEnv: parsed,
+  });
+  for (const key of CONNECT_ENV_KEYS) {
+    if (process.env[key] === undefined && parsed[key] !== undefined) {
+      process.env[key] = parsed[key];
+    }
+  }
+}
+
 async function resolveConnectContext(projectArg?: string): Promise<ConnectContext> {
+  loadConnectEnv();
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, projectArg);
@@ -119,16 +156,25 @@ async function fetchMemberMap(ctx: ConnectContext): Promise<Map<string, OrgMembe
 
 export async function listProvidersAction(options?: { project?: string }): Promise<void> {
   const ctx = await resolveConnectContext(options?.project);
-  const [catalog, connections] = await Promise.all([
-    fetchIntegrationCatalog(ctx.token, ctx.orgId),
-    fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId),
-  ]);
-
-  // Connections without an account label are attributed to whoever connected
-  // them ("connected by Jane Doe"), which needs the org member list.
+  const spinner = p.spinner();
+  spinner.start(`Fetching providers for ${ctx.projectName}`);
+  let catalog: IntegrationCatalogEntry[];
+  let connections: ProjectConnection[];
   let memberByUserId = new Map<string, OrgMember>();
-  if (connections.some(connection => !connection.displayName && !connection.accountLabel)) {
-    memberByUserId = await fetchMemberMap(ctx);
+  try {
+    [catalog, connections] = await Promise.all([
+      fetchIntegrationCatalog(ctx.token, ctx.orgId),
+      fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId),
+    ]);
+    // Connections without an account label are attributed to whoever connected
+    // them ("connected by Jane Doe"), which needs the org member list.
+    if (connections.some(connection => !connection.displayName && !connection.accountLabel)) {
+      memberByUserId = await fetchMemberMap(ctx);
+    }
+    spinner.stop(`Found ${connections.length} ${connections.length === 1 ? 'connection' : 'connections'}`);
+  } catch (error) {
+    spinner.stop('Could not load providers');
+    throw error;
   }
 
   const byIntegration = new Map<string, ProjectConnection[]>();
@@ -180,10 +226,22 @@ export async function connectProviderAction(
   options?: { project?: string; yes?: boolean },
 ): Promise<void> {
   const ctx = await resolveConnectContext(options?.project);
-  const catalog = await fetchIntegrationCatalog(ctx.token, ctx.orgId);
-  const integration = findIntegration(catalog, provider);
-
-  const projectConnections = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
+  const preflightSpinner = p.spinner();
+  preflightSpinner.start(`Looking up ${provider} in ${ctx.projectName}`);
+  let catalog: IntegrationCatalogEntry[];
+  let integration: IntegrationCatalogEntry;
+  let projectConnections: ProjectConnection[];
+  try {
+    [catalog, projectConnections] = await Promise.all([
+      fetchIntegrationCatalog(ctx.token, ctx.orgId),
+      fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId),
+    ]);
+    integration = findIntegration(catalog, provider);
+    preflightSpinner.stop(`Found ${integration.displayName}`);
+  } catch (error) {
+    preflightSpinner.stop(`Could not look up ${provider}`);
+    throw error;
+  }
   const existing = projectConnections.filter(
     connection => connection.integrationId === integration.id && connection.status === 'active',
   );
@@ -207,10 +265,13 @@ export async function connectProviderAction(
       projectConnections.filter(connection => connection.integrationId === integration.id).map(row => row.id),
     );
     let orgConnections: ProjectConnection[] = [];
+    const orgSpinner = p.spinner();
+    orgSpinner.start(`Checking organization-wide ${integration.displayName} connections`);
     try {
       orgConnections = await fetchOrgConnections(ctx.token, ctx.orgId, integration.id);
+      orgSpinner.stop(`Found ${orgConnections.length} ${orgConnections.length === 1 ? 'connection' : 'connections'}`);
     } catch {
-      console.warn(pc.yellow('Could not check for existing connections in your organization. Creating a new one.'));
+      orgSpinner.stop('Could not check for existing connections in your organization. Creating a new one.');
     }
     const reusable = orgConnections.filter(row => row.status === 'active' && !attachedIds.has(row.id));
 
@@ -505,9 +566,17 @@ export async function removeConnectionAction(
   options?: { project?: string; yes?: boolean; all?: boolean; connection?: string },
 ): Promise<void> {
   const ctx = await resolveConnectContext(options?.project);
-  const connections = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).filter(
-    connection => connection.integrationId === provider.toLowerCase(),
-  );
+  const spinner = p.spinner();
+  spinner.start(`Loading ${provider.toLowerCase()} connections in ${ctx.projectName}`);
+  let connections: ProjectConnection[];
+  try {
+    const all = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
+    connections = all.filter(connection => connection.integrationId === provider.toLowerCase());
+    spinner.stop(`Found ${connections.length} ${connections.length === 1 ? 'connection' : 'connections'}`);
+  } catch (error) {
+    spinner.stop(`Could not load ${provider.toLowerCase()} connections`);
+    throw error;
+  }
 
   if (connections.length === 0) {
     throw new Error(`${provider} is not connected to ${ctx.projectName}.`);
@@ -557,14 +626,25 @@ export async function removeConnectionAction(
     if (p.isCancel(confirmed) || !confirmed) return;
   }
 
-  for (const connection of targets) {
-    await removeProjectConnection(ctx.token, ctx.orgId, ctx.projectId, connection.id);
+  const removeSpinner = p.spinner();
+  const removeLabel =
+    targets.length === 1
+      ? `Removing ${describeConnection(provider, targets[0]!)}`
+      : `Removing ${targets.length} ${provider.toLowerCase()} connections`;
+  removeSpinner.start(removeLabel);
+  try {
+    for (const connection of targets) {
+      await removeProjectConnection(ctx.token, ctx.orgId, ctx.projectId, connection.id);
+    }
+  } catch (error) {
+    removeSpinner.stop('Removal failed');
+    throw error;
   }
   const removed =
     targets.length === 1
       ? describeConnection(provider, targets[0]!)
       : `${targets.length} ${provider.toLowerCase()} connections`;
-  console.info(`${pc.green('✓')} Removed ${removed} from ${ctx.projectName}.`);
+  removeSpinner.stop(`${pc.green('✓')} Removed ${removed} from ${ctx.projectName}.`);
 }
 
 function describeConnection(provider: string, connection: ProjectConnection): string {
