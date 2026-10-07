@@ -51,7 +51,7 @@ function createV1Database({ customIndex = false } = {}) {
 function countV1Nodes(databasePath: string) {
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    return database.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get();
+    return database.prepare("SELECT count(*) AS count FROM mastra_knowledge_nodes WHERE id = 'v1-node'").get();
   } finally {
     database.close();
   }
@@ -60,7 +60,7 @@ function countV1Nodes(databasePath: string) {
 function knowledgeSchemaVersion(databasePath: string) {
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    return database.prepare("SELECT schemaVersion FROM mastra_knowledge_access_state WHERE id = 'global'").get();
+    return database.prepare("SELECT version FROM mastra_knowledge_schema WHERE id = 'canonical'").get();
   } finally {
     database.close();
   }
@@ -106,7 +106,7 @@ describe('createMastraCode on a database with v1 Knowledge rows', () => {
     expect(code.knowledgeInspector).toBeDefined();
     expect(code.knowledgeInspectorUnavailableReason).toBeUndefined();
     expect(countV1Nodes(databasePath)).toEqual({ count: 0 });
-    expect(knowledgeSchemaVersion(databasePath)).toEqual({ schemaVersion: 2 });
+    expect(knowledgeSchemaVersion(databasePath)).toEqual({ version: 1 });
   });
 
   it('starts and explains the reset when the Knowledge layout is not one Mastra published', async () => {
