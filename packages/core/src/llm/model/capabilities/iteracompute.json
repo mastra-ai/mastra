@@ -23,5 +23,29 @@
     "ornith-ai/ornith-1.5-35b-a3b",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b"
-  ]
+  ],
+  "reasoning": {
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "ornith-ai/ornith-1.5-35b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-2.4t-a95b": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }
