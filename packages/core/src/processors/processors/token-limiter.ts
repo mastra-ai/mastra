@@ -571,7 +571,9 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
                     if (typeof entry.text === 'string') {
                       tokenString += entry.text;
                     } else if (typeof entry.data === 'string') {
-                      mediaTokens += estimateMediaTokens(entry.data, entry.mediaType as string | undefined);
+                      const { data, ...rest } = entry;
+                      mediaTokens += estimateMediaTokens(data as string, entry.mediaType as string | undefined);
+                      tokenString += JSON.stringify(rest);
                     } else {
                       tokenString += JSON.stringify(entry);
                     }

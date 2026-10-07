@@ -53,15 +53,8 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
       return capped === text ? output : { type: 'text', value: capped };
     }
     if (output.type === 'content' && Array.isArray(output.value)) {
-      let changed = false;
-      const value = output.value.map(part => {
-        if (part.type !== 'text' || typeof part.text !== 'string') return part;
-        const capped = this.cap(part.text);
-        if (capped === part.text) return part;
-        changed = true;
-        return { ...part, text: capped };
-      });
-      return changed ? ({ ...output, value } as ToolModelOutput) : output;
+      const value = this.capContent(output.value);
+      return value === output.value ? output : ({ ...output, value } as ToolModelOutput);
     }
     return output;
   }
@@ -69,6 +62,48 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
   private cap(text: string): string {
     const tokens = estimateTokenCount(text);
     return tokens <= this.limit ? text : truncate(text, tokens, this.limit);
+  }
+
+  // All text entries share one budget: keep them in order until it runs out, truncate the
+  // entry where it does, drop the remaining text entries, and add a single marker.
+  private capContent<T extends { type: string; text?: unknown }>(parts: T[]): T[] {
+    const isText = (part: T) => part.type === 'text' && typeof part.text === 'string';
+    const textTokens = parts.map(part => (isText(part) ? estimateTokenCount(part.text as string) : 0));
+    const total = textTokens.reduce((sum, tokens) => sum + tokens, 0);
+    if (total <= this.limit) return parts;
+
+    let budget = this.limit - estimateTokenCount(marker(0, total));
+    while (budget > 0) {
+      let remaining = budget;
+      let kept = 0;
+      let lastKept = -1;
+      const value: T[] = [];
+      parts.forEach((part, i) => {
+        if (!isText(part)) {
+          value.push(part);
+          return;
+        }
+        if (remaining <= 0) return;
+        const text =
+          textTokens[i]! <= remaining ? (part.text as string) : sliceByTokensSafe(part.text as string, 0, remaining);
+        const tokens = estimateTokenCount(text);
+        remaining -= textTokens[i]! <= remaining ? textTokens[i]! : remaining;
+        kept += tokens;
+        lastKept = value.length;
+        value.push({ ...part, text });
+      });
+      const end = marker(kept, total);
+      const used = kept + estimateTokenCount(end);
+      if (used <= this.limit && lastKept >= 0) {
+        value[lastKept] = { ...value[lastKept]!, text: `${value[lastKept]!.text as string}${end}` };
+        return value;
+      }
+      budget -= Math.max(1, used - this.limit);
+    }
+    const first = parts.findIndex(isText);
+    return parts
+      .filter((part, i) => !isText(part) || i === first)
+      .map(part => (isText(part) ? { ...part, text: marker(0, total).trimStart() } : part));
   }
 }
 

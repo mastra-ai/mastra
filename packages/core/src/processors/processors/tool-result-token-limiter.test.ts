@@ -133,6 +133,24 @@ describe('ToolResultTokenLimiter', () => {
     expect(out!.modelOutput.value[1]).toBe(image);
   });
 
+  it('shares one budget across all text entries of content output with a single marker', () => {
+    const image = { type: 'media', data: 'A'.repeat(50_000), mediaType: 'image/png' };
+    const out = callHook(64, 'x', {
+      type: 'content',
+      value: [
+        { type: 'text', text: 'alpha '.repeat(40) },
+        image,
+        { type: 'text', text: 'beta '.repeat(40) },
+        { type: 'text', text: 'gamma '.repeat(40) },
+      ],
+    });
+    const texts = out!.modelOutput.value.filter((part: any) => part.type === 'text').map((part: any) => part.text);
+    const kept = texts.reduce((sum: number, text: string) => sum + estimateTokenCount(text), 0);
+    expect(kept).toBeLessThanOrEqual(64);
+    expect(texts.join('').match(/\[truncated: showing/g)).toHaveLength(1);
+    expect(out!.modelOutput.value).toContain(image);
+  });
+
   it('caps the redacted result when a processToolResult redactor runs after it', async () => {
     const redactor = {
       id: 'redactor',

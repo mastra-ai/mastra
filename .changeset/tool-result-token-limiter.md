@@ -1,7 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/server': minor
-'@mastra/client-js': patch
 ---
 
 Added `ToolResultTokenLimiter`, an output processor that caps how many tokens of each tool result the model reads. The stored and streamed result stays whole; only the copy sent to the model is truncated, ending with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`.
@@ -18,7 +16,5 @@ const agent = new Agent({
   outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
 });
 ```
-
-Added the `processToolModelOutput` processor hook. It runs once per tool result, after `processToolResult` and `toModelOutput`, and changes only what the model reads. `processToolResult` still changes the result itself.
 
 `TokenLimiterProcessor` now counts the `toModelOutput` copy of a tool result when one exists, since that is what the model reads.
