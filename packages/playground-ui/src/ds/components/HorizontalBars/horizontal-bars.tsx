@@ -32,6 +32,10 @@ type HorizontalBarRow = {
   href?: string;
   /** If present, an individual segment becomes its own link. Indices align with `segments`. */
   hrefs?: Array<string | undefined>;
+  /** If present, the whole row is rendered as a button calling this handler. Ignored when `href` is set. */
+  onClick?: () => void;
+  /** If present, an individual segment becomes its own button. Indices align with `segments`. */
+  onClicks?: Array<(() => void) | undefined>;
 };
 
 export function HorizontalBars({
@@ -85,13 +89,14 @@ export function HorizontalBars({
           // The label starts over the first filled segment; that fill decides the label tone in dark mode.
           // Light mode fades every fill to 40% (see below), so the default label already reads there.
           const darkLabelOnFill = needsDarkLabel(segments[d.values.findIndex(v => v > 0)]?.color);
+          const rowInteractive = Boolean(d.href || d.onClick);
           const rowBody = (
             <>
               <div className="relative h-full min-w-0 flex-1" style={{ '--bar-width': barWidth } as CSSProperties}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
-                      className={cn('absolute inset-y-0 left-0', d.href ? 'cursor-pointer' : 'cursor-default')}
+                      className={cn('absolute inset-y-0 left-0', rowInteractive ? 'cursor-pointer' : 'cursor-default')}
                       style={{ width: barWidth }}
                     >
                       {segments.map((seg, si) => {
@@ -101,7 +106,8 @@ export function HorizontalBars({
                         const isLastWithValue = d.values.slice(si + 1).every(v => !v);
                         // Only honor segment-level links when the row itself is not an anchor.
                         // Otherwise we'd render <a> nested inside <a>, which is invalid HTML.
-                        const segHref = d.href ? undefined : d.hrefs?.[si];
+                        const segHref = rowInteractive ? undefined : d.hrefs?.[si];
+                        const segClick = rowInteractive || segHref ? undefined : d.onClicks?.[si];
 
                         const segmentNode = (
                           <div
@@ -110,7 +116,7 @@ export function HorizontalBars({
                               isStacked && si === 0 && 'rounded-l',
                               isStacked && isLastWithValue && 'rounded-r',
                               !isStacked && 'rounded',
-                              segHref && 'cursor-pointer transition-opacity hover:opacity-70',
+                              (segHref || segClick) && 'cursor-pointer transition-opacity hover:opacity-70',
                             )}
                             style={{
                               left: isStacked ? `${left}%` : 0,
@@ -130,6 +136,19 @@ export function HorizontalBars({
                             >
                               {segmentNode}
                             </LinkComponent>
+                          );
+                        }
+                        if (segClick) {
+                          return (
+                            <button
+                              key={seg.label}
+                              type="button"
+                              onClick={segClick}
+                              aria-label={`${d.name} — ${seg.label}`}
+                              className="contents"
+                            >
+                              {segmentNode}
+                            </button>
                           );
                         }
                         return <Wrapper key={seg.label}>{segmentNode}</Wrapper>;
@@ -193,6 +212,19 @@ export function HorizontalBars({
               >
                 {rowBody}
               </LinkComponent>
+            );
+          }
+          if (d.onClick) {
+            return (
+              <button
+                key={d.name}
+                type="button"
+                onClick={d.onClick}
+                aria-label={d.name}
+                className="flex h-6 w-full cursor-pointer items-center gap-14 rounded text-left transition-colors outline-none hover:bg-fill-subtle focus-visible:bg-fill-subtle"
+              >
+                {rowBody}
+              </button>
             );
           }
           return (

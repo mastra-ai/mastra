@@ -1,11 +1,24 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import {
+  ActiveResourcesKpiCard,
+  ActiveThreadsKpiCard,
+  AgentRunsKpiCard,
+  LatencyCard,
+  MemoryCard,
+  MetricsGrid,
+  ModelCostKpiCard,
+  ModelUsageCostCard,
+  TokenUsageByAgentCard,
+  TokenUsageTimelineCard,
+  TotalTokensKpiCard,
+  TracesVolumeCard,
+} from '@mastra/playground-ui/domains/metrics/components';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
@@ -23,21 +36,9 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { LatencyCard } from '@/domains/metrics/components/latency-card';
-import { MemoryCard } from '@/domains/metrics/components/memory-card';
-import {
-  ActiveResourcesKpiCard,
-  ActiveThreadsKpiCard,
-  AgentRunsKpiCard,
-  ModelCostKpiCard,
-  TotalTokensKpiCard,
-} from '@/domains/metrics/components/metrics-kpi-cards';
 import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
 import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
-import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
-import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
-import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
-import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { useMetricsDrilldownNavigation } from '@/domains/metrics/hooks/use-metrics-drilldown-navigation';
 import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
@@ -178,6 +179,7 @@ function MetricsContent() {
   const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics(useMetricsFilters());
 
   const { isInMemory } = useObservabilityStorageCapabilities();
+  const { openTraces, openLogs } = useMetricsDrilldownNavigation();
 
   const { data: tagsData, isLoading: isTagsLoading } = useTags();
   const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
@@ -257,14 +259,19 @@ function MetricsContent() {
           <ActiveResourcesKpiCard />
         </MetricsCardGroup>
 
-        <MetricsFlexGrid>
-          <ModelUsageCostCard />
-          <TokenUsageByAgentCard />
-          <TokenUsageTimelineCard />
-          <MemoryCard />
-          <TracesVolumeCard />
-          <LatencyCard />
-        </MetricsFlexGrid>
+        <MetricsGrid minItemWidth="md">
+          <ModelUsageCostCard onOpenTraces={openTraces} onRowClick={openTraces} />
+          <TokenUsageByAgentCard onOpenTraces={openTraces} onRowClick={openTraces} />
+          <TokenUsageTimelineCard onOpenTraces={openTraces} />
+          <MemoryCard onThreadClick={openTraces} onResourceClick={openTraces} />
+          <TracesVolumeCard
+            onOpenTraces={openTraces}
+            onOpenErrorsInLogs={openLogs}
+            onRowClick={openTraces}
+            onErrorSegmentClick={openTraces}
+          />
+          <LatencyCard onOpenTraces={openTraces} onBucketClick={openTraces} />
+        </MetricsGrid>
       </div>
     </MetricsPageLayout>
   );

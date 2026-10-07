@@ -1,4 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import type { ActiveDotProps } from 'recharts';
+import { ClickableDot } from './clickable-dot';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
@@ -102,17 +104,15 @@ export function MetricsLineChart({
                 dot={showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
                 activeDot={
                   isClickable
-                    ? {
-                        r: 4,
-                        stroke: s.color,
-                        strokeOpacity: 0.3,
-                        strokeWidth: 4,
-                        style: { cursor: 'pointer' },
-                        onClick: (_: unknown, payload: unknown) => {
-                          const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
-                          if (datum) onPointClick(datum, s.dataKey);
-                        },
-                      }
+                    ? (dot: ActiveDotProps) => (
+                        <ClickableDot
+                          key={`${s.dataKey}-${dot.index}`}
+                          {...dot}
+                          color={s.color}
+                          label={s.label}
+                          onClick={datum => onPointClick(datum, s.dataKey)}
+                        />
+                      )
                     : { r: 4, stroke: s.color, strokeOpacity: 0.3, strokeWidth: 4 }
                 }
                 name={s.label}

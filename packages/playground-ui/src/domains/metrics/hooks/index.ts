@@ -19,7 +19,6 @@ export { useActiveThreadsKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useActiveResourcesKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useTopActiveThreadsMetrics, type ActiveThreadRow } from '@mastra/react/hooks/metrics';
 export { useTopResourcesByThreadsMetrics, type ResourceThreadsRow } from '@mastra/react/hooks/metrics';
-export { useDrilldown } from './use-drilldown';
 export {
   buildLogsDrilldownUrl,
   buildTracesDrilldownUrl,

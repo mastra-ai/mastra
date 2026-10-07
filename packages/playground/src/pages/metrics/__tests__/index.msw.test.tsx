@@ -60,7 +60,12 @@ function observeRequests() {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  return (
+    <>
+      <output data-testid="location">{location.search}</output>
+      <output data-testid="pathname">{location.pathname}</output>
+    </>
+  );
 }
 
 function renderPage(path = '/metrics') {
@@ -225,6 +230,25 @@ describe('Metrics storage support', () => {
       renderPage(path);
 
       expect((await screen.findAllByText(`+20% ${comparison} (100)`)).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('when the user opens a card in traces', () => {
+    it('navigates to the traces page scoped to the dashboard period and card entity', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
+
+      renderPage('/metrics?period=7d&filterEnvironment=production');
+
+      const buttons = await screen.findAllByRole('button', { name: 'View in Traces' });
+      fireEvent.click(buttons[0]);
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/traces'));
+      const params = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+      expect(params.get('rootEntityType')).toBe('agent');
+      expect(params.get('filterEnvironment')).toBe('production');
     });
   });
 });
