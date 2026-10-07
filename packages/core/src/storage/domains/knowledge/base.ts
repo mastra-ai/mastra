@@ -564,7 +564,7 @@ export class KnowledgeSchemaResetRequiredError extends Error {
 
   constructor(inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>) {
     super(
-      `Knowledge schema reset required: ${inspection.reason}. Existing Knowledge data is not migrated. To replace it, call \`await storage.stores.knowledge.dangerouslyReset()\`, which deletes every Knowledge row and nothing else.`,
+      `Knowledge schema reset required: ${inspection.reason}. Existing Knowledge data is not migrated. To replace it, call \`await storage.stores?.knowledge?.dangerouslyReset()\`, which deletes every Knowledge row and nothing else.`,
     );
     this.name = 'KnowledgeSchemaResetRequiredError';
     this.inspection = inspection;

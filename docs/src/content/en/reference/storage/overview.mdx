@@ -28,6 +28,7 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `observability` | Traces and spans used by observability exporters and Studio. |
 | `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
+| `knowledge` | Knowledge nodes and records (experimental). The upgrade checks and reset in [Upgrade Knowledge storage](#upgrade-knowledge-storage) apply to LibSQL and PostgreSQL. |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
@@ -444,3 +445,36 @@ The schema definitions below cover the built-in database-backed tables documente
     />
   </TabItem>
 </Tabs>
+
+## Upgrade Knowledge storage
+
+Knowledge storage is experimental.
+
+Knowledge tables are created the first time Knowledge is used, for example when you call `storage.getStore('knowledge')`. Ordinary `storage.init()` doesn't create them.
+
+Databases initialized by earlier releases contain v1 Knowledge tables. The current Knowledge storage uses a different schema and doesn't migrate v1 data. What happens on first use depends on what those tables hold:
+
+- **Empty, unmodified v1 tables**: Mastra drops them and creates the current schema. Nothing is lost.
+- **v1 tables with rows, or a Knowledge schema Mastra doesn't recognize**: Knowledge refuses to start and throws `KnowledgeSchemaResetRequiredError`. Mastra doesn't change or delete any tables, so your existing Knowledge data stays in place.
+
+Other storage domains keep working while Knowledge is blocked.
+
+### Reset Knowledge storage
+
+To replace the old tables with the current schema, call `dangerouslyReset()` on the Knowledge domain:
+
+```typescript
+await storage.stores?.knowledge?.dangerouslyReset();
+```
+
+:::warning
+
+`dangerouslyReset()` drops the v1 and current Knowledge tables, then creates the current schema empty, deleting all Knowledge data. Other storage domains aren't touched. Back up the Knowledge tables first if you need to keep their contents.
+
+:::
+
+### Defer Knowledge initialization
+
+Set `disableInit: true` on the store, or set the `MASTRA_DISABLE_STORAGE_INIT=true` environment variable, to stop `getStore('knowledge')` from initializing Knowledge. This also turns off automatic initialization for every other domain, so you must create those tables yourself, for example by calling `storage.init()`.
+
+With initialization deferred, call `storage.initKnowledge()` when you're ready to activate Knowledge. It runs `storage.init()` first, which creates the other domains' tables, then runs the same Knowledge checks and throws `KnowledgeSchemaResetRequiredError` in the same cases.
