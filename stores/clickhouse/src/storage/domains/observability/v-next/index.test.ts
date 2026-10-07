@@ -310,7 +310,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           format: 'TabSeparatedRaw',
         });
         const explain = await explainResult.text();
-        expect(explain).toContain(expectedTable);
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
         if (expectedIndex) expect(explain).toContain(expectedIndex);
 
@@ -318,7 +317,9 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
-          query: `SELECT read_rows AS readRows, read_bytes AS readBytes
+          // Subqueries used for index analysis are built during planning, so EXPLAIN may not name
+          // every table the query reads; the query log does.
+          query: `SELECT read_rows AS readRows, read_bytes AS readBytes, tables
 FROM system.query_log
 WHERE query_id = {queryId:String} AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
@@ -326,8 +327,9 @@ LIMIT 1`,
           query_params: { queryId },
           format: 'JSONEachRow',
         });
-        const [log] = await logResult.json<{ readRows: number; readBytes: number }>();
+        const [log] = await logResult.json<{ readRows: number; readBytes: number; tables: string[] }>();
         expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(log?.tables.some(table => table.endsWith(`.${expectedTable}`))).toBe(true);
         return Number(log?.readRows);
       };
 
