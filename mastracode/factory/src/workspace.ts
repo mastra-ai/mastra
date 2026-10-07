@@ -453,6 +453,7 @@ async function resolveSessionEnvironment(
           orgId: session.orgId,
           factoryProjectId: project.id,
           projectRepositoryId: link.id,
+          slug: repository.slug,
           directory,
         },
       );
