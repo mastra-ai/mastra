@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed Factory cards selecting a repository from the wrong source-control provider when their metadata contains both GitHub and GitLab repository IDs.
+Fixed GitHub and GitLab Factory cards starting runs in repositories from the other provider when both repository identifiers are present or only one repository is linked.
