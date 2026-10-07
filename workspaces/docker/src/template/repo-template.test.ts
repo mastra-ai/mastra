@@ -36,6 +36,7 @@ describe('buildRepoTemplate', () => {
     expect(owned.dockerfile).toContain('COPY --chown=node --from=mastra-secret-0 /workspace/app /workspace/app');
     const plain = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace', baseImage: 'node:22' });
     expect(plain.dockerfile).toContain('COPY --from=mastra-secret-0 /workspace/app /workspace/app');
+    expect(() => buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace', owner: '' })).toThrow();
   });
 
   it('pins the sha with a full clone + detached checkout, making it part of the identity', () => {

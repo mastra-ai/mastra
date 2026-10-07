@@ -230,7 +230,7 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
     .runWithSecrets(clone, {
       secrets: tokenEnv ? [tokenEnv] : [],
       output: destination,
-      ...(inputs.owner ? { owner: inputs.owner } : {}),
+      ...(inputs.owner !== undefined ? { owner: inputs.owner } : {}),
     })
     .setWorkdir(destination);
 
