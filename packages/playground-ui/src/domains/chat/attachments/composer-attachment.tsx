@@ -54,6 +54,19 @@ export function ComposerAttachment({
     action();
   }
 
+  function openPreview() {
+    if (onPreview) {
+      onPreview();
+      return;
+    }
+    previewControl()?.click();
+  }
+
+  function returnFocus() {
+    if (actionSelected.current) return false;
+    return menuAnchor ?? previewControl() ?? triggerRef.current;
+  }
+
   return (
     <ContextMenu
       open={menuOpen}
@@ -70,7 +83,7 @@ export function ComposerAttachment({
           raisedSurfaceStyle,
           'group/attachment relative h-17 shrink-0 rounded-(--attachment-radius) [--attachment-radius:var(--radius-xl)] [--attachment-thumbnail-size:--spacing(15)]',
           // Concentric corners: the inner radius is the outer radius minus its inset.
-          '[--attachment-action-inset:--spacing(1)] [--attachment-action-radius:max(0px,calc(var(--attachment-radius)-var(--attachment-action-inset)))]',
+          '[--attachment-action-inset:--spacing(1)] [--attachment-action-radius:max(0px,calc(var(--attachment-radius)-var(--attachment-action-inset)))] [--attachment-action-width:--spacing(9)] [--attachment-sleeve-width:calc(var(--attachment-action-width)+2*var(--attachment-action-inset))]',
           variant === 'inline' ? 'w-72' : 'w-66',
         )}
         onClickCapture={event => {
@@ -81,9 +94,11 @@ export function ComposerAttachment({
           }
         }}
         onKeyDown={event => {
+          // Portalled preview dialogs also bubble through this React ancestor.
+          if (!(event.target instanceof HTMLElement) || !event.currentTarget.contains(event.target)) return;
           if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
             event.preventDefault();
-            openMenu(previewControl() ?? event.currentTarget);
+            openMenu(event.target);
           }
         }}
       >
@@ -94,8 +109,11 @@ export function ComposerAttachment({
             raisedSurfaceStyle,
             surfaceStateLayerStyle,
             'absolute inset-0 z-10 flex min-w-0 items-center overflow-hidden rounded-[inherit]',
-            'motion-safe:transition-[right] motion-safe:duration-normal motion-safe:ease-out-custom',
-            'group-focus-within/attachment:right-11 group-data-popup-open/attachment:right-11 group-[:hover]/attachment:right-11',
+            'motion-safe:transition-[right,border-radius] motion-safe:duration-normal motion-safe:ease-out-custom',
+            'group-focus-within/attachment:right-(--attachment-sleeve-width) group-data-popup-open/attachment:right-(--attachment-sleeve-width) group-[:hover]/attachment:right-(--attachment-sleeve-width)',
+            // Tighten the facing edge so two large curves do not widen the visible gutter.
+            'group-focus-within/attachment:rounded-r-(--attachment-action-inset) group-data-popup-open/attachment:rounded-r-(--attachment-action-inset) group-[:hover]/attachment:rounded-r-(--attachment-action-inset)',
+            'max-sm:rounded-r-[inherit]! pointer-coarse:rounded-r-[inherit]!',
             'max-sm:right-0! max-sm:pr-[calc(--spacing(11)+2*var(--attachment-action-inset))]',
             'pointer-coarse:right-0! pointer-coarse:pr-[calc(--spacing(11)+2*var(--attachment-action-inset))]',
           )}
@@ -105,7 +123,7 @@ export function ComposerAttachment({
         <div
           data-slot="composer-attachment-actions"
           className={cn(
-            'absolute inset-y-0 right-0 flex w-11 flex-col items-stretch justify-center gap-(--attachment-action-inset) p-(--attachment-action-inset)',
+            'absolute inset-y-(--attachment-action-inset) right-(--attachment-action-inset) flex w-(--attachment-action-width) flex-col gap-(--attachment-action-inset)',
             'translate-x-2 opacity-0 motion-safe:transition-[translate,opacity] motion-safe:duration-normal motion-safe:ease-out-custom',
             'group-[:hover]/attachment:translate-x-0 group-[:hover]/attachment:opacity-100',
             'group-focus-within/attachment:translate-x-0 group-focus-within/attachment:opacity-100',
@@ -117,7 +135,7 @@ export function ComposerAttachment({
             type="button"
             variant="destructive-ghost"
             size="icon-sm"
-            className="w-full rounded-(--attachment-action-radius)"
+            className="h-auto w-full flex-1 rounded-(--attachment-action-radius)"
             onClick={onRemove}
             aria-label={`Remove ${name}`}
             title={`Remove ${name}`}
@@ -129,7 +147,7 @@ export function ComposerAttachment({
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="w-full rounded-(--attachment-action-radius)"
+              className="h-auto w-full flex-1 rounded-(--attachment-action-radius)"
               onClick={onEdit}
               aria-label={`Edit ${name}`}
               title={`Edit ${name}`}
@@ -151,16 +169,9 @@ export function ComposerAttachment({
           <Ellipsis />
         </Button>
       </ContextMenu.Trigger>
-      <ContextMenu.Content
-        anchor={menuAnchor}
-        collisionPadding={8}
-        finalFocus={() => (actionSelected.current ? false : (menuAnchor ?? previewControl() ?? triggerRef.current))}
-      >
+      <ContextMenu.Content anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
         {hasPreview && (
-          <ContextMenu.Item
-            className="min-h-11"
-            onSelect={() => runMenuAction(() => (onPreview ? onPreview() : previewControl()?.click()))}
-          >
+          <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(openPreview)}>
             <Eye />
             <span>Preview</span>
           </ContextMenu.Item>

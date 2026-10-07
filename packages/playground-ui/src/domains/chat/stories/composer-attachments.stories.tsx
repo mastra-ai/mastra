@@ -148,7 +148,7 @@ export const MixedFiles: Story = {
     for (const button of removeButtons) {
       const card = button.closest('[data-slot="composer-attachment"]');
       if (!card || !button.parentElement) throw new Error('Missing attachment action column');
-      const inset = parseFloat(getComputedStyle(button.parentElement).paddingRight);
+      const inset = parseFloat(getComputedStyle(button.parentElement).right);
       await expect(parseFloat(getComputedStyle(button).borderRadius) + inset).toBe(
         parseFloat(getComputedStyle(card).borderRadius),
       );
@@ -236,11 +236,46 @@ export const KeyboardRemove: Story = {
 /** The selected design, using the production component and a real edit callback. */
 export const Sleeve: Story = {
   render: () => <AttachmentComposer files={['diagram.png']} editable withActions />,
+  play: async ({ canvasElement }) => verifySleeveSpacing(canvasElement),
 };
 
 export const SleeveFile: Story = {
   render: () => <AttachmentComposer files={['archive.zip']} editable withActions />,
+  play: Sleeve.play,
 };
+
+export const SleeveRemoveOnly: Story = {
+  render: () => <AttachmentComposer files={['archive.zip']} withActions />,
+  play: Sleeve.play,
+};
+
+async function verifySleeveSpacing(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const menuButton = canvas.queryByRole('button', { name: /^Actions for / });
+  const firstAction = menuButton ?? canvas.getByRole('button', { name: /^Remove / });
+  const card = firstAction.closest('[data-slot="composer-attachment"]');
+  const cover = card?.querySelector('[data-slot="composer-attachment-cover"]');
+  if (!card || !cover) throw new Error('Missing attachment sleeve');
+
+  firstAction.focus();
+  await waitFor(async () => {
+    const bounds = card.getBoundingClientRect();
+    const top = firstAction.getBoundingClientRect();
+    const edit = canvas.queryByRole('button', { name: /^Edit / });
+    const bottom = edit?.getBoundingClientRect() ?? top;
+    const rightInset = bounds.right - top.right;
+    await expect(rightInset).toBe(4);
+    await expect(top.top - bounds.top).toBe(rightInset);
+    await expect(bounds.bottom - bottom.bottom).toBe(rightInset);
+    if (!menuButton) await expect(top.left - cover.getBoundingClientRect().right).toBe(rightInset);
+    if (edit) {
+      await expect(bottom.top - top.bottom).toBe(rightInset);
+      await expect(bottom.height).toBe(top.height);
+    } else {
+      await expect(top.height).toBe(bounds.height - 2 * rightInset);
+    }
+  });
+}
 
 export const SleeveMixedFiles: Story = {
   render: () => (
@@ -277,14 +312,29 @@ export const AttachmentContextMenu: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(canvasElement.ownerDocument.body);
+    for (const name of [
+      'Remove project-notes.txt',
+      'Edit project-notes.txt',
+      'Remove archive.zip',
+      'Edit archive.zip',
+    ]) {
+      const action = canvas.getByRole('button', { name });
+      action.focus();
+      await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+      await body.findByRole('menu');
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(action).toHaveFocus());
+    }
     const preview = canvas.getByRole('button', { name: 'Preview project-notes.txt' });
     preview.focus();
     await userEvent.keyboard('{Shift>}{F10}{/Shift}');
     await userEvent.click(await body.findByRole('menuitem', { name: 'Preview' }));
     const dialog = await body.findByRole('dialog');
     await expect(dialog).toHaveTextContent('Zoë,12');
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    await expect(body.queryByRole('menu')).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
-    preview.focus();
+    await waitFor(() => expect(preview).toHaveFocus());
     await userEvent.keyboard('{Shift>}{F10}{/Shift}');
     await userEvent.click(await body.findByRole('menuitem', { name: 'Remove' }));
     await expect(canvas.queryByRole('button', { name: 'Preview project-notes.txt' })).not.toBeInTheDocument();
