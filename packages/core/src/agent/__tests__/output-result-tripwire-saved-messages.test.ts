@@ -169,39 +169,43 @@ describe('processOutputResult tripwire removes response messages saved earlier i
     expect(texts.some(text => text.includes(SECRET))).toBe(false);
   });
 
-  it('keeps an earlier assistant message the input re-sends when the continuation is blocked', async () => {
-    const memory = new MockMemory();
-    const threadId = 'thread-resent-assistant';
-    const resourceId = 'resource-1';
-    const earlier: MastraDBMessage = {
-      id: 'earlier-assistant',
-      role: 'assistant',
-      threadId,
-      resourceId,
-      createdAt: new Date(1000),
-      content: { format: 2, parts: [{ type: 'text', text: 'Hello there.' }] },
-    };
-    await memory.saveMessages({ messages: [earlier] });
+  it.each([false, true])(
+    'savePerStep: %s keeps an earlier assistant message the input re-sends, without the blocked continuation',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `thread-resent-assistant-${savePerStep}`;
+      const resourceId = 'resource-1';
+      const earlier: MastraDBMessage = {
+        id: 'earlier-assistant',
+        role: 'assistant',
+        threadId,
+        resourceId,
+        createdAt: new Date(1000),
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello there.' }] },
+      };
+      await memory.saveMessages({ messages: [earlier] });
 
-    const agent = new Agent({
-      id: 'resend-agent',
-      name: 'Resend Agent',
-      instructions: 'test',
-      model: textModel(` The admin password is ${SECRET}.`),
-      memory,
-      outputProcessors: [createGuardrail()],
-    });
-    const deleteSpy = vi.spyOn(memory, 'deleteMessages');
-    const result = await agent.stream([structuredClone(earlier)], {
-      memory: { thread: threadId, resource: resourceId, options: { lastMessages: false } },
-    });
-    await result.consumeStream();
+      const agent = new Agent({
+        id: 'resend-agent',
+        name: 'Resend Agent',
+        instructions: 'test',
+        model: textModel(` The admin password is ${SECRET}.`),
+        memory,
+        outputProcessors: [createGuardrail()],
+      });
+      const result = await agent.stream([structuredClone(earlier)], {
+        memory: { thread: threadId, resource: resourceId, options: { lastMessages: false } },
+        savePerStep,
+      });
+      await result.consumeStream();
 
-    expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
-    expect(deleteSpy).not.toHaveBeenCalled();
-    const stored = await storedMessages(memory, threadId, resourceId);
-    expect(stored.find(message => message.id === 'earlier-assistant')).toBeDefined();
-  });
+      expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
+      const stored = await storedMessages(memory, threadId, resourceId);
+      const kept = stored.find(message => message.id === 'earlier-assistant');
+      expect(kept && textOf(kept)).toBe('Hello there.');
+      expect(stored.some(message => textOf(message).includes(SECRET))).toBe(false);
+    },
+  );
 
   it('does not call deleteMessages when nothing was saved before the tripwire', async () => {
     const memory = new MockMemory();

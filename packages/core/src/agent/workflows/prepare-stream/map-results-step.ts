@@ -79,21 +79,23 @@ export function createMapResultsStep<OUTPUT = undefined>({
     let threadCreatedByStep = false;
 
     // A processOutputResult tripwire skips the run-level save, but response messages may already
-    // be stored: flushed before a tool-approval suspension, or per step with savePerStep. Remove
-    // them so a blocked reply never reaches the thread (and the model on the next turn).
+    // be stored: flushed before a tool-approval suspension, or per step with savePerStep. Undo
+    // those writes so a blocked reply never reaches the thread (and the model on the next turn).
     // Messages that arrived from memory or as input (e.g. a client re-sending an earlier assistant
-    // message with a tool result, which the run then continues) belong to earlier turns and are
-    // left alone. Only ids actually found in storage are deleted, so runs that saved nothing early
-    // never call deleteMessages.
-    const deleteSavedResponseMessages = async () => {
+    // message with a tool result) belong to earlier turns and are never deleted. New output can
+    // merge into such a message, so a stored copy that changed during this run is put back to the
+    // content it had when the run started. Only ids actually found in storage are touched, so runs
+    // that saved nothing early never write. Output only ever merges into the latest message, so that
+    // is the only one snapshotted.
+    const latestMessage = messageList.get.all.db().at(-1);
+    const earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
+
+    const undoSavedResponseMessages = async () => {
       const threadId = memoryData.thread?.id ?? threadIdFromArgs;
       if (!memory || !threadId || memoryConfig?.readOnly) return;
 
       const earlierTurnIds = messageList.getRememberedAndInputMessageIds();
-      const candidateIds = messageList.getPersisted.response
-        .db()
-        .map(message => message.id)
-        .filter(id => !earlierTurnIds.has(id));
+      const candidateIds = messageList.getPersisted.response.db().map(message => message.id);
       if (candidateIds.length === 0) return;
 
       try {
@@ -101,9 +103,23 @@ export function createMapResultsStep<OUTPUT = undefined>({
         const memoryStore = await memory.storage.getStore('memory');
         if (!memoryStore) return;
         const { messages: stored } = await memoryStore.listMessagesById({ messageIds: candidateIds });
-        const ids = stored.filter(message => message.threadId === threadId).map(message => message.id);
-        if (ids.length === 0) return;
-        await memory.deleteMessages(ids);
+        const storedInThread = stored.filter(message => message.threadId === threadId);
+
+        const idsToDelete = storedInThread
+          .filter(message => !earlierTurnIds.has(message.id))
+          .map(message => message.id);
+        const storedEarlierTurn = storedInThread.find(
+          message => message.id === earlierTurnSnapshot?.id && earlierTurnIds.has(message.id),
+        );
+
+        if (idsToDelete.length > 0) await memory.deleteMessages(idsToDelete);
+        if (
+          earlierTurnSnapshot &&
+          storedEarlierTurn &&
+          JSON.stringify(storedEarlierTurn.content.parts) !== JSON.stringify(earlierTurnSnapshot.content.parts)
+        ) {
+          await memory.saveMessages({ messages: [earlierTurnSnapshot], memoryConfig });
+        }
       } catch (error) {
         capabilities.logger.error('Failed to remove saved messages after an output processor tripwire', {
           error,
@@ -414,7 +430,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             agentSpan?.end({ endTree: true });
           } else {
             if (context?.outputResultTripwire) {
-              await deleteSavedResponseMessages();
+              await undoSavedResponseMessages();
             }
 
             try {
