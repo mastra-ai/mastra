@@ -195,4 +195,28 @@ describe('ObservationStep step > 0 save', () => {
     expect(messageList.get.response.db().map(m => m.id)).toEqual(['reply-2']);
     expect(messageList.get.all.db().map(m => m.id)).toEqual(['earlier', 'user-2', 'reply-2']);
   });
+
+  it('keeps a restored response separate from an earlier assistant message', async () => {
+    const threadId = 'thread-failed-response-save';
+    const { storage, om } = await setup(threadId);
+
+    const t0 = Date.now() - 60_000;
+    const earlier = textMessage('earlier', 'assistant', 'already saved', new Date(t0), threadId);
+    const reply = textMessage('reply-2', 'assistant', 'tool finished', new Date(t0 + 1000), threadId);
+    await storage.saveMessages({ messages: [earlier] });
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(earlier, 'memory');
+    messageList.add(reply, 'response', { merge: false });
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+
+    vi.spyOn(storage, 'saveMessages').mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'));
+
+    await expect(turn.step(1).prepare()).rejects.toThrow('SQLITE_BUSY');
+
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['earlier', 'reply-2']);
+    expect(messageList.get.response.db().map(m => m.id)).toEqual(['reply-2']);
+  });
 });

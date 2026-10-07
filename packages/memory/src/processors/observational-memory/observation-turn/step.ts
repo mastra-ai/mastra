@@ -613,6 +613,6 @@ function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessa
   const stillQueued = new Set([...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id));
   const ids = drained.map(msg => msg.id).filter(id => !stillQueued.has(id));
   for (const msg of messageList.removeByIds(ids)) {
-    messageList.add(msg, source);
+    messageList.add(msg, source, { merge: false });
   }
 }
