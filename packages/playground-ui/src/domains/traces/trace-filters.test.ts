@@ -527,24 +527,32 @@ describe('filter group URL params', () => {
 });
 
 describe('presence-only filter URL params', () => {
-  describe('when a hand-edited URL gives the feedback comment a text value', () => {
-    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
-      'drops the token for %s',
-      query => {
-        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-          { fieldId: 'traceId', value: 'abc' },
-        ]);
-      },
-    );
+  describe('when a hand-edited URL gives a span error a many-value operator', () => {
+    it('drops the token', () => {
+      expect(
+        getTracePropertyFilterTokens(
+          new URLSearchParams('filterSpanError=boom&filterSpanError.op=in&filterTraceId=abc'),
+        ),
+      ).toEqual([{ fieldId: 'traceId', value: 'abc' }]);
+    });
   });
+});
 
-  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
+describe('feedback comment filter URL params', () => {
+  describe('when the URL gives a feedback comment a value operator', () => {
     it.each([
-      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
-      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
-      'filterSpanError=boom&filterSpanError.op=in',
-    ])('drops the token for %s', query => {
+      ['filterFeedbackComment=wrong%20answer', { value: 'wrong answer' }],
+      ['filterFeedbackComment=wrong&filterFeedbackComment.op=is', { value: 'wrong', operatorId: 'is' }],
+      [
+        'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
+        { value: ['a', 'b'], operatorId: 'in' },
+      ],
+      ['filterFeedbackComment=a&filterFeedbackComment.op=notIn', { value: ['a'], operatorId: 'notIn' }],
+      ['filterFeedbackComment=wrong&filterFeedbackComment.op=matches', { value: 'wrong', operatorId: 'matches' }],
+      ['filterFeedbackComment=wrong&filterFeedbackComment.op=notMatches', { value: 'wrong', operatorId: 'notMatches' }],
+    ] as const)('keeps the token for %s', (query, token) => {
       expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+        { fieldId: 'feedback.comment', ...token },
         { fieldId: 'traceId', value: 'abc' },
       ]);
     });

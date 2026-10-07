@@ -106,22 +106,63 @@ describe('buildTraceQueryRequest', () => {
   });
 
   describe('when a presence-only field carries a value operator (hand-edited URL)', () => {
+    it.each(['is', 'in', 'matches'] as const)(
+      'drops the span error token with operator %s instead of sending it',
+      operatorId => {
+        expect(
+          buildTraceQueryRequest({
+            tokens: [{ fieldId: 'spans.error', value: 'wrong answer', operatorId }],
+            now,
+          }).where,
+        ).toBeUndefined();
+      },
+    );
+  });
+
+  describe('when a feedback comment carries an equality operator', () => {
     it.each([
-      ['feedback.comment', 'is'],
-      ['feedback.comment', undefined],
-      ['feedback.comment', 'notIn'],
-      ['spans.error', 'is'],
-    ] as const)('drops the %s token with operator %s instead of sending it', (fieldId, operatorId) => {
+      [undefined, 'some'],
+      ['is', 'some'],
+      ['isNot', 'none'],
+    ] as const)('applies %s with feedback.%s', (operatorId, quantifier) => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId, value: 'wrong answer', ...(operatorId ? { operatorId } : {}) }],
+          tokens: [{ fieldId: 'feedback.comment', value: 'wrong answer', operatorId }],
           now,
         }).where,
-      ).toBeUndefined();
+      ).toEqual({
+        op: 'and',
+        args: [
+          { feedback: { [quantifier]: { op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } },
+        ],
+      });
     });
   });
 
-  describe('when a presence-only field carries a presence operator', () => {
+  describe('when a feedback comment carries a set operator', () => {
+    it.each([
+      ['in', 'some'],
+      ['notIn', 'none'],
+    ] as const)('applies %s with feedback.%s', (operatorId, quantifier) => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: ['wrong answer', 'incorrect dosage'], operatorId }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            feedback: {
+              [quantifier]: { op: 'in', value: { path: 'comment' }, set: ['wrong answer', 'incorrect dosage'] },
+            },
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a feedback comment carries a presence operator', () => {
     it('keeps the predicate', () => {
       expect(
         buildTraceQueryRequest({
@@ -361,6 +402,7 @@ describe('buildTraceQueryRequest', () => {
     ['spans', 'spans.name'],
     ['scores', 'scores.scorerId'],
     ['feedback', 'feedback.feedbackType'],
+    ['feedback', 'feedback.comment'],
   ] as const)('when a %s token carries a negative operator', (scope, fieldId) => {
     it.each(['isNot', 'notIn', 'notExists', 'notMatches'] as const)(
       '%s never emits a negative op inside some',

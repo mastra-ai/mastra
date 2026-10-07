@@ -1,5 +1,6 @@
-import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, QueryTracesInput } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -923,27 +924,46 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
-    it('loads the traces without sending the invalid comment predicate', async () => {
-      const bodies: unknown[] = [];
+  describe.each([
+    [
+      'when the URL gives a feedback comment an exact value',
+      '/traces?filterFeedbackComment=wrong%20answer',
+      { feedback: { some: { op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } },
+    ],
+    [
+      'when the URL matches words in a feedback comment',
+      '/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=matches',
+      { feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } },
+    ],
+    [
+      'when the URL excludes matching feedback comments',
+      '/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=notMatches',
+      { feedback: { none: { op: 'matches', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } },
+    ],
+  ] as const)('%s', (_condition, url, predicate) => {
+    it('loads the traces with the comment predicate accepted by the server', async () => {
+      const bodies: QueryTracesInput[] = [];
       setTracePageHandlers(metricsCapableCapabilities);
       server.use(
-        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-          bodies.push(await request.json());
+        http.post<never, QueryTracesInput>(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          planTraceQuery(parseTraceQueryRequest(body));
+          bodies.push(body);
           return HttpResponse.json(traceQueryPage);
         }),
       );
 
-      const { queryClient } = renderPage('/traces?filterFeedbackComment=wrong%20answer');
+      const { queryClient } = renderPage(url);
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(bodies.length).toBeGreaterThan(0);
-      expect(JSON.stringify(bodies)).not.toContain('"comment"');
+      expect(bodies).toContainEqual(expect.objectContaining({ where: { op: 'and', args: [predicate] } }));
       expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        expect.stringContaining('Feedback comment'),
+      ]);
     });
   });
 
