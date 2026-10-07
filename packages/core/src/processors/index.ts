@@ -598,8 +598,10 @@ export interface ProcessToolModelOutputArgs<TTripwireMetadata = unknown>
   /** Final tool result, after all processToolResult rewrites */
   result: unknown;
   /**
-   * Current model-facing output. `undefined` when the tool has no `toModelOutput`
-   * and no earlier processor supplied one. Each processor sees the previous one's output.
+   * Current model-facing output. `toModelOutput` maps the result the tool returned, so
+   * this does not reflect `processToolResult` rewrites. `undefined` when the tool has no
+   * `toModelOutput` and no earlier processor supplied one. Each processor sees the
+   * previous one's output.
    */
   modelOutput: ToolModelOutput | undefined;
   /** Whether this result came from a provider-executed tool */
@@ -898,7 +900,8 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * hooks does not matter. Output processors run in sequence, each seeing the previous
    * `modelOutput`. The final value is stored as `providerMetadata.mastra.modelOutput`,
    * persists with the message, and is used on every later prompt. The stored and
-   * streamed `result` is never changed.
+   * streamed `result` is never changed. Like `processToolResult`, it does not run for
+   * background task results that arrive after the turn ends.
    *
    * @returns `{ modelOutput }` to replace the model-facing output, or undefined to keep it.
    */
