@@ -325,6 +325,16 @@ describe('PlatformGithubIntegration', () => {
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '99' })).resolves.toBeNull();
   });
 
+  it('exposes the base repository id and head ref through the octokit pulls shim', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json(pullRequest));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.getInstallationOctokit(7).pulls.get({ owner: 'acme', repo: 'app', pull_number: 34 }),
+    ).resolves.toEqual({ data: { base: { repo: { id: 101 } }, head: { ref: 'feat/intake' } } });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/repos/acme/app/pulls/34');
+  });
+
   it('updates issue state via PATCH after probing the pulls endpoint', async () => {
     const closedIssue = { ...issue, state: 'closed' as const };
     const fetchImpl = vi
