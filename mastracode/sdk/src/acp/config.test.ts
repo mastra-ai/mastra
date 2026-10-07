@@ -116,6 +116,19 @@ describe('ACP session configuration', () => {
     expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });
 
+  it('keeps the saved level across a model that cannot think', async () => {
+    const { agent, initial } = await setup(['openai/gpt-5.6-sol', 'google/gemini-2.0-flash']);
+    const thinkingAfterSelecting = async (value: string) => {
+      const result = await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'model', value });
+      return result.configOptions.find(option => option.id === 'thought_level');
+    };
+
+    await thinkingAfterSelecting('openai/gpt-5.6-sol');
+    await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'thought_level', value: 'max' });
+    expect(await thinkingAfterSelecting('google/gemini-2.0-flash')).toMatchObject({ currentValue: 'off' });
+    expect(await thinkingAfterSelecting('openai/gpt-5.6-sol')).toMatchObject({ currentValue: 'max' });
+  });
+
   it('notifies clients when the runtime changes mode outside a configuration request', async () => {
     const { initial, sessionUpdate, session, emit } = await setup();
     await session.mode.switch({ modeId: 'plan' });

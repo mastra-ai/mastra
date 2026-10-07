@@ -378,6 +378,11 @@ export class MastraCodeAcpAgent implements Agent {
     return runThinkingLevel(modelId, level, getModelReasoningOptions(modelId));
   }
 
+  private thinkingLevelToSave(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
+    const runLevel = this.thinkingLevel(entry, modelId);
+    return runLevel === 'off' ? (entry.getThinkingLevel?.() ?? 'off') : runLevel;
+  }
+
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
     const entry = this.getSession(params.sessionId);
     return this.enqueue(entry, async () => {
@@ -393,15 +398,15 @@ export class MastraCodeAcpAgent implements Agent {
       if (params.configId === 'model') {
         const modelId = String(params.value);
         await entry.session.model.switch(modelId, {
-          ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevel(entry, modelId) } : {}),
+          ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevelToSave(entry, modelId) } : {}),
         });
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
       }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
+      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevelToSave(entry)) {
+        await entry.session.state.set({ thinkingLevel: this.thinkingLevelToSave(entry) });
       }
       return { configOptions: this.configOptions(entry) };
     });
