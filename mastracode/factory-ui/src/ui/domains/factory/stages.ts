@@ -67,7 +67,7 @@ const STAGE_TONES = {
   planning: 'cyan',
   execute: 'info',
   review: 'green',
-  done: 'success',
+  done: 'purple',
   canceled: 'destructive',
 } as const satisfies Record<BuiltinStageId, BadgeVariant>;
 

@@ -54,18 +54,21 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
+type BoardTone = StageTone | 'success';
+
+const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   resting: 'neutral',
   working: 'info',
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string }> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
   orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-subtle' },
   cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-subtle' },
   info: { icon: 'text-info-indicator', tint: 'bg-info-subtle' },
   green: { icon: 'text-badge-green-indicator', tint: 'bg-badge-green-subtle' },
+  purple: { icon: 'text-badge-purple-indicator', tint: 'bg-badge-purple-subtle' },
   success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-subtle' },
   destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle' },
 };
@@ -105,7 +108,7 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
-function stageToneFor(stage: string, kind?: BoardPhaseKind): StageTone {
+function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
 }
