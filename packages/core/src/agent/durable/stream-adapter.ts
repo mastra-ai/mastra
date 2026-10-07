@@ -35,6 +35,13 @@ import type {
   AgentIterationCompleteEventData,
 } from './types';
 
+const STREAM_ENDING_EVENT_TYPES = new Set<string>([
+  AgentStreamEventTypes.FINISH,
+  AgentStreamEventTypes.ERROR,
+  AgentStreamEventTypes.SUSPENDED,
+  AgentStreamEventTypes.ABORT,
+]);
+
 /**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
@@ -95,6 +102,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * are dropped. Newer generations seen on the topic raise the bar further.
    */
   minGeneration?: number;
+  /**
+   * Reads the run's current claim generation. Pass it when `minGeneration`
+   * couldn't be read: until a read succeeds, the stream reads the claim again
+   * before an event from a claimed execution can end it, so the terminal event
+   * of a superseded execution doesn't close the stream.
+   */
+  rereadMinGeneration?: () => Promise<number | undefined>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -207,6 +221,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     resourceId,
     offset,
     minGeneration,
+    rereadMinGeneration,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -377,6 +392,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   let newestGeneration = minGeneration;
+  let pendingMinGenerationRead = rereadMinGeneration;
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -391,6 +407,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     // publishes is stale, and doesn't prove the run's producer is alive.
     const generation = streamEvent.generation;
     if (generation !== undefined) {
+      if (pendingMinGenerationRead && STREAM_ENDING_EVENT_TYPES.has(streamEvent.type)) {
+        const claimed = await pendingMinGenerationRead().catch(() => undefined);
+        if (!controller || terminated) return;
+        if (claimed !== undefined) {
+          pendingMinGenerationRead = undefined;
+          newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
+        }
+      }
       if (newestGeneration !== undefined && generation < newestGeneration) return;
       newestGeneration = generation;
     }

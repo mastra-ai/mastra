@@ -2638,12 +2638,15 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // took the run over, and would then accept what the lost execution still
       // publishes, its finish included. Follow the run's current claim instead.
       // Runs fenced by a pubsub lease have no generation and are unaffected.
-      // The floor only adds protection, so a failed read must not fail the reconnect.
+      // The floor only adds protection, so a failed read must not fail the reconnect;
+      // the claim is read again before a terminal event can end the stream.
+      let claimUnread = false;
       let newestGeneration = offset
         ? await readRunClaimGeneration(mastra, runId).catch(error => {
             mastra
               .getLogger()
               ?.warn(`Couldn't read the claim of run ${runId}; observing it without a floor`, { error });
+            claimUnread = true;
             return undefined;
           })
         : undefined;
@@ -2686,7 +2689,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           resetIdleTimer(controller);
 
-          handleEvent = (event: any) => {
+          const acceptEvent = (event: any) => {
             // Another execution took the run over: drop what the superseded one
             // still publishes. The takeover marker itself is not a stream event.
             if (typeof event.generation === 'number') {
@@ -2708,6 +2711,24 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
             } else {
               resetIdleTimer(controller);
             }
+          };
+
+          handleEvent = (event: any) => {
+            const endsStream = event.type === 'finish' || event.type === 'error';
+            if (!claimUnread || !endsStream || typeof event.generation !== 'number') {
+              acceptEvent(event);
+              return;
+            }
+            void readRunClaimGeneration(mastra, runId)
+              .catch(() => undefined)
+              .then(claimed => {
+                if (!handleEvent) return;
+                if (claimed !== undefined) {
+                  claimUnread = false;
+                  newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
+                }
+                acceptEvent(event);
+              });
           };
 
           // Subscribe with replay support

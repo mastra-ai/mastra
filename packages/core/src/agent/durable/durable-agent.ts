@@ -4209,12 +4209,15 @@ export class DurableAgent<
     // took the run over, and would then accept what the lost execution still
     // publishes, its finish included. Follow the run's current claim instead.
     // Runs fenced by a pubsub lease have no generation and are unaffected.
-    // The floor only adds protection, so a failed read must not fail the reconnect.
+    // The floor only adds protection, so a failed read must not fail the reconnect;
+    // the stream reads the claim again before an event can end it.
+    let minGenerationUnread = false;
     const minGeneration = options?.offset
       ? await readRunGeneration(this.#mastra, runId).catch(error => {
           this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
             error,
           });
+          minGenerationUnread = true;
           return undefined;
         })
       : undefined;
@@ -4232,6 +4235,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
       minGeneration,
+      rereadMinGeneration: minGenerationUnread ? () => readRunGeneration(this.#mastra, runId) : undefined,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       onChunk: options?.onChunk,

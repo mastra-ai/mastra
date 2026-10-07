@@ -255,6 +255,49 @@ describe('observe() from an offset', () => {
     observed.cleanup();
     await transport.close();
   });
+
+  it("reads the run's claim again before a finish when the first read failed", async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'observed-agent',
+      name: 'Observed Agent',
+      instructions: 'You are a helpful agent.',
+      model: new MockLanguageModelV2({}) as LanguageModelV2,
+    });
+    const transport = new EventEmitterPubSub();
+    const durable = createDurableAgent({ agent, pubsub: transport });
+    new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
+    const pubsub = durable.pubsub;
+    const runId = 'observed-run';
+
+    const workflows = (await storage.getStore('workflows'))!;
+    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, 2);
+    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    // The offset skips the marker and the first claim read fails.
+    const observed = await durable.observe(runId, { offset: 3 });
+    const reader = readFullStream(observed.fullStream as ReadableStream<any>);
+
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await delay(10);
+    expect(reader.isClosed()).toBe(false);
+
+    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('recovered'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+    await reader.done;
+
+    expect(texts(reader.chunks)).toEqual(['recovered']);
+    expect(reader.chunks.filter(c => c.type === 'finish')).toHaveLength(1);
+    observed.cleanup();
+    await transport.close();
+  });
 });
 
 describe.each(['durable', 'evented'] as const)('%s agent', kind => {

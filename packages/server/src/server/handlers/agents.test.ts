@@ -2289,6 +2289,44 @@ describe('Agent Routes Authorization', () => {
         ['finish', undefined],
       ]);
     });
+
+    it("reads the run's claim again before a finish when the first read failed", async () => {
+      const runId = 'observe-offset-reread-claim-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      const workflows = (await storage.getStore('workflows'))!;
+      await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+      await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+      vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await text('before takeover ', 1);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+      await text('seen ', 2);
+      // Published after the marker by the execution that lost the run.
+      await publish({ type: 'finish', data: {}, generation: 1 });
+      await text('recovered', 2);
+      await publish({ type: 'finish', data: {}, generation: 2 });
+
+      // The offset skips the marker and the first claim read fails.
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        offset: 3,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
+        ['chunk', 'recovered', 2],
+        ['finish', undefined, 2],
+      ]);
+    });
   });
 
   describe('SIGNAL_ROUTES', () => {
