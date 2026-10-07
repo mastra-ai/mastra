@@ -115,6 +115,25 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should flush every remaining batch before destroy completes', async () => {
+    const batchTransport = new UpstashTransport({
+      ...defaultOptions,
+      batchSize: 2,
+    });
+    batchTransport.logBuffer = Array.from({ length: 5 }, (_, index) => ({ msg: `message${index + 1}` }));
+
+    await new Promise<void>((resolve, reject) => {
+      batchTransport._destroy(null as any, (error?: Error | null) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body)[0].length - 2)).toEqual([2, 2, 1]);
+    expect(batchTransport.logBuffer).toEqual([]);
+  });
+
   it('should handle errors in _transform', () => {
     const callback = vi.fn();
 
