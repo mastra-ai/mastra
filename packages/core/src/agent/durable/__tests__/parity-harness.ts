@@ -20,7 +20,13 @@
  *                      reasoning, sources, objects and step boundaries are compared
  * - `streamedText`   → concatenated `text-delta` payloads
  * - `finishChunk`    → payload keys, reason, usage and normalised payload contents
- * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
+ * - `fullOutput`     → `getFullOutput()` text, finishReason, usage, keys and the
+ *                      parsed object when the run produced one
+ * - `error`          → a failed run reduced to `{ name, message }`; a recorded
+ *                      error is an observation like any other, so two engines
+ *                      that fail the same way still compare equal
+ * - `generate`       → present only on a turn driven by `generate()`, which has
+ *                      no chunks to compare
  * Plus, across the whole run:
  * - `requests`       → every request sent to the model, with per-message
  *                      `createdAt` timestamps stripped
@@ -55,6 +61,14 @@
  *       },
  *     });
  *     for (const r of Object.values(results)) expect(r.requests).toHaveLength(2);
+ *
+ * A `generate()` turn is driven through the handle too. It produces no chunks,
+ * so it is compared through the output the caller receives, and the request the
+ * model got is what both engines must have sent identically:
+ *
+ *     run: async h => {
+ *       await h.generate('Summarise the thread');
+ *     },
  *
  * A turn that suspends or awaits approval is driven to completion in the same
  * turn: `options.resume` names the continuation, and the helper calls the
@@ -165,6 +179,12 @@ export interface ParitySnapshot {
    */
   resumed: boolean;
   /**
+   * Set on a turn driven by `generate()` rather than `stream()`. A generate
+   * call produces no chunks, so the turn is compared through its full output,
+   * and the scenario guard counts it as an observation of its own.
+   */
+  generate?: true;
+  /**
    * Set when the run failed instead of finishing: `getFullOutput()` rejected,
    * the stream rejected while it was drained, or `stream()` rejected before it
    * produced one. The turn keeps whatever chunks preceded the failure, so a
@@ -255,6 +275,8 @@ interface TurnChunks {
   lastOutput?: MastraModelOutput<any>;
   /** See `ParitySnapshot.error`. */
   error?: ParityRunError;
+  /** See `ParitySnapshot.generate`. */
+  generate?: true;
 }
 
 /**
@@ -343,7 +365,6 @@ async function readSettled<T>(read: () => Promise<T>): Promise<T | undefined> {
 
 /** Builds a turn's snapshot from the chunks its streams produced. */
 async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot> {
-  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed } = acc;
   const output = acc.lastOutput;
   let error = acc.error;
 
@@ -373,6 +394,44 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
     read(() => output!.toolResults),
     read(() => output!.steps),
   ]);
+
+  return assembleSnapshot(acc, { text, finishReason, usage, toolCalls, toolResults, steps, full, error });
+}
+
+/**
+ * A `generate()` turn. A generate call returns its full output directly, so
+ * there is no stream to drain and every read is already settled.
+ */
+function snapshotFromGenerateResult(acc: TurnChunks, result: unknown): ParitySnapshot {
+  const full = result as Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  return assembleSnapshot(acc, {
+    text: full?.text,
+    finishReason: full?.finishReason,
+    usage: full?.usage,
+    toolCalls: full?.toolCalls,
+    toolResults: full?.toolResults,
+    steps: full?.steps,
+    full,
+    error: acc.error,
+  });
+}
+
+/** Everything a snapshot is assembled from, however the turn was driven. */
+interface TurnReads {
+  text: string | undefined;
+  finishReason: string | undefined;
+  usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number; raw?: unknown } | undefined;
+  toolCalls: any[] | undefined;
+  toolResults: any[] | undefined;
+  steps: unknown[] | undefined;
+  /** The run's full output, as a non-streaming consumer reads it; absent when the run failed. */
+  full: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  error: ParityRunError | undefined;
+}
+
+function assembleSnapshot(acc: TurnChunks, reads: TurnReads): ParitySnapshot {
+  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed, generate } = acc;
+  const { text, finishReason, usage, toolCalls, toolResults, steps, full, error } = reads;
 
   return {
     text: text ?? '',
@@ -425,6 +484,8 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
     // Omitted rather than set to `undefined`, so a turn that did not fail
     // serialises exactly as it did before this field existed.
     ...(error ? { error } : {}),
+    // Likewise omitted on a streamed turn.
+    ...(generate ? { generate } : {}),
   };
 }
 
@@ -457,6 +518,38 @@ export interface RecordingModel {
   requests: CapturedRequest[];
 }
 
+/**
+ * Folds a stream tape into the result a `doGenerate` call returns. The tape
+ * describes what a streaming consumer sees; this is the same call as a
+ * non-streaming consumer sees it, which is what `generate()` reads.
+ */
+function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModelV2['doGenerate']>> {
+  const text = tape
+    .filter(part => part.type === 'text-delta')
+    .map(part => String(part.delta ?? ''))
+    .join('');
+  const toolCalls = tape
+    .filter(part => part.type === 'tool-call')
+    .map(part => ({
+      type: 'tool-call' as const,
+      toolCallId: String(part.toolCallId),
+      toolName: String(part.toolName),
+      input: String(part.input ?? '{}'),
+    }));
+  const finish = tape.find(part => part.type === 'finish');
+
+  return {
+    content: [...(text ? [{ type: 'text' as const, text }] : []), ...toolCalls],
+    finishReason: (finish?.finishReason ?? 'stop') as Awaited<
+      ReturnType<LanguageModelV2['doGenerate']>
+    >['finishReason'],
+    usage: (finish?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 }) as Awaited<
+      ReturnType<LanguageModelV2['doGenerate']>
+    >['usage'],
+    warnings: [],
+  };
+}
+
 /** Creates a fresh mock model that records every request it receives. */
 export function createRecordingModel(script: ModelScript): RecordingModel {
   const requests: CapturedRequest[] = [];
@@ -480,11 +573,12 @@ export function createRecordingModel(script: ModelScript): RecordingModel {
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
-    // Agents stream even for generate(), so a doGenerate call is itself a
-    // behaviour change worth seeing. Record it, then fail loudly.
+    // Plain's `generate()` calls `doGenerate`; the wrapped engines reach the
+    // same scripted outcome through the workflow. Both record the request the
+    // same way, so `requests` compares across engines either way.
     doGenerate: async (options: LanguageModelV2CallOptions) => {
-      record(options);
-      throw new Error('parity recording model: doGenerate was called; scripts only support doStream');
+      const { tape } = record(options);
+      return tapeToGenerateResult(tape);
     },
   }) as unknown as LanguageModelV2;
 
@@ -608,6 +702,12 @@ export interface EngineHandle {
   agent: Agent<string, any, any>;
   /** Streams one turn on this engine, drains it and records its snapshot. */
   turn: (messages: MessageListInput, options?: EngineTurnOptions) => Promise<ParitySnapshot>;
+  /**
+   * Runs one `generate()` turn on this engine and records its snapshot. A
+   * generate call has no chunks, so the turn is compared through its full
+   * output; a rejected call is recorded on `error`, like a failed stream.
+   */
+  generate: (messages: MessageListInput, options?: ParityStreamOptions) => Promise<ParitySnapshot>;
 }
 
 /**
@@ -691,8 +791,9 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
   const plain = results.plain!;
   // Equal empty observations would compare as parity. A turn that recorded an
   // error is an observation of its own — a run that failed on every engine the
-  // same way is parity, and that is what the failed-run cases assert.
-  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0 && !t.error)) {
+  // same way is parity, and that is what the failed-run cases assert. So is a
+  // generate turn, which produces no chunks by design.
+  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0 && !t.error && !t.generate)) {
     throw new Error('expectEngineParity: the scenario produced no turns or no stream chunks on plain');
   }
   for (const engine of compared) results[engine] = await runOnEngine(engine, scenario);
@@ -787,6 +888,26 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
 
       acc.lastOutput = streamed;
       const snapshot = await snapshotFromDrainedTurn(acc);
+      turns.push(snapshot);
+      return snapshot;
+    },
+    generate: async (messages, options) => {
+      // Vitest stubs randomUUID per test, so give every run its own id.
+      const runId = options?.runId ?? `parity-${engine}-${turns.length}`;
+      const acc = emptyTurnChunks();
+      acc.generate = true;
+
+      let result: unknown;
+      try {
+        result = wrapper
+          ? await wrapper.generate(messages, { ...options, runId })
+          : await agent.generate(messages, { ...options, runId });
+      } catch (error) {
+        // A rejected generate() is an observation to compare, like a failed run.
+        acc.error ??= describeRunError(error);
+      }
+
+      const snapshot = snapshotFromGenerateResult(acc, result);
       turns.push(snapshot);
       return snapshot;
     },
