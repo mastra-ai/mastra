@@ -74,8 +74,8 @@ export const loginKeepsOmAutoScenario = {
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
     // The login switched the main model to `openai/gpt-5.6-sol`, so auto roles
     // now resolve to the OpenAI low-cost OM pack.
-    await runtime.waitForScreenText(/Observer model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+Auto \(gpt-6-luna\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-6-luna\)/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
