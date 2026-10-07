@@ -7,9 +7,10 @@ import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
 
-// Layer the raised-container fill over the opaque card material. The cover must
-// stay opaque so the sleeve controls cannot show through while it retracts.
-const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'bg-linear-to-b from-fill to-fill');
+// Dark attachments need a fill above the muted composer. Light attachments keep
+// the white card material and use the shared rim and shadow for elevation.
+// Both stay opaque so the sleeve controls cannot show through the cover.
+const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'dark:bg-linear-to-b dark:from-fill dark:to-fill');
 
 export interface ComposerAttachmentProps {
   name: string;

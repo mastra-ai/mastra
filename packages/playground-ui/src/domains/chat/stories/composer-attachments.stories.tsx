@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The shared attachment uses a retracting cover with vertically stacked edit and remove controls. Button corners follow the attachment radius minus their inset, keeping the nested curves concentric. Applications supply optional onEdit/onPreview callbacks; existing preview children and onRemove continue to work. On narrow screens and touch devices, an actions button with a minimum 44 px touch target and long press open the native ContextMenu. Edit/save in these stories updates the filename; removal updates the draft list.',
+          'Every composer attachment reveals its remove control behind a retracting cover on hover or keyboard focus. This is the default behavior for every file type. The remove button fills the action column; supplying onEdit adds an edit button below it. Button corners follow the attachment radius minus their inset. On narrow screens and touch devices, an actions button and long press open the native ContextMenu. Existing preview children and onRemove continue to work; applications can optionally supply onPreview. Edit/save in these stories updates the filename; removal updates the draft list.',
       },
     },
   },
@@ -103,6 +103,12 @@ function AttachmentPreview({ name, displayName = name }: { name: string; display
 
 export const Images: Story = {
   render: () => <AttachmentComposer files={['diagram.png']} />,
+  play: async ({ canvasElement }) => verifyAttachmentSpacing(canvasElement),
+};
+
+export const File: Story = {
+  render: () => <AttachmentComposer files={['archive.zip']} />,
+  play: Images.play,
 };
 
 export const WithAttachmentsAndActions: Story = {
@@ -144,11 +150,12 @@ export const MixedFiles: Story = {
       }
     }
 
-    const removeButtons = canvas.getAllByRole('button', { name: /^Remove / });
-    for (const button of removeButtons) {
+    const actionButtons = canvas.getAllByRole('button', { name: /^(Remove |Actions for )/ });
+    for (const button of actionButtons) {
       const card = button.closest('[data-slot="composer-attachment"]');
       if (!card || !button.parentElement) throw new Error('Missing attachment action column');
-      const inset = parseFloat(getComputedStyle(button.parentElement).right);
+      const positionedElement = button.hasAttribute('aria-haspopup') ? button : button.parentElement;
+      const inset = parseFloat(getComputedStyle(positionedElement).right);
       await expect(parseFloat(getComputedStyle(button).borderRadius) + inset).toBe(
         parseFloat(getComputedStyle(card).borderRadius),
       );
@@ -233,23 +240,7 @@ export const KeyboardRemove: Story = {
   },
 };
 
-/** The selected design, using the production component and a real edit callback. */
-export const Sleeve: Story = {
-  render: () => <AttachmentComposer files={['diagram.png']} editable withActions />,
-  play: async ({ canvasElement }) => verifySleeveSpacing(canvasElement),
-};
-
-export const SleeveFile: Story = {
-  render: () => <AttachmentComposer files={['archive.zip']} editable withActions />,
-  play: Sleeve.play,
-};
-
-export const SleeveRemoveOnly: Story = {
-  render: () => <AttachmentComposer files={['archive.zip']} withActions />,
-  play: Sleeve.play,
-};
-
-async function verifySleeveSpacing(canvasElement: HTMLElement) {
+async function verifyAttachmentSpacing(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const menuButton = canvas.queryByRole('button', { name: /^Actions for / });
   const firstAction = menuButton ?? canvas.getByRole('button', { name: /^Remove / });
@@ -277,7 +268,7 @@ async function verifySleeveSpacing(canvasElement: HTMLElement) {
   });
 }
 
-export const SleeveMixedFiles: Story = {
+export const WithEditing: Story = {
   render: () => (
     <AttachmentComposer
       files={['diagram.png', 'project-notes.txt', 'brief.pdf', 'recording.mp3', 'archive.zip']}
@@ -287,13 +278,15 @@ export const SleeveMixedFiles: Story = {
   ),
 };
 
-export const SleeveLongFilename: Story = {
-  render: () => <AttachmentComposer files={['review-notes-with-a-long-filename-é日本語.csv']} editable withActions />,
+export const LongFilename: Story = {
+  render: () => <AttachmentComposer files={['review-notes-with-a-long-filename-é日本語.csv']} />,
+  play: Images.play,
 };
 
 export const EditAttachment: Story = {
-  render: Sleeve.render,
+  render: () => <AttachmentComposer files={['diagram.png']} editable withActions />,
   play: async ({ canvasElement }) => {
+    await verifyAttachmentSpacing(canvasElement);
     const canvas = within(canvasElement);
     canvas.getByRole('button', { name: 'Preview diagram.png' }).focus();
     await userEvent.click(canvas.getByRole('button', { name: 'Edit diagram.png' }));
