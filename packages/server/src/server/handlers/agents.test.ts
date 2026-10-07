@@ -2456,6 +2456,15 @@ describe('Agent Routes Authorization', () => {
       expect(abortAgentThreadBodySchema.safeParse({ ...body, clearPendingSignals: 'true' }).success).toBe(false);
       expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      const modelOptions = {
+        providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } },
+        modelSettings: { temperature: 0.2 },
+      };
+      expect(approveToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions })).toMatchObject(modelOptions);
+      expect(declineToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions, reason: 'no' })).toMatchObject({
+        ...modelOptions,
+        reason: 'no',
+      });
       expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
       expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
     });
