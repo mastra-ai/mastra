@@ -140,6 +140,13 @@ export type AuthStorageData = Record<string, AuthCredential | OAuthAccountRecord
 export interface CredentialStore {
   /** Whether model resolution may fall back to process environment credentials. */
   readonly allowEnvironmentFallback?: boolean;
+  /**
+   * Whether `provider` may authenticate with credentials the server process
+   * supplies (an operator opt-in), even when `allowEnvironmentFallback` is
+   * false. Used by gateways whose auth is process-scoped by design, such as
+   * Amazon Bedrock's AWS credential chain.
+   */
+  allowsDeploymentCredentials?(provider: string): boolean;
   /** Refresh any cached view (no-op for sources that are always fresh). */
   reload(): void;
   /** Credential in the provider's main slot (`anthropic`, `openai-codex`, …). */

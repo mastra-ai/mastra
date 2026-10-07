@@ -86,7 +86,7 @@ function boardEmptyCopy(
   if (filtersExcludeAll) {
     return {
       title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
-      description: 'Try another teammate or relevance type.',
+      description: 'Try adjusting or clearing your filters.',
     };
   }
   const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
@@ -126,10 +126,10 @@ export function BoardColumnEmptyState({
   }
   return (
     <div className="border-border rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
-      <Txt as="p" variant="column" className="text-muted-foreground m-0">
+      <Txt tone="muted" as="p" variant="column" className="m-0">
         {copy.title}
       </Txt>
-      <Txt as="p" variant="meta" className="text-muted-foreground mt-1 mb-0 max-w-60 leading-5">
+      <Txt tone="muted" as="p" variant="meta" className="mt-1 mb-0 max-w-60">
         {copy.description}
       </Txt>
     </div>

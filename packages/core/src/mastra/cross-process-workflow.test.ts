@@ -416,6 +416,107 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
     await mastra.shutdown();
   });
 
+  it('does NOT tag events for a distributed workflow as localOnly when this process has no workers', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    expect(mastra.__hasLocalWorkflowExecution()).toBe(false);
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('durable-agentic-loop') as any, undefined, {
+      distributed: true,
+    });
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('durable-agentic-loop', 'run-1'));
+    await mastra.pubsub.publish('workflows-finish', {
+      type: 'workflow.end',
+      runId: 'run-1',
+      data: { workflowId: 'durable-agentic-loop', runId: 'run-1' },
+    } as Event);
+    // Nested runs under the distributed loop travel cross-process too.
+    await mastra.pubsub.publish(
+      'workflows',
+      makeStepRunEvent('nested', 'nested-run', { workflowId: 'durable-agentic-loop', runId: 'run-1' }),
+    );
+
+    expect(pubsub.calls.map(c => c.localOnly)).toEqual([false, false, false]);
+    await mastra.shutdown();
+  });
+
+  it('keeps a distributed workflow pinned while this process runs workers, but sends finish events across', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('durable-agentic-loop') as any, undefined, {
+      distributed: true,
+    });
+    await mastra.startWorkers();
+    expect(mastra.__hasLocalWorkflowExecution()).toBe(true);
+    pubsub.calls.length = 0;
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('durable-agentic-loop', 'run-1'));
+    await mastra.pubsub.publish(
+      'workflows',
+      makeStepRunEvent('nested', 'nested-run', { workflowId: 'durable-agentic-loop', runId: 'run-1' }),
+    );
+    // The caller waiting on the result may be another process, so finish always crosses.
+    await mastra.pubsub.publish('workflows-finish', {
+      type: 'workflow.end',
+      runId: 'run-1',
+      data: { workflowId: 'durable-agentic-loop', runId: 'run-1' },
+    } as Event);
+
+    expect(
+      pubsub.calls
+        .filter(c => c.event.runId === 'run-1' || c.event.runId === 'nested-run')
+        .map(c => [c.topic, c.localOnly]),
+    ).toEqual([
+      ['workflows', true],
+      ['workflows', true],
+      ['workflows-finish', false],
+    ]);
+    await mastra.shutdown();
+  });
+
+  it('keeps tagging unscoped non-distributed internal workflows as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('__background-task') as any);
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('__background-task', 'run-1'));
+
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('keeps tagging run-scoped registrations as localOnly even when the id is also distributed', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('wf') as any, undefined, { distributed: true });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('wf') as any, 'scoped-run');
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('wf', 'scoped-run'));
+    await mastra.pubsub.publish('workflows', makeStartEvent('wf', 'other-run'));
+
+    expect(pubsub.calls.map(c => c.localOnly)).toEqual([true, false]);
+    await mastra.shutdown();
+  });
+
+  it('warns once when a localOnly workflow event is published by a process without workers', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ storage: new MockStore(), workflows: {} as any, pubsub, workers: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-1');
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
+    await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
+
+    const stranded = warn.mock.calls.filter(([msg]) => String(msg).includes('no running workflow workers'));
+    expect(stranded).toHaveLength(1);
+
+    // stopWorkers() resets the warn-once state, so a later stranding warns again.
+    await mastra.stopWorkers();
+    await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
+    expect(warn.mock.calls.filter(([msg]) => String(msg).includes('no running workflow workers'))).toHaveLength(2);
+    await mastra.shutdown();
+  });
+
   it('does NOT touch unrelated topics', async () => {
     const pubsub = new RecordingPushOnlyPubSub();
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });

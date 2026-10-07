@@ -594,6 +594,9 @@ export interface DataOmObservationFailedPart {
     /** Machine-readable failure classification when the observer/provider call failed. */
     failureKind?: 'observer-model' | 'reflector-model';
 
+    /** Set when this attempt failed but the runner is retrying the same cycle, so the failure is not final. */
+    retrying?: true;
+
     /** The OM record ID */
     recordId: string;
 

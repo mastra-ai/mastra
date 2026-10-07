@@ -937,11 +937,13 @@ mastra auth tokens revoke <token-id>
 
 Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
 
+Commands use the organization you're signed in to with `mastra auth login`. Switch organizations with `mastra auth orgs switch`.
+
 The target project resolves from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <name|slug|id>`.
 
 ### `mastra connect list`
 
-Lists the available providers. Providers already connected to the project are shown in green, and unconnected providers are shown in grey.
+Lists providers with connected providers first. Active connections are shown in green, connections needing reauthorization in yellow, and unconnected providers in grey. Providers that aren't available yet are marked as coming soon.
 
 ```bash
 mastra connect list
@@ -951,9 +953,11 @@ mastra connect list
 
 Connects a provider to the project. When the organization already has connections for the provider that aren't attached to the project, the command lists them and lets you attach an existing connection or create a new one. With no existing connections it goes straight to the provider's auth flow.
 
-OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+
+Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
 ```bash
 mastra connect add <provider>
@@ -970,6 +974,19 @@ mastra connect remove <provider>
 ```
 
 When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation. Without a terminal, or with `--yes`, removing several connections at once requires `--all`, and `--connection <id>` removes a single one.
+
+### Replace a connection that needs reauthorization
+
+`mastra connect list` marks connections that need reauthorization, for example after a provider API key is revoked. Connect tool resolution skips these connections with a warning.
+
+Unlink the affected connection, then add a new one:
+
+```bash
+mastra connect remove posthog
+mastra connect add posthog
+```
+
+If the project has multiple connections, select the affected one when removing it. When `add` offers to reuse an organization connection, choose **Create a new connection** and authorize it with valid credentials.
 
 ## `mastra lint`
 

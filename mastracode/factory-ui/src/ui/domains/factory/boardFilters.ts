@@ -16,6 +16,8 @@ export const BOARD_FILTER_FIELD = {
   teammate: 'teammate',
   relevance: 'relevance',
   label: 'label',
+  source: 'source',
+  linearProject: 'linearProject',
 } as const;
 
 /** Query parameters each board narrowing is stored in. */
@@ -24,6 +26,8 @@ export const BOARD_FILTER_QUERY = {
   teammate: 'teammate',
   relevance: 'relevance',
   label: 'label',
+  source: 'source',
+  linearProject: 'linearProject',
 } as const;
 
 /** Every board narrowing in one value: what the URL carries, and what the cards are matched against. */
@@ -34,6 +38,8 @@ export interface BoardFilterState {
   /** Relevance kinds kept for the selected teammates. The full set means "not narrowed". */
   relevanceTypes: ReadonlySet<BoardRelevanceType>;
   labels: ReadonlySet<string>;
+  sources: ReadonlySet<string>;
+  linearProjectIds: ReadonlySet<string>;
 }
 
 export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind): BoardFilterState {
@@ -42,6 +48,8 @@ export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind)
     participantIds: new Set(params.getAll(BOARD_FILTER_QUERY.teammate).filter(Boolean)),
     relevanceTypes: boardRelevanceFromQuery(params.get(BOARD_FILTER_QUERY.relevance), kind),
     labels: boardLabelsFromQuery(params.getAll(BOARD_FILTER_QUERY.label)),
+    sources: new Set(params.getAll(BOARD_FILTER_QUERY.source).filter(Boolean)),
+    linearProjectIds: new Set(params.getAll(BOARD_FILTER_QUERY.linearProject).filter(Boolean)),
   };
 }
 
@@ -57,6 +65,13 @@ export function boardFilterParams(params: URLSearchParams, state: BoardFilterSta
   set(BOARD_FILTER_QUERY.relevance, relevance);
   next.delete(BOARD_FILTER_QUERY.label);
   for (const label of boardLabelsQueryValues(state.labels)) next.append(BOARD_FILTER_QUERY.label, label);
+  for (const [key, values] of [
+    [BOARD_FILTER_QUERY.source, state.sources],
+    [BOARD_FILTER_QUERY.linearProject, state.linearProjectIds],
+  ] as const) {
+    next.delete(key);
+    for (const value of values) next.append(key, value);
+  }
   return next;
 }
 
@@ -72,6 +87,8 @@ export function boardFiltersActive(state: BoardFilterState, kind: BoardKind): bo
     state.search !== '' ||
     state.participantIds.size > 0 ||
     state.labels.size > 0 ||
+    state.sources.size > 0 ||
+    state.linearProjectIds.size > 0 ||
     boardRelevanceQueryValue(state.relevanceTypes, kind) !== undefined
   );
 }
@@ -117,6 +134,12 @@ export function boardFilterItems(state: BoardFilterState, kind: BoardKind): Filt
       value: [...state.labels],
     });
   }
+  for (const [fieldId, values] of [
+    [BOARD_FILTER_FIELD.source, state.sources],
+    [BOARD_FILTER_FIELD.linearProject, state.linearProjectIds],
+  ] as const) {
+    if (values.size > 0) items.push({ id: fieldId, fieldId, operatorId: 'in', value: [...values] });
+  }
   return items;
 }
 
@@ -137,5 +160,7 @@ export function boardFilterStateFromItems(items: readonly FilterBarItem[], kind:
     participantIds: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.teammate))),
     relevanceTypes: new Set(selected.length > 0 ? selected : available),
     labels: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.label))),
+    sources: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.source))),
+    linearProjectIds: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.linearProject))),
   };
 }

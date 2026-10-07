@@ -12,11 +12,6 @@ export function AgentCrumb() {
   return agents?.[agentId]?.name || agentId;
 }
 
-export function AgentToolCrumb() {
-  const { toolId } = useParams<{ toolId: string }>();
-  return toolId ?? null;
-}
-
 export function AgentSwitcher() {
   const { agentId } = useParams<{ agentId: string }>();
   if (!agentId) return null;

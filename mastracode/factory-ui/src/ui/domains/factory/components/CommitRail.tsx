@@ -7,8 +7,9 @@ import { useState } from 'react';
 import { useRepositoryCommits } from '../../../../hooks/useRepositoryCommits';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { RepositoryCommit } from '../services/commits';
-import { PANEL, TIMESTAMP } from './panel';
+import { PANEL } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { CommitRailEmptyState } from './CommitRailEmptyState';
 
 const COMMITS_FETCHED = 20;
 const COMMITS_COLLAPSED = 7;
@@ -58,15 +59,24 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
       >
         <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2 pr-4">
           <Avatar src={commit.avatarUrl ?? undefined} name={author} size="sm" />
-          <span className="text-foreground min-w-0 truncate font-medium">{commit.message}</span>
+          <Txt as="span" variant="column" tone="ink" className="min-w-0 truncate">
+            {commit.message}
+          </Txt>
         </Txt>
-        <span className={`${TIMESTAMP} text-muted-foreground shrink-0 font-mono`}>
+        <Txt as="span" variant="meta" font="mono" tone="muted" className={`shrink-0`}>
           {commit.sha.slice(0, SHORT_SHA)}
-        </span>
+        </Txt>
         {commit.committedAt ? (
-          <time dateTime={commit.committedAt} className={`${TIMESTAMP} w-14 shrink-0 pl-3 text-right`}>
+          <Txt
+            as="time"
+            variant="meta"
+            tone="muted"
+            font="mono"
+            dateTime={commit.committedAt}
+            className={`w-14 shrink-0 pl-3 text-right`}
+          >
             {relativeTime(commit.committedAt)}
-          </time>
+          </Txt>
         ) : null}
       </a>
     </li>
@@ -76,7 +86,7 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
 function Note({ children }: { children: string }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
+      <Txt tone="muted" as="p" variant="caption" className="m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -84,17 +94,23 @@ function Note({ children }: { children: string }) {
 }
 
 /** The connected repository's default branch, newest first — the one thing on Overview that comes from GitHub. */
-export function CommitRail({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
+export function CommitRail({
+  projectRepositoryId,
+  factoryProjectId,
+}: {
+  projectRepositoryId: string | undefined;
+  factoryProjectId?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const query = useRepositoryCommits(projectRepositoryId, COMMITS_FETCHED);
 
   // No repository means the query never fetches, so it stays pending for good.
-  if (!projectRepositoryId) return <Note>No repository linked yet</Note>;
+  if (!projectRepositoryId) return <CommitRailEmptyState linked={false} factoryProjectId={factoryProjectId} />;
   if (query.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
   if (query.isError) return <Note>Could not reach GitHub for the commit history.</Note>;
 
   const commits = query.data?.commits ?? [];
-  if (commits.length === 0) return <Note>No commits yet</Note>;
+  if (commits.length === 0) return <CommitRailEmptyState linked factoryProjectId={factoryProjectId} />;
 
   const shown = expanded ? commits : commits.slice(0, COMMITS_COLLAPSED);
   const hidden = commits.length - shown.length;

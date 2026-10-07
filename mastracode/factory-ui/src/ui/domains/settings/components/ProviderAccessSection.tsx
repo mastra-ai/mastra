@@ -83,6 +83,13 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
       </Badge>
     );
   }
+  if (provider.source === 'deployment') {
+    return (
+      <Badge size="sm" variant="blue">
+        From deployment
+      </Badge>
+    );
+  }
   if (provider.source === 'env') {
     return (
       <Badge size="sm" variant="blue">
@@ -232,7 +239,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -293,7 +300,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (
@@ -304,14 +311,16 @@ export function ProviderAccessSection({
                       <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
                           <StatusBadge provider={provider} rowScope={rowScope} />
-                          <Button
-                            size="sm"
-                            aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
-                            disabled={actionsDisabled || isRemoving(provider)}
-                            onClick={() => setKeyDialogProvider(provider)}
-                          >
-                            {storedKey ? 'Update key' : 'Add API key'}
-                          </Button>
+                          {provider.source !== 'deployment' && (
+                            <Button
+                              size="sm"
+                              aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                              disabled={actionsDisabled || isRemoving(provider)}
+                              onClick={() => setKeyDialogProvider(provider)}
+                            >
+                              {storedKey ? 'Update key' : 'Add API key'}
+                            </Button>
+                          )}
                           {storedKey && (
                             <Button
                               size="sm"

@@ -525,6 +525,42 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
   });
 
+  it('opens a separate card for an issue whose number matches another linked repository card', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/other/repo/issues/42',
+        },
+        title: 'Issue 42 (other repo)',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { githubRepositoryId: 999 },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(issueOpened('delivery-open-cross-repo'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(decision => decision.decision)).toContainEqual(
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', sourceKey: 'github:10:issue:42' }),
+    );
+  });
+
   it('commits nothing when the closed issue card is already off the board', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await workItems.upsert({
@@ -902,7 +938,7 @@ describe('GithubRules', () => {
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -955,7 +991,7 @@ describe('GithubRules', () => {
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);
