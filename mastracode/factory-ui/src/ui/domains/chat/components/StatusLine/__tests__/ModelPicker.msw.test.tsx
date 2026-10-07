@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { ThinkingConfigInfo } from '../../../../../../api/types';
+import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import { thinkingConfig } from '../../../../../__tests__/fixtures/thinkingConfig';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
@@ -22,9 +23,24 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}`;
-const models = [
-  { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-  { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
+const models: AvailableModelOption[] = [
+  {
+    id: 'anthropic/claude-sonnet-4-6',
+    provider: 'anthropic',
+    modelName: 'claude-sonnet-4-6',
+    hasApiKey: true,
+    reasoningOptions: [
+      { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+      { type: 'budget_tokens', min: 1024 },
+    ],
+  },
+  {
+    id: 'openai/gpt-5',
+    provider: 'openai',
+    modelName: 'gpt-5',
+    hasApiKey: true,
+    reasoningOptions: [{ type: 'effort', values: ['minimal', 'low', 'medium', 'high'] }],
+  },
 ];
 
 const baseSession: ChatSessionContextApi = {
@@ -41,7 +57,7 @@ const baseSession: ChatSessionContextApi = {
 function renderPicker({
   kind = 'user',
   modelId = 'openai/gpt-5',
-  defaultModelId = 'anthropic/claude-sonnet-4-5',
+  defaultModelId = 'anthropic/claude-sonnet-4-6',
   thinkingLevel,
   settingsLoaded,
   catalogLoaded,
@@ -138,7 +154,7 @@ describe('ModelPicker', () => {
 
     expect(screen.getByText('anthropic')).toBeInTheDocument();
     expect(screen.getByText('openai')).toBeInTheDocument();
-    const defaultOption = screen.getByRole('option', { name: /claude-sonnet-4-5/i });
+    const defaultOption = screen.getByRole('option', { name: /claude-sonnet-4-6/i });
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
   });
 
@@ -150,12 +166,12 @@ describe('ModelPicker', () => {
     await user.click(screen.getByRole('option', { name: 'Reset to your default' }));
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-sonnet-4-5' }]));
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-sonnet-4-6' }]));
   });
 
   it('hides reset when the active model already matches the default', async () => {
     const user = userEvent.setup();
-    renderPicker({ modelId: 'anthropic/claude-sonnet-4-5' });
+    renderPicker({ modelId: 'anthropic/claude-sonnet-4-6' });
 
     await user.click(await screen.findByLabelText('Session model'));
 
@@ -184,7 +200,7 @@ describe('ModelPicker', () => {
   it('keeps the saved thinking choice when switching to a model that cannot run it', async () => {
     const user = userEvent.setup();
     const { client, modelSwitches, stateUpdates } = renderPicker({
-      modelId: 'anthropic/claude-sonnet-4-5',
+      modelId: 'anthropic/claude-sonnet-4-6',
       thinkingLevel: 'max',
     });
 
@@ -200,7 +216,7 @@ describe('ModelPicker', () => {
   it('shows the level the model runs when the saved choice is above what it supports', async () => {
     renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max' });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: Extra high' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High' })).toBeEnabled();
   });
 
   it('shows the mode default until the session picks its own level, then saves it', async () => {
@@ -254,7 +270,7 @@ describe('ModelPicker', () => {
       finishSwitch = resolve;
     });
     const user = userEvent.setup();
-    const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: 'high', modelSwitched });
+    const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'high', modelSwitched });
 
     await screen.findByRole('button', { name: 'Thinking: High' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());

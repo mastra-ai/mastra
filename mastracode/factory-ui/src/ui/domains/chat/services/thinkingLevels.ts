@@ -4,6 +4,7 @@ import {
   runThinkingLevel,
 } from '@mastra/code-sdk/thinking';
 import type { ThinkingDefaults, ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
 export const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
@@ -21,8 +22,11 @@ const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLeve
   max: 'warning',
 };
 
-export function thinkingLevelOptionsForModel(modelId: string): ThinkingLevelOption<ThinkingLevelSetting>[] {
-  return getAvailableThinkingLevelsForModel(modelId).map(level => ({
+export function thinkingLevelOptionsForModel(
+  modelId: string,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
+): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return getAvailableThinkingLevelsForModel(modelId, reasoningOptions).map(level => ({
     value: level,
     label: THINKING_LEVEL_LABELS[level],
     emphasis: THINKING_LEVEL_EMPHASIS[level],
@@ -36,17 +40,18 @@ function defaultThinkingLevelForMode(defaults: ThinkingDefaults | undefined, mod
 
 export function resolveEffectiveThinkingLevel({
   modelId,
+  reasoningOptions,
   override,
   defaults,
   modeId,
 }: {
   modelId: string | undefined;
+  reasoningOptions: readonly ModelReasoningOption[] | undefined;
   override: ThinkingLevelSetting | undefined;
   defaults: ThinkingDefaults | undefined;
   modeId: string | undefined;
 }): ThinkingLevelSetting | undefined {
   const level = override ?? defaultThinkingLevelForMode(defaults, modeId);
   if (!level || !modelId) return level;
-  return runThinkingLevel(modelId, level);
+  return runThinkingLevel(modelId, level, reasoningOptions);
 }
-

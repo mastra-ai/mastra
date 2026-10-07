@@ -1,6 +1,7 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
+import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useChatModes } from '../context/useChatModes';
 import { resolveEffectiveThinkingLevel } from '../services/thinkingLevels';
 
@@ -10,5 +11,12 @@ export function useEffectiveThinkingLevel(
 ): ThinkingLevelSetting | undefined {
   const { activeModeId } = useChatModes();
   const { data: thinkingDefaults } = useThinkingConfigQuery();
-  return resolveEffectiveThinkingLevel({ modelId, override, defaults: thinkingDefaults, modeId: activeModeId });
+  const reasoningOptions = useModelReasoningOptions(modelId);
+  return resolveEffectiveThinkingLevel({
+    modelId,
+    reasoningOptions,
+    override,
+    defaults: thinkingDefaults,
+    modeId: activeModeId,
+  });
 }

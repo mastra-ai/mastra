@@ -1,6 +1,7 @@
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
+import { useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import { useChatModels } from '../../context/useChatModels';
 import { thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 
@@ -11,7 +12,8 @@ interface SessionThinkingControlProps {
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const { effectiveThinkingLevel, setThinkingLevel } = useChatModels();
-  const options = thinkingLevelOptionsForModel(modelId);
+  const reasoningOptions = useModelReasoningOptions(modelId);
+  const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
 
   if (!effectiveThinkingLevel) {
     return (
