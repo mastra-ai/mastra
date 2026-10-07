@@ -483,6 +483,7 @@ export class SessionThread {
   #session: Session | undefined;
   /** Serializes create/clone/switch/delete so bindings and locks commit in call order. */
   #lifecycleQueue: Promise<void> | undefined;
+  #hasBoundThread = false;
 
   constructor(getResourceId: () => string) {
     this.#getResourceId = getResourceId;
@@ -569,12 +570,24 @@ export class SessionThread {
     return this.#set({ threadId });
   }
 
-  #set({ threadId }: { threadId: string }): number {
+  #set({
+    threadId,
+    preserveStartupSelection = false,
+  }: {
+    threadId: string;
+    preserveStartupSelection?: boolean;
+  }): number {
     this.#threadId = threadId;
+    this.#hasBoundThread = true;
     this.#bindingGeneration++;
     if (this.#session) {
-      this.#resetThreadSelection();
-      this.#session.resetThreadDerivedState();
+      if (preserveStartupSelection) {
+        // First materialization adopts the pending choices without resetting them.
+        (this.#session.state as SessionState).rebind([]);
+      } else {
+        this.#resetThreadSelection();
+        this.#session.resetThreadDerivedState();
+      }
       this.#session.resetTokenUsage();
     }
     return this.#bindingGeneration;
@@ -899,11 +912,19 @@ export class SessionThread {
       updatedAt: now,
     };
 
-    const defaultModeId = session.mode.getDefault();
-    const defaultMode = session.mode.resolveId(defaultModeId);
-    const modelId = session.model.getDefault() || defaultMode.defaultModelId;
+    const preserveStartupSelection = !this.#hasBoundThread;
+    const modeId = preserveStartupSelection ? session.mode.get() : session.mode.getDefault();
+    const mode = session.mode.resolveId(modeId);
+    const modelId =
+      (preserveStartupSelection ? session.model.get() : session.model.getDefault()) || mode.defaultModelId;
 
-    const metadata: Record<string, unknown> = { [MODE_ID_KEY]: defaultModeId };
+    const metadata: Record<string, unknown> = { [MODE_ID_KEY]: modeId };
+    if (preserveStartupSelection) {
+      const state = session.state.get() as Record<string, unknown>;
+      for (const key of THREAD_DERIVED_STATE_KEYS) {
+        if (state[key] !== undefined) metadata[key] = state[key];
+      }
+    }
     if (modelId) {
       metadata.currentModelId = modelId;
       metadata[MODEL_PERSISTENCE_VERSION_KEY] = MODEL_PERSISTENCE_VERSION;
@@ -970,7 +991,7 @@ export class SessionThread {
     }
 
     this.cleanupSubscription();
-    this.#set({ threadId: thread.id });
+    this.#set({ threadId: thread.id, preserveStartupSelection });
 
     if (modelId) {
       session.model.set({ modelId });
