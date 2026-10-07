@@ -20,7 +20,9 @@ import { SpanType } from '../observability/types';
 import { getOrCreateSpan, resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = DecisionModelV4Input;
-export type EvaluationModelResult = DecisionModelV4Result;
+export type DecisionModelResult = DecisionModelV4Result;
+/** @deprecated Use `DecisionModelResult` instead. */
+export type EvaluationModelResult = DecisionModelResult;
 
 /**
  * A model accepted by `Classifier`: an AI SDK decision model (`doDecide`), or a
@@ -28,17 +30,20 @@ export type EvaluationModelResult = DecisionModelV4Result;
  */
 export type ClassifierModel = DecisionModelV4 | EvaluationModelV4;
 
-export interface MastraEvaluationModelInterface {
+export interface MastraDecisionModelInterface {
   readonly specificationVersion: 'v4';
   readonly provider: string;
   readonly modelId: string;
   readonly supportedQuestionTypes: DecisionModelV4['supportedQuestionTypes'];
-  doDecide(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult>;
+  doDecide(options: DecisionModelV4CallOptions): Promise<DecisionModelResult>;
   /** @deprecated Use `doDecide` instead. */
-  doEvaluate(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult>;
+  doEvaluate(options: DecisionModelV4CallOptions): Promise<DecisionModelResult>;
 }
 
-export class MastraEvaluationModel extends MastraBase implements MastraEvaluationModelInterface {
+/** @deprecated Use `MastraDecisionModelInterface` instead. */
+export type MastraEvaluationModelInterface = MastraDecisionModelInterface;
+
+export class MastraDecisionModel extends MastraBase implements MastraDecisionModelInterface {
   readonly specificationVersion = 'v4' as const;
   readonly provider: string;
   readonly modelId: string;
@@ -46,28 +51,31 @@ export class MastraEvaluationModel extends MastraBase implements MastraEvaluatio
   readonly #model: ClassifierModel;
 
   constructor(model: ClassifierModel) {
-    super({ name: 'evaluation-model' });
+    super({ name: 'decision-model' });
     this.#model = model;
     this.provider = model.provider;
     this.modelId = model.modelId;
     this.supportedQuestionTypes = model.supportedQuestionTypes;
   }
 
-  async doDecide(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult> {
+  async doDecide(options: DecisionModelV4CallOptions): Promise<DecisionModelResult> {
     const model = this.#model;
     const result = 'doDecide' in model ? await model.doDecide(options) : await model.doEvaluate(options);
     return this.transformResult(result);
   }
 
   /** @deprecated Use `doDecide` instead. */
-  doEvaluate(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult> {
+  doEvaluate(options: DecisionModelV4CallOptions): Promise<DecisionModelResult> {
     return this.doDecide(options);
   }
 
-  protected transformResult(result: EvaluationModelResult): EvaluationModelResult {
+  protected transformResult(result: DecisionModelResult): DecisionModelResult {
     return result;
   }
 }
+
+/** @deprecated Use `MastraDecisionModel` instead. `MastraEvaluationModel` will be removed in a future release. */
+export class MastraEvaluationModel extends MastraDecisionModel {}
 
 export type ChoiceQuestion<
   CRITERIA extends Readonly<Record<string, DecisionModelV4Input | null>> = Readonly<
@@ -155,42 +163,56 @@ export type ClassifierResult<QUESTIONS extends ClassifierQuestions> = {
   };
 };
 
-type CommonEvaluateOptions = {
+type CommonDecideOptions = {
   state: ClassifierState;
   abortSignal?: AbortSignal;
   providerOptions?: SharedV4ProviderOptions;
   maxRetries?: number;
 };
 
-export type ConfiguredClassifierEvaluateOptions = CommonEvaluateOptions & {
+export type ConfiguredClassifierDecideOptions = CommonDecideOptions & {
   questions?: never;
 };
 
-export type PerCallClassifierEvaluateOptions<QUESTIONS extends ClassifierQuestions> = CommonEvaluateOptions & {
+export type PerCallClassifierDecideOptions<QUESTIONS extends ClassifierQuestions> = CommonDecideOptions & {
   questions: QUESTIONS;
 };
 
+/** @deprecated Use `ConfiguredClassifierDecideOptions` instead. */
+export type ConfiguredClassifierEvaluateOptions = ConfiguredClassifierDecideOptions;
+/** @deprecated Use `PerCallClassifierDecideOptions` instead. */
+export type PerCallClassifierEvaluateOptions<QUESTIONS extends ClassifierQuestions> =
+  PerCallClassifierDecideOptions<QUESTIONS>;
+
 export type ConfiguredClassifierOptions<QUESTIONS extends ClassifierQuestions> = {
   id: string;
-  model: ClassifierModel | MastraEvaluationModel;
+  model: ClassifierModel | MastraDecisionModel;
   questions: QUESTIONS;
 };
 
 export type PerCallClassifierOptions = {
   id: string;
-  model: ClassifierModel | MastraEvaluationModel;
+  model: ClassifierModel | MastraDecisionModel;
   questions?: never;
 };
 
 export interface ClassifierInterface<CONFIGURED_QUESTIONS extends ClassifierQuestions | undefined = undefined> {
   readonly id: string;
-  readonly model: MastraEvaluationModelInterface;
+  readonly model: MastraDecisionModelInterface;
   readonly questions: CONFIGURED_QUESTIONS;
-  evaluate(
-    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+  decide(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
   ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  decide<const QUESTIONS extends ClassifierQuestions>(
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
+  ): Promise<ClassifierResult<QUESTIONS>>;
+  /** @deprecated Use `decide` instead. */
+  evaluate(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  /** @deprecated Use `decide` instead. */
   evaluate<const QUESTIONS extends ClassifierQuestions>(
-    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
   ): Promise<ClassifierResult<QUESTIONS>>;
 }
 
@@ -199,7 +221,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
   implements ClassifierInterface<CONFIGURED_QUESTIONS>
 {
   readonly id: string;
-  readonly model: MastraEvaluationModel;
+  readonly model: MastraDecisionModel;
   readonly questions: CONFIGURED_QUESTIONS;
   #mastra?: Mastra;
 
@@ -215,8 +237,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     }
 
     this.id = options.id;
-    this.model =
-      options.model instanceof MastraEvaluationModel ? options.model : new MastraEvaluationModel(options.model);
+    this.model = options.model instanceof MastraDecisionModel ? options.model : new MastraDecisionModel(options.model);
     this.questions = options.questions as CONFIGURED_QUESTIONS;
 
     if (this.questions !== undefined) {
@@ -232,14 +253,28 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     this.#mastra = mastra;
   }
 
+  /** @deprecated Use `decide` instead. `evaluate` will be removed in a future release. */
   async evaluate(
-    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
   ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  /** @deprecated Use `decide` instead. `evaluate` will be removed in a future release. */
   async evaluate<const QUESTIONS extends ClassifierQuestions>(
-    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
   ): Promise<ClassifierResult<QUESTIONS>>;
   async evaluate(
-    options: ConfiguredClassifierEvaluateOptions | PerCallClassifierEvaluateOptions<ClassifierQuestions>,
+    options: ConfiguredClassifierDecideOptions | PerCallClassifierDecideOptions<ClassifierQuestions>,
+  ): Promise<ClassifierResult<ClassifierQuestions>> {
+    return this.decide(options as never);
+  }
+
+  async decide(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  async decide<const QUESTIONS extends ClassifierQuestions>(
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
+  ): Promise<ClassifierResult<QUESTIONS>>;
+  async decide(
+    options: ConfiguredClassifierDecideOptions | PerCallClassifierDecideOptions<ClassifierQuestions>,
   ): Promise<ClassifierResult<ClassifierQuestions>> {
     const questions = this.questions ?? ('questions' in options ? options.questions : undefined);
     if (questions === undefined) {
@@ -279,7 +314,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       });
       // The last provider error is kept so it can be restored below.
       let lastProviderError: unknown;
-      let providerResult: EvaluationModelResult;
+      let providerResult: DecisionModelResult;
       try {
         providerResult = await retry(async () => {
           options.abortSignal?.throwIfAborted();
@@ -292,7 +327,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
               providerOptions: options.providerOptions,
             };
             // Subclasses written before doDecide existed may override doEvaluate; keep honoring them.
-            return this.model.doEvaluate !== MastraEvaluationModel.prototype.doEvaluate
+            return this.model.doEvaluate !== MastraDecisionModel.prototype.doEvaluate
               ? await this.model.doEvaluate(callOptions)
               : await this.model.doDecide(callOptions);
           } catch (error) {
@@ -388,7 +423,7 @@ function validateState(state: unknown): asserts state is ClassifierState {
   validateJsonValue(state, 'state');
 }
 
-function validateQuestions(questions: ClassifierQuestions, model: MastraEvaluationModelInterface): void {
+function validateQuestions(questions: ClassifierQuestions, model: MastraDecisionModelInterface): void {
   if (!isPlainObject(questions) || Object.keys(questions).length === 0) {
     throw new TypeError('Questions must be a non-empty object.');
   }

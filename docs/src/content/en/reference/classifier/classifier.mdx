@@ -12,7 +12,7 @@ packages:
 
 A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
 
-`Classifier` requires a decision model (`DecisionModelV4`, or the deprecated `EvaluationModelV4`, optionally wrapped in `MastraEvaluationModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
+`Classifier` requires a decision model (`DecisionModelV4`, or the deprecated `EvaluationModelV4`, optionally wrapped in `MastraDecisionModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
 
 ## Basic usage
 
@@ -49,7 +49,7 @@ const classifier = new Classifier({
   },
 })
 
-const result = await classifier.evaluate({
+const result = await classifier.decide({
   state: {
     subject: 'Duplicate charge',
     message: 'I was charged twice for the same subscription.',
@@ -94,7 +94,7 @@ new Classifier(options)
   },
   {
     name: 'model',
-    type: 'DecisionModelV4 | EvaluationModelV4 | MastraEvaluationModel',
+    type: 'DecisionModelV4 | EvaluationModelV4 | MastraDecisionModel',
     description:
       'An AI SDK evaluation model or a Mastra evaluation model wrapper. The model declares which question types it supports.',
     isOptional: false,
@@ -103,13 +103,13 @@ new Classifier(options)
     name: 'questions',
     type: 'ClassifierQuestions',
     description:
-      'A non-empty record of named questions. Omit this field to supply the questions to each evaluate() call instead.',
+      'A non-empty record of named questions. Omit this field to supply the questions to each decide() call instead.',
     isOptional: true,
   },
 ]}
 />
 
-Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `evaluate()` rejects a `questions` option at compile time. If the constructor omits them, every `evaluate()` call must provide them. A processor, workflow step, or scorer classifies through a configured classifier, which requires constructor questions.
+Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `decide()` rejects a `questions` option at compile time. If the constructor omits them, every `decide()` call must provide them. A processor, workflow step, or scorer classifies through a configured classifier, which requires constructor questions.
 
 ## Question types
 
@@ -213,9 +213,11 @@ These rules keep a question answerable from the state:
 
 To check a question, change one field of the state and confirm one answer moves.
 
-## `evaluate(options)`
+## `decide(options)`
 
-Evaluates all questions against the supplied state.
+Answers all questions against the supplied state.
+
+`evaluate(options)` is a deprecated alias for `decide(options)` and will be removed in a future release.
 
 <PropertiesTable
   content={[
@@ -266,7 +268,7 @@ const classifier = new Classifier({
   model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
 })
 
-const result = await classifier.evaluate({
+const result = await classifier.decide({
   state: { response: 'Your refund has been processed.' },
   questions: {
     tone: {
@@ -284,7 +286,7 @@ result.answers.tone.choice // 'empathetic' | 'neutral'
 
 ## Return value
 
-`evaluate()` returns `Promise<ClassifierResult<QUESTIONS>>`.
+`decide()` returns `Promise<ClassifierResult<QUESTIONS>>`.
 
 <PropertiesTable
   content={[
@@ -360,28 +362,24 @@ Input validation includes:
 
 Provider responses must contain exactly one matching answer for each question. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
 
-Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `evaluate()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
+Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `decide()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
 
 ## Observability
 
-When an active Mastra span exists, `evaluate()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
+When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
 
 The span doesn't include the evaluated state, question instructions, criteria, answers, probabilities, provider response body, or generated text.
 
 ## Customize provider responses
 
-`Classifier` automatically wraps a raw AI SDK evaluation model in `MastraEvaluationModel`. Pass your own wrapper when provider output needs normalization before validation.
+`Classifier` automatically wraps a raw AI SDK decision model in `MastraDecisionModel`. Pass your own wrapper when provider output needs normalization before validation.
 
 ```typescript
-import {
-  Classifier,
-  MastraEvaluationModel,
-  type EvaluationModelResult,
-} from '@mastra/core/classifier'
+import { Classifier, MastraDecisionModel, type DecisionModelResult } from '@mastra/core/classifier'
 import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
-class NormalizedEvaluationModel extends MastraEvaluationModel {
-  protected override transformResult(result: EvaluationModelResult): EvaluationModelResult {
+class NormalizedDecisionModel extends MastraDecisionModel {
+  protected override transformResult(result: DecisionModelResult): DecisionModelResult {
     return {
       ...result,
       answers: normalizeAnswers(result.answers),
@@ -391,13 +389,15 @@ class NormalizedEvaluationModel extends MastraEvaluationModel {
 
 const classifier = new Classifier({
   id: 'normalized-classifier',
-  model: new NormalizedEvaluationModel(
+  model: new NormalizedDecisionModel(
     typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   ),
 })
 ```
 
 `transformResult()` runs after the provider call and before `Classifier` validates the response.
+
+`MastraEvaluationModel` and `EvaluationModelResult` are deprecated aliases for `MastraDecisionModel` and `DecisionModelResult` and will be removed in a future release.
 
 ## Registering classifiers
 
@@ -444,7 +444,7 @@ const workflow = createWorkflow({
 
 A string reference resolves through the `Mastra` instance at execution time. The ID doesn't carry the question types, so supply them with a type argument to keep the answers typed. In Studio, the workflow graph shows the step as a classifier node.
 
-The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
+The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `decide()` calls or classifier observability when you need that provider-level detail.
 
 ## Related
 

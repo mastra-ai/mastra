@@ -146,7 +146,7 @@ const approvalClassifier = new Classifier({
 
 const stream = await agent.stream('Clean up old records', {
   requireToolApproval: async ({ toolName, args }) => {
-    const result = await approvalClassifier.evaluate({
+    const result = await approvalClassifier.decide({
       state: {
         toolName,
         argumentNames: Object.keys(args),

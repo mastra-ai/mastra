@@ -24,15 +24,15 @@ const configured = new Classifier({
 });
 
 const configuredInterface: ClassifierInterface<(typeof configured)['questions']> = configured;
-const configuredResult = await configuredInterface.evaluate({ state: 'content' });
+const configuredResult = await configuredInterface.decide({ state: 'content' });
 expectTypeOf(configuredResult.answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'>>();
 expectTypeOf(configuredResult.answers.quality).toEqualTypeOf<ScoreAnswer>();
 expectTypeOf(configuredResult.answers.unsafe).toEqualTypeOf<BooleanAnswer>();
 // @ts-expect-error configured classifiers cannot receive per-call questions
-void configured.evaluate({ state: 'content', questions: { unsafe: { type: 'boolean' } } });
+void configured.decide({ state: 'content', questions: { unsafe: { type: 'boolean' } } });
 
 const perCall = new Classifier({ id: 'per-call', model });
-const perCallResult = await perCall.evaluate({
+const perCallResult = await perCall.decide({
   state: { content: 'hello' },
   questions: {
     route: {
@@ -43,4 +43,4 @@ const perCallResult = await perCall.evaluate({
 });
 expectTypeOf(perCallResult.answers.route).toEqualTypeOf<ChoiceAnswer<'docs' | 'support'>>();
 // @ts-expect-error per-call classifiers require questions
-void perCall.evaluate({ state: 'content' });
+void perCall.decide({ state: 'content' });
