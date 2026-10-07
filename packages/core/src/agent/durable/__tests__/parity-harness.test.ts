@@ -14,6 +14,7 @@ import type {
   EngineObservation,
   EngineParityScenario,
   EngineRunResult,
+  ModelTape,
   ParityEngine,
 } from './parity-harness';
 import {
@@ -574,6 +575,122 @@ describe('expectEngineParity', () => {
     await expect(expectEngineParity({ ...base, run: async () => {} })).rejects.toThrow(
       'the scenario produced no turns or no stream chunks on plain',
     );
+  });
+
+  /**
+   * A model that streams a little text and then fails. The engine surfaces the
+   * failure one way or another — an `error` chunk, a rejecting stream — and
+   * either way the turn is recorded and compared.
+   */
+  function failingTape(message: string): ModelTape {
+    return [
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id: 'parity-id-0', modelId: 'parity-model', timestamp: new Date(0) },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'before the failure' },
+      { type: 'error', error: new Error(message) },
+    ];
+  }
+
+  function failingScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { respond: () => failingTape('scripted model failure') },
+      buildAgent: ({ model }) =>
+        new Agent({ id: 'parity-failing', name: 'Parity Failing', instructions: 'Be brief', model }),
+      input: 'fail',
+      ...overrides,
+    };
+  }
+
+  it('records a run that fails mid-stream and compares it', async () => {
+    // The failure is compared rather than thrown out of the scenario. The
+    // wrapped engines re-emit the failure's chunks from workflow state with
+    // slimmer payloads (an error chunk that keeps the error but loses `type`,
+    // and an error-path `step-finish` that loses `messages`), so the payloads
+    // are left out of this comparison and pinned explicitly below instead.
+    const results = await expectEngineParity(
+      failingScenario({
+        differences: {
+          durable: { reason: 'self-test: re-emitted failure payloads', ignore: ['chunkPayloads'] },
+          evented: { reason: 'self-test: re-emitted failure payloads', ignore: ['chunkPayloads'] },
+        },
+      }),
+    );
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      // The chunks streamed before the failure are kept, so the turn is not empty.
+      expect(turn.chunks).toEqual([
+        'AGENT:start',
+        'AGENT:step-start',
+        'AGENT:text-start',
+        'AGENT:text-delta',
+        'AGENT:error',
+        'AGENT:step-finish',
+        'AGENT:finish',
+      ]);
+      expect(turn.streamedText).toBe('before the failure');
+      expect(turn.error).toEqual({ name: 'Error', message: 'scripted model failure' });
+
+      // The wrapped engines re-emit the error as a plain object; plain keeps the
+      // raw `Error`, whose name and message are not enumerable properties. Either
+      // way a `stack` — which would carry this machine's checkout path — is
+      // stripped before anything is compared.
+      const errorPayload = (turn.chunkPayloads[turn.chunks.indexOf('AGENT:error')] as { error?: unknown }).error;
+      expect(errorPayload).toEqual(engine === 'plain' ? {} : { name: 'Error', message: 'scripted model failure' });
+    }
+  });
+
+  it('compares the error when engines fail mid-stream with different messages', async () => {
+    const scenario = failingScenario({
+      model: { respond: request => failingTape(`failed: ${systemText(request)}`) },
+      buildAgent: ({ engine, model }) =>
+        new Agent({
+          id: 'parity-failing',
+          name: 'Parity Failing',
+          instructions: engine === 'durable' ? 'B' : 'A',
+          model,
+        }),
+      engines: ['plain', 'durable'],
+    });
+
+    await expect(expectEngineParity(scenario)).rejects.toThrow(
+      /durable differs from plain at turns\[0\]\.error\.message/,
+    );
+  });
+
+  it('records a run whose stream() rejects before it streams anything', async () => {
+    const scenario = failingScenario({
+      model: { tapes: [textOnlyTape('never sent')] },
+      buildAgent: ({ model }) => new Agent({ id: 'parity-invalid-timeout', name: 'P', instructions: 'x', model }),
+      options: { modelSettings: { timeout: { stepMs: -1 } } },
+    });
+
+    // The run produced no chunks at all, so it only clears the
+    // "compared nothing on plain" guard because its error was recorded.
+    const results = await expectEngineParity({
+      ...scenario,
+      differences: {
+        durable: { reason: 'self-test: the wrapped engines reject with a TypeError', ignore: ['error'] },
+        evented: { reason: 'self-test: the wrapped engines reject with a TypeError', ignore: ['error'] },
+      },
+    });
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(turn.chunks).toEqual([]);
+      expect(turn.error?.message).toMatch(/modelSettings\.timeout/);
+      // Rejected before the model was ever called on any engine.
+      expect(results[engine]!.requests).toHaveLength(0);
+    }
+    // Both engines report the same message; they disagree on the class because
+    // plain surfaces a plain `Error` where the wrapped engines surface the
+    // `TypeError` the settings validation actually throws.
+    expect(results.durable!.turns[0]!.error?.message).toBe(results.plain!.turns[0]!.error?.message);
+    expect(results.plain!.turns[0]!.error).toMatchObject({ name: 'Error' });
+    expect(results.durable!.turns[0]!.error).toMatchObject({ name: 'TypeError' });
+
+    await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
   });
 
   it('normalizes only message createdAt stamps and an unset includeRawChunks', () => {

@@ -105,6 +105,21 @@ import type { DurableAgent, DurableAgentStreamOptions } from '../durable-agent';
 // Snapshot shape — what we compare for parity
 // ---------------------------------------------------------------------------
 
+/**
+ * A run that failed instead of finishing, reduced to what is stable across
+ * machines: `stack` embeds the absolute checkout path, so it is never recorded.
+ */
+export interface ParityRunError {
+  name: string;
+  message: string;
+}
+
+/** Reduces a thrown value to the shape `ParitySnapshot.error` compares. */
+function describeRunError(thrown: unknown): ParityRunError {
+  if (thrown instanceof Error) return { name: thrown.name, message: thrown.message };
+  return { name: 'Error', message: String(thrown) };
+}
+
 export interface ParitySnapshot {
   text: string;
   finishReason: string | undefined;
@@ -138,6 +153,13 @@ export interface ParitySnapshot {
    * sides already compare, and COR-1398 is scoped to these turns.
    */
   resumed: boolean;
+  /**
+   * Set when the run failed instead of finishing: `getFullOutput()` rejected,
+   * the stream rejected while it was drained, or `stream()` rejected before it
+   * produced one. The turn keeps whatever chunks preceded the failure, so a
+   * failed run is compared across engines rather than aborting the scenario.
+   */
+  error?: ParityRunError;
 }
 
 /**
@@ -165,6 +187,9 @@ export const VOLATILE_PAYLOAD_KEYS = new Set([
   'endedAt',
   'request',
   'abortSignal',
+  // A failed run's payload carries the error's stack, which embeds the absolute
+  // checkout path and so differs on every machine.
+  'stack',
 ]);
 
 /**
@@ -212,8 +237,13 @@ interface TurnChunks {
   finishPayload: any;
   /** See `ParitySnapshot.resumed`. */
   resumed: boolean;
-  /** The stream the turn's output fields are read from: the last one to run. */
-  lastOutput: MastraModelOutput<any>;
+  /**
+   * The stream the turn's output fields are read from: the last one to run.
+   * Absent when the `stream()` call itself rejected.
+   */
+  lastOutput?: MastraModelOutput<any>;
+  /** See `ParitySnapshot.error`. */
+  error?: ParityRunError;
 }
 
 /** `from`/`type`/`payload` are shared by every chunk `fullStream` emits. */
@@ -228,22 +258,29 @@ type StreamChunk = { from?: string; type: string; payload?: any };
  * never finish, and plain is stopped at the same point so the engines are
  * compared over the same span. Whatever a `resume` produced is drained into the
  * same turn, which is why draining is separate from building the snapshot.
+ *
+ * A stream that rejects mid-iteration stops the drain and is recorded on the
+ * turn, so a failed run is still an observation.
  */
 async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promise<string | undefined> {
   let suspendedToolCallId: string | undefined;
-  for await (const chunk of output.fullStream as AsyncIterable<StreamChunk>) {
-    // Tool chunks carry their tool name so a swapped tool order shows up here;
-    // toolCallIds are compared through `toolCalls`/`toolResults`.
-    const toolName = chunk.payload?.toolName;
-    acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
-    acc.chunkTypes.push(chunk.type);
-    acc.chunkPayloads.push(normalizePayload(chunk.payload));
-    if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
-    if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
-    if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
-      suspendedToolCallId = chunk.payload?.toolCallId;
-      break;
+  try {
+    for await (const chunk of output.fullStream as AsyncIterable<StreamChunk>) {
+      // Tool chunks carry their tool name so a swapped tool order shows up here;
+      // toolCallIds are compared through `toolCalls`/`toolResults`.
+      const toolName = chunk.payload?.toolName;
+      acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
+      acc.chunkTypes.push(chunk.type);
+      acc.chunkPayloads.push(normalizePayload(chunk.payload));
+      if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
+      if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
+      if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+        suspendedToolCallId = chunk.payload?.toolCallId;
+        break;
+      }
     }
+  } catch (thrown) {
+    acc.error ??= describeRunError(thrown);
   }
   return suspendedToolCallId;
 }
@@ -262,23 +299,54 @@ function emptyTurnChunks(output?: MastraModelOutput<any>): TurnChunks {
     streamedText: '',
     finishPayload: undefined,
     resumed: false,
-    lastOutput: output as MastraModelOutput<any>,
+    lastOutput: output,
   };
+}
+
+/**
+ * A failed run can leave an individual output read rejecting (`text`, `usage`,
+ * …). That rejection is not an observation of its own, so it reads as absent:
+ * the failure itself is recorded once, on `ParitySnapshot.error`.
+ */
+async function readSettled<T>(read: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch {
+    return undefined;
+  }
 }
 
 /** Builds a turn's snapshot from the chunks its streams produced. */
 async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot> {
   const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed } = acc;
   const output = acc.lastOutput;
+  let error = acc.error;
 
-  const full = await output.getFullOutput();
+  let full: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  if (output) {
+    try {
+      full = await output.getFullOutput();
+    } catch (thrown) {
+      // The run failed after it streamed: whatever it produced still stands.
+      error ??= describeRunError(thrown);
+    }
+  }
+
+  // A failed run's reads can reject too, because the failure rejects every
+  // pending promise. That rejection is not an observation of its own — it is the
+  // failure already recorded on `error` — so on a failed turn a read reads as
+  // absent, while a turn that did not fail keeps surfacing its rejection.
+  const read = <T>(readOutput: () => Promise<T>): Promise<T | undefined> => {
+    if (!output) return Promise.resolve(undefined);
+    return error ? readSettled(readOutput) : readOutput();
+  };
   const [text, finishReason, usage, toolCalls, toolResults, steps] = await Promise.all([
-    output.text,
-    output.finishReason,
-    output.usage,
-    output.toolCalls,
-    output.toolResults,
-    output.steps,
+    read(() => output!.text),
+    read(() => output!.finishReason),
+    read(() => output!.usage),
+    read(() => output!.toolCalls),
+    read(() => output!.toolResults),
+    read(() => output!.steps),
   ]);
 
   return {
@@ -320,12 +388,16 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
       payload: normalizePayload(finishPayload),
     },
     fullOutput: {
-      text: full.text,
-      finishReason: full.finishReason as string | undefined,
-      usage: full.usage,
-      keys: Object.keys(full).sort(),
+      text: full?.text,
+      finishReason: full?.finishReason as string | undefined,
+      usage: full?.usage,
+      // A run whose `getFullOutput()` rejected has no full output to read.
+      keys: full ? Object.keys(full).sort() : [],
     },
     resumed,
+    // Omitted rather than set to `undefined`, so a turn that did not fail
+    // serialises exactly as it did before this field existed.
+    ...(error ? { error } : {}),
   };
 }
 
@@ -556,6 +628,23 @@ export interface EngineRunResult extends EngineObservation {
 export type EngineParityResults = Partial<Record<ParityEngine, EngineRunResult>>;
 
 /**
+ * Marks an error as harness misuse rather than a run failure. `turn()` records
+ * a failed run and compares it, but a scenario that breaks the harness contract
+ * (a resume with nothing to resume, a turn left suspended) must still surface.
+ */
+const MISUSE = Symbol('parityMisuse');
+
+function parityMisuse(message: string): Error {
+  const error = new Error(`expectEngineParity: ${message}`);
+  (error as Error & { [MISUSE]?: true })[MISUSE] = true;
+  return error;
+}
+
+function isParityMisuse(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { [MISUSE]?: true })[MISUSE] === true;
+}
+
+/**
  * Runs the scenario on every engine and asserts durable and evented match
  * plain, apart from declared differences. Returns each engine's observation
  * for scenario-specific assertions.
@@ -573,8 +662,10 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
   // Plain first, so it's the reference regardless of the order given.
   const results: EngineParityResults = { plain: await runOnEngine('plain', scenario) };
   const plain = results.plain!;
-  // Equal empty observations would compare as parity.
-  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0)) {
+  // Equal empty observations would compare as parity. A turn that recorded an
+  // error is an observation of its own — a run that failed on every engine the
+  // same way is parity, and that is what the failed-run cases assert.
+  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0 && !t.error)) {
     throw new Error('expectEngineParity: the scenario produced no turns or no stream chunks on plain');
   }
   for (const engine of compared) results[engine] = await runOnEngine(engine, scenario);
@@ -621,42 +712,53 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
       const target: Pick<Agent<string, any, any>, 'resumeStream' | 'approveToolCall' | 'declineToolCall'> = wrapper ??
       agent;
       const acc = emptyTurnChunks();
+      // The stream whose output the snapshot reads; a continuation replaces it.
+      let streamed: MastraModelOutput<any> | undefined;
 
-      if (wrapper) {
-        const result = await wrapper.stream(messages, { ...streamOptions, runId });
-        cleanups.push(result.cleanup);
-        acc.lastOutput = result.output;
-      } else {
-        acc.lastOutput = await agent.stream(messages, { ...streamOptions, runId });
-      }
-      let suspendedToolCallId = await drainInto(acc, acc.lastOutput);
-
-      for (const continuation of continuations) {
-        if (!suspendedToolCallId) {
-          throw new Error('expectEngineParity: turn() was given a `resume`, but the turn did not suspend');
-        }
-        const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
-        if ('resumeData' in continuation) {
-          acc.lastOutput = await target.resumeStream(continuation.resumeData, resumeOptions);
-        } else if ('approve' in continuation) {
-          acc.lastOutput = await target.approveToolCall(resumeOptions);
+      try {
+        if (wrapper) {
+          const result = await wrapper.stream(messages, { ...streamOptions, runId });
+          cleanups.push(result.cleanup);
+          streamed = result.output;
         } else {
-          acc.lastOutput = await target.declineToolCall(resumeOptions);
+          streamed = await agent.stream(messages, { ...streamOptions, runId });
         }
-        suspendedToolCallId = await drainInto(acc, acc.lastOutput);
-        acc.resumed = true;
+        let suspendedToolCallId = await drainInto(acc, streamed);
+
+        for (const continuation of continuations) {
+          if (!suspendedToolCallId) {
+            throw parityMisuse('turn() was given a `resume`, but the turn did not suspend');
+          }
+          const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
+          if ('resumeData' in continuation) {
+            streamed = await target.resumeStream(continuation.resumeData, resumeOptions);
+          } else if ('approve' in continuation) {
+            streamed = await target.approveToolCall(resumeOptions);
+          } else {
+            streamed = await target.declineToolCall(resumeOptions);
+          }
+          suspendedToolCallId = await drainInto(acc, streamed);
+          acc.resumed = true;
+        }
+
+        // A turn that is still suspended leaves its output stream open until a
+        // resume, so reading the output here would hang until the test times out.
+        // The missing continuation is the real problem, so report that instead.
+        if (suspendedToolCallId) {
+          throw parityMisuse(
+            `turn ${turns.length} on ${engine} ended suspended on tool call ` +
+              `'${suspendedToolCallId}'; add a \`resume\` continuation`,
+          );
+        }
+      } catch (error) {
+        // The run failed — a `stream()` or continuation call rejected, or the
+        // stream rejected mid-drain. That is an observation to compare, not a
+        // reason to abort the scenario, so it is recorded on the turn.
+        if (isParityMisuse(error)) throw error;
+        acc.error ??= describeRunError(error);
       }
 
-      // A turn that is still suspended leaves its output stream open until a
-      // resume, so reading the output here would hang until the test times out.
-      // The missing continuation is the real problem, so report that instead.
-      if (suspendedToolCallId) {
-        throw new Error(
-          `expectEngineParity: turn ${turns.length} on ${engine} ended suspended on tool call ` +
-            `'${suspendedToolCallId}'; add a \`resume\` continuation`,
-        );
-      }
-
+      acc.lastOutput = streamed;
       const snapshot = await snapshotFromDrainedTurn(acc);
       turns.push(snapshot);
       return snapshot;
