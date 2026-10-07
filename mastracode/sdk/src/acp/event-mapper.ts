@@ -224,13 +224,15 @@ async function handleToolSuspended(
       suspendPayload.kind === 'sandbox_access_request');
   if (isSandboxAccess || toolName === 'submit_plan') {
     state.cancelSuspensions ??= new Map();
-    state.cancelSuspensions.set(toolCallId, () =>
-      session.resumeToolCall({
-        toolCallId,
+    state.cancelSuspensions.set(toolCallId, async () => {
+      const address = session.suspensions.resolveAddress({ toolCallId, runId: event.runId });
+      if (!address) return;
+      await session.resumeToolCall({
+        address,
         resumeData: isSandboxAccess ? 'No' : { action: 'rejected' },
         resolveOnToolEnd: true,
-      }),
-    );
+      });
+    });
   }
   if (state.cancelled) {
     try {
