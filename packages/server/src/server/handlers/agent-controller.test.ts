@@ -7,6 +7,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENT_CONTROLLERS_ROUTE,
@@ -572,7 +573,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-gate-owner');
       const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'owned-call' });
       const requestContext = new RequestContext();
-      requestContext.set('mastra__resourceId', 'user-gate-intruder');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-gate-intruder');
 
       const result = await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
         mastra,
@@ -596,7 +597,7 @@ describe('agent-controller routes', () => {
       const claim = vi.spyOn(session, 'claimToolResponse');
       const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
       const requestContext = new RequestContext();
-      requestContext.set('mastra__resourceId', 'user-stored-intruder');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-stored-intruder');
 
       const result = await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
         mastra,
@@ -611,6 +612,25 @@ describe('agent-controller routes', () => {
       expect((result as HTTPException).status).toBe(403);
       expect(claim).not.toHaveBeenCalled();
       expect(persisted).not.toHaveBeenCalled();
+    });
+
+    it('lets a caller mapped to the session resource answer its armed gate', async () => {
+      const session = await getRouteSession('user-gate-self');
+      const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'self-call' });
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-gate-self');
+
+      const result = await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-gate-self',
+        toolCallId: 'self-call',
+        approved: true,
+        requestContext,
+      } as any);
+
+      expect(result).toEqual({ ok: true });
+      await expect(decision).resolves.toMatchObject({ decision: 'approve' });
     });
 
     it('accepts the armed call once, then rejects a duplicate decision', async () => {
