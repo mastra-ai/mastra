@@ -651,8 +651,8 @@ export class SessionThread {
   /** Serialize a resource transition with thread lifecycle work. */
   setResourceId({ resourceId }: { resourceId: string }): Promise<void> {
     return this.#runLifecycle(async () => {
-      this.#owner.identity.setResourceId({ resourceId });
       await this.#clearAndReleaseLock({ ignoreReleaseFailure: true });
+      this.#owner.identity.setResourceId({ resourceId });
     });
   }
 
@@ -1280,9 +1280,7 @@ export class SessionThread {
           const thinkingLevel = metadata.thinkingLevel;
           if (thinkingLevel !== undefined) {
             try {
-              await session.state.setIf({ thinkingLevel }, () =>
-                this.#isCurrentBinding(threadId, bindingGeneration),
-              );
+              await session.state.setIf({ thinkingLevel }, () => this.#isCurrentBinding(threadId, bindingGeneration));
             } catch {
               // Ignore preferences no longer accepted by the state schema.
             }
