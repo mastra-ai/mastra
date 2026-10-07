@@ -9,7 +9,7 @@ import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/rende
 import type { BoardCatalogResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
 
-function renderBoard(board = 'boards/release') {
+function renderBoard(board = 'boards/release', workItems: unknown[] = []) {
   const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
   server.use(
     http.get('*/api/agent-controller/code/sessions/:id/permissions', () => HttpResponse.json({ permissions: [] })),
@@ -48,6 +48,9 @@ function renderBoard(board = 'boards/release') {
     http.get('*/web/source-control/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
     http.get('*/web/github/projects/:id/issues', intakeRequest),
     http.get('*/web/github/projects/:id/prs', intakeRequest),
+    http.get('*/web/factory/projects/:id/work-items', () =>
+      HttpResponse.json({ workItems, runningSessionIds: [], parkedSessionIds: [] }),
+    ),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
@@ -69,6 +72,38 @@ describe('custom-only board routing', () => {
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
     expect(intakeRequest).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['github pull request', { integrationId: 'github', type: 'pull-request', externalId: 'github:1', url: null }],
+    ['gitlab merge request', { integrationId: 'gitlab', type: 'pull-request', externalId: 'gitlab:1', url: null }],
+    ['manual', null],
+  ])('renders a %s card in the initial phase', async (_label, externalSource) => {
+    const now = '2026-09-01T12:00:00.000Z';
+    renderBoard('boards/release', [
+      {
+        id: 'card-1',
+        orgId: 'org-1',
+        createdBy: 'user-1',
+        factoryProjectId: 'fp-1',
+        board: 'release',
+        externalSource,
+        parentWorkItemId: null,
+        title: 'Release card',
+        stages: ['queued'],
+        stageHistory: [{ stage: 'queued', enteredAt: now, by: 'user-1' }],
+        sessions: {},
+        metadata: {},
+        triageType: null,
+        acceptedAt: null,
+        commentCount: 0,
+        feedActivityAt: null,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const queued = await screen.findByRole('region', { name: 'Queued' });
+    expect(await within(queued).findByText('Release card')).toBeTruthy();
   });
   it.each(['boards/missing', 'work', 'review'])(
     'shows unavailable for %s rather than substituting another board',
