@@ -1283,7 +1283,9 @@ export class SessionThread {
 
       if (Object.keys(updates).length > 0) {
         try {
-          await session.state.set(updates);
+          await (session.state as SessionState).hydrate(updates, () =>
+            this.#isCurrentBinding(threadId, bindingGeneration),
+          );
         } catch {
           // Old OM overrides must not prevent restoring the model selection.
         }
@@ -1301,7 +1303,9 @@ export class SessionThread {
           const thinkingLevel = metadata.thinkingLevel;
           if (thinkingLevel !== undefined) {
             try {
-              await session.state.setIf({ thinkingLevel }, () => this.#isCurrentBinding(threadId, bindingGeneration));
+              await (session.state as SessionState).hydrate({ thinkingLevel }, () =>
+                this.#isCurrentBinding(threadId, bindingGeneration),
+              );
             } catch {
               // Ignore preferences no longer accepted by the state schema.
             }
@@ -1339,7 +1343,9 @@ export class SessionThread {
         const value = meta?.[key];
         if (value === undefined) continue;
         try {
-          await session.state.set({ [key]: value } as Record<string, unknown>);
+          await (session.state as SessionState).hydrate({ [key]: value }, () =>
+            this.#isCurrentBinding(threadId, bindingGeneration),
+          );
         } catch {
           // Persisted preference no longer valid for the current state schema.
         }
@@ -2808,11 +2814,22 @@ interface SessionStateOptions<TState> {
  */
 type PersistSettingFn = (args: { key: string; value: unknown }) => Promise<void>;
 
+type StateSource = {
+  resourceId: string;
+  threadId: string | null;
+  preferences: Record<string, unknown>;
+  writtenKeys: Set<string>;
+  references: number;
+  persistSetting?: PersistSettingFn;
+};
+
 class SessionState<TState = unknown> {
   #state: TState;
   readonly #initialState: TState;
   #updateQueue: Promise<void> = Promise.resolve();
-  #threadBindingGeneration = 0;
+  #source: StateSource;
+  readonly #sources = new Set<StateSource>();
+  readonly #getBinding: () => { resourceId: string; threadId: string | null };
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #bus: SessionBus;
   readonly #capturePersistSetting: (() => PersistSettingFn | undefined) | undefined;
@@ -2821,6 +2838,7 @@ class SessionState<TState = unknown> {
     { initialState, stateSchema }: SessionStateOptions<TState>,
     bus: SessionBus,
     capturePersistSetting?: () => PersistSettingFn | undefined,
+    getBinding: () => { resourceId: string; threadId: string | null } = () => ({ resourceId: '', threadId: null }),
   ) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#initialState = {
@@ -2830,10 +2848,65 @@ class SessionState<TState = unknown> {
     this.#state = { ...(this.#initialState as Record<string, unknown>) } as TState;
     this.#bus = bus;
     this.#capturePersistSetting = capturePersistSetting;
+    this.#getBinding = getBinding;
+    this.#source = this.#newSource(this.#state as Record<string, unknown>);
+  }
+
+  #newSource(state: Record<string, unknown>): StateSource {
+    const source: StateSource = {
+      ...this.#getBinding(),
+      preferences: Object.fromEntries(THREAD_DERIVED_STATE_KEYS.map(key => [key, state[key]])),
+      writtenKeys: new Set(),
+      references: 0,
+      persistSetting: this.#capturePersistSetting?.(),
+    };
+    this.#sources.add(source);
+    return source;
   }
 
   get(): Readonly<TState> {
-    return { ...(this.#state as Record<string, unknown>) } as TState;
+    return this.#read(this.#source);
+  }
+
+  #read(source: StateSource): Readonly<TState> {
+    const state = { ...(this.#state as Record<string, unknown>) };
+    for (const key of THREAD_DERIVED_STATE_KEYS) {
+      if (source.preferences[key] === undefined) delete state[key];
+      else state[key] = source.preferences[key];
+    }
+    return state as TState;
+  }
+
+  #release(source: StateSource): void {
+    source.references--;
+    if (source !== this.#source && source.references === 0) this.#sources.delete(source);
+  }
+
+  /** Internal run-lifetime handle; callers release it at the run's terminal boundary. */
+  retain() {
+    const source = this.#source;
+    source.references++;
+    let released = false;
+    return {
+      get: () => this.#read(source),
+      set: (updates: Partial<TState>) => this.#set(source, updates),
+      update: <TResult>(updater: SessionStateUpdater<TState, TResult>) => this.#update(source, updater),
+      release: () => {
+        if (released) return;
+        released = true;
+        this.#release(source);
+      },
+    };
+  }
+
+  #enqueue<TResult>(source: StateSource, operation: () => Promise<TResult>): Promise<TResult> {
+    source.references++;
+    const run = this.#updateQueue.then(operation).finally(() => this.#release(source));
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private getSchemaDefaults(): Partial<TState> {
@@ -2861,14 +2934,17 @@ class SessionState<TState = unknown> {
   }
 
   private async apply(
+    source: StateSource,
     updates: Partial<TState>,
     persistSetting?: PersistSettingFn,
     shouldApply?: () => boolean,
     commit?: () => Promise<void>,
     onApply?: () => void,
+    hydrating = false,
   ): Promise<boolean> {
+    if (shouldApply && !shouldApply()) return false;
     const changedKeys = Object.keys(updates as Record<string, unknown>);
-    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+    const newState = { ...this.#read(source), ...(updates as Record<string, unknown>) };
     let validatedState: TState;
 
     if (this.#schema) {
@@ -2896,73 +2972,51 @@ class SessionState<TState = unknown> {
     }
     if (shouldApply && !shouldApply()) return false;
     onApply?.();
+    const state = validatedState as Record<string, unknown>;
+    for (const key of THREAD_DERIVED_STATE_KEYS) {
+      source.preferences[key] = state[key];
+      if (!hydrating && changedKeys.includes(key)) source.writtenKeys.add(key);
+    }
+    // Only the host portion of a validated snapshot is shared across bindings.
     this.#state = validatedState;
+    const visibleKeys = changedKeys.filter(
+      key => source === this.#source || !(THREAD_DERIVED_STATE_KEYS as readonly string[]).includes(key),
+    );
+    if (visibleKeys.length > 0) {
+      this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys: visibleKeys });
+    }
 
-    this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
-
-    // Mirror restart-surviving preferences into thread metadata so they can be
-    // restored by `Session.loadMetadata()` after the host process restarts.
-    // Persistence failures never fail the in-memory state update.
     const persistedValues: Record<string, unknown> = {};
-    const state = this.#state as Record<string, unknown>;
     for (const key of changedKeys) persistedValues[key] = state[key];
     await this.#persistSettings(persistedValues as Partial<TState>, persistSetting);
     return true;
   }
 
   rebind(keys: readonly string[]): void {
-    this.#threadBindingGeneration++;
-    const current = this.#state as Record<string, unknown>;
-    const initial = this.#initialState as Record<string, unknown>;
-    const next = { ...current };
-    const changedKeys: string[] = [];
-
-    for (const key of keys) {
-      if (Object.prototype.hasOwnProperty.call(initial, key)) {
-        if (next[key] !== initial[key]) changedKeys.push(key);
-        next[key] = initial[key];
-      } else if (Object.prototype.hasOwnProperty.call(next, key)) {
-        changedKeys.push(key);
-        delete next[key];
-      }
-    }
-    if (changedKeys.length === 0) return;
-
-    this.#state = next as TState;
-    this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+    const binding = this.#getBinding();
+    const previous = this.#source;
+    const before = this.get() as Record<string, unknown>;
+    const retained = [...this.#sources].find(
+      source => source.resourceId === binding.resourceId && source.threadId === binding.threadId,
+    );
+    this.#source =
+      retained ?? this.#newSource(keys.length === 0 ? before : (this.#initialState as Record<string, unknown>));
+    if (previous !== this.#source && previous.references === 0) this.#sources.delete(previous);
+    const after = this.get() as Record<string, unknown>;
+    const changedKeys = THREAD_DERIVED_STATE_KEYS.filter(key => before[key] !== after[key]);
+    if (changedKeys.length > 0) this.#bus.emit({ type: 'state_changed', state: after, changedKeys });
   }
 
-  #partitionUpdates(
-    updates: Partial<TState>,
-    bindingGeneration: number,
-  ): { applicable: Partial<TState>; staleThreadSettings: Partial<TState> } {
-    if (bindingGeneration === this.#threadBindingGeneration) {
-      return { applicable: updates, staleThreadSettings: {} };
-    }
-
-    const applicable: Record<string, unknown> = {};
-    const staleThreadSettings: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(updates as Record<string, unknown>)) {
-      if ((THREAD_DERIVED_STATE_KEYS as readonly string[]).includes(key)) staleThreadSettings[key] = value;
-      else applicable[key] = value;
-    }
-    return { applicable: applicable as Partial<TState>, staleThreadSettings: staleThreadSettings as Partial<TState> };
-  }
-
-  async #normalizeUpdates(updates: Partial<TState>): Promise<Partial<TState>> {
-    if (!this.#schema) return updates;
-    const result = await this.#schema['~standard'].validate({
-      ...(this.#state as Record<string, unknown>),
-      ...(updates as Record<string, unknown>),
+  /** Hydration must not overwrite successful writes held by a warm source view. */
+  hydrate(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
+    const source = this.#source;
+    return this.#enqueue(source, async () => {
+      const pending = Object.fromEntries(
+        Object.entries(updates as Record<string, unknown>).filter(([key]) => !source.writtenKeys.has(key)),
+      ) as Partial<TState>;
+      if (Object.keys(pending).length === 0) return false;
+      return this.apply(source, pending, undefined, shouldApply, undefined, undefined, true);
     });
-    if (result.issues) {
-      const messages = result.issues.map(i => i.message).join('; ');
-      throw new Error(`Invalid state update: ${messages}`);
-    }
-    const validated = result.value as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.keys(updates as Record<string, unknown>).map(key => [key, validated[key]]),
-    ) as Partial<TState>;
   }
 
   async #persistSettings(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
@@ -2979,23 +3033,14 @@ class SessionState<TState = unknown> {
   }
 
   set(updates: Partial<TState>): Promise<void> {
-    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
-    // Captured now, not at apply time: an update queued behind a thread switch
-    // must persist to the thread that was active when the update was requested.
-    const persistSetting = this.#capturePersistSetting?.();
-    const bindingGeneration = this.#threadBindingGeneration;
-    const run = this.#updateQueue.then(async () => {
-      const { applicable, staleThreadSettings } = this.#partitionUpdates(updateSnapshot, bindingGeneration);
-      await this.#persistSettings(await this.#normalizeUpdates(staleThreadSettings), persistSetting);
-      if (Object.keys(applicable as Record<string, unknown>).length > 0) {
-        await this.apply(applicable, persistSetting);
-      }
+    return this.#set(this.#source, updates);
+  }
+
+  #set(source: StateSource, updates: Partial<TState>): Promise<void> {
+    const snapshot = { ...updates };
+    return this.#enqueue(source, async () => {
+      if (Object.keys(snapshot).length > 0) await this.apply(source, snapshot, source.persistSetting);
     });
-    this.#updateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
   }
 
   /** Validate a model preference before applying its model and optionally committing metadata. */
@@ -3006,56 +3051,61 @@ class SessionState<TState = unknown> {
     onApply: () => void,
   ): Promise<boolean> {
     const updateSnapshot = { ...updates };
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, undefined, shouldApply, commit, onApply));
-    this.#updateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    const source = this.#source;
+    return this.#enqueue(source, () => this.apply(source, updateSnapshot, undefined, shouldApply, commit, onApply));
   }
 
   /** Apply an update only while a caller-owned identity still matches. */
   setIf(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
-    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
-    const persistSetting = this.#capturePersistSetting?.();
-    const bindingGeneration = this.#threadBindingGeneration;
-    const run = this.#updateQueue.then(async () => {
-      if (!shouldApply()) return false;
-      const { applicable, staleThreadSettings } = this.#partitionUpdates(updateSnapshot, bindingGeneration);
-      await this.#persistSettings(await this.#normalizeUpdates(staleThreadSettings), persistSetting);
-      if (Object.keys(applicable as Record<string, unknown>).length === 0) return false;
-      return this.apply(applicable, persistSetting, shouldApply);
-    });
-    this.#updateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    const snapshot = { ...updates };
+    const source = this.#source;
+    return this.#enqueue(source, () => this.apply(source, snapshot, source.persistSetting, shouldApply));
   }
 
   update<TResult>(updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
-    const persistSetting = this.#capturePersistSetting?.();
-    const bindingGeneration = this.#threadBindingGeneration;
-    const run = this.#updateQueue.then(async () => {
-      const update = await updater(this.get());
+    return this.#update(this.#source, updater);
+  }
+
+  #update<TResult>(source: StateSource, updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
+    return this.#enqueue(source, async () => {
+      const update = await updater(this.#read(source));
       if (update.updates && Object.keys(update.updates as Record<string, unknown>).length > 0) {
-        const { applicable, staleThreadSettings } = this.#partitionUpdates(update.updates, bindingGeneration);
-        await this.#persistSettings(await this.#normalizeUpdates(staleThreadSettings), persistSetting);
-        if (Object.keys(applicable as Record<string, unknown>).length > 0) {
-          await this.apply(applicable, persistSetting);
-        }
+        await this.apply(source, update.updates, source.persistSetting);
       }
-      for (const event of update.events ?? []) {
-        this.#bus.emit(event);
-      }
+      for (const event of update.events ?? []) this.#emitForSource(source, event);
       return update.result;
     });
+  }
 
-    this.#updateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  #emitForSource(source: StateSource, event: AgentControllerEvent): void {
+    switch (event.type) {
+      case 'thread_created':
+      case 'thread_deleted':
+      case 'thread_title_updated':
+      case 'om_thread_title_updated':
+      case 'workspace_status_changed':
+      case 'workspace_ready':
+      case 'workspace_error':
+        this.#bus.emit(event);
+        return;
+      case 'tool_approval_required':
+        this.#bus.emit({ ...event, threadId: event.threadId ?? source.threadId ?? undefined });
+        return;
+      case 'tool_suspended':
+      case 'tool_suspension_cancelled':
+        this.#bus.emit({
+          ...event,
+          threadId: event.threadId ?? source.threadId ?? undefined,
+          resourceId: event.resourceId ?? source.resourceId,
+        });
+        return;
+      case 'subagent_model_changed':
+        if (event.scope === 'global' || source === this.#source) this.#bus.emit(event);
+        return;
+      default:
+        // Legacy display events have no source address. Never present them as B's.
+        if (source === this.#source) this.#bus.emit(event);
+    }
   }
 }
 
@@ -3926,14 +3976,16 @@ export class Session<TState = unknown> {
       clearFollowUps: () => this.cleanupFollowUpBinding(),
     });
     this.#bus.setDisplayState(this.displayState);
-    const sessionState = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
-      // Pin persistence to the thread active when the state update was
-      // requested — a queued preference update must not land in the metadata
-      // of a thread the session switched to in the meantime.
-      const threadId = this.thread.getId();
-      if (threadId === null) return undefined;
-      return args => this.thread.setSettingOn({ threadId, ...args });
-    });
+    const sessionState = new SessionState(
+      state ?? { initialState: {} as TState },
+      this.#bus,
+      () => {
+        const threadId = this.thread.getId();
+        if (threadId === null) return undefined;
+        return args => this.thread.setSettingOn({ threadId, ...args });
+      },
+      () => ({ resourceId: this.identity.getResourceId(), threadId: this.thread.getId() }),
+    );
     this.state = sessionState;
     this.model = new SessionModel(
       () => this.#store,
