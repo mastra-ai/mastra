@@ -782,22 +782,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           this.mastra.getServer()?.auth?.authorizeUserResource
         ) {
           const contentType = c.req.header('content-type');
-          // Custom routes get no bodyLimit middleware, so cap this read at the configured limit.
+          // Custom routes get no bodyLimit middleware, so stop this read at the configured limit.
+          // A body past it is left unread here: the route still runs, but ids in the body aren't
+          // seen, so no other resource is approved from it.
           const maxSize = this.bodyLimitOptions?.maxSize;
           const bodyRequest =
             maxSize !== undefined && (contentType?.includes('application/json') || contentType?.includes('form'))
               ? await readBodyWithinLimit(pristineRequest, maxSize)
               : pristineRequest.clone();
           if (bodyRequest === undefined) {
-            let errorResponse: unknown = { error: 'Request body too large' };
-            try {
-              errorResponse = this.bodyLimitOptions!.onError(errorResponse);
-            } catch {
-              // Fall back to the default response.
-            }
-            return c.json(errorResponse, 413);
-          }
-          if (contentType?.includes('application/json')) {
+            bodyParams = {};
+          } else if (contentType?.includes('application/json')) {
             try {
               const body = (await bodyRequest.json()) as unknown;
               if (body && typeof body === 'object' && !Array.isArray(body)) {

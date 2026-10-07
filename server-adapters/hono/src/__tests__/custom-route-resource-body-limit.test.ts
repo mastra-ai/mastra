@@ -35,18 +35,20 @@ const post = (app: Hono, body: string, headers: Record<string, string> = {}) =>
 describe('custom-route resource check body limit', () => {
   const limits = { maxSize: 64, onError: () => ({ error: 'too big' }) };
 
-  it('rejects a body over the configured limit with 413 before parsing or running the policy', async () => {
+  it('does not read a body over the configured limit, so its resource id is never approved', async () => {
     const { app, authorizeUserResource, handler } = await setup(limits);
-    const response = await post(app, JSON.stringify({ resourceId: 'session-r', pad: 'x'.repeat(200) }));
-    expect(response.status).toBe(413);
-    expect(await response.json()).toEqual({ error: 'too big' });
+    const response = await post(app, JSON.stringify({ resourceId: 'session-r', pad: 'x'.repeat(200) }), {
+      'content-length': '300',
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ resource: 'mapped' });
     expect(authorizeUserResource).not.toHaveBeenCalled();
-    expect(handler).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledOnce();
   });
 
-  it('enforces the limit when content-length is absent (streamed body)', async () => {
-    const { app, handler } = await setup(limits);
-    const bytes = new TextEncoder().encode(JSON.stringify({ pad: 'x'.repeat(200) }));
+  it('stops reading at the limit when content-length is absent (streamed body)', async () => {
+    const { app, authorizeUserResource } = await setup(limits);
+    const bytes = new TextEncoder().encode(JSON.stringify({ resourceId: 'session-r', pad: 'x'.repeat(200) }));
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(bytes);
@@ -61,8 +63,9 @@ describe('custom-route resource check body limit', () => {
         duplex: 'half',
       } as RequestInit & { duplex: 'half' }),
     );
-    expect(response.status).toBe(413);
-    expect(handler).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ resource: 'mapped' });
+    expect(authorizeUserResource).not.toHaveBeenCalled();
   });
 
   it('still reads a body within the limit for the resource check', async () => {
