@@ -25,6 +25,13 @@ function makeStartEvent(workflowId: string, runId: string, id?: string): Event {
   } as Event;
 }
 
+function makeTimerContinuationEvent(workflowId: string, runId: string, id: string): Event {
+  const event = makeStartEvent(workflowId, runId, id);
+  event.type = 'workflow.step.run';
+  event.data.workflowTimer = { id, claimToken: 'claim-token' };
+  return event;
+}
+
 function makeWorkflow(id: string) {
   const wf = createWorkflow({
     id,
@@ -51,6 +58,22 @@ class AlwaysThrowsProcessor extends WorkflowEventProcessor {
   }
 }
 
+class SuccessfulStepProcessor extends WorkflowEventProcessor {
+  public stepRunCalls = 0;
+  protected override async processWorkflowStepRun(): Promise<void> {
+    this.stepRunCalls++;
+  }
+}
+
+class FailingWorkflowFailPubSub extends EventEmitterPubSub {
+  override async publish(topic: string, event: Event): Promise<void> {
+    if (event.type === 'workflow.fail') {
+      throw new Error('workflow.fail publication failed');
+    }
+    return super.publish(topic, event);
+  }
+}
+
 describe('WorkflowEventProcessor retry budget (Sig D)', () => {
   it('completes a workflow timer only after its continuation is processed', async () => {
     const storage = new MockStore();
@@ -62,11 +85,11 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     });
     const workflowsStore = (await storage.getStore('workflows'))!;
     const completeWorkflowTimer = vi.spyOn(workflowsStore, 'completeWorkflowTimer');
-    const processor = new WorkflowEventProcessor({ mastra });
-    const event = makeStartEvent('wf', 'run-timer-complete', 'timer-event');
-    event.data.workflowTimer = { id: 'timer-event', claimToken: 'claim-token' };
+    const processor = new SuccessfulStepProcessor({ mastra });
+    const event = makeTimerContinuationEvent('wf', 'run-timer-complete', 'timer-event');
 
     expect(await processor.handle(event)).toEqual({ ok: true });
+    expect(processor.stepRunCalls).toBe(1);
     expect(completeWorkflowTimer).toHaveBeenCalledWith({
       workflowId: 'wf',
       runId: 'run-timer-complete',
@@ -95,6 +118,28 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
     expect(completeWorkflowTimer).not.toHaveBeenCalled();
     expect(releaseWorkflowTimer).not.toHaveBeenCalled();
+
+    await mastra.shutdown();
+  });
+
+  it('keeps a durable timer recoverable when terminal workflow.fail publication fails', async () => {
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub: new FailingWorkflowFailPubSub(),
+    });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const completeWorkflowTimer = vi.spyOn(workflowsStore, 'completeWorkflowTimer');
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const event = makeStartEvent('wf', 'run-terminal-handoff-failure', 'timer-event');
+    event.data.workflowTimer = { id: 'timer-event', claimToken: 'claim-token' };
+
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    expect(completeWorkflowTimer).not.toHaveBeenCalled();
 
     await mastra.shutdown();
   });

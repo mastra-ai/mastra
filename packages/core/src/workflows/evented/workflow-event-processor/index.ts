@@ -3465,11 +3465,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
-      // sees an error instead of hanging forever. Replace the counter with a
-      // TERMINAL sentinel so any later redelivery of the same logical event
-      // short-circuits at the top of handle() instead of rerunning
-      // errorWorkflow or resetting the budget.
-      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      // sees an error instead of hanging forever.
       try {
         const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
         // Never republish workflow.fail for an event that IS workflow.fail.
@@ -3493,7 +3489,13 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId: event.runId,
             error: failErr,
           });
+        return { ok: false, retry: true };
       }
+
+      // The terminal handoff succeeded (or this event is itself workflow.fail).
+      // Mark it terminal only now so a failed handoff can be retried without
+      // completing the durable timer that owns this continuation.
+      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
       await this.#completeWorkflowTimer(event);
       return { ok: false, retry: false };
     }
