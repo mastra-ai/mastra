@@ -889,9 +889,11 @@ export function fencePubSub(pubsub: PubSub, fence: ExecutionFence): PubSub {
 }
 
 /**
- * Test-only: forget every local execution, as a process restart would.
- * Executions still running keep their fence objects but no longer count as
- * local, so `recover()` in the same process treats their runs as orphaned.
+ * Test-only: forget every local execution, as a process crash would. Their
+ * claims stop renewing, and executions still running keep their fence objects
+ * but no longer count as local. `recover()` in the same process then treats
+ * their runs as another process's: refused while a claim is live, recoverable
+ * once it lapses.
  */
 export function __resetExecutionFencesForTests(): void {
   for (const fence of fencesByExecutionId.values()) fence.stopHeartbeat();
