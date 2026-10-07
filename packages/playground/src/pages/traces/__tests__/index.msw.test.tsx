@@ -923,8 +923,32 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
-    it('loads the traces without sending the invalid comment predicate', async () => {
+  describe('when the URL pairs the presence-only span error with a text value', () => {
+    it('loads the traces without sending the invalid error predicate', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterSpanError=boom');
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(bodies.length).toBeGreaterThan(0);
+      expect(JSON.stringify(bodies)).not.toContain('"error"');
+      expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
+    });
+  });
+
+  describe('when the URL filters by a feedback comment', () => {
+    it('applies the comment filter to the list', async () => {
       const bodies: unknown[] = [];
       setTracePageHandlers(metricsCapableCapabilities);
       server.use(
@@ -940,10 +964,12 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(bodies.length).toBeGreaterThan(0);
-      expect(JSON.stringify(bodies)).not.toContain('"comment"');
-      expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
+      expect(JSON.stringify(bodies.at(-1))).toContain(
+        JSON.stringify({ op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } }),
+      );
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Feedback commentiswrong answer',
+      ]);
     });
   });
 
