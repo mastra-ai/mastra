@@ -18,6 +18,7 @@ import type { WorkflowsStorage } from '../../storage';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { CoreTool } from '../../tools/types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -1220,6 +1221,42 @@ export class DurableAgent<
     const saveQueueManager = memory
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
       : undefined;
+
+    // Resolve the run's tools and workspace so the recovered LLM/tool steps see
+    // the agent-registered toolset. The rebuilt entry below carries a real
+    // model, so resolveRuntimeDependencies treats it as hydrated
+    // (hasHydratedEntry) and reads tools straight off it instead of rebuilding
+    // from the agent — without this the model request goes out with zero tools
+    // after a crash (issue #25890). Mirrors the rebuild branch in
+    // resolve-runtime.ts and the workspace resolution on the stream path.
+    let tools: Record<string, CoreTool> = {};
+    try {
+      tools = await wrapped.getToolsForExecution({
+        runId,
+        threadId,
+        resourceId,
+        requestContext,
+        memoryConfig: workflowInput.state?.memoryConfig,
+        autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
+        // Restore call-time client tools persisted on the workflow input so a
+        // recovered run keeps the client-executed tools the model was offered.
+        clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,
+      });
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve tools during recover(${runId}): ${error}`);
+    }
+    recoveryLease.assertOwned();
+
+    let workspace;
+    try {
+      workspace = await wrapped.getWorkspace({ requestContext });
+    } catch (error) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(`[DurableAgent] Failed to resolve workspace during recover(${runId}): ${error}`);
+    }
+    recoveryLease.assertOwned();
+
     const backgroundTasksConfig = this.getBackgroundTasksConfig?.();
     const backgroundTaskManager = this.#mastra?.backgroundTaskManager;
 
@@ -1303,6 +1340,9 @@ export class DurableAgent<
       mastra: this.#mastra,
       model,
       modelList,
+      tools,
+      baseTools: tools,
+      workspace,
       memory,
       saveQueueManager,
       requestContext,
