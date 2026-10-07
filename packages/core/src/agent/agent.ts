@@ -1384,12 +1384,16 @@ export class Agent<
       // rebuilds every schema, which zod's global registry retains forever (#26160).
       if (subAgent instanceof Agent) {
         const subAgentTools = await subAgent.listTools({ requestContext, resolveWebSearch: false });
-        if (subAgentTools && typeof subAgentTools === 'object') {
-          for (const tool of Object.values(subAgentTools)) {
-            const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
-            if (bg?.enabled === true) {
-              return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
-            }
+        const defaultOptions = await subAgent.getDefaultOptions({ requestContext });
+        const candidateTools = [
+          ...Object.values(subAgentTools ?? {}),
+          ...Object.values(defaultOptions?.toolsets ?? {}).flatMap(toolset => Object.values(toolset ?? {})),
+          ...Object.values(defaultOptions?.clientTools ?? {}),
+        ];
+        for (const tool of candidateTools) {
+          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+          if (bg?.enabled === true) {
+            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
           }
         }
 
