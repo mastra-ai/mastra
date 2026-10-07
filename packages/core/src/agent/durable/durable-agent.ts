@@ -3950,6 +3950,37 @@ export class DurableAgent<
 
     const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
+    let structuredOutput = observedEntry?.structuredOutput;
+
+    if (!structuredOutput) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      let workflowInput: DurableAgenticWorkflowInput | undefined;
+
+      for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+        const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
+        if (!persisted) continue;
+
+        const snapshot =
+          typeof persisted.snapshot === 'string'
+            ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+            : persisted.snapshot;
+        const persistedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+        if (persistedInput?.__workflowKind !== 'durable-agent') continue;
+
+        workflowInput = persistedInput;
+        break;
+      }
+
+      if (workflowInput) {
+        const persistedStructuredOutput = workflowInput.options?.structuredOutput;
+        if (persistedStructuredOutput?.schema) {
+          structuredOutput = {
+            ...persistedStructuredOutput,
+            schema: toStandardSchema(persistedStructuredOutput.schema),
+          };
+        }
+      }
+    }
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -3988,7 +4019,7 @@ export class DurableAgent<
         }
       },
       onSuspended: options?.onSuspended,
-      structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
+      structuredOutput: structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
       processorStates: this.#runRegistry.get(runId)?.processorStates,
       returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
