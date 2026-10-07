@@ -524,8 +524,9 @@ describe('MastraTUI queueing', () => {
       createPendingNewThread: () => Promise<void> | undefined;
     };
     tui.createPendingNewThread = () => undefined;
+    (tui as any).getEventContext = () => ({ state: tui.state });
     tui.state = {
-      session: { queueMessage },
+      session: { queueMessage, stream: { isActive: () => true } },
       pendingQueueSubmissions: 0,
       pendingSlashCommands: [],
       pendingSlashCommandMessageIds: [],
@@ -562,7 +563,7 @@ describe('MastraTUI queueing', () => {
     const queueMessage = vi.fn().mockResolvedValue(undefined);
     const tui = Object.create(MastraTUI.prototype) as { state: any; queueFollowUpMessage: (text: string) => void };
     tui.state = {
-      session: { queueMessage, thread: { create } },
+      session: { queueMessage, thread: { create }, stream: { isActive: () => true } },
       pendingNewThread: true,
       pendingQueueSubmissions: 0,
       pendingSlashCommands: [],
@@ -571,6 +572,7 @@ describe('MastraTUI queueing', () => {
       ui: { requestRender: vi.fn() },
     };
 
+    (tui as any).getEventContext = () => ({ state: tui.state });
     tui.queueFollowUpMessage('first');
     tui.queueFollowUpMessage('second');
 
@@ -582,6 +584,42 @@ describe('MastraTUI queueing', () => {
     await vi.waitFor(() => expect(tui.state.pendingQueueSubmissions).toBe(0));
     expect(queueMessage.mock.calls.map(([arg]) => arg.content)).toEqual(['first', 'second']);
     expect(tui.state.pendingNewThreadCreation).toBeUndefined();
+  });
+
+  it('runs held slash commands when the last queued submission fails while idle', async () => {
+    const handleSlashCommand = vi.fn().mockResolvedValue(undefined);
+    const queueMessage = vi.fn().mockRejectedValue(new Error('queue failed'));
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: any;
+      queueFollowUpMessage: (text: string) => void;
+      getEventContext: () => any;
+    };
+    tui.state = {
+      session: {
+        queueMessage,
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ queuedFollowUps: 0 }) },
+      },
+      pendingNewThread: false,
+      pendingQueueSubmissions: 0,
+      pendingSlashCommands: ['/help'],
+      pendingSlashCommandMessageIds: [],
+      pendingSignalMessageComponentsById: new Map(),
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+      chatContainer: { children: [], addChild: vi.fn(), removeChild: vi.fn(), invalidate: vi.fn() },
+    };
+    tui.getEventContext = () => ({
+      state: tui.state,
+      updateStatusLine: vi.fn(),
+      handleSlashCommand,
+      showError: vi.fn(),
+    });
+
+    tui.queueFollowUpMessage('will fail');
+
+    await vi.waitFor(() => expect(handleSlashCommand).toHaveBeenCalledWith('/help'));
+    expect(tui.state.pendingSlashCommands).toEqual([]);
   });
 
   it('keeps queued slash commands while follow-up submissions are still reaching the core queue', () => {

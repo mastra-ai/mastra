@@ -108,7 +108,7 @@ function drainQueuedAction(ctx: EventHandlerContext): void {
 // Aborted and failed runs keep queued slash commands. If no follow-up run is
 // coming (no pending sent or queued messages), drain them now; otherwise the
 // follow-up run's agent_end drains them.
-function drainQueuedActionIfIdle(ctx: EventHandlerContext): void {
+export function drainQueuedActionIfIdle(ctx: EventHandlerContext): void {
   if (ctx.state.session.stream.isActive()) return;
   drainQueuedAction(ctx);
 }

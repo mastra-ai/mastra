@@ -58,6 +58,7 @@ import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
@@ -671,6 +672,8 @@ export class MastraTUI {
       })
       .finally(() => {
         this.state.pendingQueueSubmissions--;
+        // If no run picked the queue back up (e.g. the submission failed), run held slash commands now.
+        if (this.state.pendingQueueSubmissions === 0) drainQueuedActionIfIdle(this.getEventContext());
       });
     updateStatusLine(this.state);
     flushRender(this.state);
