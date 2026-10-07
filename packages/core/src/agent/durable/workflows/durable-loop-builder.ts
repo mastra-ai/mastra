@@ -924,7 +924,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = globalRunRegistry.get(initData.runId);
+              const reg = globalRunRegistry.has(initData.runId) ? globalRunRegistry.get(initData.runId) : undefined;
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
               if (observability) {
