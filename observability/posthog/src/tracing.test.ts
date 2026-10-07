@@ -329,6 +329,11 @@ describe('PosthogExporter', () => {
         args: Record<string, unknown>;
         result?: unknown;
         error?: string;
+        /**
+         * Export as a provider-executed PROVIDER_TOOL_CALL span. `success` is
+         * omitted when the span ended without a result.
+         */
+        provider?: { success?: boolean };
         /** Milliseconds after the step started that the tool started. */
         startedAfter: number;
       }
@@ -380,13 +385,16 @@ describe('PosthogExporter', () => {
               id: `tool-${tc.id}`,
               traceId,
               parentSpanId: stepSpan.id,
-              type: SpanType.TOOL_CALL,
+              type: tc.provider ? SpanType.PROVIDER_TOOL_CALL : SpanType.TOOL_CALL,
               name: `tool: '${tc.name}'`,
               startTime: new Date(stepSpan.startTime.getTime() + tc.startedAfter),
               input: tc.args,
               output: tc.result,
               ...(tc.error ? { errorInfo: { message: tc.error } } : {}),
-              attributes: { toolCallId: tc.id },
+              attributes: {
+                toolCallId: tc.id,
+                ...(tc.provider?.success !== undefined ? { success: tc.provider.success } : {}),
+              },
             }),
           );
           for (const toolSpan of toolSpans) {
@@ -515,6 +523,75 @@ describe('PosthogExporter', () => {
             content: [{ type: 'tool-result', toolCallId: 'paris', toolName: 'weather', output: { tempC: 21 } }],
           },
         ]);
+      });
+
+      it('should include the results of provider-executed tools, marking failures as errors', async () => {
+        await exportGeneration([
+          {
+            offered: ['web_search'],
+            toolCalls: [
+              {
+                id: 'search-ok',
+                name: 'web_search',
+                args: { query: 'Paris weather' },
+                result: { results: ['21C'] },
+                provider: { success: true },
+                startedAfter: 0,
+              },
+              {
+                id: 'search-failed',
+                name: 'web_search',
+                args: { query: 'Rome weather' },
+                result: { error: 'rate limited' },
+                provider: { success: false },
+                startedAfter: 10,
+              },
+            ],
+          },
+          { offered: ['web_search'], text: 'Paris is 21C.' },
+        ]);
+
+        const secondInput = captured('$ai_generation')[1].properties.$ai_input;
+        expect(secondInput.slice(3)).toEqual([
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'search-ok',
+                toolName: 'web_search',
+                output: { results: ['21C'] },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'search-failed',
+                toolName: 'web_search',
+                output: { error: 'rate limited' },
+                isError: true,
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should skip provider-executed tool spans that ended without a result', async () => {
+        await exportGeneration([
+          {
+            offered: ['web_search'],
+            toolCalls: [
+              { id: 'search', name: 'web_search', args: { query: 'Paris weather' }, provider: {}, startedAfter: 0 },
+            ],
+          },
+          { offered: ['web_search'], text: 'No results.' },
+        ]);
+
+        const secondInput = captured('$ai_generation')[1].properties.$ai_input;
+        expect(secondInput.map((message: { role: string }) => message.role)).toEqual(['system', 'user', 'assistant']);
       });
 
       it('should export the wrapping MODEL_GENERATION as $ai_span that keeps the run usage', async () => {

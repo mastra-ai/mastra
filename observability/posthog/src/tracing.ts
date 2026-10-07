@@ -98,7 +98,7 @@ const CONVERSATION = 'conversation:';
 interface Conversation {
   /** Ended MODEL_INFERENCE spans, in the order they ended. */
   calls: AnyExportedSpan[];
-  /** Ended TOOL_CALL / MCP_TOOL_CALL spans, keyed by toolCallId. */
+  /** Ended TOOL_CALL / MCP_TOOL_CALL spans and PROVIDER_TOOL_CALL spans with a result, keyed by toolCallId. */
   toolResults: Map<string, AnyExportedSpan>;
 }
 
@@ -476,6 +476,11 @@ export class PosthogExporter extends TrackingExporter<
         )
         .sort((a, b) => this.toDate(a.toolSpan.startTime).getTime() - this.toDate(b.toolSpan.startTime).getTime());
       for (const { toolCall, toolSpan } of results) {
+        // Provider-executed tools report failure through `success`, not `errorInfo`.
+        const isError =
+          !!toolSpan.errorInfo ||
+          (toolSpan.type === SpanType.PROVIDER_TOOL_CALL &&
+            (toolSpan.attributes as { success?: boolean } | undefined)?.success === false);
         // Same `tool-result` part shape PostHog's own AI SDK integrations send.
         messages.push({
           role: 'tool',
@@ -485,7 +490,7 @@ export class PosthogExporter extends TrackingExporter<
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               output: toolSpan.errorInfo ? toolSpan.errorInfo.message : toolSpan.output,
-              ...(toolSpan.errorInfo ? { isError: true } : {}),
+              ...(isError ? { isError: true } : {}),
             },
           ],
         });
@@ -498,7 +503,12 @@ export class PosthogExporter extends TrackingExporter<
   /** Record ended calls and tool results so later calls in the same generation can rebuild their input. */
   private recordForConversation(span: AnyExportedSpan, traceData: PosthogTraceData): void {
     const isCall = span.type === SpanType.MODEL_INFERENCE && !span.errorInfo;
-    const isTool = span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL;
+    // A PROVIDER_TOOL_CALL span ended without a result (e.g. the run stopped first)
+    // has no `success`, and recording it would add an empty result.
+    const isProviderToolWithResult =
+      span.type === SpanType.PROVIDER_TOOL_CALL &&
+      typeof (span.attributes as { success?: unknown } | undefined)?.success === 'boolean';
+    const isTool = span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL || isProviderToolWithResult;
     if (!isModelInferenceEnabled() || (!isCall && !isTool)) return;
 
     const generation = this.findGeneration(span, traceData);
