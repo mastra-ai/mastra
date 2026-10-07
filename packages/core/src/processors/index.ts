@@ -906,7 +906,8 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * exception to once per result: the hook runs when the result is applied to the
    * message list and again when the awaited result returns to the turn, so it should
    * give the same output when run twice on the same result. It doesn't run for
-   * client-side tools (tools without `execute`).
+   * client-side tools (tools without `execute`), or for a durable tool call that runs
+   * on a worker process other than the one that started, resumed, or recovered the run.
    *
    * @returns `{ modelOutput }` to replace the model-facing output, or undefined to keep it.
    */
