@@ -28,7 +28,7 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `observability` | Traces and spans used by observability exporters and Studio. |
 | `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
-| `knowledge` | Knowledge nodes and records. Supported by LibSQL and PostgreSQL. See [Upgrade Knowledge storage](#upgrade-knowledge-storage). |
+| `knowledge` | Knowledge nodes and records (experimental). The upgrade checks and reset in [Upgrade Knowledge storage](#upgrade-knowledge-storage) apply to LibSQL and PostgreSQL. |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
