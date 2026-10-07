@@ -93,3 +93,43 @@ describe('custom-route resource check body limit', () => {
     expect(authorizeUserResource).toHaveBeenCalledOnce();
   });
 });
+
+describe('custom-route resource selector conflict', () => {
+  it('rejects a request whose query and body name different resources', async () => {
+    const { app, authorizeUserResource, handler } = await setup();
+    authorizeUserResource.mockImplementation(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const response = await app.request('http://localhost/custom?resourceId=r-a', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer t' },
+      body: JSON.stringify({ resourceId: 'r-b' }),
+    });
+    expect(response.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+    expect(authorizeUserResource).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request that repeats the query resource id with different values', async () => {
+    const { app, authorizeUserResource, handler } = await setup();
+    authorizeUserResource.mockImplementation(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const response = await app.request('http://localhost/custom?resourceId=r-a&resourceId=r-b', {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+    });
+    expect(response.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+    expect(authorizeUserResource).not.toHaveBeenCalled();
+  });
+
+  it('allows a request whose query and body name the same approved resource', async () => {
+    const { app, authorizeUserResource, handler } = await setup();
+    authorizeUserResource.mockImplementation(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const response = await app.request('http://localhost/custom?resourceId=r-b', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer t' },
+      body: JSON.stringify({ resourceId: 'r-b' }),
+    });
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(authorizeUserResource).toHaveBeenCalledOnce();
+  });
+});

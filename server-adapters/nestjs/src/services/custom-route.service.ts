@@ -183,11 +183,19 @@ export class CustomRouteService {
             body = {};
           }
         }
-        const resourceError = await checkRequestedResource(mastra, c.get('requestContext'), {
-          ...c.req.param(),
-          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
-          ...body,
-        });
+        const pathParams = c.req.param();
+        const searchParams = new URL(c.req.url).searchParams;
+        const queryParams = Object.fromEntries(searchParams.entries());
+        // A repeated key keeps only its last value in queryParams, while c.req.query() returns the first.
+        const repeatedQueryIds = ['resourceId', 'resource_id'].flatMap(key =>
+          searchParams.getAll(key).map(value => ({ [key]: value })),
+        );
+        const resourceError = await checkRequestedResource(
+          mastra,
+          c.get('requestContext'),
+          { ...pathParams, ...queryParams, ...body },
+          [pathParams, queryParams, ...repeatedQueryIds, body],
+        );
         if (resourceError) {
           return c.json({ error: resourceError.error, message: resourceError.message }, resourceError.status);
         }
