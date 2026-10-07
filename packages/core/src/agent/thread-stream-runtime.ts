@@ -2603,8 +2603,9 @@ export class AgentThreadStreamRuntime {
     state.abortedRunIds.clear();
   }
 
-  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
+  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
     const preparedRun = state.preparedRunsById.get(runId);
+    if (expectedPreparedRun && preparedRun !== expectedPreparedRun) return;
     preparedRun?.cleanup();
     if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
@@ -2884,10 +2885,10 @@ export class AgentThreadStreamRuntime {
       if (preparedRun) {
         preparedRun.finalizerToken = finalizerToken;
         this.#threadlessRunFinalizer.register(output, { state, runId, token: finalizerToken }, finalizerToken);
+        void Promise.allSettled([output._waitUntilFinished()]).then(() => {
+          this.#cleanupPreparedRun(state, runId, preparedRun);
+        });
       }
-      void Promise.allSettled([output._waitUntilFinished()]).then(() => {
-        this.#cleanupPreparedRun(state, runId);
-      });
       return;
     }
 

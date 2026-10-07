@@ -49,6 +49,77 @@ function createParkedModel() {
   return { model, startedPromise, observedAbort: () => observedAbort };
 }
 
+function createControllableModel() {
+  const runs = Array.from({ length: 2 }, () => {
+    let started!: () => void;
+    const startedPromise = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    let finish!: () => void;
+    let observedAbort = false;
+
+    return {
+      started,
+      startedPromise,
+      setFinish: (callback: () => void) => {
+        finish = callback;
+      },
+      finish: () => finish(),
+      observeAbort: () => {
+        observedAbort = true;
+      },
+      observedAbort: () => observedAbort,
+    };
+  });
+  let runIndex = 0;
+
+  const model = new MockLanguageModelV2({
+    doStream: async ({ abortSignal }) => {
+      const run = runs[runIndex++]!;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            let finished = false;
+            const finish = () => {
+              if (finished) return;
+              finished = true;
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            };
+            run.setFinish(finish);
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: `controllable-response-${runIndex}`,
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            run.started();
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                run.observeAbort();
+                finish();
+              },
+              { once: true },
+            );
+          },
+        }),
+      };
+    },
+  });
+
+  return { model, runs };
+}
+
 async function abortParkedRun(agent: Agent, runId: string, streamOptions: Parameters<Agent['stream']>[1] = {}) {
   const stream = await agent.stream('hello', { ...streamOptions, runId });
   const text = stream.text;
@@ -153,6 +224,34 @@ describe('Agent.abortRunStream without a thread', () => {
     } finally {
       remoteSubscription.unsubscribe();
     }
+  });
+
+  it('does not let an earlier duplicate run ID clean up a newer thread-less run', async () => {
+    const { model, runs } = createControllableModel();
+    const agent = new Agent({
+      id: 'duplicate-run-id-no-thread',
+      name: 'Duplicate run ID cleanup test',
+      instructions: 'Test',
+      model,
+    });
+    const runId = 'duplicate-threadless-run';
+
+    const firstStream = await agent.stream('first', { runId });
+    const firstText = firstStream.text;
+    await runs[0]!.startedPromise;
+    const secondStream = await agent.stream('second', { runId });
+    const secondText = secondStream.text;
+    await runs[1]!.startedPromise;
+
+    runs[0]!.finish();
+    await firstText;
+    await firstStream._waitUntilFinished();
+    await Promise.resolve();
+
+    expect(agent.abortRunStream(runId)).toBe(true);
+    await secondText;
+    await secondStream._waitUntilFinished();
+    expect(runs[1]!.observedAbort()).toBe(true);
   });
 
   it('removes a thread-less prepared run when its unconsumed output is collected', async () => {
