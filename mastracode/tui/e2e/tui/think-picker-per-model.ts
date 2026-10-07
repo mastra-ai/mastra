@@ -43,7 +43,7 @@ export const thinkPickerPerModelScenario = {
     terminal.write('openai/gpt-4o');
     await runtime.waitForScreenText(/openai\/gpt-4o/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched build mode to openai\/gpt-4o\b/i, terminal, 8_000);
+    await runtime.waitForScreenText(/▐build▌openai\/gpt-4o▌/, terminal, 8_000);
 
     const gpt4oPicker = await openThinkPicker(terminal, runtime);
     runtime.printScreen('/think on GPT-4o', terminal);
