@@ -8,16 +8,16 @@ complexity unless it is researched and testable ahead of time.
 
 ## Summary
 
-| Tier | Change                                                                                              | Write path                           | Correctness risk                                                 | Evidence               | Recommendation            |
-| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------- | ---------------------- | ------------------------- |
-| 0    | Compiler rewrites that keep every dedupe (`safe`) + `filesystem_prefetches_limit = 8` for small–p90 | none                                 | none (0 mismatches / 2,880)                                      | prod warm + cold       | **ship**                  |
-| 1    | Span-name index `(org, project, name, traceId)`                                                     | 1 MV, no sums                        | none found: span names never change between copies               | prod facts, lab memory | **research + shadow**     |
-| 1    | One token/cost row per model call (ReplacingMergeTree, latest wins)                                 | writer emits 1 row per call, no sums | none found: 1 token row per (call, type) today; latest copy wins | prod facts, lab memory | **research + shadow**     |
-| 1    | Narrow token rows ordered by trace (ReplacingMergeTree, read with `FINAL`)                          | 1 MV, no sums                        | none: same dedupe key as today                                   | lab memory             | fallback to per-call rows |
-| 2    | Hourly token/cost rollup                                                                            | 2 MVs with sums                      | retries double-count; roots are rewritten; hour attribution      | prod facts, lab memory | **later, after Tier 1**   |
-| 2    | Per-trace token/cost rollup (sums)                                                                  | 1 MV with sums                       | retries double-count                                             | lab memory             | superseded by narrow rows |
-| 3    | Drop query-time root dedupe                                                                         | writer change                        | **roots are rewritten today**                                    | prod facts             | **no**                    |
-| 3    | Token/cost totals on the root row                                                                   | writer change                        | 4% of token rows land after the root ends                        | prod facts             | **no**                    |
+| Tier | Change                                                                                              | Write path                                       | Correctness risk                                               | Evidence               | Recommendation            |
+| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------- | ---------------------- | ------------------------- |
+| 0    | Compiler rewrites that keep every dedupe (`safe`) + `filesystem_prefetches_limit = 8` for small–p90 | none                                             | none (0 mismatches / 2,880)                                    | prod warm + cold       | **ship**                  |
+| 1    | Span-name index `(org, project, name, traceId)`                                                     | 1 MV, no sums                                    | none found: span names never change between copies             | prod facts, lab memory | **research + shadow**     |
+| 1    | One token/cost row per usage emission (ReplacingMergeTree, keyed by an emission id)                 | writer stamps an id, 1 row per emission, no sums | must key by emission, not span (rolled-up usage shares a span) | prod facts, lab memory | **research + shadow**     |
+| 1    | Narrow token rows ordered by trace (ReplacingMergeTree, read with `FINAL`)                          | 1 MV, no sums                                    | none: same dedupe key as today                                 | lab memory             | fallback to per-call rows |
+| 3    | Hourly token/cost rollup                                                                            | 2 MVs with sums or a scheduled recompute         | resumed traces change old hours; retries; roots rewritten      | prod facts, lab memory | **not viable now**        |
+| 2    | Per-trace token/cost rollup (sums)                                                                  | 1 MV with sums                                   | retries double-count                                           | lab memory             | superseded by narrow rows |
+| 3    | Drop query-time root dedupe                                                                         | writer change                                    | **roots are rewritten today**                                  | prod facts             | **no**                    |
+| 3    | Token/cost totals on the root row                                                                   | writer change                                    | 4% of token rows land after the root ends                      | prod facts             | **no**                    |
 
 ## Realistic spread: Tier 0 only (prod, 30 days, peak MiB, warm median)
 
@@ -113,51 +113,39 @@ query uses today). Still over 256 MiB on the largest project; cuts the token-joi
 A projection on `mastra_metric_events` with this order would avoid the MV, but ClickHouse didn't choose it, and
 sorting alone didn't make the dedupe stream (X32): the gain comes from the narrow, hash-keyed table plus `FINAL`.
 
-## Tier 1: one token/cost row per model call
+## Tier 1: one token/cost row per usage emission
 
-**What.** `mastra_model_usage (organizationId, projectId, traceId, spanId)` ReplacingMergeTree holding the four token
-totals, cost and pricing flags for one model call. The exporter writes it when a model span ends, from the same usage
-it already prices for token metrics (including rolled-up internal usage). Queries dedupe per call (`argMax` by
-timestamp) and sum per trace, instead of deduping ~6 token rows per trace.
+**What.** `mastra_model_usage (organizationId, projectId, traceId, usageId)` ReplacingMergeTree holding the four token
+totals, cost and pricing flags for one call to `emitUsageMetrics`. The writer stamps a new `usageId` per emission and
+writes this row next to the token metric rows. Queries dedupe per `usageId` and sum per trace, instead of deduping ~6
+token rows per trace.
 
-**Buys (lab, X35).** p99 E4/T1/T3 187 → 72 MiB; largest 818 → 338 MiB. With `safe` + limit 8, p99 would land near
-~100–150 MiB on prod (estimate). The largest project stays over 256 MiB: pair it with window caps or per-day splits
-there.
+**Why not key by span.** Usage from hidden model calls is rolled up to the nearest exported ancestor
+(`applyUsageRollup` in `observability/mastra/src/instances/base.ts`): each hidden call emits its own token rows under
+the _ancestor's_ `spanId`, and a visible model span can carry its own usage plus rolled-up usage. Several emissions can
+share a span; keyed by span, "latest wins" would drop all but one. The lab table (X35) was keyed by span and matched
+only because the pulled data had no such collision. Token rows don't carry an emission id today, so a materialized view
+over them can't build this table; the writer has to stamp the id (one per emission, shared by its token rows).
 
-**Why low risk.** No sums at write time, so retries can't double-count; a retried or rewritten call collapses to its
-latest copy, the same rule the query uses for spans. Prod facts: exactly one token row per (call, token type) today,
-and 99.3% of token rows sit on model spans.
+**Buys (lab, X35, keyed by span).** p99 E4/T1/T3 187 → 72 MiB; largest 818 → 338 MiB. Keyed by emission the row count
+is the same or slightly higher. The largest project stays over 256 MiB.
 
-**Can go wrong.** A model span rewritten with _less_ final usage than an earlier copy (latest wins, so the earlier,
-larger value is dropped; 14 of 14 rewritten model spans had different usage); the 0.6% of usage on `processor_run`
-spans must be written too; a call whose usage is never finalized. Keep writing token metric rows: metrics dashboards
-use them, and they are the reconciliation source.
+**Why exact.** No sums at write time; a retried emission repeats its `usageId` and collapses. Every emission is kept,
+including rolled-up and resumed (HITL) usage, because each is its own row.
 
-**Test.** Daily reconciliation per tenant: per-trace sums from `mastra_model_usage` vs deduped token rows (must
-match). Replay with rewritten spans carrying different usage. An MV from token rows with `argMaxIf` states per token
-type would avoid the writer change and stays idempotent, but is untested.
+**Can go wrong.** A writer path that emits usage without a row (must cover `emitUsageMetrics` for both live and rolled-up
+usage); retries that mint a new `usageId` (would double-count, as today's metric rows would with new `metricId`s).
 
-## Tier 2: hourly token/cost rollup
+**Test.** Per-tenant reconciliation of per-trace sums against deduped token rows (must match exactly); fixtures with
+nested hidden model calls under one processor, a visible model span with rolled-up usage, and suspend/resume.
 
-**What.** One row per (org, project, hour, entity type/name, environment, service, source) with trace/error
-counts and token/cost sums. Dashboard queries go here; everything else stays per-trace.
+## Not viable now: hourly token/cost rollup
 
-**Buys (lab).** 8–14 MiB at every project size (largest E4 882 → 12 MiB).
-
-**Risks, now with evidence.**
-
-- **Roots are rewritten** (0.08% of traces, up to 263 copies). A roots MV adds every rewrite: trace and error
-  counts need a duplicate-safe aggregate (e.g. `uniqExactState` of trace hashes, ~8 bytes per trace) rather than
-  sums, and "is an error" becomes "any version errored".
-- **Token sums double-count retries.** No duplicates today, but nothing prevents them. Needs writers to retry
-  with the same batch or `insert_deduplication_token` (window on source and rollup), or accept drift with daily
-  reconciliation.
-- **Two MVs** (roots and token rows): token rows carry their own attribution, which is missing or different for
-  2.7% of rows.
-- **Hour attribution** moves 9.9% of tokens between hours (root start vs token time). Needs a product decision.
-- Two query paths to keep consistent; no per-trace deletes; rebuild to add a dimension.
-
-**Test.** All six steps; step 3 with rewritten roots and retried token batches is the deciding one.
+Lab memory was 8–14 MiB at every size, but it can't be both exact and current. Traces suspend and resume (HITL) hours
+or days later and add usage, so the hour a trace started keeps changing indefinitely. An insert-time view sums (retries
+double-count, roots are rewritten); a scheduled recompute lags and can't know which old hours changed. Attributing
+usage to the hour it happened avoids that, but answers a different question than `aggregateTraces()` (which counts all
+of a trace's usage under its start time). Revisit only with a product decision on that semantics.
 
 ## Tier 3: not recommended
 

@@ -592,7 +592,7 @@ Per-call storage removes ~60% of the token cost at p99 and the largest project; 
 is ~100 MiB for roots and grouping and ~240 MiB for the per-call dedupe of ~1M call rows. Span columns match the
 table on memory but read 1.5–2× the bytes and run 1.5–5× slower. `FINAL` replaces the hash table with a merge but
 costs a ~160 MiB floor at every size. The lab table is pivoted from token rows, so it doesn't model spans rewritten
-with different usage; that needs the replay test in SCHEMA-PROPOSALS.md.
+with different usage; that needs the replay test in SCHEMA-PROPOSALS.md. **Correction:** keyed by span, this table loses usage when several hidden model calls roll up to one exported ancestor (`applyUsageRollup`); it matched only because the pulled data had no such collision. A real table must be keyed by a per-emission id the writer stamps.
 
 ## Recommendation (memory track)
 
