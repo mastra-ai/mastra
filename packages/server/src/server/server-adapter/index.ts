@@ -1410,6 +1410,7 @@ export async function checkRequestedResource(
   mastra: any,
   requestContext: RequestContext | undefined,
   params: Record<string, unknown>,
+  sources?: Record<string, unknown>[],
 ): Promise<{ status: number; error: string; message: string } | null> {
   const mappedResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
   if (!requestContext || typeof mappedResourceId !== 'string' || !mappedResourceId) return null;
@@ -1425,10 +1426,13 @@ export async function checkRequestedResource(
     | undefined;
   if (typeof auth?.authorizeUserResource !== 'function') return null;
 
+  const denied = { status: 403, error: 'Forbidden', message: 'Access denied: resource not available to this caller' };
+  // A handler may re-read a raw source, so every id named in any source must agree.
+  if (sources && new Set(sources.flatMap(requestedResourceIds)).size > 1) return denied;
+
   const requested = requestedResourceIds(params).filter(resourceId => resourceId !== mappedResourceId);
   if (requested.length === 0) return null;
 
-  const denied = { status: 403, error: 'Forbidden', message: 'Access denied: resource not available to this caller' };
   if (requested.length > 1) return denied;
 
   const [resourceId] = requested as [string];
@@ -1448,8 +1452,9 @@ export async function checkRouteFGA(
   route: ServerRoute,
   requestContext: RequestContext,
   params: Record<string, unknown>,
+  sources?: Record<string, unknown>[],
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const resourceError = await checkRequestedResource(mastra, requestContext, params);
+  const resourceError = await checkRequestedResource(mastra, requestContext, params, sources);
   if (resourceError) return resourceError;
 
   // Use request context to determine which FGA provider to use (studio vs server)

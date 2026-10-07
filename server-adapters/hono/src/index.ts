@@ -812,11 +812,20 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
         }
-        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...c.req.param(),
-          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
-          ...bodyParams,
-        });
+        const pathParams = c.req.param();
+        const searchParams = new URL(c.req.url).searchParams;
+        const queryParams = Object.fromEntries(searchParams.entries());
+        // A repeated key keeps only its last value in queryParams, while c.req.query() returns the first.
+        const repeatedQueryIds = ['resourceId', 'resource_id'].flatMap(key =>
+          searchParams.getAll(key).map(value => ({ [key]: value })),
+        );
+        const fgaError = await checkRouteFGA(
+          this.mastra,
+          serverRoute,
+          c.get('requestContext'),
+          { ...pathParams, ...queryParams, ...bodyParams },
+          [pathParams, queryParams, ...repeatedQueryIds, bodyParams],
+        );
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
         }

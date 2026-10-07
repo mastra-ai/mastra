@@ -107,6 +107,47 @@ describe('NestJS Adapter - authorizeUserResource', () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
+  it('returns 403 from a custom route when the query and JSON body name different resources', async () => {
+    const policy = vi.fn(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const handler = await start(policy);
+    const response = await executeExpressRequest(expressApp, {
+      method: 'POST',
+      path: '/custom?resourceId=r-a',
+      headers: { authorization: 'Bearer t', 'content-type': 'application/json' },
+      body: { resourceId: 'r-b' },
+    });
+    expect(response.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 from a custom route when the query repeats the resource id with different values', async () => {
+    const policy = vi.fn(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const handler = await start(policy);
+    const response = await executeExpressRequest(expressApp, {
+      method: 'POST',
+      path: '/custom?resourceId=r-a&resourceId=r-b',
+      headers: { authorization: 'Bearer t' },
+    });
+    expect(response.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('runs a custom route when the query and JSON body name the same approved resource', async () => {
+    const policy = vi.fn(async (_user: unknown, resourceId: string) => resourceId === 'r-b');
+    const handler = await start(policy);
+    const response = await executeExpressRequest(expressApp, {
+      method: 'POST',
+      path: '/custom?resourceId=r-b',
+      headers: { authorization: 'Bearer t', 'content-type': 'application/json' },
+      body: { resourceId: 'r-b' },
+    });
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(policy).toHaveBeenCalledOnce();
+  });
+
   it('keeps the mapped resource when no policy is set', async () => {
     await start();
     const response = await listThreads();

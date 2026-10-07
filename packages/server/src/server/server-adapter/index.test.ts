@@ -1387,14 +1387,19 @@ describe('getCustomHTTPExceptionResponse', () => {
 describe('checkRouteFGA - authorizeUserResource', () => {
   const route = {} as any;
 
-  async function run(policy: any, params: Record<string, unknown>, mapped: string | null = 'user-a') {
+  async function run(
+    policy: any,
+    params: Record<string, unknown>,
+    mapped: string | null = 'user-a',
+    sources?: Record<string, unknown>[],
+  ) {
     const { checkRouteFGA } = await import('./index');
     const { RequestContext, MASTRA_RESOURCE_ID_KEY } = await import('@mastra/core/request-context');
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'u1' });
     if (mapped) requestContext.set(MASTRA_RESOURCE_ID_KEY, mapped);
     const mastra = { getServer: () => ({ auth: policy ? { authorizeUserResource: policy } : {} }) };
-    const result = await checkRouteFGA(mastra, route, requestContext, params);
+    const result = await checkRouteFGA(mastra, route, requestContext, params, sources);
     return { result, resourceId: requestContext.get(MASTRA_RESOURCE_ID_KEY) };
   }
 
@@ -1420,6 +1425,25 @@ describe('checkRouteFGA - authorizeUserResource', () => {
     const { result } = await run(policy, { resourceId: 'r1', resource_id: 'r2' });
     expect(result).toMatchObject({ status: 403 });
     expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('denies when request sources name different resources without asking the policy', async () => {
+    const policy = vi.fn(() => true);
+    const { result } = await run(policy, { resourceId: 'r2' }, 'user-a', [{ resourceId: 'r1' }, { resourceId: 'r2' }]);
+    expect(result).toMatchObject({ status: 403 });
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('asks the policy once when request sources agree or one is empty', async () => {
+    const policy = vi.fn(() => true);
+    const { result, resourceId } = await run(policy, { resourceId: 'r1' }, 'user-a', [
+      { resourceId: 'r1' },
+      { resourceId: '' },
+      { resource_id: 'r1' },
+    ]);
+    expect(result).toBeNull();
+    expect(resourceId).toBe('r1');
+    expect(policy).toHaveBeenCalledOnce();
   });
 
   it('skips the policy when the requested resource is the mapped one or nothing is mapped', async () => {
