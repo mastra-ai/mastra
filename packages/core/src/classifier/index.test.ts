@@ -1,4 +1,8 @@
-import { APICallError, type Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
+import {
+  APICallError,
+  type Experimental_DecisionModelV4 as DecisionModelV4,
+  type Experimental_EvaluationModelV4 as EvaluationModelV4,
+} from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';
@@ -121,6 +125,81 @@ describe('Classifier', () => {
         headers: { 'x-request-id': 'request-id' },
         body: { ok: true },
       },
+    });
+  });
+
+  describe('decision models', () => {
+    function createDecisionModel(doDecide: DecisionModelV4['doDecide']): DecisionModelV4 {
+      return {
+        specificationVersion: 'v4',
+        provider: 'openai.decisions',
+        modelId: 'gpt-6-luna',
+        supportedQuestionTypes: ['choice', 'score', 'boolean'],
+        doDecide,
+      };
+    }
+
+    const questions = {
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+      route: { type: 'choice', criteria: { support: 'Support', sales: 'Sales' } },
+      quality: { type: 'score', criteria: ['Poor', 'Good', 'Excellent'] },
+    } as const;
+
+    it('calls doDecide and returns boolean, choice, and score answers with usage and probabilities', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: {
+          unsafe: { type: 'boolean', probability: 0.25 },
+          route: { type: 'choice', choice: 'sales', probabilities: { support: 0.4, sales: 0.6 } },
+          quality: { type: 'score', score: 2, probabilities: { '0': 0, '1': 0, '2': 1 } },
+        },
+        usage: { inputTokens: 10, outputTokens: 1 },
+        providerMetadata: { openai: { decisionId: 'dec_123' } },
+        warnings: [],
+      }));
+      const classifier = new Classifier({ id: 'decision', model: createDecisionModel(doDecide) });
+
+      const result = await classifier.evaluate({ state: 'hello', questions });
+
+      expect(doDecide).toHaveBeenCalledTimes(1);
+      expect(result.answers).toEqual({
+        unsafe: { type: 'boolean', probability: 0.25 },
+        route: { type: 'choice', choice: 'sales', probabilities: { support: 0.4, sales: 0.6 } },
+        quality: { type: 'score', score: 2, probabilities: { '0': 0, '1': 0, '2': 1 } },
+      });
+      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 1, totalTokens: 11 });
+      expect(result.providerMetadata).toEqual({ openai: { decisionId: 'dec_123' } });
+      expect(result.response.modelId).toBe('gpt-6-luna');
+    });
+
+    it('surfaces non-retryable provider errors such as refusals', async () => {
+      const refusal = new APICallError({
+        message: 'The model refused to answer',
+        url: 'https://example.test/decisions',
+        requestBodyValues: {},
+        statusCode: 400,
+        isRetryable: false,
+      });
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => {
+        throw refusal;
+      });
+      const classifier = new Classifier({ id: 'refusal', model: createDecisionModel(doDecide) });
+
+      await expect(classifier.evaluate({ state: 'hello', questions })).rejects.toBe(refusal);
+      expect(doDecide).toHaveBeenCalledTimes(1);
+    });
+
+    it('prefers doDecide when a model exposes both doDecide and the legacy doEvaluate alias', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+        warnings: [],
+      }));
+      const doEvaluate = vi.fn();
+      const model = { ...createDecisionModel(doDecide), doEvaluate };
+
+      await new Classifier({ id: 'both', model, questions: booleanQuestions }).evaluate({ state: 'x' });
+
+      expect(doDecide).toHaveBeenCalledTimes(1);
+      expect(doEvaluate).not.toHaveBeenCalled();
     });
   });
 

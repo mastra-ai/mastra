@@ -12,7 +12,7 @@ packages:
 
 A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
 
-`Classifier` requires an evaluation model (`EvaluationModelV4`, optionally wrapped in `MastraEvaluationModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
+`Classifier` requires a decision model (`DecisionModelV4`, or the deprecated `EvaluationModelV4`, optionally wrapped in `MastraEvaluationModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
 
 ## Basic usage
 
@@ -64,7 +64,7 @@ The evaluation model receives every question with the same `state`. When a quest
 
 ## Evaluation models
 
-The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
+The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose a `decisionModel()` factory (previously `evaluationModel()`, still available as a deprecated alias). Mastra calls `doDecide()` and falls back to `doEvaluate()` for older providers. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
 
 Each provider exports a ready-made instance, which is what the examples on this page use. See [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) for the others.
 
@@ -94,7 +94,7 @@ new Classifier(options)
   },
   {
     name: 'model',
-    type: 'EvaluationModelV4 | MastraEvaluationModel',
+    type: 'DecisionModelV4 | EvaluationModelV4 | MastraEvaluationModel',
     description:
       'An AI SDK evaluation model or a Mastra evaluation model wrapper. The model declares which question types it supports.',
     isOptional: false,
