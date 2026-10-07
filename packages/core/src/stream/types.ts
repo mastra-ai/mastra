@@ -1197,6 +1197,12 @@ export type CustomChunkWriter = {
 /** Context passed as the second argument to `MastraOnFinishCallback`. */
 export type MastraOnFinishCallbackContext = {
   writer?: CustomChunkWriter;
+  /**
+   * Set when an output processor aborted the run from `processOutputResult`. The run-level
+   * message save never happens in that case, so the agent removes any response messages the
+   * run already saved (before a tool-approval suspension, or with `savePerStep`).
+   */
+  outputResultTripwire?: StepTripwireData;
 };
 
 export type MastraOnFinishCallback<OUTPUT = undefined> = (

@@ -1140,6 +1140,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 },
               };
 
+              let outputResultTripwire: StepTripwireData | undefined;
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
@@ -1250,6 +1251,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  outputResultTripwire = self.#tripwire;
                   // A tripwire rejects the output without erasing it; keep `text` in sync with
                   // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
@@ -1360,7 +1362,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
-                  await options?.onFinish?.(onFinishPayload, { writer: outputResultWriter });
+                  await options?.onFinish?.(onFinishPayload, {
+                    writer: outputResultWriter,
+                    ...(outputResultTripwire && { outputResultTripwire }),
+                  });
                 }
               }
 

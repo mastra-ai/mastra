@@ -78,6 +78,33 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     let threadCreatedByStep = false;
 
+    // A processOutputResult tripwire skips the run-level save, but response messages may already
+    // be stored: flushed before a tool-approval suspension, or per step with savePerStep. Remove
+    // them so a blocked reply never reaches the thread (and the model on the next turn).
+    // Messages that came from memory are left alone, as is the user message.
+    const deleteSavedResponseMessages = async () => {
+      const threadId = memoryData.thread?.id ?? threadIdFromArgs;
+      if (!memory || !threadId || memoryConfig?.readOnly) return;
+
+      const remembered = new Set(messageList.getPersisted.remembered.db());
+      const ids = messageList.getPersisted.response
+        .db()
+        .filter(message => !remembered.has(message))
+        .map(message => message.id);
+      if (ids.length === 0) return;
+
+      try {
+        await saveQueueManager?.flushPending(threadId);
+        await memory.deleteMessages(ids);
+      } catch (error) {
+        capabilities.logger.error('Failed to remove saved messages after an output processor tripwire', {
+          error,
+          runId,
+          threadId,
+        });
+      }
+    };
+
     const result = {
       ...options,
       agentId,
@@ -378,6 +405,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             agentSpan?.end({ endTree: true });
           } else {
+            if (context?.outputResultTripwire) {
+              await deleteSavedResponseMessages();
+            }
+
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null

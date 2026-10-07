@@ -143,4 +143,15 @@ export class SaveQueueManager {
     this.clearDebounce(threadId);
     return this.enqueueSave(threadId, messageList, memoryConfig);
   }
+
+  /**
+   * Cancels any debounced save for a thread and waits for saves already in flight to finish,
+   * so a caller can change stored messages without a queued save landing afterwards.
+   *
+   * @param threadId - The ID of the thread whose pending saves should settle.
+   */
+  async flushPending(threadId: string) {
+    this.clearDebounce(threadId);
+    await this.saveQueues.get(threadId);
+  }
 }
