@@ -16,7 +16,7 @@ import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type { MCPClientInfo, SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -59,6 +59,11 @@ export interface MCPClientOptions {
   servers: Record<string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /**
+   * Default `clientInfo` sent in the MCP `initialize` handshake to every server.
+   * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
+   */
+  clientInfo?: MCPClientInfo;
 }
 
 /**
@@ -91,6 +96,7 @@ export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private defaultClientInfo?: MCPClientInfo;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -134,6 +140,7 @@ export class MCPClient extends MastraBase {
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
+    this.defaultClientInfo = args.clientInfo;
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
@@ -1457,6 +1464,7 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      clientInfo: { ...this.defaultClientInfo, ...config.clientInfo },
     });
 
     mcpClient.__setLogger(this.logger);

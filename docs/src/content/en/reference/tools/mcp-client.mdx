@@ -23,6 +23,7 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  clientInfo?: { name?: string; version?: string };
 }: MCPClientOptions)
 ```
 
@@ -51,6 +52,13 @@ constructor({
     isOptional: true,
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      "Client name and version sent to every server during the MCP handshake, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
   },
 ]}
 />
@@ -93,6 +101,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     defaultValue: 'true',
     description:
       "For Stdio servers: Whether the subprocess environment starts from the MCP SDK's default inherited environment. The default is a curated whitelist, not the full process environment: on POSIX it inherits HOME, LOGNAME, PATH, SHELL, TERM, and USER; on Windows it inherits APPDATA, HOMEDRIVE, HOMEPATH, LOCALAPPDATA, PATH, PROCESSOR_ARCHITECTURE, SYSTEMDRIVE, SYSTEMROOT, TEMP, USERNAME, and USERPROFILE. When set to `false`, only the variables explicitly listed in `env` are passed to the subprocess. Note that a subprocess without PATH may fail to spawn commands that are not absolute paths.",
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      'Overrides the top-level `clientInfo` for this server. Fields you set replace the top-level values; fields you omit keep them.',
   },
   {
     name: 'url',

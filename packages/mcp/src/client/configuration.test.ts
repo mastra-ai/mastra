@@ -562,3 +562,69 @@ describe('MCPClient tool discovery retries', () => {
   it('lists resources from all servers concurrently rather than serially', () =>
     expectConcurrentDiscovery(installResourcesMock, client => client.resources.list()));
 });
+
+describe('MCPClient clientInfo', () => {
+  const clients: MCPClient[] = [];
+
+  afterEach(async () => {
+    await Promise.all(clients.map(client => client.disconnect().catch(() => {})));
+    clients.length = 0;
+  });
+
+  async function sdkClientInfo(client: MCPClient, serverName: string) {
+    clients.push(client);
+    const internal = await (client as any).getOrCreateClient(serverName, (client as any).getServerConfig(serverName));
+    return (internal as any).client._clientInfo as { name: string; version: string };
+  }
+
+  it('defaults to the server key and version 1.0.0', async () => {
+    const client = new MCPClient({
+      id: `client-info-test-${++clientId}`,
+      servers: { weather: { url: new URL('http://localhost:1234/mcp') } },
+    });
+
+    expect(await sdkClientInfo(client, 'weather')).toEqual({ name: 'weather', version: '1.0.0' });
+  });
+
+  it('applies top-level clientInfo to every server', async () => {
+    const client = new MCPClient({
+      id: `client-info-test-${++clientId}`,
+      clientInfo: { name: 'my-app', version: '2.3.4' },
+      servers: {
+        weather: { url: new URL('http://localhost:1234/mcp') },
+        stock: { url: new URL('http://localhost:5678/mcp') },
+      },
+    });
+
+    expect(await sdkClientInfo(client, 'weather')).toEqual({ name: 'my-app', version: '2.3.4' });
+    expect(await sdkClientInfo(client, 'stock')).toEqual({ name: 'my-app', version: '2.3.4' });
+  });
+
+  it('merges per-server clientInfo over the top-level default field-wise', async () => {
+    const client = new MCPClient({
+      id: `client-info-test-${++clientId}`,
+      clientInfo: { name: 'my-app', version: '2.3.4' },
+      servers: {
+        weather: { url: new URL('http://localhost:1234/mcp'), clientInfo: { version: '9.9.9' } },
+      },
+    });
+
+    expect(await sdkClientInfo(client, 'weather')).toEqual({ name: 'my-app', version: '9.9.9' });
+  });
+
+  it('keeps the server key as the tool namespace when clientInfo.name is set', async () => {
+    const client = new MCPClient({
+      id: `client-info-test-${++clientId}`,
+      clientInfo: { name: 'my-app' },
+      servers: { weather: { url: new URL('http://localhost:1234/mcp') } },
+    });
+    clients.push(client);
+
+    vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(InternalMastraMCPClient.prototype, 'tools').mockResolvedValue({ forecast: { id: 'forecast' } } as any);
+
+    const tools = await client.listTools();
+    expect(Object.keys(tools)).toEqual(['weather_forecast']);
+    vi.restoreAllMocks();
+  });
+});

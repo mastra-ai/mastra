@@ -4,6 +4,7 @@ export type {
   LogHandler,
   MastraMCPServerDefinition,
   MCPClientCapabilities,
+  MCPClientInfo,
   MCPClientProtocolVersion,
   MCPInputRequest,
   MCPInputRequestHandler,
