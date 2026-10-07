@@ -322,6 +322,18 @@ export const PROBES: Probe[] = [
       settings: { filesystem_prefetches_limit: 8 },
     },
   ]),
+  // Strictly exact subset (`ex`) and the prefetch limit alone.
+  ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3'].flatMap((caseId): Probe[] => [
+    { id: `${caseId}-ex`, note: `${caseId} 30d, variant ex`, sql: compiled(caseId, 30, 'ex') },
+    ...(['ex', 'base'] as const).map(
+      (v): Probe => ({
+        id: `${caseId}-${v}-pf8`,
+        note: `${caseId} 30d, variant ${v} + prefetch limit 8`,
+        sql: compiled(caseId, 30, v),
+        settings: { filesystem_prefetches_limit: 8 },
+      }),
+    ),
+  ]),
   // Compiler-only path that keeps every dedupe (`sk`, `safe` = sk + rio + hk), alone and with the prefetch limit.
   ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3'].flatMap((caseId): Probe[] =>
     (['sk', 'safe'] as const).flatMap((v): Probe[] => [

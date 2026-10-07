@@ -114,6 +114,7 @@ export type Variant =
   | 'srio'
   | 'safe'
   | 'hkd'
+  | 'ex'
   | 'mcall'
   | 'mcallf'
   | 'spanu';
@@ -297,6 +298,9 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
         [/(\n\s+)SELECT traceId,(\n\s+argMax\()/g, '$1SELECT cityHash64(traceId) AS th,$2'],
         [/GROUP BY traceId, metricId/g, 'GROUP BY th, cityHash64(metricId)'],
       ]);
+    // Exact subset: tenant-scoped outer root re-read (no time bound) + one root dedupe; spans untouched.
+    case 'ex':
+      return singleRootDedupe(applyVariant(compiled, 'w1'));
     case 'w1': {
       const tenantParam = /AND organizationId = (\{trace_query_\d+:String\}) AND projectId/.exec(compiled.query)?.[1];
       if (!tenantParam) throw new RewriteError('Variant w1: query is not project-scoped');

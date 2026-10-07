@@ -579,6 +579,7 @@ export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>([
   'srio',
   'safe',
   'hkd',
+  'ex',
   'mcall',
   'mcallf',
   'spanu',
