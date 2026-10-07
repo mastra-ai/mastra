@@ -718,6 +718,14 @@ export class TelegramProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     if (this.#config.baseUrl) return stripTrailingSlash(this.#config.baseUrl);
     const server = this.#mastra?.getServer();
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which Telegram rejects for webhooks — but explicit
+    // `server.studio*` overrides in user config still win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) return stripTrailingSlash(envUrl);
     if (!server) return undefined;
     const protocol = server.studioProtocol ?? 'http';
     const host = server.studioHost ?? server.host ?? 'localhost';

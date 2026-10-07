@@ -571,6 +571,7 @@ export class ReflectorRunner {
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
           error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          retrying: true,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });

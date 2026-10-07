@@ -141,7 +141,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
  * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
  * cards. A card with neither signal cannot be attributed by number alone.
  */
-function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);

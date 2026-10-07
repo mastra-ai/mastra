@@ -56,6 +56,22 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
   return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
 }
 
+/**
+ * Issue and pull request numbers repeat across repositories, so new cards are
+ * keyed by repository. A card this repository already owns keeps its key —
+ * including canonical `github-issue:N` / `github-pr:N` keys from before
+ * scoping — but only when it is the same kind of source: pull request intake
+ * runs with the authoring issue as `context.item`.
+ */
+function githubSourceKey(
+  context: FactoryGithubRuleContext,
+  source: 'github-issue' | 'github-pr',
+  itemNumber: number,
+): string {
+  if (context.item?.source === source && context.item.sourceKey) return context.item.sourceKey;
+  return `github:${context.repository.id}:${source === 'github-issue' ? 'issue' : 'pull-request'}:${itemNumber}`;
+}
+
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   // Everything arrives on the routed board's initial phase (Work › Intake when
@@ -66,7 +82,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:issue-intake`,
     board: context.intake?.board ?? 'work',
     source: 'github-issue',
-    sourceKey: `github-issue:${context.issue.number}`,
+    sourceKey: githubSourceKey(context, 'github-issue', context.issue.number),
     title: context.issue.title,
     url: context.issue.url,
     stage: context.intake?.initialPhase ?? 'intake',
@@ -121,7 +137,7 @@ function materializePullRequestIntake(
     idempotencyKey,
     board: 'review',
     source: 'github-pr',
-    sourceKey: `github-pr:${context.pullRequest.number}`,
+    sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage,
