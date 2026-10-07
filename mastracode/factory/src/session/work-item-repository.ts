@@ -52,7 +52,12 @@ export async function resolveWorkItemRepository(args: {
   }
 
   const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
-  const externalRepositoryId = metadata.githubRepositoryId ?? metadata.gitlabProjectId;
+  const externalRepositoryId =
+    sourceControl.integrationId === 'github'
+      ? metadata.githubRepositoryId
+      : sourceControl.integrationId === 'gitlab'
+        ? metadata.gitlabProjectId
+        : undefined;
   const externalRepositorySignal = externalRepositoryId == null ? undefined : String(externalRepositoryId);
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
   const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;

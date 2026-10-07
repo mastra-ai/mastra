@@ -14,11 +14,17 @@ export function cardRepositorySlug(
   repositories: LinkedRepositoryPayload[],
 ) {
   // The provider id survives repository renames, so it outranks a possibly stale slug.
-  const externalId = metadata?.githubRepositoryId ?? metadata?.gitlabProjectId;
-  if (externalId != null) {
-    const matches = repositories.filter(repository => repository.externalId === String(externalId));
-    if (matches.length === 1) return matches[0]!.slug;
-  }
+  const providerIds = [
+    ['github', metadata?.githubRepositoryId],
+    ['gitlab', metadata?.gitlabProjectId],
+  ] as const;
+  const matches = repositories.filter(repository =>
+    providerIds.some(
+      ([provider, id]) =>
+        id != null && (repository.provider ?? 'github') === provider && repository.externalId === String(id),
+    ),
+  );
+  if (matches.length === 1) return matches[0]!.slug;
   if (typeof metadata?.repository === 'string') return metadata.repository;
   const projectId = cardLinearProjectId(source, metadata);
   if (projectId === undefined) return undefined;
