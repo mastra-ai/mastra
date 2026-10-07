@@ -158,7 +158,16 @@ describe('sub-agent delegation auto-resume persistence', () => {
       await stream.consumeStream();
     }
 
-    const owners = toolCallIdOwners(await savedAssistantMessages(storage));
+    const assistantMessages = await savedAssistantMessages(storage);
+    const owners = toolCallIdOwners(assistantMessages);
+
+    const textCounts: Record<string, number> = {};
+    for (const message of assistantMessages) {
+      for (const part of (message.content as any)?.parts ?? []) {
+        if (part.type === 'text') textCounts[part.text] = (textCounts[part.text] ?? 0) + 1;
+      }
+    }
+    expect(textCounts).toEqual({ 'Here is what I found.': 1, 'Task complete.': 1, 'All done.': 1 });
 
     expect([...owners.entries()].filter(([, messageIds]) => messageIds.length > 1)).toEqual([]);
     for (const toolCallId of ['lookup-1', 'delegate-1', 'delegate-2', 'delegate-3', 'ask-1', 'ask-2']) {
