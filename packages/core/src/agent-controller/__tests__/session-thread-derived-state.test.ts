@@ -264,6 +264,30 @@ describe('AgentController thread-derived session state', () => {
     expect(second.getTokenUsage()).toMatchObject({ promptTokens: 5, completionTokens: 8, totalTokens: 13 });
   });
 
+  it('preserves the live thread projection when a metadata refresh fails', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'metadata-refresh-failure');
+    const session = await controller.createSession({
+      id: 'metadata-refresh-session',
+      resourceId: 'metadata-refresh-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    await session.thread.create({ id: 'metadata-refresh-thread' });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.state.set({ thinkingLevel: 'high' });
+
+    const memory = await storage.getStore('memory');
+    vi.spyOn(memory!, 'getThreadById').mockRejectedValueOnce(new Error('transient metadata read failure'));
+
+    await session.thread.loadMetadata();
+
+    expect(session.mode.get()).toBe('plan');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    expect(session.state.get().thinkingLevel).toBe('high');
+  });
+
   it('does not leak token usage when the target thread metadata read fails', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'usage-read-failure');
