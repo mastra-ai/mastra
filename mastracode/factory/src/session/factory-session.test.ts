@@ -283,6 +283,73 @@ describe('ensureFactorySourceSession', () => {
       }),
     ).rejects.toThrow('Factory source-control repository not found.');
   });
+
+  it('files the session under the named environment link, with that repository as the base', async () => {
+    const { sourceControl, project, projectRepository, repository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '789',
+        slug: 'mastra-ai/other',
+        defaultBranch: 'dev',
+      },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepositoryId: otherLink.id,
+      branch: 'factory/issue-3',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ projectRepositoryId: otherLink.id, baseBranch: 'dev' }));
+  });
+
+  it('rejects a named link that is not in the environment', async () => {
+    const { sourceControl, project, projectRepository, repository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '789',
+        slug: 'mastra-ai/other',
+        defaultBranch: 'dev',
+      },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: otherLink.id,
+      input: { inEnvironment: false },
+    });
+
+    await expect(
+      ensureFactorySourceSession({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        projectRepositoryId: otherLink.id,
+        branch: 'factory/issue-3',
+      }),
+    ).rejects.toThrow('Factory source-control repository not found.');
+  });
 });
 
 describe('hydrateFactorySession', () => {
