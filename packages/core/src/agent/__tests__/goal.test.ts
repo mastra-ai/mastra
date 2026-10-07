@@ -491,6 +491,15 @@ describe('in-loop goal scoring', () => {
       expect(record?.status).toBe('done');
     });
 
+    it('prefers a scorer id over another scorer name', async () => {
+      const scorerA = { ...passingScorer(), id: 'shared-ref', name: 'Scorer A', __registerMastra: vi.fn() };
+      const scorerB = { ...passingScorer(), id: 'scorer-b', name: 'shared-ref', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('shared-ref', { scorerB, scorerA });
+      expect(scorerA.run).toHaveBeenCalled();
+      expect(scorerB.run).not.toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
     it('still resolves a scorer by its registration key', async () => {
       const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
       const record = await runWithRegisteredScorer('testsPass', { testsPass: scorer });
