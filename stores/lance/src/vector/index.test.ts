@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { connect } from '@lancedb/lancedb';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { LanceVectorStore } from './index';
 
 describe('Lance vector store tests', () => {
@@ -246,6 +248,85 @@ describe('Lance vector store tests', () => {
 
         await expect(vectorDB.deleteIndex({ indexName: nonExistentIndex })).rejects.toThrow('not found');
       });
+    });
+  });
+
+  describe('createIndex idempotency', () => {
+    const tableName = 'idempotent-index-' + Date.now();
+    let createIndexSpy: MockInstance;
+
+    beforeAll(async () => {
+      await vectorDB.createTable(
+        tableName,
+        Array.from({ length: 300 }, (_, i) => ({
+          id: String(i + 1),
+          vector: Array.from({ length: 16 }, () => Math.random()),
+        })),
+      );
+      const db = await connect(connectionString);
+      const table = await db.openTable(tableName);
+      createIndexSpy = vi.spyOn(Object.getPrototypeOf(table), 'createIndex');
+      table.close();
+    });
+
+    afterEach(() => {
+      createIndexSpy.mockClear();
+    });
+
+    afterAll(() => {
+      createIndexSpy.mockRestore();
+    });
+
+    const create = (metric: 'cosine' | 'euclidean', numPartitions?: number, numSubVectors?: number) =>
+      vectorDB.createIndex({
+        tableName,
+        indexName: 'vector',
+        dimension: 16,
+        metric,
+        indexConfig: { type: 'ivfflat', numPartitions, numSubVectors },
+      });
+
+    it('does not rebuild an unchanged index', async () => {
+      await create('cosine', 2, 4);
+      await create('cosine', 2, 4);
+      expect(createIndexSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('rebuilds once when a build parameter changes', async () => {
+      await create('cosine', 2, 4);
+      createIndexSpy.mockClear();
+      await create('cosine', 4, 4);
+      await create('cosine', 4, 4);
+      expect(createIndexSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('rebuilds once when the metric changes', async () => {
+      await create('cosine', 4, 4);
+      createIndexSpy.mockClear();
+      await create('euclidean', 4, 4);
+      await create('euclidean', 4, 4);
+      expect(createIndexSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats omitted params and explicit defaults as the same config', async () => {
+      await create('cosine');
+      await create('cosine', 128, 16);
+      expect(createIndexSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('rebuilds an index that was replaced outside of createIndex, then reuses it', async () => {
+      const db = await connect(connectionString);
+      const table = await db.openTable(tableName);
+      await table.createIndex('vector');
+      table.close();
+      createIndexSpy.mockClear();
+
+      await create('cosine');
+      await create('cosine');
+      expect(createIndexSpy).toHaveBeenCalledTimes(1);
+
+      const stats = await vectorDB.describeIndex({ indexName: 'vector_idx' });
+      expect(stats.count).toBe(300);
     });
   });
 
