@@ -51,8 +51,14 @@ import type {
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
 /**
- * Formats a thread key for error messages. The key's NUL separator would cut
- * off any stored or displayed text at the resource id.
+ * Formats a thread key for use in error messages.
+ *
+ * Thread keys are `resourceId + NUL + threadId`. Never put a raw key in an
+ * error message: these errors flow back to senders (e.g. `agent_signal_send`)
+ * and into a notification's `lastDeliveryError`, and anything that treats the
+ * string as NUL-terminated (SQLite text binding, terminals, the TUI) silently
+ * drops everything after the resource id, including the thread id and the rest
+ * of the message.
  */
 function describeThreadKey(key: string): string {
   const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
@@ -61,6 +67,7 @@ function describeThreadKey(key: string): string {
   const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
   return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
 }
+
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
