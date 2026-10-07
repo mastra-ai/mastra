@@ -28,6 +28,10 @@ import {
   FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
   AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
   AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
+  GET_AGENT_CONTROLLER_OM_RECORD_ROUTE,
+  GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE,
+  GET_AGENT_CONTROLLER_GOAL_ROUTE,
+  GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
 } from './agent-controller';
 
 function makeAgent(id = 'test-agent') {
@@ -220,6 +224,37 @@ describe('agent-controller routes', () => {
 
       expect(response).toEqual({ ok: true });
       expect(switchThread).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('read-only session routes', () => {
+    it('require read permission', () => {
+      for (const route of [
+        STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
+        GET_AGENT_CONTROLLER_OM_RECORD_ROUTE,
+        GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE,
+        GET_AGENT_CONTROLLER_GOAL_ROUTE,
+        GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
+      ]) {
+        expect(route.requiresPermission).toBe('agent-controller:read');
+      }
+    });
+
+    it('does not create a session when the requested live session does not exist', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const createSession = vi.spyOn(controller, 'createSession');
+
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'missing-resource',
+        } as any),
+      ).rejects.toThrow('agent controller session for resource "missing-resource" not found');
+
+      expect(createSession).not.toHaveBeenCalled();
+      expect(await controller.getSessionByResource('missing-resource')).toBeUndefined();
     });
   });
 
@@ -650,6 +685,9 @@ describe('agent-controller routes', () => {
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('delivers session events to the SSE stream', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: 'code' });
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -660,9 +698,6 @@ describe('agent-controller routes', () => {
       const reader = stream.getReader();
 
       // Emit an event on the session the route subscribed to.
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: 'code' });
       // Any emit fans out a synthetic display_state_changed to subscribers.
       session.emit({ type: 'agent_start' } as any);
 
@@ -681,6 +716,13 @@ describe('agent-controller routes', () => {
     });
 
     it('preserves compact message lifecycle payloads across the SSE boundary', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-live-message',
+        id: 'user-live-message',
+        ownerId: 'code',
+      });
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -689,13 +731,6 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({
-        resourceId: 'user-live-message',
-        id: 'user-live-message',
-        ownerId: 'code',
-      });
       const message = {
         id: 'assistant-live-1',
         role: 'assistant',
@@ -728,6 +763,9 @@ describe('agent-controller routes', () => {
     });
 
     it('flattens Error instances on error events so the message survives JSON serialization', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -736,10 +774,6 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
-
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
       session.emit({ type: 'error', error: new Error('model quota exhausted'), errorType: 'provider' } as any);
 
       let received: any;
@@ -758,6 +792,9 @@ describe('agent-controller routes', () => {
     });
 
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -766,10 +803,6 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
-
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
       session.emit({ type: 'workspace_error', error: new Error('clone failed: permission denied') });
       session.emit({ type: 'workspace_status_changed', status: 'error', error: new Error('sandbox unreachable') });
 
@@ -790,6 +823,9 @@ describe('agent-controller routes', () => {
     });
 
     it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -798,10 +834,6 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
-
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
       session.emit({
         type: 'tool_approval_required',
@@ -855,6 +887,10 @@ describe('agent-controller routes', () => {
 
   describe('GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE', () => {
     it('returns the current mode, model, and thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+
       const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
         mastra,
         controllerId: 'code',

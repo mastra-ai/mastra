@@ -31,8 +31,9 @@ import { enforceThreadAccess } from './utils';
  * non-terminal clients — e.g. a browser-based MastraCode — can create sessions,
  * send messages, stream events, and drive run-control. Each route resolves its
  * target AgentController by id, then operates on a session bound to a
- * `resourceId` (get-or-create, so reconnects resume rather than fork the
- * conversation).
+ * `resourceId`. Mutating routes use get-or-create resolution so reconnects
+ * resume rather than fork the conversation; read routes only inspect existing
+ * live sessions.
  */
 
 /**
@@ -91,6 +92,20 @@ async function getSession(
   // stable session id when supplied.
   const id = threadId ?? (scope ? `${resourceId}::${scope}` : resourceId);
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
+}
+
+async function getExistingSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  scope?: string,
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const session = await controller.getSessionByResource(resourceId, scope, requestContext);
+  if (!session) {
+    throw new HTTPException(404, { message: `agent controller session for resource "${resourceId}" not found` });
+  }
+  return session;
 }
 
 /**
@@ -539,11 +554,11 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   description: 'Subscribes to a session\u2019s event bus and streams events to the client over SSE.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
-  requiresPermission: 'agent-controller:execute',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
 
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -888,11 +903,11 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   description: 'Returns the current mode, model, thread, and durable tasks for initial UI hydration.',
   tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'agent-controller:execute',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
       const storage = mastra.getStorage();
@@ -1480,7 +1495,7 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const record = await controller.getObservationalMemoryRecord(session);
       return { record: record ?? undefined };
     } catch (error) {
@@ -1533,7 +1548,7 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const resourceIds = await controller.getKnownResourceIds(session);
       return { resourceIds };
     } catch (error) {
@@ -1588,7 +1603,7 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const threadId = session.thread.getId();
       if (!threadId) return { goal: undefined };
       const agent = getAgentForSession(controller, session);
@@ -1731,7 +1746,7 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const rules = session.permissions.getRules();
       return {
         categories: rules.categories as Record<string, 'allow' | 'ask' | 'deny'> | undefined,
