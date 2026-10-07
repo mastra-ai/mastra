@@ -171,7 +171,8 @@ function stubDraftRoute({
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
       const body = await request.json();
       const thinkingLevel = readBody(body, 'thinkingLevel');
-      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingLevel ? ` thinking:${thinkingLevel}` : ''}`);
+      const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
+      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {

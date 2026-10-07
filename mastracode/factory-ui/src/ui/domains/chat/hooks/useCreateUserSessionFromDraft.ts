@@ -29,11 +29,8 @@ export function useCreateUserSessionFromDraft() {
         throw new Error('Session configuration is not ready. Try again.');
       }
 
-      // Session creation hydrates the personal default server-side. Only hand
-      // off a model when the draft explicitly deviated from that default; a
-      // thinking override rides on the model switch, so it needs one too.
-      const keepsDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
-      const handoffModelId = keepsDefaults ? undefined : activeModelId;
+      const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
+      const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
 
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {

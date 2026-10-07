@@ -29,6 +29,11 @@ export function thinkingLevelOptionsForModel(modelId: string): ThinkingLevelOpti
   }));
 }
 
+function defaultThinkingLevelForMode(defaults: ThinkingDefaults | undefined, modeId: string | undefined) {
+  if (!defaults) return undefined;
+  return resolveDefaultThinkingLevel(defaults, modeId).level;
+}
+
 export function resolveEffectiveThinkingLevel({
   modelId,
   override,
@@ -40,6 +45,15 @@ export function resolveEffectiveThinkingLevel({
   defaults: ThinkingDefaults | undefined;
   modeId: string | undefined;
 }): ThinkingLevelSetting | undefined {
-  const level = override ?? (defaults ? resolveDefaultThinkingLevel(defaults, modeId).level : undefined);
-  return level && modelId ? runThinkingLevel(modelId, level) : level;
+  const level = override ?? defaultThinkingLevelForMode(defaults, modeId);
+  if (!level || !modelId) return level;
+  return runThinkingLevel(modelId, level);
+}
+
+export function carryThinkingOverrideToModel(
+  modelId: string,
+  override: ThinkingLevelSetting | undefined,
+): ThinkingLevelSetting | undefined {
+  if (!override) return undefined;
+  return runThinkingLevel(modelId, override);
 }

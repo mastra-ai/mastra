@@ -20,6 +20,7 @@ import { useState } from 'react';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useChatConnection } from '../../context/useChatConnection';
+import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { SessionThinkingControl } from './SessionThinkingControl';
@@ -63,12 +64,11 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-/**
- * Model and thinking control for the session status line. The searchable menu
- * groups models by provider and lets user chats reset a per-session choice to
- * the personal default model; the thinking ramp only offers levels the active
- * model supports.
- */
+function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, sessionEnabled: boolean): boolean {
+  if (kind === 'user' && isDraft) return true;
+  return sessionEnabled;
+}
+
 export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
@@ -95,14 +95,15 @@ export function ModelPicker() {
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = kind === 'user' ? Boolean(draftSessionId) || sessionEnabled : kind === 'factory' && sessionEnabled;
+  const switchable = canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
   const canReset =
     kind === 'user' &&
     Boolean(defaultModelId) &&
     selectedModelId !== defaultModelId &&
     modelsQuery.data?.some(model => model.id === defaultModelId);
 
-  if (!switchable || (!modelsQuery.isPending && !modelsQuery.data?.length)) {
+  const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
+  if (!switchable || noModelsToOffer) {
     return (
       <span
         className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
@@ -132,15 +133,16 @@ export function ModelPicker() {
     setPendingModelId(modelId);
     runAction(setModel(modelId), 'Failed to switch model');
   };
+  const modelMenuLocked = busy || modelsQuery.isPending;
 
   return (
     <ButtonsGroup size="sm" aria-label="Model and thinking">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           type="button"
-          disabled={busy || modelsQuery.isPending}
+          disabled={modelMenuLocked}
           aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-          aria-busy={busy || modelsQuery.isPending}
+          aria-busy={modelMenuLocked}
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
             notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',

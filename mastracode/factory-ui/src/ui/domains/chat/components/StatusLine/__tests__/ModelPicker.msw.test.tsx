@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
+import type { ThinkingConfigInfo } from '../../../../../../api/types';
 import { thinkingConfig } from '../../../../../__tests__/fixtures/thinkingConfig';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
@@ -63,7 +64,11 @@ function renderPicker({
       return HttpResponse.json({ models });
     }),
     http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
-      HttpResponse.json({ ...thinkingConfig, globalDefault: 'low', modeDefaults: { build: 'medium' } }),
+      HttpResponse.json<ThinkingConfigInfo>({
+        ...thinkingConfig,
+        globalDefault: 'low',
+        modeDefaults: { build: 'medium' },
+      }),
     ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
       await settingsLoaded;
