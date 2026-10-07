@@ -573,11 +573,33 @@ export class SessionThread {
     this.#threadId = threadId;
     this.#bindingGeneration++;
     if (this.#session) {
-      this.#session.resetThreadSelection();
+      this.#resetThreadSelection();
       this.#session.resetThreadDerivedState();
       this.#session.resetTokenUsage();
     }
     return this.#bindingGeneration;
+  }
+
+  #resetThreadSelection(): void {
+    const session = this.#session;
+    if (!session) return;
+    const previousModeId = session.mode.get();
+    const previousModelId = session.model.get();
+    session.resetThreadSelection();
+    const modeId = session.mode.get();
+    const modelId = session.model.get();
+    if (modeId !== previousModeId) {
+      session.emit({ type: 'mode_changed', modeId, previousModeId });
+    }
+    if (modelId !== previousModelId) {
+      session.emit({
+        type: 'model_changed',
+        modelId,
+        thinkingLevel: (session.state.get() as Record<string, unknown>).thinkingLevel as
+          | AgentControllerThinkingLevel
+          | undefined,
+      });
+    }
   }
 
   /**
@@ -597,7 +619,7 @@ export class SessionThread {
     this.#threadId = null;
     this.#bindingGeneration++;
     if (this.#session) {
-      this.#session.resetThreadSelection();
+      this.#resetThreadSelection();
       this.#session.resetThreadDerivedState();
       this.#session.resetTokenUsage();
     }
