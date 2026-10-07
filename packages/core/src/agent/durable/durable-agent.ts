@@ -3310,15 +3310,14 @@ export class DurableAgent<
   }
 
   /**
-   * Override the inherited `approveToolCall()` to route through the durable
-   * `resume()` path.
-   */
-  /**
    * Resolve a run's owning resource read-only (registry, then persisted row)
    * for the caller-resource guard. Never rehydrates.
    * @internal
    */
-  protected override async resolveRunResourceForGuard(runId: string): Promise<{ found: boolean; resourceId?: string }> {
+  protected override async resolveRunResourceForGuard(
+    runId: string,
+    _method: string,
+  ): Promise<{ found: boolean; resourceId?: string }> {
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
     if (this.#runRegistry.get(runId)) {
       return { found: true, resourceId: memoryInfo?.resourceId };
@@ -3345,10 +3344,14 @@ export class DurableAgent<
     }
   }
 
+  /**
+   * Override the inherited `approveToolCall()` to route through the durable
+   * `resume()` path.
+   */
   override async approveToolCall(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
-    await this.assertToolControlCallerOwnsRun(options);
+    await this.assertToolControlCallerOwnsRun(options, 'approveToolCall');
     return this.resumeStream({ approved: true }, options);
   }
 
@@ -3359,7 +3362,7 @@ export class DurableAgent<
   override async declineToolCall(
     options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
-    await this.assertToolControlCallerOwnsRun(options);
+    await this.assertToolControlCallerOwnsRun(options, 'declineToolCall');
     const { reason, ...resumeOptions } = options;
     return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
@@ -3367,7 +3370,7 @@ export class DurableAgent<
   override async approveToolCallGenerate<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    await this.assertToolControlCallerOwnsRun(options);
+    await this.assertToolControlCallerOwnsRun(options, 'approveToolCallGenerate');
     const { runId, ...resumeOptions } = options;
     return this.resumeGenerate(runId, { approved: true }, resumeOptions as any) as any;
   }
@@ -3375,7 +3378,7 @@ export class DurableAgent<
   override async declineToolCallGenerate<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    await this.assertToolControlCallerOwnsRun(options);
+    await this.assertToolControlCallerOwnsRun(options, 'declineToolCallGenerate');
     const { runId, reason, ...resumeOptions } = options;
     return this.resumeGenerate(
       runId,

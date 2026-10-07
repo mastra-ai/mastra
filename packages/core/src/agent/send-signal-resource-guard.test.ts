@@ -352,7 +352,7 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
     expect(prompts.join('\n')).not.toContain('MALLORY-OWN-QUEUED');
   });
 
-  it('a queued message never inherits the active run’s requestContext', async () => {
+  it('a queued message with its own options does not inherit the active run’s requestContext', async () => {
     const threadId = 'queued-context';
     const { agent, prompts, release } = await setup(threadId, { holdFirst: true });
     const subscription = await agent.subscribeToThread({ threadId, resourceId: RESOURCE });
@@ -382,5 +382,27 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
     expect(prompts[2]).toContain('marker:undefined');
     expect(prompts[2]).toContain('queued without context');
     expect(callerIfIdle.streamOptions).toEqual({});
+  });
+
+  it('a queued message with no context or options keeps the active run’s requestContext', async () => {
+    const threadId = 'queued-inherits-context';
+    const { agent, prompts, release } = await setup(threadId, { holdFirst: true });
+    const subscription = await agent.subscribeToThread({ threadId, resourceId: RESOURCE });
+    const stream = await agent.stream('alice starts', {
+      memory: { thread: threadId, resource: RESOURCE },
+      requestContext: callerContext(RESOURCE, 'active-run'),
+    });
+    try {
+      await waitFor(() => prompts.length === 1);
+      agent.queueMessage('queued plain', { resourceId: RESOURCE, threadId });
+    } finally {
+      release();
+    }
+    await stream.text;
+    await waitFor(() => prompts.length >= 2);
+    subscription.unsubscribe();
+
+    expect(prompts[1]).toContain('queued plain');
+    expect(prompts[1]).toContain('marker:active-run');
   });
 });

@@ -4958,11 +4958,16 @@ export class AgentThreadStreamRuntime {
     const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
     // Build a new object so the queued run never inherits the active run's
-    // signal or request context, and the caller's options are not mutated.
+    // signal and the caller's options are not mutated. A caller that passes no
+    // options at all keeps the active run's request context, as before.
     const queuedStreamOptions = {
       ...(target.ifIdle?.streamOptions ?? activeRecord?.streamOptions),
       abortSignal: target.ifIdle?.streamOptions?.abortSignal,
-      requestContext: resolveSignalRequestContext(target),
+      requestContext:
+        target.requestContext ??
+        (target.ifIdle?.streamOptions
+          ? target.ifIdle.streamOptions.requestContext
+          : activeRecord?.streamOptions?.requestContext),
     };
 
     if (activeRecord || state.activeThreadRunIds.has(key)) {
