@@ -576,10 +576,17 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
                       tokenString += JSON.stringify(entry);
                     }
                   }
+                  overhead -= 12;
+                } else if (
+                  ((modelOutput as { type?: string }).type === 'text' ||
+                    (modelOutput as { type?: string }).type === 'error-text') &&
+                  typeof content === 'string'
+                ) {
+                  tokenString += content;
                 } else {
-                  tokenString += JSON.stringify(modelOutput);
+                  tokenString += JSON.stringify(content ?? modelOutput);
+                  overhead -= 12;
                 }
-                overhead -= 12;
               } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;

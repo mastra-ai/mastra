@@ -83,8 +83,9 @@ function truncate(text: string, total: number, limit: number): string {
   while (budget > 0) {
     const slice = sliceByTokensSafe(text, 0, budget);
     const candidate = `${slice}${marker(estimateTokenCount(slice), total)}`;
-    if (estimateTokenCount(candidate) <= limit) return candidate;
-    budget--;
+    const used = estimateTokenCount(candidate);
+    if (used <= limit) return candidate;
+    budget -= Math.max(1, used - limit);
   }
   return marker(0, total).trimStart();
 }

@@ -901,8 +901,8 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * list. Output processors run in sequence, each seeing the previous
    * `modelOutput`. The final value is stored as `providerMetadata.mastra.modelOutput`,
    * persists with the message, and is used on every later prompt. The stored and
-   * streamed `result` is never changed. Like `processToolResult`, it does not run for
-   * background task results that arrive after the turn ends.
+   * streamed `result` is never changed. It also runs for background task results,
+   * including ones that arrive after the turn ends.
    *
    * @returns `{ modelOutput }` to replace the model-facing output, or undefined to keep it.
    */

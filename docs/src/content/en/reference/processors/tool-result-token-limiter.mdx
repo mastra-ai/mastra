@@ -62,6 +62,6 @@ When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limit
 - For tools that define `toModelOutput`, the mapped output is capped. Text and JSON outputs are capped, and so are text entries of `content` outputs. Media entries are left unchanged.
 - Without `toModelOutput`, the model reads a capped text copy of the result. Objects are converted to JSON text for that copy only.
 - Media results such as `{ data, mediaType }` pass through unchanged.
-- Results from background tasks the agent waits for are limited like any other tool result. Results that arrive after the turn ends pass through unchanged.
+- Background task results are limited too, including ones that arrive after the turn ends. On a durable agent, a result that arrives after a process restart passes through unchanged if the run is no longer registered.
 - Tool errors, results from provider-executed tools, and results that can't be serialized to JSON pass through unchanged.
 - Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt. It counts the capped copy, not the full result.

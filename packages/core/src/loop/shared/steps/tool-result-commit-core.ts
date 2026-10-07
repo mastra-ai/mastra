@@ -207,3 +207,20 @@ export async function applyToolModelOutputProcessors(
   else mastra.modelOutput = normalizeModelOutput(next);
   return { ...providerMetadata, mastra };
 }
+
+/**
+ * Background-task variant: runs `processToolModelOutput` on an already mapped
+ * output and returns the final value, or the input unchanged when no
+ * processor implements the hook.
+ */
+export async function runBackgroundModelOutputProcessors(
+  runner: ProcessorRunner | undefined,
+  args: Omit<Parameters<ProcessorRunner['runProcessToolModelOutput']>[0], 'modelOutput'> & { modelOutput: unknown },
+): Promise<unknown> {
+  if (!runner?.hasToolModelOutputProcessor()) return args.modelOutput;
+  const next = await runner.runProcessToolModelOutput({
+    ...args,
+    modelOutput: args.modelOutput as ToolModelOutput | undefined,
+  });
+  return next === args.modelOutput ? next : normalizeModelOutput(next);
+}

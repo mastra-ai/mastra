@@ -5,6 +5,7 @@ import { executeAdoptedBackgroundOperation } from '../../../background-tasks/ado
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
+import { ProcessorRunner } from '../../../processors/runner';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -46,6 +47,7 @@ import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
+import { runBackgroundModelOutputProcessors } from '../../shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
@@ -101,7 +103,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
   mcp,
+  outputProcessors,
+  processorStates,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  const modelOutputRunner =
+    outputProcessors?.length && logger
+      ? new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors,
+          logger,
+          agentName: 'ToolCallStep',
+          processorStates,
+        })
+      : undefined;
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -1186,6 +1200,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     messageList,
                     approvalGrant: approvalGrant as Record<string, unknown> | undefined,
                     baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                    processModelOutput: ({ result, modelOutput }) =>
+                      runBackgroundModelOutputProcessors(modelOutputRunner, {
+                        steps: [],
+                        stepNumber: 0,
+                        messageList,
+                        toolName: params.toolName,
+                        toolCallId: params.toolCallId,
+                        toolArgs: args,
+                        result,
+                        modelOutput,
+                        requestContext,
+                        retryCount: 0,
+                        abortSignal,
+                      }),
                     transformForTranscript: async result => {
                       const transformCarrier = await applyToolPayloadTransformToChunk(
                         {

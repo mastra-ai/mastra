@@ -1019,6 +1019,37 @@ describe('TokenLimiterProcessor', () => {
           'input',
         );
 
+      it('counts a text modelOutput by its value, without the output wrapper', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+        const make = (modelOutput?: unknown) => {
+          const list = new MessageList();
+          list.add(
+            {
+              id: 'tool-msg',
+              role: 'assistant',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'tool-invocation',
+                    toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 't', args: {}, result: 'ignored' },
+                    ...(modelOutput ? { providerMetadata: { mastra: { modelOutput } } } : {}),
+                  },
+                ],
+              },
+              createdAt: new Date('2023-01-01T00:00:00Z'),
+            } as any,
+            'response',
+          );
+          return list;
+        };
+        const text = 'short tool output';
+        const viaModelOutput = await countTokens(processor, make({ type: 'text', value: text }));
+        const rawList = make();
+        (rawList.get.all.db()[0]!.content.parts[0] as any).toolInvocation.result = text;
+        expect(viaModelOutput).toBe(await countTokens(processor, rawList));
+      });
+
       it('should keep a message with a base64 image file part within a modest limit', async () => {
         const processor = new TokenLimiterProcessor({ limit: 2000 });
         const messageList = new MessageList();
