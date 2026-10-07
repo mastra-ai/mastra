@@ -1144,7 +1144,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   toolChoice: currentToolChoice,
                   activeTools: currentActiveTools,
                   specificationVersion: currentModel.specificationVersion,
-                  structuredOutput: !!structuredOutput?.schema,
+                  structuredOutput: !!structuredOutput?.schema && !(structuredOutput as { model?: unknown })?.model,
                 })
               : undefined;
             modelSpanTracker?.setInferenceContext?.({
