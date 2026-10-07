@@ -85,57 +85,54 @@ describe('NoticeRoot', () => {
     expect(classes).toContain('rounded-2xl');
   });
 
-  describe('without a title', () => {
-    it('renders nothing where the message would be when it has none', () => {
-      const { container } = render(<Notice variant="info" />);
+  describe('the icon follows the last row', () => {
+    const rowOfIcon = (container: HTMLElement) => container.querySelector('svg')?.closest('[class*="gap-2"]');
 
-      expect(container.textContent).toBe('');
-    });
-
-    it('places the action beside the message', () => {
-      render(
-        <Notice variant="info" action={<button type="button">Retry</button>}>
-          A message
-        </Notice>,
-      );
-
-      // One action only — the untitled layout has a single slot for it.
-      const actions = screen.getAllByRole('button', { name: 'Retry' });
-      expect(actions).toHaveLength(1);
-      // Its own slot, so it can go full width when the row stacks.
-      expect(actions[0]?.parentElement?.className).toContain('[&>button]:w-full');
-    });
-
-    it('leaves no empty action slot behind when there is no action', () => {
-      const { container } = render(<Notice variant="info">A message</Notice>);
-
-      expect(container.querySelector('[class*="[&>button]:w-full"]')).toBeNull();
-    });
-  });
-
-  describe('with a title', () => {
-    it('shows the action twice so one is visible at every width', () => {
-      render(
+    it('sits beside the action when there is one', () => {
+      const { container } = render(
         <Notice variant="info" title="Heads up" action={<button type="button">Retry</button>}>
           <Notice.Message>A message</Notice.Message>
         </Notice>,
       );
 
-      // The titled layout corners the action on wide screens and stacks it on
-      // narrow ones; each copy is hidden at the other width.
-      const actions = screen.getAllByRole('button', { name: 'Retry' });
-      expect(actions).toHaveLength(2);
-      expect(actions[0]?.parentElement?.className).toContain('@md:block');
-      expect(actions[1]?.parentElement?.className).toContain('@md:hidden');
+      expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+      expect(rowOfIcon(container)?.textContent).toBe('Retry');
     });
 
-    it('leaves out the body entirely when there is neither message nor action', () => {
-      const { container } = render(<Notice variant="info" title="Heads up" />);
+    it('drops onto the message when the action slot is empty', () => {
+      const { container } = render(
+        <Notice variant="info" title="Heads up">
+          <Notice.Message>A message</Notice.Message>
+        </Notice>,
+      );
 
-      expect(screen.getByText('Heads up')).toBeTruthy();
       expect(screen.queryByRole('button')).toBeNull();
-      // No empty body div under the title row, which would add its own gap.
+      expect(rowOfIcon(container)?.textContent).toBe('A message');
+    });
+
+    it('sits beside the title when the title is all there is', () => {
+      const { container } = render(<Notice variant="warning" title="Action required" />);
+
+      expect(rowOfIcon(container)?.textContent).toBe('Action required');
       expect(container.querySelector('.wrap-anywhere')).toBeNull();
     });
+
+    it('renders no text when there is nothing to say', () => {
+      const { container } = render(<Notice variant="info" />);
+
+      expect(container.textContent).toBe('');
+    });
+  });
+
+  it('glows in the notice tone, except on a note', () => {
+    const glowOf = (variant: 'warning' | 'note') => {
+      const { container, unmount } = render(<Notice variant={variant}>A message</Notice>);
+      const tone = container.querySelector('[data-grain-tone]')?.getAttribute('data-grain-tone') ?? null;
+      unmount();
+      return tone;
+    };
+
+    expect(glowOf('warning')).toBe('warning');
+    expect(glowOf('note')).toBeNull();
   });
 });
