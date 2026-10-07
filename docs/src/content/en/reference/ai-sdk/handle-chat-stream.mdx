@@ -171,14 +171,6 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
     defaultValue: 'false',
   },
   {
-    name: 'sendTraceId',
-    type: 'boolean',
-    description:
-      "Whether to send the run's trace ID as `traceId` in the `start` chunk's message metadata. The value is merged with object metadata returned by `messageMetadata`, which wins on conflicts. Omitted when tracing is disabled.",
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
     name: 'onError',
     type: '(error: unknown) => string',
     description:
@@ -187,9 +179,9 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
   },
   {
     name: 'messageMetadata',
-    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    type: '(options: { part: UIMessageStreamPart; traceId?: string }) => Record<string, unknown> | undefined',
     description:
-      'A function that receives the current stream part and returns metadata to attach to start and finish chunks. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.',
+      "A function that receives the current stream part and returns metadata to attach to start and finish chunks. Also receives the run's `traceId` (undefined when tracing is disabled), so you can return it as metadata, for example `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.",
     isOptional: true,
   },
 ]}

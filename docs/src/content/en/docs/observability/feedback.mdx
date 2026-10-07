@@ -61,7 +61,14 @@ The value is the same trace the run reports as `traceId` on its result, so feedb
 
 ### Read the trace ID in `useChat`
 
-[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) send the run's `traceId` as message metadata when the response starts streaming, so the client has it on the live message without a server lookup:
+[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) pass the run's `traceId` to your `messageMetadata` callback. Return it on the `start` part so the client has it on the live message without a server lookup:
+
+```typescript title="src/mastra/index.ts"
+chatRoute({
+  path: '/chat/:agentId',
+  messageMetadata: ({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined),
+})
+```
 
 ```tsx title="app/chat.tsx"
 const { messages } = useChat<UIMessage<{ traceId?: string }>>()
@@ -70,7 +77,7 @@ const lastMessage = messages.at(-1)
 const traceId = lastMessage?.role === 'assistant' ? lastMessage.metadata?.traceId : undefined
 ```
 
-Send the `traceId` with the user's vote to your own route, then call `addFeedback()` there. Check that the caller owns a message with that `traceId` before adding feedback, because the value comes from the client. Set `sendTraceId: false` to stop sending trace IDs to the browser.
+If you validate metadata with `messageMetadataSchema`, add `traceId: z.string().optional()` to it. Send the `traceId` with the user's vote to your own route, then call `addFeedback()` there. Check that the caller owns a message with that `traceId` before adding feedback, because the value comes from the client.
 
 ## Create feedback
 

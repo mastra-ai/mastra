@@ -12,7 +12,7 @@ import type { UIMessage as UIMessageV7, UIMessageStreamOptions as UIMessageStrea
 import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { ZodObject, ZodType } from 'zod/v4';
-import type { V6UIMessageStream, V7UIMessageStream } from './public-types';
+import type { V6UIMessageStream, V7UIMessageStream, WithTraceId } from './public-types';
 import { applyMastraStreamTransforms } from './smooth-stream';
 import type { MastraStreamTransformOptions } from './smooth-stream';
 import {
@@ -66,8 +66,6 @@ type AgentStreamOptionsBase = {
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  /** When true (default), the run's trace id is sent as `traceId` in the `start` chunk's message metadata. */
-  sendTraceId?: boolean;
   /** When true, sub-agent runs are emitted as data-tool-agent parts with ancestry metadata. */
   includeSubAgentMetadata?: boolean;
   /** Experimental transforms applied to Mastra chunks before AI SDK UI conversion. */
@@ -76,19 +74,19 @@ type AgentStreamOptionsBase = {
 
 type AgentStreamOptionsV5 = AgentStreamOptionsBase & {
   version?: 'v5';
-  messageMetadata?: UIMessageStreamOptionsV5<UIMessageV5>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV5<UIMessageV5>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV5<UIMessageV5>['onError'];
 };
 
 type AgentStreamOptionsV6 = AgentStreamOptionsBase & {
   version: 'v6';
-  messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
 };
 
 type AgentStreamOptionsV7 = AgentStreamOptionsBase & {
   version: 'v7';
-  messageMetadata?: UIMessageStreamOptionsV7<UIMessageV7>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV7<UIMessageV7>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV7<UIMessageV7>['onError'];
 };
 
@@ -168,7 +166,6 @@ export function toAISdkV5Stream(
       sendFinish: options.sendFinish,
       sendReasoning: options.sendReasoning,
       sendSources: options.sendSources,
-      sendTraceId: options.sendTraceId,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
       includeSubAgentMetadata: options.includeSubAgentMetadata,
@@ -298,7 +295,6 @@ export function toAISdkStream(
         sendFinish: options.sendFinish,
         sendReasoning: options.sendReasoning,
         sendSources: options.sendSources,
-        sendTraceId: options.sendTraceId,
         messageMetadata: options.messageMetadata as UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'],
         onError: options.onError as UIMessageStreamOptionsV6<UIMessageV6>['onError'],
         includeSubAgentMetadata: options.includeSubAgentMetadata,
@@ -339,7 +335,6 @@ export function toAISdkStream(
       sendFinish: options.sendFinish,
       sendReasoning: options.sendReasoning,
       sendSources: options.sendSources,
-      sendTraceId: options.sendTraceId,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
       includeSubAgentMetadata: options.includeSubAgentMetadata,

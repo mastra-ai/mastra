@@ -343,11 +343,23 @@ describe('messageMetadata', () => {
       return chunks;
     };
 
-    it.each(['v5', 'v6'] as const)('sends the run traceId as start message metadata (%s)', async version => {
-      const chunks = await collect(
-        toAISdkStream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent', version } as any),
+    it.each(['v5', 'v6'] as const)('passes the run traceId to the messageMetadata callback (%s)', async version => {
+      const messageMetadata = vi.fn(({ part, traceId }: { part: { type: string }; traceId?: string }) =>
+        part.type === 'start' ? { traceId } : undefined,
       );
 
+      const chunks = await collect(
+        toAISdkStream(
+          createTracedStream() as unknown as MastraModelOutput,
+          {
+            from: 'agent',
+            version,
+            messageMetadata,
+          } as any,
+        ),
+      );
+
+      expect(messageMetadata).toHaveBeenCalledWith(expect.objectContaining({ traceId: TRACE_ID }));
       expect(chunks.find(c => c.type === 'start')).toEqual({
         type: 'start',
         messageId: 'msg-1',
@@ -356,23 +368,13 @@ describe('messageMetadata', () => {
       expect(chunks.find(c => c.type === 'finish').messageMetadata).toBeUndefined();
     });
 
-    it('merges traceId with user messageMetadata, letting user fields win', async () => {
+    it('does not add traceId to message metadata on its own', async () => {
       const chunks = await collect(
-        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, {
-          from: 'agent',
-          messageMetadata: ({ part }) => (part.type === 'start' ? { userId: 'u1', traceId: 'override' } : undefined),
-        }),
-      );
-
-      expect(chunks.find(c => c.type === 'start').messageMetadata).toEqual({ userId: 'u1', traceId: 'override' });
-    });
-
-    it('omits traceId when sendTraceId is false', async () => {
-      const chunks = await collect(
-        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent', sendTraceId: false }),
+        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent' }),
       );
 
       expect(chunks.find(c => c.type === 'start')).toEqual({ type: 'start', messageId: 'msg-1' });
+      expect(JSON.stringify(chunks)).not.toContain(TRACE_ID);
     });
   });
 });
