@@ -6,12 +6,14 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
+import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -37,6 +39,7 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
+  sessionsCreatedFor: string[];
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   intakeRequests: number;
@@ -45,6 +48,7 @@ interface SearchRequestState {
 }
 
 interface StubSearchOptions {
+  activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
   failRepositories?: string[];
   failRepositoryAttempts?: Record<string, number>;
@@ -66,6 +70,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
+    sessionsCreatedFor: [],
     created: [],
     transitions: [],
     intakeRequests: 0,
@@ -92,8 +97,22 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, ({ params }) => {
       const factoryProjectId = String(params.factoryProjectId);
       if (factoryProjectId === ACTIVE_FACTORY_ID) {
+        const connections =
+          options.activeRepositories?.map(repository => ({
+            id: `connection-${repository.projectRepositoryId}`,
+            installationId: `installation-${repository.projectRepositoryId}`,
+            integrationId: repository.provider ?? 'github',
+            repositories: [
+              {
+                id: repository.projectRepositoryId,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+                repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
+              },
+            ],
+          })) ?? factoryConnections[ACTIVE_FACTORY_ID];
         return HttpResponse.json({
-          connections: options.activeFactoryHasRepositories === false ? [] : factoryConnections[ACTIVE_FACTORY_ID],
+          connections: options.activeFactoryHasRepositories === false ? [] : connections,
         });
       }
       return HttpResponse.json({ connections: factoryConnections[OTHER_FACTORY_ID] });
@@ -149,16 +168,20 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
       },
     ),
-    http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, async ({ request }) => {
-      state.createSessionRequests += 1;
-      const body = (await request.json()) as { branch?: string };
-      return HttpResponse.json({
-        session: {
-          sessionId: 'session-search',
-          branch: body.branch ?? 'factory/search',
-        },
-      });
-    }),
+    http.post(
+      `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
+      async ({ request, params }) => {
+        state.createSessionRequests += 1;
+        state.sessionsCreatedFor.push(String(params.projectRepositoryId));
+        const body = (await request.json()) as { branch?: string };
+        return HttpResponse.json({
+          session: {
+            sessionId: 'session-search',
+            branch: body.branch ?? 'factory/search',
+          },
+        });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const sessionId = String(params.sessionId);
       const session = Object.values(sessionsByRepository)
@@ -313,6 +336,87 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
+  describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
+    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
+      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
+        const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
+          projectRepositoryId: `${provider}-repo-${index}`,
+          provider,
+          externalId: String(index),
+          slug: `${provider}-org/repo-${index}`,
+        }));
+        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+        const otherRepository: LinkedRepositoryPayload = {
+          projectRepositoryId: 'other-provider-repo',
+          provider: otherProvider,
+          slug: 'other-provider/repo',
+        };
+        const item: WorkItem = {
+          ...workItems[3]!,
+          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
+          board: 'release',
+          stages: ['shipped'],
+          metadata: {},
+        };
+        const requests = stubSearchApi({
+          workItems: [item],
+          activeRepositories: [otherRepository, ...sourceRepositories],
+        });
+        const patches: unknown[] = [];
+        const starts: unknown[] = [];
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+          http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
+            HttpResponse.json({ boards: [releaseBoard] }),
+          ),
+          http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
+          http.get(`${TEST_BASE_URL}/web/gitlab/projects/:projectRepositoryId/prs`, () =>
+            HttpResponse.json({ pullRequests: [], nextPage: null }),
+          ),
+          http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
+            patches.push(await request.json());
+            return HttpResponse.json({ workItem: toWireWorkItem(item) });
+          }),
+          http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+            starts.push(await request.json());
+            return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
+          }),
+        );
+        const user = userEvent.setup();
+        renderSearchRoute(entryPoint === 'board' ? `/factories/${ACTIVE_FACTORY_ID}/boards/release` : undefined);
+        const search = entryPoint === 'search' ? await openFromSidebar() : undefined;
+        const results = search ? within(search) : screen;
+        if (search) await user.click(await results.findByText(item.title));
+        else await user.click(await screen.findByRole('button', { name: 'Start session' }));
+
+        if (count === 0) {
+          expect(
+            await screen.findByText("No repository matching this card's provider is linked to this Factory."),
+          ).toBeInTheDocument();
+          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+          expect(requests.createSessionRequests).toBe(0);
+          expect(patches).toEqual([]);
+          expect(starts).toEqual([]);
+          return;
+        }
+        if (count > 1) {
+          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
+          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
+          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
+            count,
+          );
+          expect(requests.createSessionRequests).toBe(0);
+          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
+        }
+        await waitFor(() => expect(starts).toHaveLength(1));
+        expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
+        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
+        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+        if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
+      });
+    });
+  });
+
   it('opens from the sidebar and Mod+K with the labeled, focused command input', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -663,7 +767,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    expect(within(rail).getByRole('button', { name: 'Work Items 4' })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work Items\s*4$/ })).toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');

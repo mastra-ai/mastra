@@ -313,6 +313,8 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
+For runs configured with `structuredOutput`, an observer in another process reconstructs `output.object` from the persisted schema and replayed text.
+
 ```typescript
 const { output } = await durableAgent.observe(runId, {
   onChunk: chunk => console.log(chunk),

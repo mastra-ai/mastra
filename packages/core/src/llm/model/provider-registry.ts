@@ -710,16 +710,18 @@ function sourceAnswersForModel({ provider, modelId }: ReasoningSource): boolean 
 
 /**
  * The reasoning controls a model accepts: effort values, a token budget, or an on/off toggle.
- * Returns `undefined` when no provider data describes the model. The first source that publishes
- * reasoning data and lists the model answers for it: the provider itself, then a gateway's
- * per-provider data, then the nested or Bedrock vendor's data.
+ * Returns `[]` when the provider data lists the model without reasoning controls, and `undefined`
+ * when no provider data describes the model. The first source that publishes reasoning data and
+ * lists the model answers for it: the provider itself, then a gateway's per-provider data, then
+ * the nested or Bedrock vendor's data.
  */
 export function getModelReasoningOptions(modelRouterId: string): ModelReasoningOption[] | undefined {
   const parsed = parseModelString(modelRouterId);
   if (!parsed.provider) return undefined;
   const provider = PROVIDER_ALIASES[parsed.provider] ?? parsed.provider;
   const answeringSource = reasoningSourcesInPrecedence(provider, parsed.modelId).find(sourceAnswersForModel);
-  return answeringSource && loadReasoningByModel(answeringSource.provider)?.[answeringSource.modelId];
+  if (!answeringSource) return undefined;
+  return loadReasoningByModel(answeringSource.provider)?.[answeringSource.modelId] ?? [];
 }
 
 /** @internal Reset capability caches. For testing only. */

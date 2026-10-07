@@ -11,6 +11,7 @@
     "claude-opus4-8",
     "claude-sonnet-4",
     "claude-sonnet-5",
+    "claude-sonnet-5.5",
     "deepseek-v4.1-flash",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -50,6 +51,7 @@
     "mistral-7b-instruct-v0.2",
     "mistral-large-2402",
     "mistral-large-2512",
+    "mistral-large-4-0",
     "mistral-medium-3.5",
     "mistral-small-2503",
     "mistral-small-2603",
@@ -117,6 +119,7 @@
     "minimax-m2.5",
     "minimax-m3",
     "mistral-large-2512",
+    "mistral-large-4-0",
     "mistral-small-2603",
     "mixtral-8x7B-instruct-v0.1",
     "nova-pro-v1",
@@ -144,6 +147,7 @@
     "claude-opus4-8",
     "claude-sonnet-4",
     "claude-sonnet-5",
+    "claude-sonnet-5.5",
     "codestral-2508",
     "deepseek-v3.2",
     "deepseek-v4-pro-0813",
@@ -192,6 +196,7 @@
     "mistral-7b-instruct-v0.3",
     "mistral-large-2402",
     "mistral-large-2512",
+    "mistral-large-4-0",
     "mistral-medium-3.5",
     "mistral-nemo-instruct-2407",
     "mistral-small-2503",
@@ -351,6 +356,12 @@
         "min": 1024
       }
     ],
+    "claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gpt-oss-20b": [
       {
         "type": "effort",
@@ -449,6 +460,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-large-4-0": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "claude-opus-5.5": [

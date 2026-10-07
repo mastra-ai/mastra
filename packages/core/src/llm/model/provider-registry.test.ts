@@ -278,10 +278,10 @@ describe('getModelReasoningOptions', () => {
     expect(getModelReasoningOptions('openrouter/anthropic/claude-haiku-4.5')).toEqual(gatewayToggle);
   });
 
-  it('does not borrow upstream data for a model the publishing gateway lists without options', () => {
+  it('answers no controls for a model the publishing gateway lists without options, instead of borrowing upstream data', () => {
     expect(GatewayRegistry.getInstance().getModels().openrouter).toContain('openai/gpt-5');
 
-    expect(getModelReasoningOptions('openrouter/openai/gpt-5')).toBeUndefined();
+    expect(getModelReasoningOptions('openrouter/openai/gpt-5')).toEqual([]);
   });
 
   it('falls back to the upstream provider for catalog-only gateways', () => {
@@ -300,9 +300,12 @@ describe('getModelReasoningOptions', () => {
     expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-sonnet-4-5')).toEqual(gatewayToggle);
   });
 
+  it('answers no controls for a model its provider lists without options', () => {
+    expect(getModelReasoningOptions('anthropic/claude-opus-4-6')).toEqual([]);
+  });
+
   it('returns undefined when nothing describes the model', () => {
     expect(getModelReasoningOptions('unknown-provider/some-model')).toBeUndefined();
-    expect(getModelReasoningOptions('anthropic/claude-opus-4-6')).toBeUndefined();
     expect(getModelReasoningOptions('claude-haiku-4-5')).toBeUndefined();
   });
 });

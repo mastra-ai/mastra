@@ -200,6 +200,15 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "gpt-6-luna": [
       {
         "type": "effort",

@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { buildProviderAccess, ConfigRoutes, listProviders } from './config.js';
+import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 vi.mock('@mastra/core/llm', async importOriginal => ({
@@ -210,6 +210,44 @@ describe('listProviders', () => {
   });
 });
 
+describe('listProviders with deployment-provided providers', () => {
+  const controller = makeAgentController([
+    { provider: 'amazon-bedrock', hasApiKey: true },
+    { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+  ]);
+
+  it('omits Bedrock in tenant mode unless the deployment opted in', async () => {
+    const list = await listProviders({ controller, tenantCredentials: [] });
+    expect(list.map(p => p.provider)).toEqual(['anthropic']);
+  });
+
+  it("reports Bedrock as 'deployment' in tenant mode when opted in", async () => {
+    const list = await listProviders({
+      controller,
+      tenantCredentials: [],
+      deploymentProviders: new Set(['amazon-bedrock']),
+    });
+    expect(list.find(p => p.provider === 'amazon-bedrock')).toEqual({
+      provider: 'amazon-bedrock',
+      source: 'deployment',
+    });
+  });
+
+  it('omits Bedrock when opted in but the server has no AWS credentials', async () => {
+    const list = await listProviders({
+      controller: makeAgentController([{ provider: 'amazon-bedrock', hasApiKey: false }]),
+      tenantCredentials: [],
+      deploymentProviders: new Set(['amazon-bedrock']),
+    });
+    expect(list).toEqual([]);
+  });
+
+  it('leaves local mode unchanged', async () => {
+    const list = await listProviders({ controller, authStorage: makeAuthStorage({}) });
+    expect(list.find(p => p.provider === 'amazon-bedrock')?.source).toBe('env');
+  });
+});
+
 describe('buildProviderAccess', () => {
   it('does not expose catalog or environment credentials in tenant mode', async () => {
     const access = await buildProviderAccess({
@@ -256,6 +294,56 @@ describe('buildProviderAccess', () => {
 
     expect(access.cerebras).toBe('apikey');
     expect(access.xai).toBe('apikey');
+  });
+
+  describe('deployment-provided providers', () => {
+    const bedrockCatalog = (hasApiKey: boolean) => makeAgentController([{ provider: 'amazon-bedrock', hasApiKey }]);
+    const bedrockKeyRow = [
+      {
+        provider: 'amazon-bedrock',
+        scope: 'org' as const,
+        credential: { type: 'api_key' as const, key: 'pasted-key' },
+        updatedAt: new Date(),
+      },
+    ];
+
+    it('grants Bedrock in tenant mode when the deployment opted in and has AWS credentials', async () => {
+      const access = await buildProviderAccess({
+        controller: bedrockCatalog(true),
+        tenantCredentials: [],
+        deploymentProviders: new Set(['amazon-bedrock']),
+      });
+      expect(access['amazon-bedrock']).toBe('apikey');
+    });
+
+    it('denies Bedrock in tenant mode without the opt-in, even with a stored tenant key', async () => {
+      const access = await buildProviderAccess({ controller: bedrockCatalog(true), tenantCredentials: bedrockKeyRow });
+      expect(access['amazon-bedrock']).toBe(false);
+    });
+
+    it('denies Bedrock when opted in but the server has no AWS credentials', async () => {
+      const access = await buildProviderAccess({
+        controller: bedrockCatalog(false),
+        tenantCredentials: bedrockKeyRow,
+        deploymentProviders: new Set(['amazon-bedrock']),
+      });
+      expect(access['amazon-bedrock']).toBe(false);
+    });
+
+    it('keeps local mode unchanged: server AWS credentials are enough', async () => {
+      const access = await buildProviderAccess({ controller: bedrockCatalog(true) });
+      expect(access['amazon-bedrock']).toBe('apikey');
+    });
+  });
+});
+
+describe('resolveDeploymentModelProviders', () => {
+  it('keeps supported providers and warns about the rest', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect([...resolveDeploymentModelProviders([' amazon-bedrock', 'openai', ''])]).toEqual(['amazon-bedrock']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"openai"'));
+    expect(resolveDeploymentModelProviders(undefined).size).toBe(0);
+    warn.mockRestore();
   });
 });
 
@@ -306,6 +394,17 @@ describe('provider key routes with a tenant', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+  it('rejects a per-account key for a deployment-provided provider', async () => {
+    const res = await buildApp(userA).request('/web/config/providers/amazon-bedrock/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'bedrock-key', scope: 'org' }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('provider_configured_by_deployment');
+    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock')).toBeUndefined();
+  });
 
   it('stores a user-scoped key by default, invisible to other members', async () => {
     const res = await putKey(buildApp(userA), { key: 'sk-mine' });
@@ -503,6 +602,49 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+        },
+      ],
+    });
+  });
+
+  it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
+    const seed = await createFactoryStorageForTests();
+    const controller = {
+      listAvailableModels: async () => [
+        {
+          id: 'amazon-bedrock/anthropic.claude-x',
+          modelName: 'anthropic.claude-x',
+          provider: 'amazon-bedrock',
+          hasApiKey: true,
+        },
+      ],
+    };
+    const request = async (deploymentProviders?: ReadonlySet<string>) => {
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as any,
+        new ConfigRoutes({
+          auth: fakeRouteAuth(),
+          controller,
+          modelCredentials: seed.credentials,
+          deploymentProviders,
+        }).routes(),
+      );
+      return (await app.request('/web/config/models')).json();
+    };
+
+    expect(await request()).toEqual({ models: [] });
+    expect(await request(new Set(['amazon-bedrock']))).toEqual({
+      models: [
+        {
+          id: 'amazon-bedrock/anthropic.claude-x',
+          provider: 'amazon-bedrock',
+          modelName: 'anthropic.claude-x',
+          hasApiKey: true,
         },
       ],
     });

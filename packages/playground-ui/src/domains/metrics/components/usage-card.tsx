@@ -2,7 +2,6 @@ import { EntityType } from '@mastra/core/observability';
 import { useTokenUsageByAgentMetrics } from '@mastra/react/hooks/metrics';
 import { keepPreviousData } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useDrilldown } from '../hooks/use-drilldown';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { useTokenSpend } from '../hooks/use-token-spend';
 import { CHART_COLORS } from '../lib/chart-colors';
@@ -10,28 +9,39 @@ import { formatCount, formatUsd } from '../lib/chart-format';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
 import { MetricsShareList } from '@/ds/components/MetricsShareList';
-import { useLinkComponent } from '@/lib/framework';
 
 type View = 'agents' | 'models' | 'threads';
-type UsageRow = { key: string; cost: number; tokens: number; href: string };
-type ViewProps = { onViewChange: (view: View) => void };
+type UsageRow = { key: string; cost: number; tokens: number; onClick?: () => void };
+
+export type UsageCardProps = {
+  /** Called from the "View in Traces" button. */
+  onViewTraces?: () => void;
+  /** Called with the agent name of the clicked row in the Agents tab. */
+  onAgentClick?: (agentName: string) => void;
+  /** Called with the model of the clicked row in the Models tab. */
+  onModelClick?: (model: string) => void;
+  /** Called with the thread ID of the clicked row in the Threads tab. */
+  onThreadClick?: (threadId: string) => void;
+};
+type ViewProps = UsageCardProps & { onViewChange: (view: View) => void };
 
 const KEEP = { placeholderData: keepPreviousData };
 const COLUMNS = [{ label: 'Tokens' }];
 
 /** Who is spending: agents, models or threads ranked by cost share, with tokens. Only the open tab loads. */
-export function UsageCard() {
+export function UsageCard(props: UsageCardProps) {
   const [view, setView] = useState<View>('agents');
-  if (view === 'models') return <ModelsUsage onViewChange={setView} />;
-  if (view === 'threads') return <ThreadsUsage onViewChange={setView} />;
-  return <AgentsUsage onViewChange={setView} />;
+  if (view === 'models') return <ModelsUsage {...props} onViewChange={setView} />;
+  if (view === 'threads') return <ThreadsUsage {...props} onViewChange={setView} />;
+  return <AgentsUsage {...props} onViewChange={setView} />;
 }
 
-function AgentsUsage({ onViewChange }: ViewProps) {
-  const { getTracesHref } = useDrilldown();
+function AgentsUsage(props: ViewProps) {
+  const { onAgentClick } = props;
   const {
     data = [],
     isLoading,
@@ -45,12 +55,12 @@ function AgentsUsage({ onViewChange }: ViewProps) {
     key: a.name,
     cost: a.cost ?? 0,
     tokens: a.total,
-    href: getTracesHref({ rootEntityType: EntityType.AGENT, entityName: a.name }),
+    onClick: onAgentClick && (() => onAgentClick(a.name)),
   }));
   return (
     <UsageFrame
       view="agents"
-      onViewChange={onViewChange}
+      {...props}
       rows={rows}
       isLoading={isLoading}
       isUpdating={isPlaceholderData}
@@ -59,14 +69,14 @@ function AgentsUsage({ onViewChange }: ViewProps) {
   );
 }
 
-function ModelsUsage({ onViewChange }: ViewProps) {
-  const { getTracesHref } = useDrilldown();
+function ModelsUsage(props: ViewProps) {
+  const { onModelClick } = props;
   const { data = [], isLoading, isPlaceholderData, isError } = useTokenSpend('model');
-  const rows = data.map(m => ({ ...m, href: getTracesHref({ model: m.key }) }));
+  const rows = data.map(m => ({ ...m, onClick: onModelClick && (() => onModelClick(m.key)) }));
   return (
     <UsageFrame
       view="models"
-      onViewChange={onViewChange}
+      {...props}
       rows={rows}
       isLoading={isLoading}
       isUpdating={isPlaceholderData}
@@ -75,14 +85,14 @@ function ModelsUsage({ onViewChange }: ViewProps) {
   );
 }
 
-function ThreadsUsage({ onViewChange }: ViewProps) {
-  const { getTracesHref } = useDrilldown();
+function ThreadsUsage(props: ViewProps) {
+  const { onThreadClick } = props;
   const { data = [], isLoading, isPlaceholderData, isError } = useTokenSpend('threadId');
-  const rows = data.map(t => ({ ...t, href: getTracesHref({ threadId: t.key }) }));
+  const rows = data.map(t => ({ ...t, onClick: onThreadClick && (() => onThreadClick(t.key)) }));
   return (
     <UsageFrame
       view="threads"
-      onViewChange={onViewChange}
+      {...props}
       rows={rows}
       isLoading={isLoading}
       isUpdating={isPlaceholderData}
@@ -95,13 +105,12 @@ function ThreadsUsage({ onViewChange }: ViewProps) {
 function UsageFrame({
   view,
   onViewChange,
+  onViewTraces,
   rows,
   isLoading,
   isUpdating,
   isError,
 }: ViewProps & { view: View; rows: UsageRow[]; isLoading: boolean; isUpdating: boolean; isError: boolean }) {
-  const { Link } = useLinkComponent();
-  const { getTracesHref } = useDrilldown();
   const tokensOf = new Map(rows.map(r => [r.key, r.tokens]));
   const shareRows: MetricsShareListRow[] = rows.map(r => ({
     key: r.key,
@@ -109,19 +118,14 @@ function UsageFrame({
     share: r.cost,
     value: formatUsd(r.cost),
     cells: [formatCount(r.tokens)],
-    href: r.href,
+    onClick: r.onClick,
   }));
 
-  return (
-    <ChartCard
-      title="Usage"
-      description="Who is spending: cost share, with tokens."
-      summary={{ value: formatUsd(rows.reduce((sum, r) => sum + r.cost, 0)), label: 'cost' }}
-      actions={<OpenInTracesButton href={getTracesHref({})} LinkComponent={Link} />}
-      isLoading={isLoading}
-      isUpdating={isUpdating}
-      isError={isError}
-    >
+  const layout = {
+    title: 'Usage',
+    description: 'Who is spending: cost share, with tokens.',
+    actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsCard.Tabs<View> value={view} onValueChange={onViewChange}>
           <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
@@ -130,7 +134,30 @@ function UsageFrame({
         </MetricsCard.Tabs>
         <MetricsShareList.Header columns={COLUMNS} valueLabel="Cost" />
       </MetricsCard.Toolbar>
-      <ChartArea isError={isError}>
+    ),
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={
+        <MetricsCard.Summary
+          value={formatUsd(rows.reduce((sum, r) => sum + r.cost, 0))}
+          label="cost"
+          isLoading={isLoading}
+        />
+      }
+      isUpdating={isUpdating}
+    >
+      <ChartArea>
         <MetricsShareList
           rows={shareRows}
           columns={COLUMNS}
@@ -142,7 +169,6 @@ function UsageFrame({
             cells: [formatCount(rest.reduce((sum, r) => sum + (tokensOf.get(r.key) ?? 0), 0))],
           })}
           emptyState="No model usage in this range."
-          LinkComponent={Link}
           isLoading={isLoading}
         />
       </ChartArea>

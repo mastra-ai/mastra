@@ -379,8 +379,13 @@ describe('ModelsDevGateway', () => {
                   { type: 'toggle' },
                   { type: 'adaptive_v2', values: ['auto'] },
                   { type: 'effort', values: [] },
+                  { type: 'effort', values: [null] },
                   { type: 'budget_tokens', min: '1024' },
                 ],
+              },
+              'claude-opus-4-7': {
+                reasoning: true,
+                reasoning_options: [{ type: 'effort', values: [null, 'low', 'medium', 'high'] }],
               },
               'claude-haiku-4-5': { reasoning: true, reasoning_options: [] },
               'claude-3-haiku': { reasoning: false },
@@ -400,6 +405,7 @@ describe('ModelsDevGateway', () => {
             { type: 'budget_tokens', min: 1024 },
           ],
           'claude-sonnet-5': [{ type: 'toggle' }],
+          'claude-opus-4-7': [{ type: 'effort', values: ['low', 'medium', 'high'] }],
         },
       });
     });
