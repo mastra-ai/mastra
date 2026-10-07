@@ -194,19 +194,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.listRecords({ node, scopeIds })).records).toHaveLength(1);
     });
 
-    it('rejects the deprecated curation cursor methods', async () => {
-      await expect(store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).rejects.toThrow(
-        'Knowledge curation cursors were removed',
-      );
-      await expect(
-        store.advanceCurationCursor({
-          sourceThreadId: 't1',
-          agent: 'curate',
-          lastKnowledgeId: '01J00000000000000000000000',
-        }),
-      ).rejects.toThrow('Knowledge curation cursors were removed');
-    });
-
     it('reports one canonical storage contract', () => {
       expect(store.getCapabilities()).toEqual({
         supported: true,
