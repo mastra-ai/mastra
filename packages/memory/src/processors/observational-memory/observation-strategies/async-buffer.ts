@@ -59,13 +59,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     // START marker already emitted by the launch chain before strategy runs
   }
 
-  async observe(existingObservations: string, messages: MastraDBMessage[]) {
+  async observe(observerContext: string, messages: MastraDBMessage[], wasTruncated: boolean) {
     const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
-    const result = await this.deps.observer.call(existingObservations, messages, undefined, {
+    const result = await this.deps.observer.call(observerContext, messages, undefined, {
       skipContinuationHints: true,
+      wasTruncated,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
       priorExtractedValues: this.priorExtractedValues,
