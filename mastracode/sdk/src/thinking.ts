@@ -110,6 +110,8 @@ export function runThinkingLevel(
   if (provider === 'anthropic') {
     return runAnthropicThinkingLevel(normalizeAnthropicModelId(bareModelId), level, reasoningOptions);
   }
+  const listedWithoutReasoningControls = reasoningOptions?.length === 0;
+  if (listedWithoutReasoningControls) return 'off';
   if (provider === 'openai') return runOpenAIThinkingLevel(bareModelId, level, reasoningOptions);
   return closestOfferedEffort(level, reasoningOptions) ?? level;
 }

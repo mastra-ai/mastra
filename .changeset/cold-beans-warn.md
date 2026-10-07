@@ -14,3 +14,5 @@ getAvailableThinkingLevelsForModel('openai/gpt-5', options); // ['off', 'low', '
 ```
 
 Fixed GPT-5 requests at Extra high or Max thinking. They sent `xhigh`, an effort models.dev does not list for the model, and now send `high`.
+
+Models that models.dev lists without reasoning controls, such as GPT-4o, now run every level as `off`, so GPT-4o requests no longer carry a reasoning effort. Claude and Gemini models keep the levels their thinking settings send.

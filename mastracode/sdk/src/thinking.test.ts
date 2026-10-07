@@ -98,6 +98,14 @@ describe('thinking model capabilities', () => {
       effort('low', 'high'),
       ['off', 'low', 'high'],
     ],
+    ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
+    ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
+    [
+      'Claude keeps the levels its thinking budget sends when listed without controls',
+      'anthropic/claude-haiku-4-5',
+      [],
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
     [
       'other providers without data keep every level',
       'xai/grok-3-mini',

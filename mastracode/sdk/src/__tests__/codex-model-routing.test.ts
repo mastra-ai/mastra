@@ -49,9 +49,9 @@ describe('getEffectiveThinkingLevel', () => {
     expect(getEffectiveThinkingLevel('gpt-5-pro', 'off')).toBe('high');
   });
 
-  it('preserves requested level for non-GPT-5 models', () => {
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'off')).toBe('off');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'high')).toBe('high');
+  it('keeps off and published efforts for non-GPT-5 reasoning models', () => {
+    expect(getEffectiveThinkingLevel('o3', 'off')).toBe('off');
+    expect(getEffectiveThinkingLevel('o3', 'high')).toBe('high');
   });
 
   it('preserves max for GPT-5.6+ models that support it', () => {
@@ -63,6 +63,5 @@ describe('getEffectiveThinkingLevel', () => {
   it('clamps max to xhigh for models whose effort scale tops out there', () => {
     expect(getEffectiveThinkingLevel('gpt-5.3-codex', 'max')).toBe('xhigh');
     expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'max')).toBe('xhigh');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'max')).toBe('xhigh');
   });
 });
