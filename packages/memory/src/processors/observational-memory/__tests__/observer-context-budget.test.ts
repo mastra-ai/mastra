@@ -10,6 +10,7 @@ import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
+import { buildMultiThreadObserverRequestMessage, buildObserverRequestMessage } from '../observer-agent';
 import { TokenCounter } from '../token-counter';
 
 const threadId = 'budget-thread';
@@ -207,5 +208,48 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     expect(prompts[0]).toContain('Previous observations were truncated for context budget reasons.');
     expect(prompts[0]).toContain('Newest observation line 399');
     expect(prompts[0]).not.toContain('Oldest observation line 0');
+  });
+});
+
+describe('Observer truncation notice', () => {
+  const NOTICE = 'Previous observations were truncated for context budget reasons.';
+  const text = (request: { content: unknown }) => JSON.stringify(request.content);
+
+  // A zero budget passes no previous observations at all; there may be no prior thread metadata either.
+  it.each([
+    ['retained observations', '- Recent retained fact'],
+    ['a zero budget', ''],
+  ])('tells a single-thread Observer about truncation with %s and no prior metadata', (_, context) => {
+    for (const skipContinuationHints of [false, true]) {
+      expect(text(buildObserverRequestMessage(context, [], { wasTruncated: true, skipContinuationHints }))).toContain(
+        NOTICE,
+      );
+    }
+    expect(text(buildObserverRequestMessage(context, [], { wasTruncated: false }))).not.toContain(NOTICE);
+  });
+
+  it.each([
+    ['retained observations', '- Recent retained fact'],
+    ['a zero budget', ''],
+  ])('tells a multi-thread Observer about truncation with %s and no prior metadata', (_, context) => {
+    const request = (wasTruncated: boolean) =>
+      buildMultiThreadObserverRequestMessage(context, new Map(), ['t1', 't2'], undefined, wasTruncated);
+    expect(text(request(true))).toContain(NOTICE);
+    expect(text(request(false))).not.toContain(NOTICE);
+  });
+
+  it('states the notice once when prior metadata is present', () => {
+    const single = text(buildObserverRequestMessage('- fact', [], { wasTruncated: true, priorCurrentTask: 'task' }));
+    const multi = text(
+      buildMultiThreadObserverRequestMessage(
+        '- fact',
+        new Map(),
+        ['t1'],
+        new Map([['t1', { currentTask: 'task' }]]),
+        true,
+      ),
+    );
+    expect(single.split(NOTICE)).toHaveLength(2);
+    expect(multi.split(NOTICE)).toHaveLength(2);
   });
 });

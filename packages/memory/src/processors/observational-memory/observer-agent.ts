@@ -1477,6 +1477,16 @@ function buildMultiThreadObserverTaskInstructions(includeThreadTitle?: boolean):
   return `## Your Task\n\nExtract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, suggested-response${titleInstruction}, in the format specified in your instructions.`;
 }
 
+// Shown whenever the budget cut previous observations, including down to nothing, so the
+// Observer doesn't treat what it sees as everything already recorded.
+function buildTruncationNotice(wasTruncated: boolean | undefined): string {
+  if (!wasTruncated) return '';
+  return (
+    'Previous observations were truncated for context budget reasons.\n' +
+    'The main agent still has full memory context outside this observer window.\n\n'
+  );
+}
+
 function buildMultiThreadObserverContextPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
@@ -1496,7 +1506,8 @@ function buildMultiThreadObserverContextPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  const hasTruncatedObservations = wasTruncated ?? false;
+  prompt += buildTruncationNotice(wasTruncated);
+
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
@@ -1530,10 +1541,6 @@ function buildMultiThreadObserverContextPrompt(
 
   if (threadMetadataLines) {
     prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n`;
-    if (hasTruncatedObservations) {
-      prompt += `Previous observations were truncated for context budget reasons.\n`;
-      prompt += `The main agent still has full memory context outside this observer window.\n`;
-    }
     const titleHint = includeThreadTitle ? ', and thread-title' : '';
     prompt += `Use each thread's prior current-task, suggested-response${titleHint} as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
   }
@@ -1695,7 +1702,8 @@ function buildObserverContextPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  const hasTruncatedObservations = options?.wasTruncated ?? false;
+  prompt += buildTruncationNotice(options?.wasTruncated);
+
   const priorMetadataLines: string[] = [];
   if (options?.priorCurrentTask) {
     priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
@@ -1710,10 +1718,6 @@ function buildObserverContextPrompt(
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
-    if (hasTruncatedObservations) {
-      prompt += `Previous observations were truncated for context budget reasons.\n`;
-      prompt += `The main agent still has full memory context outside this observer window.\n`;
-    }
     const titleHint = options?.includeThreadTitle ? ', and thread-title' : '';
     prompt += `Use the prior current-task, suggested-response${titleHint} as continuity hints, then update them based on the new messages.\n\n---\n\n`;
   }
