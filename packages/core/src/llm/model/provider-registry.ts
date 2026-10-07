@@ -9,7 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Provider, ModelForProvider, ModelRouterModelId } from '../index.js';
 import { getCapabilityFileName } from './capability-file.js';
-import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
+import type { ProviderCapabilityFile } from './capability-file.js';
+import type { ModelReasoningOption, ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
@@ -21,7 +22,7 @@ import type { ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
-export type { AttachmentCapabilities } from './gateways/base.js';
+export type { AttachmentCapabilities, ModelReasoningOption } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
@@ -441,13 +442,7 @@ export function getRegisteredProviders(): string[] {
 // Provider capabilities (per-model attachment / modality metadata)
 // ---------------------------------------------------------------------------
 
-interface ProviderCapabilityFile {
-  attachment?: string[];
-  temperature?: string[];
-  structuredOutput?: string[];
-}
-
-type CapabilityDimension = keyof ProviderCapabilityFile;
+type CapabilityDimension = 'attachment' | 'temperature' | 'structuredOutput';
 
 const providerCapCaches: Record<CapabilityDimension, Map<string, string[] | null>> = {
   attachment: new Map(),
@@ -680,6 +675,42 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   return directSupport;
 }
 
+function loadReasoningByModel(provider: string): Record<string, ModelReasoningOption[]> | undefined {
+  const useDynamicLoading = GatewayRegistry.getInstance()['useDynamicLoading'];
+  return loadProviderCapabilityFile(provider, useDynamicLoading)?.reasoning;
+}
+
+function splitNestedModelId(modelId: string): { provider: string; modelId: string } | undefined {
+  const delimiter = modelId.indexOf('/');
+  if (delimiter <= 0 || delimiter === modelId.length - 1) return undefined;
+  return { provider: modelId.substring(0, delimiter), modelId: modelId.substring(delimiter + 1) };
+}
+
+/**
+ * The reasoning controls a model accepts: effort values, a token budget, or an on/off toggle.
+ * Returns `undefined` when no provider data describes the model. A gateway that publishes
+ * reasoning data and lists the model answers for it; otherwise the nested or Bedrock vendor's
+ * data is used.
+ */
+export function getModelReasoningOptions(modelRouterId: string): ModelReasoningOption[] | undefined {
+  const parsed = parseModelString(modelRouterId);
+  if (!parsed.provider) return undefined;
+  const provider = PROVIDER_ALIASES[parsed.provider] ?? parsed.provider;
+
+  if (provider === 'aws-bedrock') {
+    const { vendor, shortId } = resolveBedrockVendorModel(parsed.modelId);
+    return loadReasoningByModel(provider)?.[shortId] ?? (vendor ? loadReasoningByModel(vendor)?.[shortId] : undefined);
+  }
+
+  const reasoningByModel = loadReasoningByModel(provider);
+  const directOptions = reasoningByModel?.[parsed.modelId];
+  const gatewayAnswers = reasoningByModel !== undefined && providerListsModel(provider, parsed.modelId);
+  if (directOptions || gatewayAnswers) return directOptions;
+
+  const nested = splitNestedModelId(parsed.modelId);
+  return nested ? loadReasoningByModel(nested.provider)?.[nested.modelId] : undefined;
+}
+
 /** @internal Reset capability caches. For testing only. */
 export function _resetCapabilityCaches(): void {
   for (const cache of Object.values(providerCapCaches)) cache.clear();
@@ -830,6 +861,7 @@ export class GatewayRegistry {
         attachmentCapabilities,
         temperatureCapabilities,
         structuredOutputCapabilities,
+        reasoningCapabilities,
         failedGateways,
       } = await fetchProvidersFromGateways(gateways);
 
@@ -856,6 +888,7 @@ export class GatewayRegistry {
           attachmentCapabilities,
           temperatureCapabilities,
           structuredOutputCapabilities,
+          reasoningCapabilities,
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
@@ -874,6 +907,7 @@ export class GatewayRegistry {
         attachmentCapabilities,
         temperatureCapabilities,
         structuredOutputCapabilities,
+        reasoningCapabilities,
       );
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 

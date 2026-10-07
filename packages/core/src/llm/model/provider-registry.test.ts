@@ -8,6 +8,7 @@ import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import {
   GatewayRegistry,
+  getModelReasoningOptions,
   modelSupportsAttachments,
   modelSupportsStructuredOutput,
   modelSupportsTemperature,
@@ -235,6 +236,43 @@ describe('modelSupportsStructuredOutput', () => {
 
   it('uses underlying provider data for nested gateway routes without a route override', () => {
     expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(true);
+  });
+});
+
+describe('getModelReasoningOptions', () => {
+  afterEach(() => {
+    _resetCapabilityCaches();
+  });
+
+  it('returns the controls the provider publishes for the model', () => {
+    expect(getModelReasoningOptions('anthropic/claude-haiku-4-5-20251001')).toEqual([
+      { type: 'budget_tokens', min: 1024 },
+    ]);
+    expect(getModelReasoningOptions('anthropic/claude-opus-4-6')).toEqual([
+      { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+      { type: 'budget_tokens', min: 1024 },
+    ]);
+  });
+
+  it('answers with the gateway data when the gateway publishes it, not the upstream provider', () => {
+    expect(getModelReasoningOptions('openrouter/anthropic/claude-haiku-4.5')).toEqual([{ type: 'toggle' }]);
+  });
+
+  it('falls back to the upstream provider for catalog-only gateways', () => {
+    expect(getModelReasoningOptions('netlify/openai/gpt-5')).toEqual(getModelReasoningOptions('openai/gpt-5'));
+    expect(getModelReasoningOptions('openai/gpt-5')).toBeDefined();
+  });
+
+  it('uses the vendor data for Bedrock-hosted models', () => {
+    expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-opus-4-6')).toEqual(
+      getModelReasoningOptions('anthropic/claude-opus-4-6'),
+    );
+  });
+
+  it('returns undefined when nothing describes the model', () => {
+    expect(getModelReasoningOptions('unknown-provider/some-model')).toBeUndefined();
+    expect(getModelReasoningOptions('anthropic/not-a-real-model')).toBeUndefined();
+    expect(getModelReasoningOptions('claude-opus-4-6')).toBeUndefined();
   });
 });
 
