@@ -1,10 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -134,71 +137,50 @@ export function AgentEditSidebar({
             <div className="flex flex-col gap-4 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
-              <TextFieldBlock
-                label="Name"
-                required
-                placeholder="My Agent"
-                {...register('name')}
-                errorMsg={errors.name?.message}
-                disabled={readOnly}
-              />
+              <Field invalid={Boolean(errors.name)} disabled={readOnly}>
+                <FieldLabel required>Name</FieldLabel>
+                <Input placeholder="My Agent" required {...register('name')} />
+                <FieldError>{errors.name?.message}</FieldError>
+              </Field>
 
-              <TextareaFieldBlock
-                label="Description"
-                placeholder="Describe what this agent does"
-                {...register('description')}
-                errorMsg={errors.description?.message}
-                disabled={readOnly}
-              />
+              <Field invalid={Boolean(errors.description)} disabled={readOnly}>
+                <FieldLabel>Description</FieldLabel>
+                <Textarea placeholder="Describe what this agent does" {...register('description')} />
+                <FieldError>{errors.description?.message}</FieldError>
+              </Field>
 
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-provider" required>
-                    Provider
-                  </FieldBlock.Label>
-                  <Controller
-                    name="model.provider"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMProviders
-                          id="input-model-provider"
-                          name="model-provider"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          container={formRef}
-                          error={errors.model?.provider?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+              <Field invalid={Boolean(errors.model?.provider?.message)}>
+                <FieldLabel required>Provider</FieldLabel>
+                <Controller
+                  name="model.provider"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.provider?.message}</FieldError>
+              </Field>
 
-              <FieldBlock.Layout>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name="model-name" required>
-                    Model
-                  </FieldBlock.Label>
-                  <Controller
-                    name="model.name"
-                    control={control}
-                    render={({ field }) => (
-                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                        <LLMModels
-                          id="input-model-name"
-                          name="model-name"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          llmId={form.watch('model.provider') || ''}
-                          container={formRef}
-                          error={errors.model?.name?.message}
-                        />
-                      </div>
-                    )}
-                  />
-                </FieldBlock.Column>
-              </FieldBlock.Layout>
+              <Field invalid={Boolean(errors.model?.name?.message)}>
+                <FieldLabel required>Model</FieldLabel>
+                <Controller
+                  name="model.name"
+                  control={control}
+                  render={({ field }) => (
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMModels
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        llmId={form.watch('model.provider') || ''}
+                        container={formRef}
+                      />
+                    </div>
+                  )}
+                />
+                <FieldError>{errors.model?.name?.message}</FieldError>
+              </Field>
             </div>
           </ScrollArea>
         </TabContent>
@@ -234,7 +216,7 @@ export function AgentEditSidebar({
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
                     agent's instructions with the{' '}
-                    <code className="font-medium text-warning-indicator">{'{{variableName}}'}</code> syntax.
+                    <InlineCode className="text-label text-warning-foreground">{'{{variableName}}'}</InlineCode> syntax.
                   </>
                 }
               />
@@ -260,7 +242,6 @@ export function AgentEditSidebar({
         </TabContent>
       </Tabs>
 
-      {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
         <div className="shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">

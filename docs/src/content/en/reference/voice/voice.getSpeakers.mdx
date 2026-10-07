@@ -43,7 +43,11 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId })
 
 ## Parameters
 
-This method doesn't accept any parameters.
+Most providers accept no parameters. Google accepts an optional `languageCode` filter that passes through to the provider's voice listing:
+
+```typescript
+const speakers = await googleVoice.getSpeakers({ languageCode: 'en-US' })
+```
 
 ## Return value
 
@@ -95,11 +99,6 @@ Different voice providers return different metadata for their voices:
     type: 'string',
     description: 'Unique identifier for the voice',
   },
-  {
-    name: 'language',
-    type: 'string',
-    description: "Language code embedded in the voice ID (e.g., 'en')",
-  },
 ]}
     />
   </TabItem>
@@ -118,9 +117,14 @@ Different voice providers return different metadata for their voices:
     description: 'Human-readable name of the voice',
   },
   {
-    name: 'category',
+    name: 'language',
     type: 'string',
-    description: "Category of the voice (e.g., 'premade', 'cloned')",
+    description: "Language from the voice labels (e.g., 'en'), defaulting to 'en'",
+  },
+  {
+    name: 'gender',
+    type: 'string',
+    description: "Gender from the voice labels (e.g., 'female'), defaulting to 'neutral'",
   },
 ]}
     />
@@ -240,12 +244,7 @@ Different voice providers return different metadata for their voices:
   {
     name: 'name',
     type: 'string',
-    description: 'Human-readable name of the voice',
-  },
-  {
-    name: 'language',
-    type: 'string',
-    description: "Language code of the voice (e.g., 'en-US')",
+    description: 'Name of the voice, matching the voice ID',
   },
 ]}
     />
@@ -258,21 +257,6 @@ Different voice providers return different metadata for their voices:
     name: 'voiceId',
     type: 'string',
     description: 'Unique identifier for the voice',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name of the voice',
-  },
-  {
-    name: 'language',
-    type: 'string',
-    description: "Language of the voice (e.g., 'english', 'hindi')",
-  },
-  {
-    name: 'gender',
-    type: 'string',
-    description: "Gender of the voice ('male' or 'female')",
   },
 ]}
     />

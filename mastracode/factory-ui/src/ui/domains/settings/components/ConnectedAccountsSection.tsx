@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronRight, InfoIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -21,7 +22,7 @@ export function SlackNotConfigured() {
               <Txt as="span" variant="body">
                 Slack
               </Txt>
-              <Txt as="span" variant="caption" className="text-muted-foreground whitespace-nowrap">
+              <Txt tone="muted" as="span" variant="caption" className="whitespace-nowrap">
                 Not configured
               </Txt>
             </span>
@@ -29,9 +30,10 @@ export function SlackNotConfigured() {
         }
       >
         <Txt
+          tone="muted"
           as="span"
           variant="caption"
-          className="text-muted-foreground flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
+          className="flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
         >
           <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
           Slack is not set up for this factory.
@@ -58,7 +60,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-indicator">
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );
@@ -76,9 +78,10 @@ export function ConnectedAccountsSection() {
           Slack
         </Txt>
         <Txt
+          tone="muted"
           as="span"
           variant="caption"
-          className={slackAccounts.length > 0 ? 'text-success-indicator' : 'text-muted-foreground'}
+          className={slackAccounts.length > 0 ? 'text-success-indicator' : ''}
         >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`
@@ -95,7 +98,7 @@ export function ConnectedAccountsSection() {
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-fill focus-visible:ring-border-focus block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+          className={`group hover:bg-fill block cursor-pointer rounded-xl transition-colors ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
             <Txt
@@ -114,7 +117,7 @@ export function ConnectedAccountsSection() {
           type="button"
           disabled={!canConnect}
           onClick={connectSlack}
-          className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
             <Txt

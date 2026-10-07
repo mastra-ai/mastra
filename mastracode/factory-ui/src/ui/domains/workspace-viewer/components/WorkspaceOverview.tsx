@@ -52,10 +52,10 @@ export function WorkspaceOverview({
     changes.additions !== undefined &&
     changes.deletions !== undefined;
   const changesStatus = hasChangeStats ? (
-    <span className="flex items-center gap-1 font-mono tabular-nums">
+    <Txt as="span" variant="body-sm" className="flex items-center gap-1 tabular-nums">
       <span className="text-success-indicator">+{changes.additions}</span>
-      <span className="text-destructive-indicator">−{changes.deletions}</span>
-    </span>
+      <span className="text-destructive-foreground">−{changes.deletions}</span>
+    </Txt>
   ) : (
     <span className="text-muted-foreground">{changesLabel}</span>
   );

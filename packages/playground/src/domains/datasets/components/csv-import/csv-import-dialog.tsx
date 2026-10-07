@@ -14,8 +14,8 @@ import {
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset } from '@mastra/react/hooks/datasets';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -63,7 +63,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   const { parseFile, isParsing, error: parseError } = useCSVParser();
   const { batchInsertItems } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   const columnMapping = useColumnMapping(parsedCSV?.headers ?? []);
 
@@ -302,7 +302,9 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <>
-            <div className="text-body text-muted-foreground">Preview of your CSV data. Click Next to map columns.</div>
+            <Txt as="p" variant="body" tone="muted">
+              Preview of your CSV data. Click Next to map columns.
+            </Txt>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </>
         ) : null;
@@ -319,7 +321,9 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {validationErrors.length > 0 && <ValidationSummary errors={validationErrors} />}
 
             <div className="border-t border-border pt-4">
-              <div className="mb-2 text-caption text-muted-foreground">Data Preview</div>
+              <Txt as="p" variant="caption" tone="muted" className="mb-2">
+                Data Preview
+              </Txt>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </>
@@ -328,19 +332,21 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <>
-            <div className="text-body text-muted-foreground">
+            <Txt as="p" variant="body" tone="muted">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
-            </div>
+            </Txt>
 
             {schemaValidation.invalidCount > 0 ? (
               <div className="rounded-md border border-warning-edge bg-warning-subtle p-3">
-                <div className="flex items-center gap-2 font-medium text-warning-subtle-foreground">
+                <div className="flex items-center gap-2 text-warning-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ⚠
                   </Txt>
-                  {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
+                  <Txt as="span" variant="label" className="block">
+                    {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
+                  </Txt>
                 </div>
                 <Txt tone="muted" className="mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
@@ -348,11 +354,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               </div>
             ) : (
               <div className="rounded-md border border-success-edge bg-success-subtle p-3">
-                <div className="flex items-center gap-2 font-medium text-success-subtle-foreground">
+                <div className="flex items-center gap-2 text-success-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ✓
                   </Txt>
-                  All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
+                  <Txt as="span" variant="label" className="block">
+                    All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
+                  </Txt>
                 </div>
               </div>
             )}
@@ -374,10 +382,12 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <div className="text-heading text-placeholder">Importing items...</div>
-              <div className="mt-1 text-body text-muted-foreground">
+              <Txt as="p" variant="heading" tone="faint">
+                Importing items...
+              </Txt>
+              <Txt as="p" variant="body" tone="muted" className="mt-1">
                 {importProgress.current} of {importProgress.total}
-              </div>
+              </Txt>
             </div>
           </div>
         );
@@ -385,18 +395,22 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'complete':
         return (
           <div className="flex flex-col items-center gap-4 py-5">
-            <div className="text-display">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
+            <Txt as="p" variant="display">
+              {importResult && importResult.errors === 0 ? '✓' : '⚠'}
+            </Txt>
             <div className="text-center">
-              <div className="text-heading text-placeholder">Import Complete</div>
-              <div className="mt-1 text-body text-muted-foreground">
+              <Txt as="p" variant="heading" tone="faint">
+                Import Complete
+              </Txt>
+              <Txt as="p" variant="body" tone="muted" className="mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
-                  <span className="text-destructive-indicator">
+                  <span className="text-destructive-foreground">
                     {' '}
                     ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
                   </span>
                 )}
-              </div>
+              </Txt>
             </div>
           </div>
         );

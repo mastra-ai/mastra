@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -145,7 +145,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
   );
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/${kind}${initialSearch}`]}>
-      <MainSidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Location />
           <Routes>
@@ -155,7 +155,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
             </Route>
           </Routes>
         </OverlaysProvider>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -164,6 +164,9 @@ const candidateTitles = () => screen.queryAllByTestId('candidate-card').map(card
 
 const input = () => screen.getByRole('combobox', { name: 'Add filter' });
 async function selectField(name: string) {
+  if (!screen.queryByRole('combobox', { name: 'Add filter' })) {
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+  }
   input().focus();
   fireEvent.change(input(), { target: { value: name } });
   await screen.findByRole('option', { name: new RegExp(`^${name}$`, 'i') });
@@ -172,9 +175,7 @@ async function selectField(name: string) {
 }
 
 async function selectTeammate() {
-  await selectField('Teammate');
-  await screen.findByRole('option', { name: /alice/i });
-  fireEvent.keyDown(input(), { key: 'Enter' });
+  await selectMany('Teammate', [/alice/i]);
 }
 
 async function selectMany(name: string, options: RegExp[]) {
@@ -241,6 +242,7 @@ describe('BoardPage filters', () => {
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).not.toContain('Issue 11');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Relevant because filter' }));
     expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance=');
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();

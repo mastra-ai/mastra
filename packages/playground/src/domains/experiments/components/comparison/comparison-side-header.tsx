@@ -69,7 +69,7 @@ export function ComparisonSideHeader({
       </div>
 
       {experiment && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
           {experiment.name && (
             <TextAndIcon>
               <HashIcon /> {shortId}
@@ -85,7 +85,7 @@ export function ComparisonSideHeader({
               <TargetIcon /> {experiment.targetId}
             </TextAndIcon>
           )}
-          <TextAndIcon className={cn(versionMismatch && 'text-warning-indicator')}>
+          <TextAndIcon className={cn(versionMismatch && 'text-warning-foreground')}>
             <LayersIcon /> v{experiment.datasetVersion ?? '—'}
             {versionMismatch && ' · different dataset version'}
           </TextAndIcon>

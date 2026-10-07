@@ -6,7 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 
 const sectionAccentIcon = {
-  amber: 'text-badge-yellow-indicator',
+  amber: 'text-badge-amber-indicator',
   blue: 'text-badge-blue-indicator',
   cyan: 'text-badge-cyan-indicator',
   green: 'text-badge-green-indicator',
@@ -43,21 +43,23 @@ export const AgentMetadataSection = ({
     <section className="group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4">
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Txt as="h3" variant="label" tone="ink" className="flex min-w-0 items-center gap-2">
+          <h3 className="flex min-w-0 items-center gap-2 text-foreground">
             {icon && (
               <Icon aria-hidden="true" className={cn('shrink-0', sectionAccentIcon[accent])}>
                 {icon}
               </Icon>
             )}
             <span className="flex min-w-0 items-center gap-1.5">
-              <span>{title}</span>
+              <Txt as="span" variant="label">
+                {title}
+              </Txt>
               {count !== undefined && count > 0 && (
                 <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
                 </Txt>
               )}
             </span>
-          </Txt>
+          </h3>
           {hint && (
             <TooltipProvider>
               <Tooltip>

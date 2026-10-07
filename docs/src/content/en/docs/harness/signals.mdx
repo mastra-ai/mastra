@@ -11,12 +11,6 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
@@ -364,7 +358,7 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 ## Cross-agent connections in Mastra Code
 
-Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available. It doesn't affect the pub/sub transport itself.
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
 
 ```typescript
 import { createMastraCode } from 'mastracode'
@@ -400,6 +394,20 @@ Use the connection tools for distinct operations:
 Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
 After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
+
+### Discover agents in other projects
+
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub. The Mastra Code CLI turns it on by default. Embedded clients pass `unixSocketPubSub: true` alongside `crossAgentSignals: true` to `createMastraCode()`. It doesn't apply in these cases:
+
+- On Windows.
+- When you pass your own `pubsub`.
+- When the resource ID, set through `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`, can't be used as a directory name. That covers IDs that are empty, are longer than 128 characters, contain `/`, `\` or control characters, or equal `.`, `..` or `_shared`. Mastra Code logs one warning at startup, and the instance only lists instances that share its resource ID.
+
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `/tmp/mc/_shared` directory. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
+
+Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
+
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
 ## Distributed and serverless deployments
 

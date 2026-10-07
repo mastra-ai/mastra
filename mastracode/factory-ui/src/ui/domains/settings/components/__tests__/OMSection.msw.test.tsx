@@ -84,7 +84,7 @@ describe('OMSection', () => {
     expect(screen.getByDisplayValue('2000')).toBeInTheDocument();
     expect(screen.getByText('Observer model')).toBeInTheDocument();
     expect(screen.getByText('Reflector model')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: 'Auto' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('updates an observation threshold and reflects the server response', async () => {
@@ -144,9 +144,9 @@ describe('OMSection', () => {
     renderWithProviders(<OMSection models={models} />);
 
     await screen.findByDisplayValue('1000');
-    await user.click(screen.getByRole('button', { name: 'On' }));
+    await user.click(screen.getByRole('radio', { name: 'On' }));
 
     await waitFor(() => expect(requestBody).toEqual({ value: true }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true'));
   });
 });

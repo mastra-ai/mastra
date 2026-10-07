@@ -19,12 +19,12 @@ export const RAIL_MARK_TONE: Record<BadgeVariant, string> = {
   neutral: 'text-muted-foreground',
   green: 'text-badge-green-indicator',
   red: 'text-badge-red-indicator',
-  yellow: 'text-badge-yellow-indicator',
+  amber: 'text-badge-amber-indicator',
   blue: 'text-badge-blue-indicator',
   success: 'text-success-indicator',
-  destructive: 'text-destructive-indicator',
+  destructive: 'text-destructive-foreground',
   info: 'text-info-indicator',
-  warning: 'text-warning-indicator',
+  warning: 'text-warning-foreground',
   purple: 'text-badge-purple-indicator',
   orange: 'text-badge-orange-indicator',
   cyan: 'text-badge-cyan-indicator',
@@ -35,7 +35,7 @@ export function DayHeading({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <span aria-hidden className="bg-border h-px flex-1" />
-      <Txt as="h3" variant="meta" className="text-muted-foreground m-0 tracking-wider uppercase">
+      <Txt tone="muted" as="h3" variant="meta" className="m-0 uppercase">
         {children}
       </Txt>
       <span aria-hidden className="bg-border h-px flex-1" />

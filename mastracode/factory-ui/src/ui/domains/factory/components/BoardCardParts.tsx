@@ -3,16 +3,25 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import type { BoardCardStatus } from '../boardCardStatus';
-import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
+import type { BoardCardStatus } from '../boardCardState';
+import {
+  HIDDEN_CARD_LABELS,
+  SOURCE_LABELS,
+  metadataLabelColors,
+  metadataLabels,
+  pullRequestStatusForItem,
+} from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import type { WorkItemSource } from '../services/workItems';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { WorkItem, WorkItemSource } from '../services/workItems';
+import { SourceIcon } from './BoardIcons';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -21,6 +30,11 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
       <span id={id}>{title}</span>
     </>
   );
+}
+
+export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
+  if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
+  return <SourceIcon source={item.source} />;
 }
 
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
@@ -36,15 +50,19 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// Beside the card's menu, in the slot where the open copy puts Collapse; the click falls through to the card.
-export function CardDetailsHint() {
+// A mouse twin of the card's own details button, which keeps the keyboard and screen-reader path.
+export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   return (
-    <span
+    <button
+      type="button"
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      tabIndex={-1}
+      draggable={false}
+      onClick={onOpen}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
-    </span>
+    </button>
   );
 }
 
@@ -92,9 +110,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-destructive-indicator flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined &&
-          'focus-visible:outline-border-focus relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+        'text-destructive-foreground flex w-full min-w-0 items-start gap-1.5',
+        status.detail !== undefined && [
+          'relative cursor-help underline decoration-dotted underline-offset-2',
+          focusRing,
+        ],
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
@@ -117,22 +137,17 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 function labelDotClass(label: string): string {
   const normalized = label.toLowerCase();
   if (normalized.includes('bug') || normalized.includes('error')) return 'bg-badge-red-indicator';
-  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-badge-yellow-indicator';
+  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-badge-amber-indicator';
   if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-badge-green-indicator';
   if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-badge-blue-indicator';
-  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-badge-yellow-indicator';
+  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-badge-amber-indicator';
   return 'bg-muted-foreground';
 }
 
-export function CardLabels({
-  labels,
-  colors = {},
-}: {
-  labels: readonly string[];
-  colors?: Readonly<Record<string, string>>;
-}) {
-  const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
+  const displayLabels = metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
+  const colors = metadataLabelColors(metadata);
   return (
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">

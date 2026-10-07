@@ -440,7 +440,7 @@ mastra deploy --env staging --yes
 
 Manages environments on Mastra platform. Environments are deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. The current organization is resolved from stored credentials.
 
-Every subcommand resolves its project in a fixed order. It first checks the `MASTRA_PROJECT_ID` environment variable and the `--project <name|slug|id>` flag. It then reads the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
+Every subcommand resolves its project in a fixed order. It first checks the `--project <name|slug|id>` flag, then the `MASTRA_PROJECT_ID` environment variable. It then reads the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
 
 ### `mastra env list`
 
@@ -551,15 +551,16 @@ mastra env db create --kind turso                                    # picks or 
 mastra env db create staging --kind turso                            # scoped to the "staging" environment
 mastra env db create --kind turso --shared                           # shared by all environments
 mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
+mastra env db create production --kind postgres                      # VPC-isolated Postgres, private to the environment
 ```
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon` (public serverless Postgres), or `postgres` (VPC-isolated Postgres that runs on the same private network as the deployed environment).
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-pg`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso`, `my-app-pg` for Neon, or `my-app-postgres` for VPC Postgres).
 
 #### `--region`
 
@@ -809,7 +810,7 @@ Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
 
 #### `--project`
 
-Project ID or slug when `MASTRA_PROJECT_ID` isn't set. Slugs are resolved against projects in the current organization.
+Project ID or slug. Takes precedence over `MASTRA_PROJECT_ID`. Slugs are resolved against projects in the current organization.
 
 #### `-c, --config`
 
@@ -877,7 +878,7 @@ The file defaults to `.env` when no argument is given. All values are double-quo
 
 #### `--project`
 
-Project ID or slug. Overrides the linked project when `MASTRA_PROJECT_ID` isn't set.
+Project ID or slug. Takes precedence over `MASTRA_PROJECT_ID` and the linked project.
 
 #### CI usage
 
@@ -931,6 +932,44 @@ Revokes an API token.
 ```bash
 mastra auth tokens revoke <token-id>
 ```
+
+## `mastra connect`
+
+Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
+
+The target project resolves from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <name|slug|id>`.
+
+### `mastra connect list`
+
+Lists the available providers. Providers already connected to the project are shown in green, and unconnected providers are shown in grey.
+
+```bash
+mastra connect list
+```
+
+### `mastra connect add`
+
+Connects a provider to the project. When the organization already has connections for the provider that aren't attached to the project, the command lists them and lets you attach an existing connection or create a new one. With no existing connections it goes straight to the provider's auth flow.
+
+OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+
+Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming.
+
+```bash
+mastra connect add <provider>
+```
+
+Pass `--yes` to skip all prompts. This always creates a new connection without a display name, even when existing connections could be reused.
+
+### `mastra connect remove`
+
+Unlinks a provider's connection from the project. The organization-level connection is kept and can be re-attached later.
+
+```bash
+mastra connect remove <provider>
+```
+
+When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation. Without a terminal, or with `--yes`, removing several connections at once requires `--all`, and `--connection <id>` removes a single one.
 
 ## `mastra lint`
 
@@ -1099,7 +1138,7 @@ See [Import existing traces](/docs/mastra-platform/observability#import-existing
 
 #### `--project <name|slug|id>`
 
-Selects the destination Mastra Platform project. `MASTRA_PROJECT_ID` takes precedence when set. Without either value, the command uses the project linked in `.mastra-project.json`.
+Selects the destination Mastra Platform project. Takes precedence over `MASTRA_PROJECT_ID`. Without either value, the command uses the project linked in `.mastra-project.json`.
 
 #### `--from <date>`
 
@@ -1135,7 +1174,7 @@ The command loads `.env` and `.env.local` from the current directory.
 | `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
 | `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
-| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. The `--project` flag takes precedence over it. |
 
 ### Examples
 

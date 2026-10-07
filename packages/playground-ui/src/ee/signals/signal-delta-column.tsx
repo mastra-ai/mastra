@@ -45,9 +45,8 @@ export function SignalDeltaColumn({
     <section aria-label={`${label} changes`} className="min-w-0">
       <Txt
         as="h3"
-        variant="column"
-        font="mono"
-        className="tracking-widest uppercase"
+        variant="eyebrow"
+
         style={{ color: getSignalColor(signalName) }}
       >
         <Tooltip>
@@ -59,7 +58,11 @@ export function SignalDeltaColumn({
       </Txt>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? (
-          <li className="text-caption text-muted-foreground">No themes in either snapshot.</li>
+          <li className="text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              No themes in either snapshot.
+            </Txt>
+          </li>
         ) : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;
@@ -69,11 +72,11 @@ export function SignalDeltaColumn({
                 <Txt as="span" variant="column" tone="ink" className="truncate" title={delta.label}>
                   {delta.label}
                 </Txt>
-                <Txt as="span" variant="column" tone="ink" font="mono" className="shrink-0 tabular-nums">
+                <Txt as="span" variant="column" tone="ink" className="shrink-0 tabular-nums">
                   {deltaLabel(delta.delta)}
                 </Txt>
               </div>
-              <Txt variant="caption" tone="muted" font="mono" className="tabular-nums">
+              <Txt variant="caption" tone="muted" className="tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
               </Txt>
               <ThemeCompareSparkline

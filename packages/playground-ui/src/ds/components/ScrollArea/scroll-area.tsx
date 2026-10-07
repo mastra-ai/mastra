@@ -2,7 +2,7 @@ import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { mergeRefs } from '@/lib/merge-refs';
@@ -142,7 +142,7 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
         'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent hover:bg-fill-subtle active:bg-fill',
         quietTextHover,
         controlStateColorTransition,
-        'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid',
+        focusRing,
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'
           : 'right-1 group-data-[overflow-x-end]/scroll-area:flex',
@@ -354,6 +354,7 @@ function ScrollBar({
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
         'flex touch-none transition-opacity duration-normal ease-out-custom select-none',

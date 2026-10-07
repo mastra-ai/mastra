@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, listScoresArgsSchema, TABLE_SCORERS } from '@mastra/core/storage';
 import type {
@@ -223,7 +221,7 @@ function transformObservabilityScoreRow(row: ScoreRow): ScoreRecord {
 }
 
 function scoreRecordToTableRecord(score: ScoreRecord): Record<string, unknown> {
-  const id = score.scoreId ?? randomUUID();
+  const id = score.scoreId ?? globalThis.crypto.randomUUID();
   const timestamp = score.timestamp instanceof Date ? score.timestamp : new Date(score.timestamp ?? Date.now());
   const source = score.scoreSource ?? score.source ?? 'observability';
   // Filter out undefined contextual fields BEFORE merging over score.metadata.

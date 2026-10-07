@@ -263,7 +263,7 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
-  it('rejects duplicate installed board ids at construction time', () => {
+  it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
         new MastraFactory({
@@ -271,7 +271,19 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("board id 'work' is reserved for a built-in board");
+    ).toThrow("duplicate board id 'work'");
+  });
+
+  it('allows replacing a built-in board when default boards are disabled', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          includeDefaultBoards: false,
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).not.toThrow();
   });
 });
 
@@ -563,7 +575,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
-      'model-packs',
+      'model-defaults',
       'memory-settings',
       'custom-providers',
       'queue-health',
@@ -604,7 +616,9 @@ describe('MastraFactory.prepare', () => {
     // fix its config from the message alone.
     expect(error.message).toMatch(/'sandbox' is now a callback/);
     expect(error.message).toMatch(/FactorySandboxContext/);
-    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    expect(error.message).toMatch(
+      /sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+    );
     // The old options had three different fates, and a host reading this
     // message needs all three: none of them is "pass it to the provider"
     // unchanged.
@@ -1619,8 +1633,8 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       // A channel integration starts a new session on the linked sender's own
-      // model pack, so it reads the same model-packs handle the web routes use.
-      expect(ctx.storage.modelPacks).toBeDefined();
+      // default model, so it reads the same model-defaults handle the web routes use.
+      expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 

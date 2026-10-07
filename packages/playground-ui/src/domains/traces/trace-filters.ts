@@ -1,5 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
+import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
+import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
 import {
   ActivityIcon,
   BoxIcon,
@@ -32,7 +34,6 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
@@ -73,12 +74,7 @@ type EntityTypeValue = `${EntityType}`;
 
 export type EntityOptions = { label: string; entityType: EntityTypeValue };
 
-export const ROOT_ENTITY_TYPES = {
-  AGENT: 'agent',
-  WORKFLOW: 'workflow_run',
-  SCORER: 'scorer',
-  INGEST: 'rag_ingestion',
-} as const satisfies Record<string, EntityTypeValue>;
+export { ROOT_ENTITY_TYPES };
 
 export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },
@@ -124,7 +120,7 @@ export const TRACE_LIST_MODE_PARAM = 'listMode';
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
 export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
 export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
-export type TraceListMode = 'traces' | 'branches';
+export type { TraceListMode };
 
 export const TRACE_LIST_MODE_OPTIONS = [
   { label: 'Traces (default)', value: 'traces' },
@@ -337,7 +333,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 };
 
 const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: string }> = {
-  timeRange: { icon: ClockIcon, color: hueAccentColor('yellow') },
+  timeRange: { icon: ClockIcon, color: hueAccentColor('amber') },
   rootEntityType: { icon: BoxIcon, color: hueAccentColor('purple') },
   entityName: { icon: TagIcon, color: hueAccentColor('cyan') },
   entityId: { icon: FingerprintIcon, color: hueAccentColor('pink') },
@@ -349,7 +345,7 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: str
   runId: { icon: PlayIcon, color: hueAccentColor('purple') },
   threadId: { icon: MessageSquareIcon, color: hueAccentColor('blue') },
   sessionId: { icon: LayersIcon, color: hueAccentColor('orange') },
-  requestId: { icon: RadioIcon, color: hueAccentColor('yellow') },
+  requestId: { icon: RadioIcon, color: hueAccentColor('amber') },
   resourceId: { icon: HashIcon, color: hueAccentColor('green') },
   userId: { icon: UserIcon, color: hueAccentColor('orange') },
   organizationId: { icon: BuildingIcon, color: hueAccentColor('cyan') },
@@ -359,11 +355,11 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: str
   'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
   'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
   'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
-  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-indicator)' },
+  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-foreground)' },
   'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
-  'scores.score': { icon: PercentIcon, color: hueAccentColor('yellow') },
+  'scores.score': { icon: PercentIcon, color: hueAccentColor('amber') },
   'feedback.feedbackType': { icon: ThumbsUpIcon, color: hueAccentColor('purple') },
-  'feedback.value': { icon: StarIcon, color: hueAccentColor('yellow') },
+  'feedback.value': { icon: StarIcon, color: hueAccentColor('amber') },
   'feedback.comment': { icon: MessageCircleIcon, color: hueAccentColor('blue') },
 };
 

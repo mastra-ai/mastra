@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -68,6 +68,30 @@ describe('TraceThreadItemView', () => {
 
       expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
       expect(screen.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when the user input is a skill activation envelope', () => {
+    it('renders the Skill row instead of the raw envelope', async () => {
+      const [root, ...rest] = basicAgentTrace.spans;
+      if (!root) throw new Error('fixture missing root span');
+      const envelope = '<skill name="factory-triage">\nTriage the work item.\n</skill>';
+      const spans = [
+        { ...root, input: { messages: [{ role: 'user', content: [{ type: 'text', text: envelope }] }] } },
+        ...rest,
+      ];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json({ ...basicAgentTrace, spans }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+      );
+
+      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+
+      expect(await screen.findByLabelText('Skill: factory-triage')).not.toBeNull();
+      expect(screen.queryByText(/<skill name=/)).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });

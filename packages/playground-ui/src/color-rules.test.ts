@@ -28,7 +28,7 @@ const findings = (pattern: RegExp, allowed: (path: string) => boolean) =>
     .flatMap(file => file.lines.filter(line => pattern.test(line)).map(line => `${file.path}: ${line.trim()}`));
 
 const chromaticRole =
-  '(?:(?:red|orange|yellow|green|cyan|blue|purple|pink)-(?:soft-)?\\d+|(?:success|destructive|warning|info)(?:-[a-z]+)*|badge-[a-z]+(?:-[a-z]+)?|product-[a-z-]+|chart-[a-z-]+|span-[a-z]+|brand-[a-z]+)';
+  '(?:(?:red|orange|amber|green|cyan|blue|purple|pink)-(?:soft-)?\\d+|(?:success|destructive|warning|info)(?:-[a-z]+)*|badge-[a-z]+(?:-[a-z]+)?|product-[a-z-]+|chart-[a-z-]+|span-[a-z]+|brand-[a-z]+(?:-[a-z]+)?)';
 const translucentChromatic = new RegExp(
   `\\b(?:bg|text|border(?:-[lrtbxy])?|ring|fill|stroke|outline|shadow|from|via|to|decoration|divide|accent)-${chromaticRole}/\\d+`,
 );
@@ -38,7 +38,7 @@ const colorMixEffects = [
   'packages/playground-ui/src/ds/components/Activity/activity.css',
   'packages/playground-ui/src/ds/components/Composer/composer-ring.css',
   'packages/playground-ui/src/ds/components/Composer/composer.css',
-  'packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx',
+  'packages/playground-ui/src/ds/components/Sidebar/footer/sidebar-meter.tsx',
 ];
 
 // Masks, brand marks, generated palettes, and surfaces that render before the theme loads.
@@ -47,7 +47,7 @@ const rawColorExceptions = [
   'packages/playground-ui/src/ds/components/Activity/activity.css',
   'packages/playground-ui/src/ds/components/Composer/composer.css',
   'packages/playground-ui/src/ds/components/ChatShell/chat-shell.tsx',
-  'packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx',
+  'packages/playground-ui/src/ds/components/Sidebar/footer/sidebar-meter.tsx',
   'packages/playground/src/domains/agents/components/agent-channels/platform-icons.tsx',
   'packages/playground/src/startup-error.ts',
   'mastracode/factory-ui/src/ui/ui/icons.tsx',
@@ -60,6 +60,15 @@ const rawColor =
   /(?<![\w&-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![\w-])|\b(?:rgba?|hsla?)\(\s*\d|\boklch\(\s*[\d.]/;
 
 describe('color usage', () => {
+  it('uses neutral boundary tokens at their authored opacity', () => {
+    expect(
+      findings(
+        /\b(?:border(?:-[lrtbxyse])?|divide|ring|outline)-(?:border(?:-strong|-hover|-focus)?|surface-rim)\//,
+        () => false,
+      ),
+    ).toEqual([]);
+  });
+
   it('keeps chromatic colors opaque: no opacity modifiers on status, badge, product, chart, span, or ramp colors', () => {
     expect(files.length).toBeGreaterThan(500);
     expect(findings(translucentChromatic, () => false)).toEqual([]);

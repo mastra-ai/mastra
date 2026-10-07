@@ -2,6 +2,7 @@ import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
@@ -75,7 +76,12 @@ export function ActivityEvent({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <Txt as="span" variant="meta" tone="ink" className="truncate">
           {actor.name}
-          {modelId ? <span className="text-muted-foreground font-normal"> · {modelId}</span> : null}
+          {modelId ? (
+            <Txt as="span" variant="meta" tone="muted">
+              {' '}
+              · {modelId}
+            </Txt>
+          ) : null}
         </Txt>
         <Txt as="span" variant="meta" tone="muted" className="flex items-baseline justify-between gap-3">
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
@@ -101,9 +107,11 @@ export function ActivityEvent({
 export function WorkItemActivity({
   activity,
   actors,
+  showName = true,
 }: {
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
+  showName?: boolean;
 }) {
   const worker = activity.lastWorker;
   const timeline = activity.events.slice(0, 8);
@@ -119,11 +127,18 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-meta text-muted-foreground hover:text-foreground focus-visible:outline-border-focus relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
+            className={cn(
+              'text-muted-foreground',
+              `hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`,
+            )}
           >
-            <span className="max-w-32 truncate">{worker.name}</span>
+            {showName && (
+              <Txt as="span" variant="meta" className="max-w-32 truncate">
+                {worker.name}
+              </Txt>
+            )}
             <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }

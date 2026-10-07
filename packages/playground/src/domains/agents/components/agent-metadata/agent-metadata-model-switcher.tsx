@@ -6,12 +6,13 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, useLLMProviders, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -230,7 +231,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 border-0! text-caption whitespace-nowrap"
+          className="flex items-center gap-1.5 border-0! whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -241,7 +242,7 @@ export const AgentMetadataModelSwitcher = ({
         <div className="p-2 pt-2" data-testid="agent-metadata-model-stale-warning">
           <Notice variant="warning" title="Model not allowed">
             <Notice.Message>
-              <code className="rounded bg-warning-subtle px-1 py-0.5">
+              <code className="rounded bg-fill-hover px-1 py-0.5">
                 {selectedProvider}/{selectedModel}
               </code>{' '}
               is no longer allowed by the admin policy. Pick a different model to save changes.
@@ -256,7 +257,7 @@ export const AgentMetadataModelSwitcher = ({
           <Notice variant="warning" title="Provider not connected">
             <Notice.Message>
               Set the{' '}
-              <code className="rounded bg-warning-subtle px-1 py-0.5">
+              <code className="rounded bg-fill-hover px-1 py-0.5">
                 {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
               </code>{' '}
               environment{' '}

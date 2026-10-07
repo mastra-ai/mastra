@@ -48,11 +48,11 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         role="img"
         tabIndex={0}
         aria-label={tooltip}
-        className="rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+        className={cn('rounded', focusRing)}
       >
         <BanIcon
           className={cn('h-5 w-5 text-muted-foreground/40', {
-            'text-destructive-indicator': red,
+            'text-destructive-foreground': red,
           })}
         />
       </TooltipTrigger>
@@ -79,7 +79,7 @@ function LinkCell({
       className={cn(
         'flex w-full items-center justify-center gap-4 rounded-lg px-3 py-2 text-left hover:bg-fill-subtle',
         transitions.colors,
-        focusRing.visible,
+        focusRing,
         className,
       )}
     >
@@ -172,11 +172,14 @@ export function DatasetCompareVersionsList({
             <li
               key={id}
               className={cn(
-                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] text-body text-foreground first:border-t-transparent',
+                'text-foreground',
+                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] first:border-t-transparent',
                 transitions.colors,
               )}
             >
-              <div className="truncate py-[0.6rem] text-body text-placeholder">{id}</div>
+              <Txt as="p" variant="body" tone="faint" className="truncate py-[0.6rem]">
+                {id}
+              </Txt>
               {status !== 'same' ? (
                 <>
                   {itemA?.datasetVersion ? (

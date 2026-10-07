@@ -27,7 +27,7 @@ function getFileIcon(path: string): ReactNode {
     case 'jsx':
       return <FileCode className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-badge-yellow-indicator" />;
+      return <FileJson className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
       return <FileText className="text-muted-foreground" />;
@@ -45,9 +45,9 @@ function getFileIcon(path: string): ReactNode {
 
 function getFolderIcon(isOpen: boolean): ReactNode {
   return isOpen ? (
-    <FolderOpen className="text-badge-yellow-indicator" />
+    <FolderOpen className="text-badge-amber-indicator" />
   ) : (
-    <Folder className="text-badge-yellow-indicator" />
+    <Folder className="text-badge-amber-indicator" />
   );
 }
 
@@ -179,11 +179,11 @@ export function WorkspaceFileBrowser({
           <ArrowLeft />
         </Button>
         <NotepadText className="text-muted-foreground" size={14} />
-        <Txt as="h2" variant="column" className="text-foreground">
+        <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-muted-foreground ml-auto">
+          <Txt tone="muted" variant="meta" className="ml-auto">
             {persistedFiles.length} {persistedFiles.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -205,14 +205,14 @@ export function WorkspaceFileBrowser({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-destructive-indicator">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>
       ) : null}
       {!isLoading && !error && nodes.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt className="text-muted-foreground" variant="caption">
+          <Txt tone="muted" variant="caption">
             No files
           </Txt>
         </div>

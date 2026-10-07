@@ -150,7 +150,6 @@ describe('headless goal parity', () => {
           session,
           goalManager: new GoalManager(),
           pendingNewThread: false,
-          planStartedGoalId: undefined,
           ui: { showOverlay: vi.fn(), hideOverlay: vi.fn() },
         },
         authStorage: {},

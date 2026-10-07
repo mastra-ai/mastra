@@ -75,7 +75,7 @@ export function ThemeLifelines({
         <span aria-hidden="true" className="w-9 shrink-0" />
       </div>
       {snapshots[selectedIndex] ? (
-        <Txt variant="caption" tone="muted" font="mono" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" data-testid="snapshot-summary">
           {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
         </Txt>
       ) : null}

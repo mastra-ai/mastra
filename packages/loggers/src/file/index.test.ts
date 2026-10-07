@@ -136,5 +136,58 @@ describe('FileTransport', () => {
       logs = await fileLogger.listLogsByRunId({ runId: 'test-run-id' });
       expect(logs.total).toBe(1);
     });
+
+    it('should skip malformed lines and return valid logs', async () => {
+      fs.writeFileSync(testPath, '{"msg":"before","time":1}\n{"msg":\n{"msg":"after","time":2}\n');
+
+      const all = await fileLogger.listLogs({ returnPaginationResults: false });
+      expect(all.total).toBe(2);
+      expect(all.logs.map(log => log.msg)).toEqual(['before', 'after']);
+
+      const paged = await fileLogger.listLogs({ page: 1, perPage: 1 });
+      expect(paged.total).toBe(2);
+      expect(paged.logs).toHaveLength(1);
+      expect(paged.hasMore).toBe(true);
+    });
+
+    it('should stream the file and retain only the requested page', async () => {
+      const lines = Array.from({ length: 250 }, (_, i) => JSON.stringify({ msg: `m${i + 1}`, time: i }));
+      fs.writeFileSync(testPath, lines.join('\n') + '\n');
+      const readFileSyncSpy = vi.spyOn(fs, 'readFileSync');
+
+      const result = await fileLogger.listLogs({ page: 2, perPage: 10 });
+
+      expect(result.logs.map(log => log.msg)).toEqual(Array.from({ length: 10 }, (_, i) => `m${i + 11}`));
+      expect(result.total).toBe(250);
+      expect(result.perPage).toBe(10);
+      expect(result.hasMore).toBe(true);
+      expect(readFileSyncSpy).not.toHaveBeenCalled();
+      readFileSyncSpy.mockRestore();
+    });
+
+    it('should skip non-object records and apply filters while streaming', async () => {
+      fs.writeFileSync(
+        testPath,
+        ['null', '42', '"str"', '{"msg":"a","level":"info"}', '{"msg":"b","level":"error"}', ''].join('\r\n'),
+      );
+
+      const result = await fileLogger.listLogs({ logLevel: LogLevel.ERROR });
+      expect(result.logs.map(log => log.msg)).toEqual(['b']);
+      expect(result.total).toBe(1);
+    });
+
+    it('should find runId matches beyond the first 100 records', async () => {
+      const lines = Array.from({ length: 150 }, (_, i) => JSON.stringify({ msg: `m${i}`, runId: 'other' }));
+      lines.push(
+        JSON.stringify({ msg: 'target-1', runId: 'run-x' }),
+        JSON.stringify({ msg: 'target-2', runId: 'run-x' }),
+      );
+      fs.writeFileSync(testPath, lines.join('\n') + '\n');
+
+      const result = await fileLogger.listLogsByRunId({ runId: 'run-x', perPage: 1, page: 2 });
+      expect(result.logs.map(log => log.msg)).toEqual(['target-2']);
+      expect(result.total).toBe(2);
+      expect(result.hasMore).toBe(false);
+    });
   });
 });

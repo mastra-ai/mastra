@@ -166,6 +166,11 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
+
       - name: Build
         run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
 

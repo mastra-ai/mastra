@@ -438,6 +438,8 @@ new Agent({
 
 You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle. Alternatively, set `observeAttachments: 'auto'` so Mastra consults the provider capabilities registry. It forwards attachments when the Observer model supports multimodal input and drops them otherwise. If capability data is unavailable for the model, the setting falls back to `true`.
 
+Attachments that the agent recorded as unavailable, because they could no longer be downloaded, are never sent to the Observer. The Observer still sees their `[Image #1: ...]` or `[File #1: ...]` line. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures) for how Mastra records them.
+
 ```md
 Date: 2026-01-15
 
@@ -790,7 +792,7 @@ When message tokens reach the `messageTokens` threshold, buffered chunks activat
 
 Async buffered Observer calls don't generate continuation hints because delayed hints can be stale by activation time. When buffered chunks activate, any previously stored suggested response and current task are cleared. The main agent receives the compressed observations without those hints.
 
-When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
+When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and activating buffered chunks doesn't bring pending tokens back under it. For example, this happens when a large tool result arrives after buffering has stopped. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
 Reflection works similarly: the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
@@ -801,7 +803,7 @@ Reflection works similarly: the Reflector runs in the background when observatio
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens`. With the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`. For example, `1.2` creates a threshold of 36k tokens (1.2 × 30k), above which activation may overshoot the retention target rather than use fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`) and must be greater than `messageTokens`. |
-| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
+| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, or an object of per-provider TTLs such as `{ default: 'auto', anthropic: '1h' }`. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
@@ -838,6 +840,30 @@ const memory = new Memory({
 With `"auto"`, this activates buffered observations based on the active provider's prompt cache behavior so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer a fixed 5-minute TTL, use `"5m"` or `300_000`.
 
 Changing models or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
+
+#### Per-provider idle TTLs
+
+`"auto"` can't see a cache TTL that you set on individual messages, such as Anthropic's `cacheControl: { type: 'ephemeral', ttl: '1h' }`. It keeps using the provider's 5-minute default, so buffered observations activate while the 1-hour cache is still warm. Pass an object to set the TTL per provider instead:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+    },
+  },
+})
+```
+
+Set the `anthropic` entry to the same TTL as your `cacheControl.ttl`. Mastra doesn't read the per-message cache setting, so the two must be kept in sync by hand.
+
+How the object resolves:
+
+- Keys are provider names. Mastra compares them case-insensitively with the part of the model's provider before the first `.`, so `anthropic` matches both `anthropic` and `anthropic.messages`. Claude served through another provider uses that provider's key instead, for example `amazon-bedrock`. Keys must not contain `.` or `/`.
+- Each value accepts the same forms as a single TTL: milliseconds, a duration string, `"auto"`, or `false` to turn off idle activation for that provider.
+- `default` applies to every provider without its own key. Without `default`, those providers don't idle-activate.
+- `observation.activateAfterIdle` and `reflection.activateAfterIdle` accept the same object. An `observation.activateAfterIdle` object replaces the top-level value and isn't merged with it.
 
 ### Disabling
 

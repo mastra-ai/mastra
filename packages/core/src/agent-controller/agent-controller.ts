@@ -14,7 +14,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
@@ -183,6 +183,7 @@ export class AgentController<TState = {}> {
 
   private config: AgentControllerConfig<TState>;
   private initPromise: Promise<void> | undefined = undefined;
+  readonly #metadataWriteQueues = new Map<string, Promise<void>>();
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -377,14 +378,19 @@ export class AgentController<TState = {}> {
     const defaultMode = this.#defaultMode;
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
+      getAllOn: async threadId => (await session.thread.getById({ threadId }))?.metadata ?? {},
       get: key => session.thread.getSetting({ key }),
+      getThreadId: () => session.thread.getId() ?? undefined,
       set: (key, value) => session.thread.setSetting({ key, value }),
+      setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
+      setModelOn: (threadId, settings) => this.writeThreadMetadataValues(threadId, settings),
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
+      getModeIds: () => this.config.modes.map(mode => mode.id),
       trackModelUse: this.config.modelUseCountTracker,
     });
     session.om.setResolver({
@@ -443,8 +449,11 @@ export class AgentController<TState = {}> {
   /**
    * Create a new, fully-wired {@link Session} and bring it online: it starts in
    * the default mode with the seeded model, is connected to the AgentController's shared
-   * machinery (agent, storage/lock, config catalog), and has a current thread
-   * (the most recent thread for `resourceId`, or a freshly created one).
+   * machinery (agent, storage/lock, config catalog), and normally has a current
+   * thread (the most recent matching thread, or a freshly created one). When
+   * `createInitialThread` is false and no thread matches, the returned session
+   * has no current thread; the first operation that needs one (sending a
+   * message, {@link SessionThread.ensureId}) creates it.
    *
    * The AgentController owns no session of its own — every consumer creates its own
    * session and drives all work through it (`session.sendMessage`,
@@ -459,6 +468,7 @@ export class AgentController<TState = {}> {
    * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the controller `id`.
    * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the controller `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
+   * @param createInitialThread - Create a thread when no existing thread matches. Defaults to true.
    */
   async createSession({
     resourceId,
@@ -467,6 +477,7 @@ export class AgentController<TState = {}> {
     scope,
     tags,
     threadId,
+    createInitialThread = true,
     workspace,
     browser,
     requestContext,
@@ -494,6 +505,8 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>;
     /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
     threadId?: string;
+    /** Create a thread when no existing thread matches. Set false to defer creation until first use, so unused sessions leave no empty thread behind. */
+    createInitialThread?: boolean;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -555,6 +568,8 @@ export class AgentController<TState = {}> {
           } else {
             await session.thread.create({ id: threadId, requestContext });
           }
+        } else if (createInitialThread && session.thread.getId() === null) {
+          await session.thread.create({ requestContext });
         }
         // A deletion may have started during the thread-rebinding awaits.
         pendingDeletion = this.#deletionsInProgress.get(registryKey);
@@ -576,6 +591,7 @@ export class AgentController<TState = {}> {
       const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
         scope,
         threadId,
+        createInitialThread,
         workspace,
         browser,
         requestContext,
@@ -609,6 +625,7 @@ export class AgentController<TState = {}> {
     overrides?: {
       scope?: string;
       threadId?: string;
+      createInitialThread?: boolean;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -618,8 +635,7 @@ export class AgentController<TState = {}> {
     // factory resolve against this session's scope (e.g. its `projectPath`), not
     // the controller-global default (which, on a multi-session server, may point at
     // a different repo).
-    const requestContext = new RequestContext(overrides?.requestContext?.entries());
-    await this.#authorizeSessionResource(effectiveResourceId, requestContext);
+    const requestContext = overrides?.requestContext ?? new RequestContext();
     let initialState = structuredClone(this.config.initialState);
     if (tags && Object.keys(tags).length > 0) {
       initialState = { ...initialState, ...tags } as TState;
@@ -722,9 +738,9 @@ export class AgentController<TState = {}> {
         return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
-      if (candidates.length === 0) {
+      if (candidates.length === 0 && overrides?.createInitialThread !== false) {
         await session.thread.create({ requestContext });
-      } else {
+      } else if (candidates.length > 0) {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
@@ -1143,6 +1159,31 @@ export class AgentController<TState = {}> {
     }
   }
 
+  private async writeThreadMetadataValues(threadId: string, settings: Record<string, unknown>): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const previous = this.#metadataWriteQueues.get(threadId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const memoryStorage = await this.getMemoryStorage();
+        const thread = await memoryStorage.getThreadById({ threadId });
+        if (!thread) throw new Error(`Thread ${threadId} not found`);
+        const metadata = { ...thread.metadata, ...settings };
+        for (const key of Object.keys(settings)) {
+          if (settings[key] === undefined) delete metadata[key];
+        }
+        await memoryStorage.saveThread({
+          thread: { ...thread, metadata: Object.keys(metadata).length ? metadata : undefined, updatedAt: new Date() },
+        });
+      });
+    this.#metadataWriteQueues.set(threadId, run);
+    try {
+      await run;
+    } finally {
+      if (this.#metadataWriteQueues.get(threadId) === run) this.#metadataWriteQueues.delete(threadId);
+    }
+  }
+
   private async writeThreadMetadataValue({
     threadId,
     key,
@@ -1152,36 +1193,16 @@ export class AgentController<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: { ...thread, metadata: { ...thread.metadata, [key]: value }, updatedAt: new Date() },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: value });
     } catch {
       // Settings persistence is not critical
     }
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread && thread.metadata) {
-        const metadata = { ...thread.metadata };
-        delete metadata[key];
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: undefined });
     } catch {
       // Settings removal is not critical
     }
@@ -1992,12 +2013,12 @@ export class AgentController<TState = {}> {
     if (!abortSignal) {
       session.run.clearAbortRequested();
     }
-    // Reconcile the in-memory model selection with the persisted per-mode model
+    // Reconcile the in-memory model selection with the persisted thread model
     // before snapshotting it into the request context. In multiplayer
     // deployments another process (or a freshly-created Session for an existing
     // thread) may have persisted a different model; the per-instance cache would
-    // otherwise run with a stale selection. No-op in the single-player TUI.
-    await session.model.syncFromPersisted({ modeId });
+    // otherwise run with a stale selection. No-op when already in sync.
+    await session.model.syncFromPersisted();
     const requestContext = await this.buildRequestContext(session, requestContextInput, {
       abortSignal,
       resourceId,
@@ -2257,7 +2278,7 @@ export class AgentController<TState = {}> {
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: (modelId: string) => modelId,
+        resolveModel: this.config.resolveSubagentModel ?? ((modelId: string) => modelId),
         mastra: this.getMastra(),
         controllerTools: resolvedControllerTools,
         fallbackModelId: currentMode?.defaultModelId,
@@ -2347,27 +2368,6 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * A mapped resource on the caller's context outranks the session's own
-   * resource wherever the controller-built context is read (memory, workspace,
-   * tool connections, caching, authorization). When the host authorizes the
-   * caller for this session, use the session's resource instead.
-   */
-  async #authorizeSessionResource(resourceId: string, requestContext: RequestContext): Promise<void> {
-    const mappedResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
-    if (
-      typeof mappedResourceId !== 'string' ||
-      !mappedResourceId ||
-      mappedResourceId === resourceId ||
-      !this.config.authorizeSessionResource
-    ) {
-      return;
-    }
-    if ((await this.config.authorizeSessionResource({ resourceId, mappedResourceId, requestContext })) === true) {
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
-    }
-  }
-
-  /**
    * Build request context for agent execution.
    * Tools can access controller state via requestContext.get('controller').
    */
@@ -2377,7 +2377,6 @@ export class AgentController<TState = {}> {
     scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
   ): Promise<RequestContext> {
     requestContext = new RequestContext(requestContext?.entries());
-    await this.#authorizeSessionResource(session.identity.getResourceId(), requestContext);
     const threadId = scope?.threadId ?? session.thread.getId();
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
@@ -2445,17 +2444,7 @@ export class AgentController<TState = {}> {
     if (!threadId || !this.#resolveStorage()) return;
 
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { tokenUsage: session.getTokenUsage() });
     } catch {
       // Token persistence is not critical
     }

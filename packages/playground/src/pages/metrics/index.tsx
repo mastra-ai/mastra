@@ -6,9 +6,9 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import {
   applyMetricsPropertyFilterTokens,
   createMetricsPropertyFilterFields,
@@ -16,11 +16,9 @@ import {
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
+import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -177,7 +175,7 @@ export default function Metrics() {
 
 /** Fetches and renders dashboard data only after the storage gate confirms metrics support. */
 function MetricsContent() {
-  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
+  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics(useMetricsFilters());
 
   const { isInMemory } = useObservabilityStorageCapabilities();
 

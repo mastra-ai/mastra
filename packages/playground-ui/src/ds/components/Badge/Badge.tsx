@@ -20,10 +20,10 @@ const red = {
   subtle: 'bg-badge-red-subtle text-badge-red-foreground',
   indicator: 'bg-badge-red-indicator',
 };
-const yellow = {
-  strong: 'bg-badge-yellow-strong text-badge-yellow-foreground',
-  subtle: 'bg-badge-yellow-subtle text-badge-yellow-foreground',
-  indicator: 'bg-badge-yellow-indicator',
+const amber = {
+  strong: 'bg-badge-amber-strong text-badge-amber-foreground',
+  subtle: 'bg-badge-amber-subtle text-badge-amber-foreground',
+  indicator: 'bg-badge-amber-indicator',
 };
 const blue = {
   strong: 'bg-badge-blue-strong text-badge-blue-foreground',
@@ -68,12 +68,20 @@ const badgeToneStyles = {
     indicator: 'bg-muted-foreground',
   },
   success: { ...green, indicator: 'bg-success-indicator' },
-  destructive: { ...red, indicator: 'bg-destructive-indicator' },
+  destructive: {
+    strong: 'bg-badge-red-strong text-badge-red-foreground',
+    subtle: 'bg-badge-red-subtle text-badge-red-foreground',
+    indicator: 'bg-destructive-indicator',
+  },
   info: { ...blue, indicator: 'bg-info-indicator' },
-  warning: { ...yellow, indicator: 'bg-warning-indicator' },
+  warning: {
+    strong: 'bg-badge-amber-strong text-warning-foreground',
+    subtle: 'bg-badge-amber-subtle text-warning-foreground',
+    indicator: 'bg-warning-indicator',
+  },
   green,
   red,
-  yellow,
+  amber,
   blue,
   purple: {
     strong: 'bg-badge-purple-strong text-badge-purple-foreground',

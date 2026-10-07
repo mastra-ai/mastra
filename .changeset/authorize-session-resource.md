@@ -1,14 +1,15 @@
 ---
-'@mastra/core': minor
+'@mastra/server': minor
+'@mastra/core': patch
 ---
 
-Added `authorizeSessionResource` to `AgentController`. When auth maps a signed-in user to a resource (`mapUserToResourceId`), that resource normally overrides the session's own, so running a session that owns a different resource fails with "Thread … belongs to resource … but resource … was provided". Return `true` from the hook for callers your app has authorized, and the controller runs that caller with the session's resource in `MASTRA_RESOURCE_ID_KEY`, so memory, caller-supplied tool connections, and cache scoping use the session's resource. Without the hook, nothing changes.
+Added `authorizeUserResource` to server auth, next to `mapUserToResourceId`. When a request names a resource other than the caller's mapped one (`resourceId`, `resource_id` or `memory.resource`), the server asks this callback. Return `true` and the request runs under the requested resource, so memory ownership, agent controller sessions and tools see it; any other result gets a 403. It may return a promise. Without it, the mapped resource keeps winning, as before.
 
 ```ts
-const controller = new AgentController({
-  id: 'app',
-  modes,
-  authorizeSessionResource: async ({ resourceId, mappedResourceId, requestContext }) =>
-    canUseSession({ sessionResourceId: resourceId, callerResourceId: mappedResourceId, requestContext }),
-});
+auth: {
+  mapUserToResourceId: user => user.id,
+  authorizeUserResource: async (user, resourceId) => isSessionMember(user.id, resourceId),
+}
 ```
+
+Agent controller sessions now reject input whose request context belongs to another resource (messages, follow-ups, queued messages, notifications, steering and tool approvals) before anything is queued, stored or delivered.

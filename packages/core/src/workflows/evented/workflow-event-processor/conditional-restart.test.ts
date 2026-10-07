@@ -43,7 +43,7 @@ describe('processWorkflowConditional restart branch routing', () => {
     const stepExecutor = { evaluateConditions: async () => [2] } as any;
     const args = makeArgs({
       executionPath: [0, 2],
-      restart: { activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
+      restart: { activePaths: [0, 2], activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
     });
 
     await processWorkflowConditional(args, { pubsub, stepExecutor, step });

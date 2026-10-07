@@ -6,6 +6,7 @@ import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { createObservabilityContext, SpanType } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
+import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { Step } from './step';
@@ -1660,7 +1661,7 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
       outputSchema: z.any(),
       execute: async ({ inputData }: any) => {
         // Trigger cancel during step 1 so step 2 is skipped and engine loop catches cancellation
-        abortController.abort();
+        abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
         // Return a payload matching input to test deduplication
         return {
           ...inputData,

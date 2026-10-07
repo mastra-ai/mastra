@@ -230,7 +230,7 @@ export const WorkflowInputData = ({
   if (!collapsible) {
     return (
       <>
-        {!hideHeading && <div className="border-b border-border/50 pb-3">{headingSlot ?? defaultHeading}</div>}
+        {!hideHeading && <div className="border-b border-border pb-3">{headingSlot ?? defaultHeading}</div>}
         <div>{body}</div>
       </>
     );

@@ -1,5 +1,7 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 
 interface CodeDisplayProps {
   content: string;
@@ -27,10 +29,10 @@ export function CodeDisplay({
               type="button"
               onClick={onCopy}
               aria-label="Copy code"
-              className="absolute inset-0 z-10 rounded-md focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
+              className={`absolute inset-0 z-10 rounded-md ${focusRingInset}`}
             />
           )}
-          <pre className="pointer-events-none text-meta whitespace-pre-wrap">{content}</pre>
+          <Code className="pointer-events-none text-meta whitespace-pre-wrap" code={content} />
           {isDraft && (
             <div className="mt-1.5">
               <Txt

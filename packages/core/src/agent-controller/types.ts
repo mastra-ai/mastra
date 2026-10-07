@@ -6,11 +6,12 @@ import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
-import type { PublicSchema } from '../schema';
 import type { RequestContext } from '../request-context';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
@@ -53,7 +54,7 @@ interface AgentControllerModeBase {
 
   name?: string;
 
-  /** bootstrap model default when a session enters this mode. */
+  /** Seeds sessions that start in this mode and remains the subagent fallback. Mode switches do not apply it. */
   defaultModelId?: string;
 
   /** Surfaced in mode pickers / Studio UI. Free text. */
@@ -267,36 +268,6 @@ export interface AgentControllerConfig<TState = {}> {
   /** Memory configuration (shared across all modes) */
   memory?: DynamicArgument<MastraMemory>;
 
-  /**
-   * Decide whether a caller whose request context carries a different resource
-   * id (for example from `mapUserToResourceId`) may act as the session's own
-   * resource. Return exactly `true` and the controller sets `MASTRA_RESOURCE_ID_KEY`
-   * to the session's resource on its own copy of the context, so everything
-   * that reads that key sees the session's resource: memory and thread
-   * ownership, caller-supplied tool connections, response-cache and token-cost
-   * scoping, and any of your factories or tools that read it. The hook does not
-   * change the controller context's `resourceId` or the caller's `user`. Any
-   * other result, or omitting the hook, keeps the mapped resource, so memory
-   * that enforces thread ownership rejects the session's threads. A throw fails
-   * the operation. Called whenever the controller builds a context from one
-   * that still carries a different resource, so keep it cheap; once approved,
-   * contexts derived from the rewritten copy skip the hook. It chooses which
-   * resource a caller acts as; it does not gate creating or opening a session,
-   * which your route authorization must still do. Dynamic workspace and browser
-   * factories run once, at session creation; one that reads
-   * `MASTRA_RESOURCE_ID_KEY` sees the session's resource if the creating caller
-   * was approved and their mapped resource if not. Only approve callers your app
-   * has already authorized for the session.
-   */
-  authorizeSessionResource?: (args: {
-    /** The resource the session owns. */
-    resourceId: string;
-    /** The resource the caller's request context is mapped to. */
-    mappedResourceId: string;
-    /** The controller's own copy of the caller's context, which the run uses. Treat it as read-only. */
-    requestContext: RequestContext;
-  }) => boolean | Promise<boolean>;
-
   /** Available agent modes */
   modes: AgentControllerMode[];
 
@@ -373,6 +344,13 @@ export interface AgentControllerConfig<TState = {}> {
    * that parent agents can call to spawn focused subagents.
    */
   subagents?: AgentControllerSubagent[];
+
+  /**
+   * Resolves a subagent's model id for the run that spawned it. Without it the
+   * bare id resolves through {@link gateways}; provide it when model resolution
+   * depends on the request (tenant credentials, request-scoped custom providers).
+   */
+  resolveSubagentModel?: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
 
   /**
    * Model gateways registered on AgentController' internal Mastra instance.
@@ -814,6 +792,13 @@ export function defaultOMProgressState(): OMProgressState {
 // =============================================================================
 
 /**
+ * Reasoning-effort levels a session can select alongside its model. Mirrors the
+ * persisted `thinkingLevel` session-state key so a model switch can carry the
+ * level that should take effect with it.
+ */
+export type AgentControllerThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/**
  * Events emitted by the controller that UIs can subscribe to.
  *
  * A logical message emits one `message_start` containing its initial
@@ -824,7 +809,15 @@ export function defaultOMProgressState(): OMProgressState {
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
+  | {
+      type: 'model_changed';
+      modelId: string;
+      /**
+       * The current session thinking level, including for model-only switches.
+       * Undefined when the session has no thinking-level override.
+       */
+      thinkingLevel: AgentControllerThinkingLevel | undefined;
+    }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
@@ -1073,8 +1066,6 @@ export interface AgentControllerRequestState<TState = unknown> {
   get: () => Readonly<TState>;
   /** Update session-owned controller state. */
   set: (updates: Partial<TState>) => Promise<void>;
-  /** Apply an update only while a caller-owned identity still matches. */
-  setIf?: (updates: Partial<TState>, shouldApply: () => boolean) => Promise<boolean>;
   /** Update session-owned controller state from the latest snapshot in a serialized transaction. */
   update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -30,7 +28,7 @@ import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByC
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -87,6 +85,8 @@ function getAggregationSql(aggregation: AggregationType, measure = 'score'): str
       return `toFloat64(count(${measure}))`;
     case 'last':
       return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
     default:
       return `sum(${measure})`;
   }
@@ -130,6 +130,26 @@ export function currentScoresRelation(sourcePredicate?: string): string {
     FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL
     ${whereClause}
   )`;
+}
+
+/**
+ * Current-state scores narrowed before FINAL merges. `score_events_current` is
+ * keyed by scoreId, so a traceId filter only applies after FINAL has merged
+ * the whole table. When the (unaliased) filter pins traceId, the matching
+ * scoreIds are first read from the history table, whose sort key starts with
+ * traceId. Every current row was written to history, so the candidate set is a
+ * superset; callers still apply the same filter to the current version.
+ *
+ * Time ranges alone are not narrowed this way: scoreIds are hash-distributed,
+ * so the ids from any real time window touch nearly every granule of the
+ * current table and the extra history scan costs more than it saves.
+ */
+function prunedCurrentScoresRelation(historyFilter: FilterResult): string {
+  const pinsTrace = historyFilter.conditions.some(condition => condition.startsWith('traceId '));
+  if (!pinsTrace) return currentScoresRelation();
+  return currentScoresRelation(
+    `scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS} WHERE ${historyFilter.conditions.join(' AND ')})`,
+  );
 }
 
 function buildScoreIdentityFilter(args: Pick<GetScoreAggregateArgs, 'scorerId' | 'scoreSource'>): FilterResult {
@@ -239,7 +259,7 @@ export async function deleteScores(
   if (args.scoreIds.length === 0) return;
 
   const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'scores',
@@ -320,7 +340,7 @@ export async function listScores(
   }
 
   const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
-  const scoresRelation = currentScoresRelation();
+  const scoresRelation = prunedCurrentScoresRelation(buildScoresFilterConditions(parsed.filters));
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${scoresRelation} AS s ${whereClause}`,
@@ -372,6 +392,9 @@ async function queryScoresAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<ScoreDeltaRow[]> {
+  // The current-state table drives the scan and is narrowed to the polled
+  // scoreIds by its sort key before FINAL merges, so a poll never merges the
+  // whole table. Only the small delta slice is built into the hash table.
   return await queryJson<ScoreDeltaRow>(
     client,
     `
@@ -381,15 +404,19 @@ async function queryScoresAfterCursor(
         s.timestamp AS timestamp,
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
-      FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+      FROM ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+      INNER JOIN (
+        SELECT cursorId, scoreId
+        FROM ${TABLE_SCORE_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+          AND scoreId NOT IN (
+            SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+            WHERE cursorId <= {afterCursor:UInt64}
+              AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
+          )
+      ) d
         ON s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND` : 'WHERE'} d.cursorId > {afterCursor:UInt64}
-        AND d.scoreId NOT IN (
-          SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
-          WHERE cursorId <= {afterCursor:UInt64}
-            AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
-        )
+      ${appendWhere(whereClause, `s.scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})`)}
       ORDER BY d.cursorId ASC
       LIMIT 1 BY s.scoreId
       LIMIT {fetchLimit:UInt32}
@@ -398,19 +425,28 @@ async function queryScoresAfterCursor(
   );
 }
 
+/**
+ * Newest delta cursor whose current score matches the filters. Without
+ * filters this is the stream head; with filters, FINAL only merges the
+ * scoreIds still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
-        ON s.scoreId = d.scoreId
-      ${whereClause}
+      WHERE d.scoreId IN (
+        SELECT s.scoreId
+        FROM ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ${appendWhere(whereClause, `s.scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})`)}
+      )
     `,
     params,
   );
@@ -420,13 +456,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = await queryJson<{ cursorId?: string | null }>(
-    client,
-    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
-    {},
-  );
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
@@ -461,13 +491,14 @@ export async function getScoreAggregate(
   client: ClickHouseClient,
   args: GetScoreAggregateArgs,
 ): Promise<GetScoreAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  // ClickHouse returns type defaults (0 / nan) for aggregates over an empty set; other stores return NULL.
+  const aggSql = `if(count() = 0, NULL, ${getAggregationSql(args.aggregation)})`;
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${currentScoresRelation()} ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -506,7 +537,7 @@ export async function getScoreAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${currentScoresRelation()} ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${prunedCurrentScoresRelation(prevCombined)} ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -534,7 +565,7 @@ export async function getScoreBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveScoreGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${currentScoresRelation()} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${prunedCurrentScoresRelation(combined)} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -567,7 +598,7 @@ export async function getScoreTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${currentScoresRelation()} ${whereClause}
+      FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -592,7 +623,7 @@ export async function getScoreTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${currentScoresRelation()} ${whereClause}
+    FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -625,29 +656,30 @@ export async function getScorePercentiles(
     throw new Error('Percentiles must include at least one value between 0 and 1.');
   }
 
-  const series = [];
   for (const p of args.percentiles) {
     if (!Number.isFinite(p) || p < 0 || p > 1) {
       throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
     }
-    const sql = `
-      SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
-             quantile(${p})(score) AS pvalue
-      FROM ${currentScoresRelation()}
-      ${whereClause}
-      GROUP BY bucket
-      ORDER BY bucket
-    `;
-    const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
-
-    series.push({
-      percentile: p,
-      points: rows.map(row => ({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row.pvalue ?? 0),
-      })),
-    });
   }
+
+  // One scan for every requested level instead of one query per percentile.
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           quantiles(${args.percentiles.join(', ')})(score) AS pvalues
+    FROM ${prunedCurrentScoresRelation(combined)}
+    ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  const series = args.percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+      value: Number((row.pvalues as unknown[] | undefined)?.[index] ?? 0),
+    })),
+  }));
 
   return { series };
 }

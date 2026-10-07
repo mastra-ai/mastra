@@ -1,3 +1,4 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
@@ -125,9 +126,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
                 Result
               </Txt>
               {typeof entry.result === 'string' ? (
-                <pre className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 text-caption whitespace-pre">
-                  {entry.result}
-                </pre>
+                <Code
+                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 text-caption whitespace-pre"
+                  code={entry.result}
+                />
               ) : (
                 <CodeEditor
                   data={entry.result as Record<string, unknown> | Record<string, unknown>[]}
@@ -149,6 +151,6 @@ function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
     case 'complete':
       return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-destructive-indicator" />;
+      return <X className="h-3 w-3 shrink-0 text-destructive-foreground" />;
   }
 }

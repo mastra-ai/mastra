@@ -12,7 +12,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Three utilities carry elevation: shadow-raised for a surface in the flow, shadow-overlay for a detached one, and shadow-inset for a small filled mark such as a badge or avatar. Each assembles its own lip and 1px rim, so none of them adds a border of its own, and nothing else in the system casts a shadow.',
+          'shadow-rim draws only the surface edge. shadow-raised and shadow-overlay compose that edge with a lip and drops; shadow-inset combines a highlight and rim for badges and avatars. The examples distinguish isolated edges from these complete recipes.',
       },
     },
   },
@@ -25,12 +25,25 @@ export const ElevationFoundations: Story = {
   name: 'Elevation foundations',
   render: () => (
     <FoundationPage
-      eyebrow="Elevation / 3 utilities"
+      eyebrow="Elevation / 4 utilities"
       title="Elevation foundations"
       description="Elevation encodes distance from the canvas, and the product has two distances: a surface that sits in the flow, and one that is detached and dismissible."
-      note="Neither draws a border: both tokens already contain a 1px ring and, in dark, a top inset highlight."
-      noteAside="Utilities: shadow-raised, shadow-overlay, shadow-inset, from src/index.css. Inset tokens: --inset-highlight, --inset-rim."
+      note="Each recipe already draws its edge. Adding a CSS border on that same edge doubles it."
+      noteAside="Utilities: shadow-rim, shadow-raised, shadow-overlay, shadow-inset."
     >
+      <FoundationSection
+        label="Rim — edge only"
+        description="shadow-rim draws a 1px inset --surface-rim with no highlight or drop. border-surface-rim uses the same color as a CSS border. Reserve the inset pixel when children touch this edge."
+      >
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Specimen name="shadow-rim" note="Isolated inset edge on the canvas">
+            <div className="h-20 rounded-xl shadow-rim" />
+          </Specimen>
+          <Specimen name="border-surface-rim" note="Isolated CSS border on the same canvas">
+            <div className="h-20 rounded-xl border border-surface-rim" />
+          </Specimen>
+        </div>
+      </FoundationSection>
       <FoundationSection
         label="Raised — in the flow"
         description="App frame, card, list panel, settings container, table head. The bleed stays short on purpose: a tile in a grid inside a scroller is clipped by that scroller, and a shadow reaching past the tile's clearance is sliced into a hard line along the container edge."
@@ -40,7 +53,7 @@ export const ElevationFoundations: Story = {
             <div className="flex h-32 flex-col justify-end rounded-xl bg-card p-4 shadow-raised">
               <Txt variant="label">Raised surface</Txt>
               <Txt variant="caption" tone="muted">
-                Rim and drop from one token
+                Lip + surface rim + drops
               </Txt>
             </div>
           </Specimen>
@@ -96,10 +109,7 @@ export const ElevationFoundations: Story = {
               <Badge variant="success">Success</Badge>
             </div>
           </Specimen>
-          <Specimen
-            name="--inset-highlight / --inset-rim"
-            note="Dark: white at 7% / 7%. Light: white at 55% / black at 8%."
-          >
+          <Specimen name="Inset edge" note="Dark: white at 7% / 7%. Light: white at 55% / black at 8%.">
             <div className="flex h-20 items-center gap-3 rounded-xl bg-background p-4">
               <div className="size-12 rounded-lg bg-card shadow-inset" />
               <Txt variant="caption" tone="muted">
@@ -108,19 +118,21 @@ export const ElevationFoundations: Story = {
             </div>
           </Specimen>
         </div>
-      </FoundationSection>
-
-      <FoundationSection
-        label="Not elevation"
-        description="The focus halo is the only other box-shadow in the system. It belongs to focus, not to depth — it is documented on the Surface page beside --border-focus and --ring."
-      >
-        <Specimen name="--shadow-focus-ring" note="Paired with ring-border-focus by focusRing.visible">
-          <div className="flex h-20 items-center justify-center rounded-xl bg-background p-4">
-            <div className="rounded-md bg-fill px-3 py-1.5 shadow-focus-ring ring-1 ring-border-focus">
-              <Txt variant="label">Focused row</Txt>
-            </div>
-          </div>
-        </Specimen>
+        <div className="grid grid-cols-2 gap-3 sm:max-w-80">
+          {['inset-highlight', 'inset-rim'].map(token => (
+            <Specimen key={token} name={`--${token}`}>
+              <div
+                role="img"
+                aria-label={`--${token} isolated edge`}
+                className="h-16 rounded-md"
+                style={{
+                  boxShadow:
+                    token === 'inset-highlight' ? `inset 0 1px 0 var(--${token})` : `inset 0 0 0 1px var(--${token})`,
+                }}
+              />
+            </Specimen>
+          ))}
+        </div>
       </FoundationSection>
     </FoundationPage>
   ),

@@ -1,5 +1,5 @@
+import { useExperiments } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 
 const useCurrentExperiment = () => {

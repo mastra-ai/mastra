@@ -1,5 +1,7 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 
 import type { ChannelOrigin, MessageAuthor } from '../services/message-author';
@@ -11,12 +13,12 @@ const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
 export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
-    <div className="text-meta text-muted-foreground mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
+    <div aria-label={`Sent from ${label}`} className="text-muted-foreground mt-1 flex items-center gap-1">
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
-      <span>
+      <Txt as="span" variant="meta">
         via {label}
         {origin.authorName ? ` · ${origin.authorName}` : ''}
-      </span>
+      </Txt>
     </div>
   );
 }
@@ -29,7 +31,7 @@ export function SenderAvatar({ author }: { author: MessageAuthor }) {
         render={
           <span
             aria-label={`Sent by ${author.name}`}
-            className="focus-visible:ring-border-focus mt-1 shrink-0 rounded-full outline-hidden focus-visible:ring-2"
+            className={`mt-1 shrink-0 rounded-full ${focusRing}`}
             tabIndex={0}
           >
             <Avatar name={author.name} src={author.avatarUrl} size="sm" />

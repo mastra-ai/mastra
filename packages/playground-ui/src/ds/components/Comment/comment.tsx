@@ -1,3 +1,4 @@
+import { useRender } from '@base-ui/react/use-render';
 import { cva } from 'class-variance-authority';
 import type { ComponentPropsWithoutRef, HTMLAttributes } from 'react';
 import { forwardRef } from 'react';
@@ -7,6 +8,7 @@ import type { CommentVariant } from './comment-context';
 import { Txt } from '@/ds/components/Txt';
 import type { TxtProps } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 const commentVariants = cva('flex flex-col', {
@@ -210,17 +212,16 @@ export type CommentItemBodyProps = ComponentPropsWithoutRef<'p'>;
 export const CommentItemBody = forwardRef<HTMLElement, CommentItemBodyProps>(({ className, ...props }, ref) => {
   const variant = useCommentVariant();
 
-  return (
-    <Txt
-      ref={ref}
-      // Rendered markdown brings its own blocks, which a paragraph cannot hold.
-      as={variant === 'thread' ? 'div' : 'p'}
-      variant={commentItemBodySize[variant]}
-      data-slot="comment-item-body"
-      className={cn(commentItemBodyTone[variant], className)}
-      {...props}
-    />
-  );
+  // Rendered markdown brings its own blocks, which a paragraph cannot hold.
+  return useRender({
+    defaultTagName: variant === 'thread' ? 'div' : 'p',
+    props: {
+      ...props,
+      ref,
+      'data-slot': 'comment-item-body',
+      className: cn(textStyle({ variant: commentItemBodySize[variant] }), commentItemBodyTone[variant], className),
+    },
+  });
 });
 CommentItemBody.displayName = 'CommentItemBody';
 

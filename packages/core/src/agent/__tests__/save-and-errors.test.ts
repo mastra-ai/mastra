@@ -486,6 +486,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           instructions: 'test',
           model: createPartialThenErrorModel('stream broke'),
           memory: mockMemory,
+          // Terminal-error persistence is the subject; no processor-level retry layer, which would
+          // start another step before the error part is appended.
+          errorProcessorDefaults: false,
         });
 
         const result = await agent.stream('tell me something', {
@@ -1127,6 +1130,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
           const mockMemory = new MockMemory();
           let outputProcessorCalls = 0;
+          const onError = vi.fn();
           let onFinishCalls = 0;
           const agent = new Agent({
             id: 'test-error-stream-non-error-finish',
@@ -1148,6 +1152,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           const output = await agent.stream('Hello', {
             modelSettings: { maxRetries: 0 },
             memory: { thread: 'partial-failure-thread', resource: 'partial-failure-resource' },
+            onError,
             onFinish: () => {
               onFinishCalls++;
             },
@@ -1166,6 +1171,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           expect(output.error).toBeInstanceOf(Error);
           expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
           expect(outputProcessorCalls).toBe(1);
+          expect(onError).toHaveBeenCalledTimes(1);
           expect(onFinishCalls).toBe(0);
 
           const recalled = await mockMemory.recall({
@@ -1609,22 +1615,26 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         let abortCalled = false;
         let abortEvent: any = null;
+        const onFinish = vi.fn();
 
         const stream = await agent.stream('Hello', {
           onAbort: event => {
             abortCalled = true;
             abortEvent = event;
           },
+          onFinish,
           abortSignal: abortController.signal,
         });
 
-        // Consume the stream to trigger the abort
+        const chunks: any[] = [];
         try {
-          await stream.consumeStream();
+          for await (const chunk of stream.fullStream) chunks.push(chunk);
         } catch {}
 
+        expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
+        expect(onFinish).not.toHaveBeenCalled();
       });
 
       it('should persist an immediate abort and recall it on the next turn', async () => {
@@ -2618,6 +2628,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       name: 'Test Raw Finish Reason',
       model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
       instructions: 'You are a helpful assistant.',
+      // The provider's raw finish reason is the subject; opt out of processor-level retry.
+      errorProcessorDefaults: false,
     });
 
     const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });

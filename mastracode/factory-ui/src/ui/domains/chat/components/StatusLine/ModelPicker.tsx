@@ -1,6 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Command,
   CommandEmpty,
@@ -13,20 +12,15 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Check, ChevronDown, RotateCcw, Settings2 } from 'lucide-react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
 
-import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
-import type { ModelPackInfo } from '../../../../../api/types';
-import { settingsSectionPath } from '../../../settings/settingsSections';
-
+import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
-import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function titleCase(value: string): string {
   return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
@@ -56,20 +50,6 @@ export function formatModelName(id: string): string {
   return slug.split(/[-_]+/).filter(Boolean).map(titleCase).join(' ');
 }
 
-type PackModeKey = 'build' | 'plan' | 'fast';
-
-function packModeKey(modeId: string | undefined): PackModeKey | undefined {
-  return modeId === 'build' || modeId === 'plan' || modeId === 'fast' ? modeId : undefined;
-}
-
-function packSummary(pack: ModelPackInfo): string {
-  return `${formatModelName(pack.models.build)} · ${formatModelName(pack.models.plan)} · ${formatModelName(pack.models.fast)}`;
-}
-
-function packDetail(pack: ModelPackInfo): string {
-  return `Build ${pack.models.build} · Plan ${pack.models.plan} · Fast ${pack.models.fast}`;
-}
-
 /** Models grouped by provider, providers sorted alphabetically. */
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -82,32 +62,20 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
 }
 
 /**
- * Combined model control for the session status line. One trigger shows the
- * effective model for the current mode; the searchable menu offers packs
- * (presets of Build/Plan/Fast models), per-provider model overrides for the
- * current mode, reset to the personal default pack, and a link to pack
- * management in settings.
+ * Model control for the session status line. The searchable menu groups models
+ * by provider and lets user chats reset a per-session choice to the personal
+ * default model.
  */
 export function ModelPicker() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const navigate = useNavigate();
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
-  const { activeModeId } = useChatModes();
-  const { activeModelId, activeModelPackId, defaultModelPackId, modelPacks, setModel, setModelPack, isLoading, error } =
-    useChatModels();
+  const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const modelsQuery = useAvailableModelsQuery();
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
-  const [pendingPackId, setPendingPackId] = useState<string>();
 
-  const modeKey = packModeKey(activeModeId);
-  const pendingPack = modelPacks.find(pack => pack.id === pendingPackId);
-  const selectedModelId =
-    pendingModelId ?? (pendingPack && modeKey ? pendingPack.models[modeKey] : undefined) ?? activeModelId;
-  const selectedPackId = pendingPackId ?? activeModelPackId;
-  const selectedPack = modelPacks.find(pack => pack.id === selectedPackId);
-  const busy = Boolean(pendingModelId || pendingPackId);
+  const selectedModelId = pendingModelId ?? activeModelId;
+  const busy = Boolean(pendingModelId);
   const providerGroups = groupByProvider(modelsQuery.data ?? []);
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
@@ -115,7 +83,7 @@ export function ModelPicker() {
   }
   if (!selectedModelId && error) {
     return (
-      <span className="text-destructive-indicator" aria-label="Model unavailable" title={error.message}>
+      <span className="text-destructive-foreground" aria-label="Model unavailable" title={error.message}>
         Model unavailable
       </span>
     );
@@ -124,24 +92,17 @@ export function ModelPicker() {
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
-  // User chats can pick models and packs in drafts and once the sandbox is
-  // ready; factory sessions can pick models only.
   const switchable = kind === 'user' ? Boolean(draftSessionId) || sessionEnabled : kind === 'factory' && sessionEnabled;
-  const showPacks = kind === 'user' && modelPacks.length > 0;
-  // The current selection deviates from the personal default when another pack
-  // is applied, or when the mode's model no longer matches the applied pack.
-  const packModelDeviates = Boolean(
-    selectedPack && modeKey && selectedModelId && selectedPack.models[modeKey] !== selectedModelId,
-  );
   const canReset =
-    showPacks && Boolean(defaultModelPackId) && (selectedPackId !== defaultModelPackId || packModelDeviates);
+    kind === 'user' &&
+    Boolean(defaultModelId) &&
+    selectedModelId !== defaultModelId &&
+    modelsQuery.data?.some(model => model.id === defaultModelId);
 
-  // Packs remain selectable even when no credentialed models are listed, so
-  // only fall back to the plain label when there is nothing to pick at all.
-  if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
+  if (!switchable || !modelsQuery.data?.length) {
     return (
       <span
-        className={notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground'}
+        className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
@@ -151,11 +112,14 @@ export function ModelPicker() {
     );
   }
 
-  const runAction = (action: Promise<void>, clear: () => void, failure: string) => {
-    void action.then(clear, (cause: unknown) => {
-      clear();
-      toast.error(cause instanceof Error ? cause.message : failure);
-    });
+  const runAction = (action: Promise<void>, failure: string) => {
+    void action.then(
+      () => setPendingModelId(undefined),
+      (cause: unknown) => {
+        setPendingModelId(undefined);
+        toast.error(cause instanceof Error ? cause.message : failure);
+      },
+    );
   };
 
   const pickModel = (modelId: string) => {
@@ -163,15 +127,7 @@ export function ModelPicker() {
     setOpen(false);
     if (modelId === activeModelId) return;
     setPendingModelId(modelId);
-    runAction(setModel(modelId), () => setPendingModelId(undefined), 'Failed to switch model');
-  };
-
-  const pickPack = (packId: string) => {
-    if (busy) return;
-    setOpen(false);
-    if (packId === activeModelPackId && !packModelDeviates) return;
-    setPendingPackId(packId);
-    runAction(setModelPack(packId), () => setPendingPackId(undefined), 'Failed to apply model pack');
+    runAction(setModel(modelId), 'Failed to switch model');
   };
 
   return (
@@ -183,9 +139,9 @@ export function ModelPicker() {
         aria-busy={busy}
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-destructive-indicator' : 'text-muted-foreground',
+          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
         )}
-        title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
+        title={selectedModelId}
       >
         <span className="max-w-48 truncate">
           {label}
@@ -195,47 +151,14 @@ export function ModelPicker() {
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command loop>
-          <CommandInput placeholder={showPacks ? 'Search models and packs…' : 'Search models…'} />
+          <CommandInput placeholder="Search models…" />
           <CommandList className="max-h-80">
             <CommandEmpty>No matching model.</CommandEmpty>
-            {showPacks ? (
-              <CommandGroup heading="Model packs">
-                {modelPacks.map(pack => (
-                  <CommandItem
-                    key={pack.id}
-                    value={`pack:${pack.id}`}
-                    keywords={[pack.name, pack.models.build, pack.models.plan, pack.models.fast]}
-                    aria-label={`Model pack ${pack.name}`}
-                    title={packDetail(pack)}
-                    onSelect={() => pickPack(pack.id)}
-                  >
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="truncate">{pack.name}</span>
-                        {pack.id === defaultModelPackId ? (
-                          <Badge variant="blue" size="xs">
-                            Default
-                          </Badge>
-                        ) : null}
-                      </span>
-                      <Txt as="span" variant="meta" tone="muted" className="truncate">
-                        {packSummary(pack)}
-                      </Txt>
-                    </div>
-                    {pack.id === selectedPackId && !packModelDeviates ? (
-                      <Check aria-hidden className="ml-auto shrink-0" />
-                    ) : null}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
             {providerGroups.map(([provider, models]) => (
               <CommandGroup
                 key={provider}
                 heading={provider}
-                // Providers are a soft grouping inside the models list, not a
-                // top-level section: mute the loud uppercase heading styling.
-                className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
+                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
               >
                 {models.map(model => (
                   <CommandItem
@@ -246,46 +169,30 @@ export function ModelPicker() {
                     onSelect={() => pickModel(model.id)}
                   >
                     <span className="truncate">{model.modelName}</span>
+                    {model.id === defaultModelId ? (
+                      <Badge variant="blue" size="xs">
+                        Default
+                      </Badge>
+                    ) : null}
                     {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
                   </CommandItem>
                 ))}
               </CommandGroup>
             ))}
-            {canReset || showPacks ? <CommandSeparator /> : null}
-            {canReset && defaultModelPackId ? (
+            {canReset ? <CommandSeparator /> : null}
+            {canReset && defaultModelId ? (
               <CommandGroup>
                 <CommandItem
                   value="action:reset"
-                  keywords={['reset', 'default', 'pack']}
-                  onSelect={() => pickPack(defaultModelPackId)}
+                  keywords={['reset', 'default', 'model']}
+                  onSelect={() => pickModel(defaultModelId)}
                 >
                   <RotateCcw aria-hidden />
-                  <span>Reset to default pack</span>
-                </CommandItem>
-              </CommandGroup>
-            ) : null}
-            {showPacks && factoryId ? (
-              <CommandGroup>
-                <CommandItem
-                  value="action:manage"
-                  keywords={['manage', 'model', 'packs', 'settings']}
-                  onSelect={() => {
-                    setOpen(false);
-                    navigate(`${settingsSectionPath(factoryId, 'models')}#model-packs`);
-                  }}
-                >
-                  <Settings2 aria-hidden />
-                  <span>Manage model packs</span>
+                  <span>Reset to your default</span>
                 </CommandItem>
               </CommandGroup>
             ) : null}
           </CommandList>
-          {modeKey ? (
-            <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
-              Model choices apply to {titleCase(modeKey)} mode only.
-              {showPacks ? ' Packs set all three modes.' : ''}
-            </Txt>
-          ) : null}
         </Command>
       </PopoverContent>
     </Popover>

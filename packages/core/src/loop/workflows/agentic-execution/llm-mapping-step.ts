@@ -4,6 +4,7 @@ import { TripWire } from '../../../agent/trip-wire';
 import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
+import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
@@ -70,7 +71,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       requestContext: rest.requestContext,
       messageList: rest.messageList,
       streamWriter,
-      emitChunk: c => rest.controller.enqueue(c),
+      emitChunk: c => {
+        safeEnqueue(rest.controller, c);
+      },
     });
   }
 
@@ -133,7 +136,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
    * step result. Mirrors the tripwire emission in processAndEnqueueChunk.
    */
   function emitTripwireChunk(tripwire: TripWire): void {
-    rest.controller.enqueue({
+    safeEnqueue(rest.controller, {
       type: 'tripwire',
       payload: {
         reason: tripwire.message || 'Tool result blocked by processor',
@@ -150,6 +153,21 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
+      // A processToolResult abort is terminal for the run: stop processing the
+      // remaining tool results and end the loop instead of calling the model again.
+      const bailOnToolResultTripwire = (tripwire: TripWire) => {
+        emitTripwireChunk(tripwire);
+        initialResult.stepResult.reason = 'tripwire';
+        initialResult.stepResult.isContinued = false;
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
+      };
 
       /**
        * Compute toModelOutput for a successful tool call and return providerMetadata
@@ -181,10 +199,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           result: toolCall.result,
           existingProviderMetadata: toolCall.providerMetadata,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
-          // No `onMappingError`: on the default engine a toModelOutput failure
-          // rethrows and fails the run — the released contract. The durable
-          // engine supplies a warn-and-continue handler instead (redelivery
-          // would re-run the mapper on every attempt).
         });
       }
 
@@ -341,8 +355,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               steps,
             });
             if (!trResult.ok) {
-              emitTripwireChunk(trResult.tripwire);
-              continue;
+              return bailOnToolResultTripwire(trResult.tripwire);
             }
 
             if (!toolCall.providerExecuted) {
@@ -497,8 +510,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             steps: stepsForToolResults,
           });
           if (!trResult.ok) {
-            emitTripwireChunk(trResult.tripwire);
-            continue;
+            return bailOnToolResultTripwire(trResult.tripwire);
           }
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed

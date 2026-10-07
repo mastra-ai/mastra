@@ -1,8 +1,7 @@
+import { useAllConnections, useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { useAllConnections } from '../../tool-providers/hooks/use-all-connections';
-import { useAllProviderTools } from '../../tool-providers/hooks/use-all-provider-tools';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
 import { buildAgentTools } from '../types/agent-tool';
