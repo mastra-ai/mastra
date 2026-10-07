@@ -6,4 +6,4 @@ Added run fencing for durable agents. Convex stores now reject writes from a dur
 
 Claims are stored in the existing `mastra_documents` table, so no schema change is needed. Redeploy your Convex functions after upgrading. Until you do, durable agent runs fail with an error asking you to redeploy. Other writes keep working.
 
-Requires `@mastra/core` 1.75.0 or later.
+Requires `@mastra/core` 1.76.0 or later.

@@ -6,18 +6,14 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import {
-  AGENT_STREAM_TOPIC,
-  AgentStreamEventTypes,
-  DurableStepIds,
-  readRunGeneration,
-} from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -2597,6 +2593,19 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
+/**
+ * Generation of the latest storage claim on a run, which is what the claiming
+ * execution tags its stream events with. Undefined when the store doesn't fence
+ * runs, including with a @mastra/core release that predates run fencing.
+ */
+async function readRunClaimGeneration(mastra: Mastra, runId: string): Promise<number | undefined> {
+  const workflows = await mastra.getStorage()?.getStore('workflows');
+  if (typeof workflows?.supportsRunFencing !== 'function' || !(await workflows.supportsRunFencing())) {
+    return undefined;
+  }
+  return (await workflows.getRunOwnership({ runId }))?.generation;
+}
+
 export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/observe',
@@ -2629,7 +2638,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // took the run over, and would then accept what the lost execution still
       // publishes, its finish included. Follow the run's current claim instead.
       // Runs fenced by a pubsub lease have no generation and are unaffected.
-      let newestGeneration = offset ? await readRunGeneration(mastra, runId) : undefined;
+      let newestGeneration = offset ? await readRunClaimGeneration(mastra, runId) : undefined;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.

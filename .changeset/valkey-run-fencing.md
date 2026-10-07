@@ -6,4 +6,4 @@ Added run fencing for durable agents. Valkey stores now reject writes from a dur
 
 Claims are stored as keys in the same database, so no setup is needed.
 
-Requires `@mastra/core` 1.75.0 or later.
+Requires `@mastra/core` 1.76.0 or later.
