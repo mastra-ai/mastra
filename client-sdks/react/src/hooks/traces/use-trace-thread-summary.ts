@@ -1,4 +1,3 @@
-import { MastraClient } from '@mastra/client-js';
 import type { TraceQueryKeysetTraceResponse } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
@@ -56,8 +55,7 @@ export function useTraceThreadSummary({
   return useQuery({
     queryKey: ['trace-thread-summary', threadId, timeRange] as const,
     queryFn: async () => {
-      const queryClient = new MastraClient({ ...client.options, retries: 0 });
-      const response = await queryClient.queryTraces({
+      const response = await client.queryTraces({
         timeRange,
         where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
         orderBy: [{ field: 'startedAt', direction: 'asc' }],
@@ -68,6 +66,7 @@ export function useTraceThreadSummary({
       return summarizeThreadTraces(threadId, response);
     },
     staleTime: 30_000,
+    retry: false,
     enabled,
   });
 }

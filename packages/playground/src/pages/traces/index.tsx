@@ -370,9 +370,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       tokens: url.filterTokens,
     }),
   });
-  // Threads view: a thread is listed when any of its traces matches the filters. Range is fixed at
-  // mount (no rolling refresh) so summary query keys stay stable.
-  const [threadsNow] = useState(() => new Date());
+  // Threads view: a thread is listed when any of its traces matches the filters. The range is pinned
+  // when the view opens (no rolling refresh) so summary query keys stay stable.
+  const [threadsNow, setThreadsNow] = useState(() => new Date());
   const threadSelection = useMemo(
     () =>
       buildTraceQueryRequest({
@@ -451,7 +451,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     <ActionRow>
       <ActionRow.Start>
         {threadQuery.enabled && (
-          <Tabs defaultTab="traces" value={view} onValueChange={setView}>
+          <Tabs
+            defaultTab="traces"
+            value={view}
+            onValueChange={next => {
+              if (next === 'threads') setThreadsNow(new Date());
+              setView(next);
+            }}
+          >
             <TabList>
               <Tab value="traces">Traces</Tab>
               <Tab value="threads">Threads</Tab>
@@ -524,6 +531,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <h1 className="sr-only">Traces</h1>
         <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (view === 'threads' && threads.error) {
+    return (
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <div className="flex h-full items-center justify-center">
+          <TracesErrorContent error={threads.error} resource="threads" errorTitle="Failed to load threads" />
         </div>
       </PageLayout>
     );

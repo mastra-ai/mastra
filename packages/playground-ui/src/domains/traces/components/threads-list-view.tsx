@@ -89,7 +89,7 @@ function ThreadRow({
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
   onClick: () => void;
 }) {
-  const { data: summary, isLoading } = useTraceThreadSummary({ threadId, timeRange });
+  const { data: summary, isLoading, isError } = useTraceThreadSummary({ threadId, timeRange });
   const placeholder = isLoading ? '…' : '—';
   const durationMs =
     summary?.startedAt && summary.lastActivityAt
@@ -105,7 +105,9 @@ function ThreadRow({
       )}
       <DataList.TextCell font="mono">{threadId}</DataList.TextCell>
       <TracesDataList.NameCell name={summary?.entityName ?? placeholder} parentSpanId={null} />
-      <TracesDataList.InputCell input={summary?.firstInput ?? placeholder} />
+      <TracesDataList.InputCell
+        input={isError ? 'Failed to load thread summary' : (summary?.firstInput ?? placeholder)}
+      />
       <TracesDataList.InputCell input={summary?.lastInput ?? placeholder} />
       <DataList.TextCell font="mono">{summary ? (summary.resourceId ?? '—') : placeholder}</DataList.TextCell>
       <DataList.NumberCell font="mono">

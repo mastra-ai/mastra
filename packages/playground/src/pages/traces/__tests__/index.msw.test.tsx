@@ -1617,6 +1617,41 @@ describe('Traces page threads view', () => {
     });
   });
 
+  describe('when the thread query fails', () => {
+    it('shows the error instead of an empty list', async () => {
+      setThreadsHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/threads/query`, () =>
+          HttpResponse.json({ error: 'The time range cannot exceed 31 days' }, { status: 400 }),
+        ),
+      );
+
+      renderPage('/traces?view=threads');
+
+      expect(await screen.findByText('Failed to load threads')).not.toBeNull();
+      expect(screen.queryByText('No threads found yet')).toBeNull();
+    });
+  });
+
+  describe("when a thread's summary fails to load", () => {
+    it('marks the row as failed instead of showing it empty', async () => {
+      setThreadsHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          return JSON.stringify(body).includes('thread-chef')
+            ? HttpResponse.json({ error: 'boom' }, { status: 500 })
+            : HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?view=threads');
+      const row = within(await getThreadRow());
+
+      expect(await row.findByText('Failed to load thread summary')).not.toBeNull();
+    });
+  });
+
   describe('when a thread row is clicked', () => {
     it('opens the whole conversation in a panel', async () => {
       setThreadsHandlers();
