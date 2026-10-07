@@ -16,6 +16,8 @@ export interface TraceThreadPanelProps {
   depth?: 1 | 2 | 3;
   /** Accessible drawer name; defaults to the thread id. */
   title?: string;
+  /** Close button label; defaults to "Back to trace" for the drawer stacked above a trace. */
+  closeLabel?: string;
 }
 
 /** The full thread in its own drawer, stacked above the trace panel: every turn as traces, opened on the latest one. */
@@ -28,6 +30,7 @@ export function TraceThreadPanel({
   onClose,
   depth = 2,
   title,
+  closeLabel = 'Back to trace',
 }: TraceThreadPanelProps) {
   // Like the trace panel: the drawer only takes the full frame while a span detail is open.
   const [hasSelectedSpan, setHasSelectedSpan] = useState(false);
@@ -40,7 +43,7 @@ export function TraceThreadPanel({
       size={hasSelectedSpan ? 'full' : 'wide'}
     >
       <DataPanel.Header>
-        <DataPanel.CloseButton onClick={onClose} label="Back to trace" tooltip="Back to trace" />
+        <DataPanel.CloseButton onClick={onClose} label={closeLabel} tooltip={closeLabel} />
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Thread

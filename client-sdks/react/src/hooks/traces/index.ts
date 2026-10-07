@@ -23,3 +23,5 @@ export * from './use-trace-feedback';
 export * from './types';
 export * from './use-trace-metadata-filter-fields';
 export * from './use-trace-column-preferences-storage-key';
+export * from './use-trace-threads-query';
+export * from './use-trace-thread-summary';

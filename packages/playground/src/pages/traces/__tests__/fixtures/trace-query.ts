@@ -1,5 +1,6 @@
 import type {
   GetObservabilityCapabilitiesResponse,
+  QueryTraceThreadsResult,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesResponse,
   TraceQueryKeysetTraceResponse,
@@ -144,4 +145,46 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     spanQuery: false,
     feedback: false,
   },
+};
+
+export const noThreadQueryCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQuery: false,
+  },
+};
+
+export const traceThreadsPage: QueryTraceThreadsResult = {
+  threads: [{ threadId: 'thread-chef' }],
+  page: { next: null },
+};
+
+/** The two turns of `thread-chef`, oldest first, as the summary query returns them. */
+export const chefThreadTraces: TraceQueryKeysetTraceResponse = {
+  traces: [
+    {
+      ...traceQueryPage.traces[0]!,
+      traceId: 'trace-chef-1',
+      rootSpanId: 'span-chef-1',
+      entityName: 'Chef Agent',
+      entityType: 'agent',
+      threadId: 'thread-chef',
+      inputPreview: 'I have eggs and spinach',
+      startedAt: '2026-09-15T12:00:00.000Z',
+      endedAt: '2026-09-15T12:00:05.000Z',
+    },
+    {
+      ...traceQueryPage.traces[0]!,
+      traceId: 'trace-chef-2',
+      rootSpanId: 'span-chef-2',
+      entityName: 'Chef Agent',
+      entityType: 'agent',
+      threadId: 'thread-chef',
+      inputPreview: 'Make it vegetarian',
+      startedAt: '2026-09-15T12:01:00.000Z',
+      endedAt: '2026-09-15T12:01:10.000Z',
+    },
+  ],
+  page: { next: null },
 };

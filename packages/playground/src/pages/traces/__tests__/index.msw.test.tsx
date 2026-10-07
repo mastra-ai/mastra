@@ -8,14 +8,17 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
+  chefThreadTraces,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  noThreadQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
   traceQueryPage,
   traceQueryRegionValues,
   traceQuerySpanModelValues,
   traceQueryPageWithThreadAndEnvironment,
+  traceThreadsPage,
 } from './fixtures/trace-query';
 import {
   branchList,
@@ -1476,5 +1479,67 @@ describe('Traces side panel span search', () => {
       await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
       expect(screen.getByText('weather tool')).toBeTruthy();
     });
+  });
+});
+
+describe('Traces page threads view', () => {
+  const onThreadsRequest = vi.fn<(body: unknown) => void>();
+
+  const setThreadsHandlers = () => {
+    setTracePageHandlers(metricsCapableCapabilities);
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/threads/query`, async ({ request }) => {
+        onThreadsRequest(await request.json());
+        return HttpResponse.json(traceThreadsPage);
+      }),
+      // Thread-scoped trace queries build each row's summary and the thread panel.
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+        const body = await request.json();
+        return HttpResponse.json(JSON.stringify(body).includes('thread-chef') ? chefThreadTraces : traceQueryPage);
+      }),
+      http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+    );
+  };
+
+  beforeEach(() => onThreadsRequest.mockClear());
+
+  it('given the store cannot run thread queries, then the Threads view is not offered', async () => {
+    setTracePageHandlers(noThreadQueryCapabilities);
+
+    renderPage('/traces?view=threads');
+
+    expect(await screen.findByRole('combobox', { name: 'Add filter' })).not.toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Threads' })).toBeNull();
+    expect(onThreadsRequest).not.toHaveBeenCalled();
+  });
+
+  it('when Threads is picked, then each conversation is listed once with its first and last message and turn count', async () => {
+    setThreadsHandlers();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('radio', { name: 'Threads' }));
+
+    expect(await screen.findByText('Chef Agent')).not.toBeNull();
+    expect(screen.getByText('I have eggs and spinach')).not.toBeNull();
+    expect(screen.getByText('Make it vegetarian')).not.toBeNull();
+    expect(screen.getByText('2')).not.toBeNull();
+    expect(screen.getByTestId('location').textContent).toContain('view=threads');
+    expect(onThreadsRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ traces: expect.objectContaining({ timeRange: expect.any(Object) }) }),
+    );
+  });
+
+  it('when a thread is clicked, then the whole conversation opens in a panel that closes back to the list', async () => {
+    setThreadsHandlers();
+
+    renderPage('/traces?view=threads');
+    fireEvent.click(await screen.findByText('Chef Agent'));
+
+    expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+    expect(screen.getByTestId('location').textContent).toContain('threadId=thread-chef');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close thread' }));
+
+    await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('threadId'));
   });
 });
