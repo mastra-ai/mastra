@@ -1165,7 +1165,7 @@ describe('KnowledgeRoutes', () => {
     await expect(threadDetail.json()).resolves.toMatchObject({ run: { source: 'calendar:thread' } });
   });
 
-  it('returns agentic import transcripts only to host operators', async () => {
+  it('returns import status, runs, and transcripts only to host operators', async () => {
     const recall = vi.fn(async () => ({
       messages: [
         {
@@ -1200,23 +1200,64 @@ describe('KnowledgeRoutes', () => {
     });
     await runtime.updateImportRunInternal({ id: run.id, status: 'running', transcriptThreadId: 'importer-thread' });
     await runtime.updateImportRunInternal({ id: run.id, status: 'succeeded' });
-    const runs = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/notes/runs`);
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+    const asOperator = { headers: { 'x-operator': '1' } };
+    const runs = await h.app.request(`${base}/notes/runs`, asOperator);
     expect(runs.status).toBe(200);
     const [listed] = (await runs.json()).runs as Array<{ reference: string }>;
-    const path = `/web/factory/projects/${h.projectId}/knowledge/importers/notes/runs/${listed!.reference}`;
+    const detailPath = `${base}/notes/runs/${listed!.reference}`;
 
-    const reader = await h.app.request(path);
-    expect(reader.status).toBe(200);
-    const readerBody = await reader.json();
-    expect(readerBody).not.toHaveProperty('transcript');
-    expect(JSON.stringify(readerBody)).not.toContain('importer-only secret');
+    for (const path of [base, `${base}/notes/runs`, detailPath]) {
+      const reader = await h.app.request(path);
+      expect(reader.status).toBe(403);
+      const body = JSON.stringify(await reader.json());
+      expect(body).not.toContain('notes:primary');
+      expect(body).not.toContain('succeeded');
+      expect(body).not.toContain('importer-only secret');
+    }
     expect(recall).not.toHaveBeenCalled();
 
-    const operator = await h.app.request(path, { headers: { 'x-operator': '1' } });
+    const operator = await h.app.request(detailPath, asOperator);
     expect(operator.status).toBe(200);
     const operatorBody = await operator.json();
+    expect(operatorBody).toMatchObject({ run: { status: 'succeeded', source: 'notes:primary' } });
     expect(operatorBody.transcript).toMatchObject({ threadId: 'importer-thread', available: true });
     expect(JSON.stringify(operatorBody.transcript.messages)).toContain('importer-only secret');
+  });
+
+  it('treats organization administrators as import operators when the profile does not decide', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const admins = new Set(['user-1']);
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      isOrganizationAdmin: async (_organizationId, userId) => admins.has(userId),
+    });
+    const run = await runtime.createImportRunInternal({
+      id: 'run-admin',
+      importerId: 'calendar',
+      binding: knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` }),
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'running' });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'failed', error: 'upstream said private detail' });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+
+    const adminRuns = await h.app.request(`${base}/calendar/runs`);
+    expect(adminRuns.status).toBe(200);
+    const [listed] = (await adminRuns.json()).runs as Array<{ reference: string; error?: string }>;
+    expect(listed!.error).toBe('upstream said private detail');
+
+    admins.clear();
+    for (const path of [base, `${base}/calendar/runs`, `${base}/calendar/runs/${listed!.reference}`]) {
+      const member = await h.app.request(path);
+      expect(member.status).toBe(403);
+      expect(JSON.stringify(await member.json())).not.toContain('private detail');
+    }
   });
 
   it('applies trigger filters before run pagination', async () => {
