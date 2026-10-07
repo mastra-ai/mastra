@@ -27,7 +27,9 @@ Combine Connect tools and channels with your own [custom tools](/docs/agents/too
 
 ## How connections work
 
-A **provider** defines the service and capabilities you can use. A **connection** authorizes an account on that provider and links it to your project. A project can have multiple connections, such as accounts in different Slack workspaces.
+A **provider** defines the service and capabilities you can use. A **connection** authorizes an account on that provider. Connections belong to your organization and can be linked to multiple projects without authorizing again.
+
+A project can have multiple connections for the same provider, such as accounts in different Slack workspaces. Give each connection a distinct display name to help agents choose the right account.
 
 Providers don't all offer the same capabilities or authorization flow. Some use OAuth, others require an API key, and channel setup can require creating a bot or app in the vendor's console. See [Providers](/docs/mastra-platform/connect/providers) to choose the provider for your use case.
 
@@ -66,7 +68,7 @@ Choose a provider from the [provider list](/docs/mastra-platform/connect/provide
 mastra connect add linear
 ```
 
-Run the command from the directory containing your `.env` file. The CLI guides you through the provider's authorization flow. [Connections](/docs/mastra-platform/connect/connections) covers naming, listing, and removing connections.
+Run the command from the directory containing your `.env` file. The CLI guides you through the provider's authorization flow. See the [`mastra connect` CLI reference](/reference/cli/mastra#mastra-connect) for listing, naming, removing, and replacing connections.
 
 ### Use the connection
 

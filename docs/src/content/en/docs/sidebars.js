@@ -777,11 +777,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'mastra-platform/connect/connections',
-          label: 'Connections',
-        },
-        {
-          type: 'doc',
           id: 'mastra-platform/connect/tools',
           label: 'Tools',
         },

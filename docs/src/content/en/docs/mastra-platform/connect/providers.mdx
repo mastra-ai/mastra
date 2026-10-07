@@ -131,7 +131,7 @@ A triage agent that reads incidents and posts updates needs **View data** and **
 
 A `proxy_error` carries the provider's response in its `status` and `detail` properties.
 
-- **Status `401` on every call:** The key was deleted or rotated in the provider. Create a new key, then [replace the connection](/docs/mastra-platform/connect/connections#fix-a-connection-that-needs-reauthorization).
+- **Status `401` on every call:** The key was deleted or rotated in the provider. Create a new key, then [replace the connection](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization).
 - **Status `403` on some tools:** The key is missing the scope or permission for those tools. Add it in the provider, or remove the tools with `allowTools`.
 - **No tools from a provider:** The project has no active connection for it, or a tool key in `allowTools` or `disallowTools` is misspelled. Run `mastra connect list`, and check your app's logs for a `[@mastra/connect] Skipping` warning.
 
