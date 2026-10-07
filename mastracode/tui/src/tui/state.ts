@@ -355,8 +355,6 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
-  /** Track a goal started from plan approval — return to plan mode when it completes */
-  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -499,7 +497,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Goal loop
     goalManager: new GoalManager(),
-    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],

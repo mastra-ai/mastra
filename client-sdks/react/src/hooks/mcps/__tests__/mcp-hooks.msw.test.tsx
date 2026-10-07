@@ -4,16 +4,18 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { server } from '../../../test/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../test/render';
+import { useMcpAppHtml } from '../use-mcp-app-html';
 import { useMcpAppTools } from '../use-mcp-app-tools';
 import { useExecuteMCPTool, useMCPServerTool } from '../use-mcp-server-tool';
 import { useMCPServerTools } from '../use-mcp-server-tools';
 import { useMCPServerToolsById } from '../use-mcp-server-tools-by-id';
 import { useMCPServers } from '../use-mcp-servers';
 import { useTryConnectMcp } from '../use-try-connect-mcp';
-import { mcpServersResponse, weatherToolsResponse } from './fixtures/mcp';
+import { mapAppResourceResponse, mcpServersResponse, weatherToolsResponse } from './fixtures/mcp';
 
 const SERVERS_URL = `${TEST_BASE_URL}/api/mcp/v0/servers`;
 const TOOLS_URL = `${TEST_BASE_URL}/api/mcp/weather-server/tools`;
+const RESOURCE_URL = `${TEST_BASE_URL}/api/mcp/weather-server/resources/read`;
 
 describe('useMCPServers', () => {
   describe('when the server lists MCP servers', () => {
@@ -143,6 +145,28 @@ describe('useTryConnectMcp', () => {
       });
 
       expect(tools).toEqual([{ name: 'echo' }]);
+    });
+  });
+});
+
+describe('useMcpAppHtml', () => {
+  describe('when the tool ships an app resource', () => {
+    it('returns the app HTML', async () => {
+      server.use(http.post(RESOURCE_URL, () => HttpResponse.json(mapAppResourceResponse)));
+
+      const { result } = renderHookWithProviders(() =>
+        useMcpAppHtml({ serverId: 'weather-server', appResourceUri: 'ui://weather/map' }),
+      );
+
+      await waitFor(() => expect(result.current.data).toBe('<html><body>Map</body></html>'));
+    });
+  });
+
+  describe('when the tool has no app resource', () => {
+    it('does not fetch', () => {
+      const { result } = renderHookWithProviders(() => useMcpAppHtml({ serverId: 'weather-server' }));
+
+      expect(result.current.fetchStatus).toBe('idle');
     });
   });
 });

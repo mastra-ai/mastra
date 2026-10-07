@@ -1,0 +1,33 @@
+@keyframes notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--spacing) * -2));
+  }
+}
+
+@layer components {
+  [data-slot='notice'] {
+    box-shadow: var(--elevation-lip), var(--elevation-raised);
+  }
+
+  /* Play on mount without relying on @starting-style support. Backwards fill
+   * leaves no animation transform or opacity override after the entrance. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='notice'] {
+      animation: notice-enter var(--duration-normal) var(--ease-out-custom) backwards;
+    }
+  }
+
+  /* This highlight belongs to the frame, not the square background layers.
+   * Match its border box and radius; the transparent border keeps the white
+   * inset rim inside the existing surface border. Paint above the grain. */
+  html.light [data-slot='notice']::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border: 1px solid transparent;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 0.5px var(--color-white);
+  }
+}

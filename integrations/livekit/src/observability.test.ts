@@ -90,6 +90,7 @@ describe('startVoiceCallObservability', () => {
     });
     session.emitMetric({
       type: 'tts_metrics',
+      speechId: 'speech-1',
       label: 'cartesia',
       requestId: 'r1',
       timestamp: 0,
@@ -111,7 +112,35 @@ describe('startVoiceCallObservability', () => {
       charactersCount: 64,
       modelProvider: 'cartesia',
       modelName: 'sonic-3',
+      speechId: 'speech-1',
     });
+  });
+
+  it('records correlated generation and speech outcomes without a transcript', () => {
+    const span = makeFakeSpan();
+    const obs = startVoiceCallObservability({ mastra: mastraWithSpan(span), ...baseArgs })!;
+    obs.recordTurn({
+      version: 1,
+      phase: 'generation',
+      turnId: 'turn-1',
+      attemptId: 'attempt-1',
+      startedAt: 1000,
+      durationMs: 50,
+      outcome: 'completed',
+      tools: [],
+    });
+    obs.recordTurn({
+      version: 1,
+      phase: 'speech',
+      turnId: 'turn-1',
+      attemptId: 'attempt-1',
+      speechId: 'speech-1',
+      measurement: 'server-playout',
+      outcome: 'interrupted',
+    });
+    expect(span.events.map(event => event.name)).toEqual(['voice generation completed', 'voice speech interrupted']);
+    expect(span.events[1]!.output).toMatchObject({ turnId: 'turn-1', attemptId: 'attempt-1', speechId: 'speech-1' });
+    expect(span.events[1]!.output).not.toHaveProperty('playedText');
   });
 
   it('closes the call span with a per-model usage roll-up when the session closes', () => {

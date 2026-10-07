@@ -967,6 +967,13 @@ Emitted when observation or reflection fails. The system falls back to synchrono
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted.' },
   { name: 'error', type: 'string', description: 'Error message.' },
   {
+    name: 'retrying',
+    type: 'true',
+    description:
+      'Set when a reflection attempt did not compress below its target and OM is retrying at a higher compression level. A new `start` marker follows, so this failure is not final. Absent on final failures.',
+    isOptional: true,
+  },
+  {
     name: 'observations',
     type: 'string',
     description: 'Any partial content available for display.',

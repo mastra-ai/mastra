@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",

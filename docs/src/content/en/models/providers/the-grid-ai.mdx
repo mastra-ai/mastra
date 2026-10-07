@@ -7,7 +7,7 @@ description: "Browse The Grid AI model IDs, capabilities, and context windows. L
 
 # <img src="https://models.dev/logos/the-grid-ai.svg" alt="The Grid AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />The Grid AI
 
-Access 9 The Grid AI models through Mastra's model router. Authentication is handled automatically using the `THEGRID_API_KEY` environment variable.
+Access 16 The Grid AI models through Mastra's model router. Authentication is handled automatically using the `THEGRID_API_KEY` environment variable.
 
 Learn more in the [The Grid AI documentation](https://thegrid.ai/docs).
 
@@ -65,7 +65,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 30000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -77,7 +77,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 16000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/bytedance-pro-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/claude-opus-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
@@ -101,7 +125,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 30000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -113,7 +137,67 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 16000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/deepseek-pro-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/gemini-pro-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/glm-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/gpt-sol-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/minimax-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
     "inputCost": null,
     "outputCost": null
   },
@@ -137,7 +221,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 30000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -149,7 +233,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 16000,
+    "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
   }
