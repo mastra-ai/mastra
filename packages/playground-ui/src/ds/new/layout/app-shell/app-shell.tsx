@@ -16,16 +16,13 @@ export function AppShell({ children, className, mobileHeader, ref, sidebar, ...p
       className={cn(
         'h-full min-h-0',
         sidebar && 'lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[1fr]',
+        // The body's top inset plus `MainCard`'s 1px rim. `Sidebar` reads it so its header lines up with the page header.
+        sidebar && 'lg:[--app-shell-inset-top:calc(--spacing(2)+1px)]',
         className,
       )}
       {...props}
     >
-      {sidebar && (
-        // The body's top inset plus `MainCard`'s 1px rim, so the sidebar header lines up with the page header.
-        <div data-slot="app-shell-sidebar" className="contents lg:flex lg:min-h-0 lg:pt-[calc(--spacing(2)+1px)]">
-          {sidebar}
-        </div>
-      )}
+      {sidebar}
       <div data-slot="app-shell-content" className="flex h-full min-h-0 min-w-0 flex-col">
         {mobileHeader}
         <div
