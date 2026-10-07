@@ -46,6 +46,9 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
   const createThread = vi.fn(async () => ({ id: 'thread-1' }));
   const cleanup = vi.fn().mockResolvedValue(undefined);
   const resume = vi.fn().mockResolvedValue(undefined);
+  const resolveAddress = vi.fn(({ toolCallId, runId }: { toolCallId?: string; runId?: string }) =>
+    toolCallId ? { toolCallId, runId: runId ?? 'run-1', threadId: 'thread-1', resourceId: 'resource-1' } : undefined,
+  );
   const abort = vi.fn(() => emit({ type: 'agent_end', reason: 'aborted' }));
   const deny = vi.fn(async () => {
     emit({ type: 'agent_start' });
@@ -61,6 +64,7 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
     sendMessage,
     respondToToolSuspension: resume,
     resumeToolCall: deny,
+    suspensions: { resolveAddress },
     abort,
   } as unknown as Session;
   let agent!: MastraCodeAcpAgent;
@@ -365,7 +369,12 @@ describe('ACP JSON-RPC conversation', () => {
     await decision.promise;
     await Promise.resolve();
     expect(deny).toHaveBeenCalledExactlyOnceWith({
-      toolCallId: 'access-1',
+      address: {
+        toolCallId: 'access-1',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      },
       resumeData: 'No',
       resolveOnToolEnd: true,
     });
