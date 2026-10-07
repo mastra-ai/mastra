@@ -9483,10 +9483,15 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub, {
-        agent: this,
-        streamOptions: preparedOptions,
-      });
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }
@@ -9841,7 +9846,12 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed resume does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        runId,
+        threadStreamPubSub,
+        undefined,
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }

@@ -4891,12 +4891,17 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
   it('should forward the parent abortSignal to a delegated sub-agent (stream)', async () => {
     let capturedSignal: AbortSignal | undefined;
+    let releaseProbe!: () => void;
+    const probeReleased = new Promise<void>(resolve => {
+      releaseProbe = resolve;
+    });
     const probe = createTool({
       id: 'probe',
       description: 'Records the abortSignal it receives from the execution context.',
       inputSchema: z.object({}),
       execute: async (_input: unknown, ctx: any) => {
         capturedSignal = ctx?.abortSignal;
+        await probeReleased;
         return { ok: true };
       },
     });
@@ -4921,17 +4926,22 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
     const controller = new AbortController();
     const stream = await supervisor.stream('go', { abortSignal: controller.signal, maxSteps: 5 });
-    for await (const _chunk of stream.fullStream) {
-      // drain
+    const drainPromise = (async () => {
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+    })();
+
+    try {
+      await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+      expect(capturedSignal!.aborted).toBe(false);
+
+      controller.abort();
+      expect(capturedSignal!.aborted).toBe(true);
+    } finally {
+      releaseProbe();
     }
-
-    // The sub-agent's tool must have received a signal linked to the parent controller.
-    expect(capturedSignal).toBeDefined();
-    expect(capturedSignal!.aborted).toBe(false);
-
-    // Aborting the parent must propagate to the forwarded signal observed by the sub-agent.
-    controller.abort();
-    expect(capturedSignal!.aborted).toBe(true);
+    await drainPromise;
   });
 
   it('should forward the parent abortSignal to a delegated sub-agent (generate)', async () => {
