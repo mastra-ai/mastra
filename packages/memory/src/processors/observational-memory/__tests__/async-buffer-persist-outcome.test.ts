@@ -13,7 +13,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { ObservationalMemory } from '../observational-memory';
 
-async function bufferOnce(observations: string, opts: { rolloverBeforeAppend?: boolean; rolloverAfterAppend?: boolean; clearAfterAppend?: boolean } = {}) {
+async function bufferOnce(
+  observations: string,
+  opts: { rolloverBeforeAppend?: boolean; rolloverAfterAppend?: boolean; clearAfterAppend?: boolean } = {},
+) {
   const storage = new InMemoryMemory({ db: new InMemoryDB() });
   const threadId = randomUUID();
   const resourceId = randomUUID();
