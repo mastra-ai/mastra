@@ -28,12 +28,16 @@ import { renderReport } from './report';
 import { capacityCheck, DELTA_TABLE, files, REQUIRED_COLUMNS, runPhases, runProbe, TABLES } from './run';
 import type { SkipRecord, TqContext, TqRecord } from './run';
 
-const LOCAL = { url: 'http://localhost:8123', username: 'default', password: 'password' };
-const DB = 'aqa_bench_tq_smoke';
+export const LOCAL = {
+  url: process.env.TQ_SMOKE_URL ?? 'http://localhost:8123',
+  username: 'default',
+  password: process.env.TQ_SMOKE_PASSWORD ?? 'password',
+};
+export const DB = 'aqa_bench_tq_smoke';
 const RO_USER = 'aqa_bench_tq_smoke_ro';
 const RO_PASSWORD = randomUUID();
-const ORG = 'smoke-org';
-const PROJECTS = { a: 'smoke-proj-a', b: 'smoke-proj-b' };
+export const ORG = 'smoke-org';
+export const PROJECTS = { a: 'smoke-proj-a', b: 'smoke-proj-b' };
 const SIGNAL_TABLES = [
   'mastra_span_events',
   'mastra_trace_roots',
@@ -156,7 +160,7 @@ function fixtures(to: Date) {
   return { spans, metrics, feedback, traces };
 }
 
-async function setup(to: Date) {
+export async function setup(to: Date) {
   const admin = createClient(LOCAL);
   try {
     await admin.command({ query: `DROP DATABASE IF EXISTS ${DB}` });
@@ -350,7 +354,8 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(error => {
-  process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`)
+  main().catch(error => {
+    process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
+    process.exit(1);
+  });

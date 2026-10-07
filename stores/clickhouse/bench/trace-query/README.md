@@ -47,6 +47,20 @@ npx tsx bench/shared/leak-check.ts [pr-body.md]
 
 `run` refuses to start without a probe decision, and is resumable (skips keys already in `results/runs.jsonl`). `--dry-run` lists the phases and units.
 
+## Memory experiments
+
+`experiments.ts` tests query rewrites and settings (`variants.ts`) against the compiled base, sequentially, 3 s apart. Results go to `results/experiments.jsonl`; the register and findings are in [EXPERIMENTS.md](./EXPERIMENTS.md).
+
+```sh
+npx tsx bench/trace-query/experiments.ts census                          # duplicate root copies
+npx tsx bench/trace-query/experiments.ts equiv --exp QX03 --variants nh2 --cases T0,D1 --targets p90,p99 --windows 30d
+npx tsx bench/trace-query/experiments.ts ab --exp QX09 --variants nh2+topn2+pf8 --cases T0 --targets p99 --windows 30d --reps 3 [--cold --cold-reps 2]
+npx tsx bench/trace-query/experiments.ts summary --exp QX09
+TQ_SMOKE_URL=http://localhost:18125 npx tsx bench/trace-query/experiments.smoke.ts   # rewrites vs base, local throwaway ClickHouse
+```
+
+Variants compose with `+`; `<setting>@2` applies a settings overlay to a two-stage variant's lookup only.
+
 ## Concurrency
 
 A scheduling unit is one case × variant × window × project; its stages and reps run in order in one slot, and different units run in parallel (default 4, max 8). Phases (bucket × window, smallest first) are barriers, so the aggregate suite's escalation rule stays exact. Each slot keeps the 2 s gap between its own queries, and query starts are at least 250 ms apart.
