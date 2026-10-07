@@ -587,6 +587,24 @@ describe('KnowledgePage', () => {
     }
   });
 
+  it('explains that imports are operator-only instead of showing an error', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json(
+          { error: 'forbidden', message: 'Knowledge imports are visible to instance operators.' },
+          { status: 403 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    expect(await screen.findByText('Knowledge imports are visible to instance operators.')).toBeInTheDocument();
+    expect(screen.queryByText('repo:mastra')).not.toBeInTheDocument();
+  });
+
   it('shows the truncation banner when the payload window was capped', async () => {
     stubKnowledgeRoute({
       ...graphFixture,

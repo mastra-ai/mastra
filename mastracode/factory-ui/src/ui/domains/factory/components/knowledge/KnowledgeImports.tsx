@@ -17,6 +17,7 @@ import type {
   KnowledgeImportStatus,
   KnowledgeImportTrigger,
 } from '../../services/knowledge-imports';
+import { RequestError } from '../../services/request';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 
 function elapsed(run: KnowledgeImportRun): string {
@@ -315,7 +316,10 @@ export function KnowledgeImports({
   const [requestedImporterId, setRequestedImporterId] = useState<string | undefined>(initialImporterId);
   if (!factoryProjectId) return null;
   if (importers.isPending) return <SkeletonRows label="Loading knowledge importers" rows={5} />;
-  if (importers.isError) return <Notice variant="destructive">{importers.error.message}</Notice>;
+  if (importers.isError) {
+    const forbidden = importers.error instanceof RequestError && importers.error.status === 403;
+    return <Notice variant={forbidden ? 'info' : 'destructive'}>{importers.error.message}</Notice>;
+  }
   if (importers.data.importers.length === 0) {
     return (
       <Txt as="p" variant="body" className="text-muted-foreground">
