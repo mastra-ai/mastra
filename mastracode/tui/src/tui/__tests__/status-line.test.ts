@@ -128,7 +128,7 @@ function createState() {
       rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',
       gitBranch: 'feat/mc-queueing-ux',
     },
-    pendingQueuedActions: [],
+    pendingSlashCommands: [],
     activeGithubPrSubscriptions: [],
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
@@ -153,7 +153,7 @@ describe('updateStatusLine', () => {
 
   it('shows queued count in the status line', () => {
     const state = createState();
-    state.pendingQueuedActions = ['message', 'slash'];
+    state.pendingSlashCommands = ['/a', '/b'];
     state.session.displayState.get.mockReturnValue({
       ...state.session.displayState.get(),
       queuedFollowUps: 1,
