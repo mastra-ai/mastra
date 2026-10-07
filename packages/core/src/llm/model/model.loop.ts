@@ -9,6 +9,7 @@ import { SpanType, resolveObservabilityContext } from '../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
+import { sendsNativeResponseFormat } from '../../stream/aisdk/v5/execute';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -180,7 +181,7 @@ export class MastraLLMVNext extends MastraBase {
           tools,
           toolChoice,
           activeTools: activeTools as string[] | undefined,
-          stripToolsWhenNone: !!structuredOutput?.schema && !structuredOutput?.model,
+          stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, firstModel),
         })
       : undefined;
 

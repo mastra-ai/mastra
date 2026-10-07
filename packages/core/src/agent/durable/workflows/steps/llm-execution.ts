@@ -35,7 +35,7 @@ import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget'
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
-import { execute } from '../../../../stream/aisdk/v5/execute';
+import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
@@ -1144,7 +1144,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   toolChoice: currentToolChoice,
                   activeTools: currentActiveTools,
                   specificationVersion: currentModel.specificationVersion,
-                  stripToolsWhenNone: !!structuredOutput?.schema,
+                  stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, currentModel),
                 })
               : undefined;
             modelSpanTracker?.setInferenceContext?.({

@@ -715,4 +715,12 @@ describe("execute toolChoice 'none' (issue #25908)", () => {
     expect(options.tools).toBeUndefined();
     expect(options.toolChoice).toEqual({ type: 'none' });
   });
+
+  it('keeps tools when the schema is injected into the prompt instead of sent as a response format', async () => {
+    const options = await captureCallOptions({ schema, jsonPromptInjection: true });
+
+    expect(options.responseFormat).toBeUndefined();
+    expect(options.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
 });
