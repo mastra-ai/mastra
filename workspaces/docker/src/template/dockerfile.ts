@@ -152,6 +152,15 @@ function renderSecretRun(command: string | string[], secrets: string[]): string 
   return `RUN ${[...mounts, ''].join(' ')}${[...prefix, ...toCommandList(command)].join(' && ')}`;
 }
 
+const OWNER_PATTERN = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+)?$/;
+
+/** Throws unless `owner` is a `user[:group]` or `uid[:gid]` usable in `COPY --chown`. */
+export function assertValidOwner(owner: unknown): asserts owner is string {
+  if (typeof owner !== 'string' || !OWNER_PATTERN.test(owner)) {
+    throw new TypeError(`owner must be user[:group] or uid[:gid], got ${JSON.stringify(owner)}`);
+  }
+}
+
 export function synthesizeDockerfile(definition: DockerTemplateDefinition): string {
   const lines: string[] = [];
   let mainIndex = 0;
@@ -175,12 +184,13 @@ export function synthesizeDockerfile(definition: DockerTemplateDefinition): stri
         break;
       case 'runWithSecrets': {
         const [command, { secrets, output, owner }] = operation.args;
+        if (owner !== undefined) assertValidOwner(owner);
         const snapshot = mainStageName(mainIndex);
         const stage = secretStageName(index);
         lines.push(`FROM ${snapshot} AS ${stage}`, renderSecretRun(command, secrets));
         mainIndex += 1;
         openMain(snapshot);
-        lines.push(`COPY ${owner ? `--chown=${owner} ` : ''}--from=${stage} ${output} ${output}`);
+        lines.push(`COPY ${owner !== undefined ? `--chown=${owner} ` : ''}--from=${stage} ${output} ${output}`);
         break;
       }
       case 'aptInstall':

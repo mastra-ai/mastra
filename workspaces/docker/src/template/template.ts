@@ -37,6 +37,7 @@ import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
 import { openBuildSession, type BuildSession } from './build-session';
 import {
+  assertValidOwner,
   type AptInstallOptions,
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
@@ -120,7 +121,6 @@ interface InFlightBuild {
  * Operation methods return a new instance (like the platform `Template()`
  * builder); `build`/`createSandbox`/`dispose` operate against the daemon.
  */
-const OWNER_PATTERN = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+)?$/;
 
 export class DockerTemplate {
   readonly #baseImage: string;
@@ -210,9 +210,7 @@ export class DockerTemplate {
     let owner: string | undefined;
     if (options.owner !== undefined) {
       owner = validateString(options.owner, 'owner');
-      if (!OWNER_PATTERN.test(owner)) {
-        throw new TypeError(`owner must be user[:group] or uid[:gid], got ${JSON.stringify(owner)}`);
-      }
+      assertValidOwner(owner);
     }
     return this.#append({
       method: 'runWithSecrets',
