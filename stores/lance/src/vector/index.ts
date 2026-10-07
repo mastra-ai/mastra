@@ -693,6 +693,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       );
     }
 
+    if (indexConfig.type === 'ivfflat' && indexConfig.numSubVectors !== undefined) {
+      this.logger.warn(
+        `numSubVectors is ignored for 'ivfflat' indexes. Use type 'ivfpq' for product-quantized IVF indexes.`,
+      );
+    }
+
     try {
       const tables = await this.lanceClient.tableNames();
       let table: Table;
@@ -739,11 +745,16 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return;
       }
 
-      const isIvf = indexConfig.type === 'ivfflat';
-      const buildParams = isIvf
-        ? { numPartitions: indexConfig.numPartitions || 128, numSubVectors: indexConfig.numSubVectors || 16 }
-        : { m: indexConfig?.hnsw?.m || 16, efConstruction: indexConfig?.hnsw?.efConstruction || 100 };
-      const fingerprint = JSON.stringify({ type: isIvf ? 'ivf_pq' : 'hnsw_pq', metric: metricType, ...buildParams });
+      const numPartitions = indexConfig.numPartitions || 128;
+      const buildParams =
+        indexConfig.type === 'ivfflat'
+          ? { numPartitions }
+          : indexConfig.type === 'ivfpq'
+            ? { numPartitions, numSubVectors: indexConfig.numSubVectors || 16 }
+            : { m: indexConfig?.hnsw?.m || 16, efConstruction: indexConfig?.hnsw?.efConstruction || 100 };
+      const fingerprintType =
+        indexConfig.type === 'ivfflat' ? 'ivf_flat' : indexConfig.type === 'ivfpq' ? 'ivf_pq' : 'hnsw_pq';
+      const fingerprint = JSON.stringify({ type: fingerprintType, metric: metricType, ...buildParams });
 
       // Skip the rebuild when the index on this column is the one we last built with identical settings.
       // LanceDB index stats don't expose build params, so the fingerprint and index UUID are persisted on
@@ -760,7 +771,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         }
       }
 
-      if (isIvf) {
+      if (indexConfig.type === 'ivfflat') {
+        await table.createIndex(columnToIndex, {
+          config: Index.ivfFlat({ numPartitions, distanceType: metricType }),
+        });
+      } else if (indexConfig.type === 'ivfpq') {
         await table.createIndex(columnToIndex, {
           config: Index.ivfPq({ ...buildParams, distanceType: metricType }),
         });

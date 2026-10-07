@@ -1921,6 +1921,39 @@ describe('Lance vector store tests', () => {
       });
     });
 
+    describe('native index types', () => {
+      const createAndListIndexType = async (type: 'ivfflat' | 'ivfpq') => {
+        const tableName = `native_index_${type}_${Date.now()}`;
+        await vectorDB.createTable(
+          tableName,
+          Array.from({ length: 300 }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 16 }, () => Math.random()),
+          })),
+        );
+        await vectorDB.createIndex({
+          tableName,
+          indexName: 'vector',
+          dimension: 16,
+          metric: 'cosine',
+          indexConfig: { type, numPartitions: 1, numSubVectors: 2 },
+        });
+        const db = await connect(connectionString);
+        const indices = await (await db.openTable(tableName)).listIndices();
+        db.close();
+        await vectorDB.deleteTable(tableName);
+        return indices.find(index => index.columns.includes('vector'))?.indexType;
+      };
+
+      it("creates an IVF Flat index for type 'ivfflat'", async () => {
+        expect(await createAndListIndexType('ivfflat')).toBe('IvfFlat');
+      });
+
+      it("creates an IVF PQ index for type 'ivfpq'", async () => {
+        expect(await createAndListIndexType('ivfpq')).toBe('IvfPq');
+      });
+    });
+
     describe('query without tableName', () => {
       it('should return empty array when table does not exist', async () => {
         const indexName = 'memory_compat_query_nonexistent_' + Date.now();
