@@ -17,11 +17,15 @@ vi.mock('../../utils/resolve-runtime', () => ({
 
 const { runDurableFinishSideEffects } = await import('../finalize-run');
 
-function makeInitData(state: Record<string, unknown>): DurableAgenticWorkflowInput {
+function makeInitData(
+  state: Record<string, unknown>,
+  options?: DurableAgenticWorkflowInput['options'],
+): DurableAgenticWorkflowInput {
   return {
     runId: 'run-1',
     agentId: 'agent-1',
     agentName: 'agent-1',
+    ...(options ? { options } : {}),
     state,
   } as unknown as DurableAgenticWorkflowInput;
 }
@@ -86,14 +90,23 @@ describe('runDurableFinishSideEffects', () => {
     await expect(
       runDurableFinishSideEffects({
         runId: 'run-1',
-        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: false }),
+        initData: makeInitData(
+          { threadId: 'thread-1', resourceId: 'resource-1', threadExists: false },
+          { actor: true },
+        ),
         messageListState: makeMessageListState(),
       }),
     ).rejects.toBe(denial);
 
     expect(authorizeDurableMemory).toHaveBeenCalledWith(
       expect.any(Map),
-      expect.objectContaining({ permission: 'memory:write' }),
+      expect.objectContaining({
+        permission: 'memory:write',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        agentId: 'agent-1',
+        actor: true,
+      }),
     );
     expect(createThread).not.toHaveBeenCalled();
     expect(flushMessages).not.toHaveBeenCalled();

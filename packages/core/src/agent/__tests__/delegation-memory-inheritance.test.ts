@@ -205,13 +205,44 @@ describe('delegation memory inheritance (issue #21625)', () => {
     });
 
     expect(fgaProvider.require).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({ id: 'user-1', organizationMembershipId: 'membership-1' }),
       expect.objectContaining({
         permission: 'memory:write',
+        resource: { type: 'thread', id: expect.any(String) },
         context: expect.objectContaining({ metadata: expect.objectContaining({ agentId: 'sub-agent' }) }),
       }),
     );
+    const authorization = vi
+      .mocked(fgaProvider.require)
+      .mock.calls.find(
+        ([, input]) => input.permission === 'memory:write' && input.context?.metadata?.agentId === 'sub-agent',
+      )?.[1];
+    expect(authorization?.context?.requestContext?.get('actor')).toEqual({ id: 'actor-1', type: 'user' });
     expect(saveMessages).not.toHaveBeenCalled();
+  });
+
+  it('persists supervisor feedback when the write is allowed', async () => {
+    const supervisorMemory = new MockMemory();
+    const saveMessages = vi.spyOn(supervisorMemory, 'saveMessages');
+    const sub = makeSubAgent('sub-agent', new MockMemory());
+    const supervisor = makeSupervisor(sub, supervisorMemory);
+    const fgaProvider = createMemoryWriteDenyProvider('unmatched-agent');
+    new Mastra({ agents: { supervisor, sub }, logger: false, server: { fga: fgaProvider } });
+
+    await supervisor.generate('Delegate please', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+      requestContext: createActorRequestContext(),
+      delegation: { onDelegationComplete: () => ({ feedback: 'Supervisor feedback' }) },
+    });
+
+    expect(
+      saveMessages.mock.calls.some(call =>
+        call[0].messages.some(message =>
+          message.content.parts.some(part => part.type === 'text' && part.text === 'Supervisor feedback'),
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('denies supervisor feedback persistence before writing the feedback message', async () => {
@@ -242,6 +273,20 @@ describe('delegation memory inheritance (issue #21625)', () => {
     });
 
     expect(supervisorWriteChecks).toBeGreaterThan(1);
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', organizationMembershipId: 'membership-1' }),
+      expect.objectContaining({
+        permission: 'memory:write',
+        resource: { type: 'thread', id: expect.any(String) },
+        context: expect.objectContaining({ metadata: expect.objectContaining({ agentId: 'supervisor' }) }),
+      }),
+    );
+    const authorization = vi
+      .mocked(fgaProvider.require)
+      .mock.calls.find(
+        ([, input]) => input.permission === 'memory:write' && input.context?.metadata?.agentId === 'supervisor',
+      )?.[1];
+    expect(authorization?.context?.requestContext?.get('actor')).toEqual({ id: 'actor-1', type: 'user' });
     expect(
       saveMessages.mock.calls.some(call =>
         call[0].messages.some(message =>
