@@ -514,10 +514,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             onReset={traceColumns.resetColumns}
           />
         )}
-        <Field orientation="horizontal" disabled={isTracesLoading}>
-          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
-          <FieldLabel>Auto refresh</FieldLabel>
-        </Field>
+        {view === 'traces' && (
+          <Field orientation="horizontal" disabled={isTracesLoading}>
+            <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
+            <FieldLabel>Auto refresh</FieldLabel>
+          </Field>
+        )}
       </ActionRow.End>
     </ActionRow>
   );

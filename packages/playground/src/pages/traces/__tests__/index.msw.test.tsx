@@ -1589,6 +1589,15 @@ describe('Traces page threads view', () => {
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('view=threads'));
     });
 
+    it('hides Auto refresh, which only applies to traces', async () => {
+      setThreadsHandlers();
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.queryByText('Auto refresh')).toBeNull());
+    });
+
     it('queries threads over the selected time range', async () => {
       setThreadsHandlers();
 
