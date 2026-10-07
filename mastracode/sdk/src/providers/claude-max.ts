@@ -6,14 +6,13 @@
  */
 
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { runThinkingLevel } from '../thinking.js';
+import { runCatalogThinkingLevel } from '../thinking-catalog.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
 import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import { ANTHROPIC_THINKING_BUDGET_TOKENS, getAnthropicThinkingCapability } from './anthropic-thinking.js';
@@ -154,8 +153,7 @@ export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): L
 });
 
 function runAnthropicRequestLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
-  const routerModelId = `anthropic/${modelId}`;
-  return runThinkingLevel(routerModelId, level, getModelReasoningOptions(routerModelId));
+  return runCatalogThinkingLevel(`anthropic/${modelId}`, level);
 }
 
 /**

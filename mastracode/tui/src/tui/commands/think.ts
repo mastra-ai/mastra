@@ -2,9 +2,9 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
-import { isThinkingLevelSetting, parseThinkCommand, runThinkingLevel } from '@mastra/code-sdk/thinking';
+import { isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { runCatalogThinkingLevel } from '@mastra/code-sdk/thinking-catalog';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -69,7 +69,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   const modelId = ctx.state.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const override = getSessionOverride(ctx);
-  const runningOverride = override && runThinkingLevel(modelId, override, getModelReasoningOptions(modelId));
+  const runningOverride = override && runCatalogThinkingLevel(modelId, override);
   const configuredDefault = getConfiguredDefault(ctx);
   const rawArguments = args.join(' ');
 

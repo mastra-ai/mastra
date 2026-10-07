@@ -19,10 +19,10 @@ import type {
   AvailableCommand,
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
-import { getModelReasoningOptions } from '@mastra/core/llm';
 import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
 import { seedProviderOMDefault } from '../onboarding/om-settings.js';
-import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting, runThinkingLevel } from '../thinking.js';
+import { getCatalogThinkingLevels, runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { openUrlInBrowser } from '../utils/open-url.js';
 import { getCurrentVersion } from '../utils/update-check.js';
@@ -365,7 +365,7 @@ export class MastraCodeAcpAgent implements Agent {
         type: 'select',
         description: 'Requested reasoning level. The provider may adjust it for the selected model.',
         currentValue: this.thinkingLevel(entry),
-        options: getAvailableThinkingLevelsForModel(modelId, getModelReasoningOptions(modelId)).map(value => ({
+        options: getCatalogThinkingLevels(modelId).map(value => ({
           value,
           name: value[0]!.toUpperCase() + value.slice(1),
         })),
@@ -375,7 +375,7 @@ export class MastraCodeAcpAgent implements Agent {
 
   private thinkingLevel(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
     const level = entry.getThinkingLevel?.() ?? 'off';
-    return runThinkingLevel(modelId, level, getModelReasoningOptions(modelId));
+    return runCatalogThinkingLevel(modelId, level);
   }
 
   private thinkingLevelToSave(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
