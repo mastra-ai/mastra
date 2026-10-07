@@ -229,10 +229,13 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
       // COR-1391 lands.
       await expect(host.shutdown({ drainTimeout: 1000 })).rejects.toThrow(/reading 'mastra'/);
     } else {
-      // The harness runs one engine per process; here all three engines share
-      // this process, so the valueless key an earlier evented variant leaves
-      // behind (COR-1391) makes this shutdown throw the same TypeError. Any
-      // other failure is a real one.
+      // COR-1391: the harness runs one engine per process, but all three
+      // engines share this process, so the valueless key an earlier evented
+      // variant leaves behind makes this shutdown throw the same TypeError.
+      // Tolerating exactly that error is a consequence of the bug only — when
+      // COR-1391 lands, this try/catch goes away and the call becomes an
+      // unconditional `await host.shutdown({ drainTimeout: 1000 })` again,
+      // alongside the evented assertion above.
       try {
         await host.shutdown({ drainTimeout: 1000 });
       } catch (error) {
