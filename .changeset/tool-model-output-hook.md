@@ -10,9 +10,9 @@ Added a `processToolModelOutput` processor hook that changes what the model read
 const shortener: Processor = {
   id: 'shortener',
   processToolModelOutput: ({ result }) => ({
-    modelOutput: { type: 'text', value: String(result).slice(0, 2000) },
+    modelOutput: { type: 'text', value: JSON.stringify(result).slice(0, 2000) },
   }),
 };
 ```
 
-The hook runs after every `processToolResult` and after the tool's `toModelOutput`, on both the default and durable engines and for background task results. Stored processor configs and the server accept the new `processToolModelOutput` phase.
+The hook runs after every `processToolResult` and after the tool's `toModelOutput`, on both the default and durable engines, for provider-executed tools, and for background task results. It doesn't run for client-side tools. Stored processor configs and the server accept the new `processToolModelOutput` phase.

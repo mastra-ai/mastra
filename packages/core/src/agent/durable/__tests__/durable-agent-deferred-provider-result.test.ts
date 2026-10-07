@@ -253,6 +253,46 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
     result.cleanup();
   });
 
+  it('runs processToolModelOutput on the deferred result and keeps the stored result whole', async () => {
+    const seen: Array<{ toolCallId: string; result: unknown; providerExecuted?: boolean }> = [];
+    const shortener = {
+      id: 'deferred-shortener',
+      processToolModelOutput: async ({ toolCallId, result, providerExecuted }: any) => {
+        seen.push({ toolCallId, result, providerExecuted });
+        return { modelOutput: { type: 'text', value: 'short' } };
+      },
+    };
+
+    const { mockMemory, durableAgent } = setup(pubsub, {
+      deferredResult: { hits: 3, source: 'full-source' },
+      outputProcessors: [shortener],
+    });
+
+    const result = await durableAgent.stream('search and check weather', {
+      memory: { thread: 'thread-deferred-mo', resource: 'resource-deferred-mo' },
+    });
+    const chunks = await drain(result.fullStream);
+
+    const providerCall = seen.find(s => s.toolCallId === PROVIDER_CALL_ID);
+    expect(providerCall?.result).toEqual({ hits: 3, source: 'full-source' });
+    expect(providerCall?.providerExecuted).toBe(true);
+
+    const streamedResult = chunks.find(
+      (c: any) => c.type === 'tool-result' && c.payload?.toolCallId === PROVIDER_CALL_ID,
+    );
+    expect(streamedResult?.payload?.result).toEqual({ hits: 3, source: 'full-source' });
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-deferred-mo',
+      resourceId: 'resource-deferred-mo',
+    });
+    const invocations = findInvocations(recalled.messages, PROVIDER_CALL_ID);
+    const patched = invocations.find((inv: any) => inv.state === 'result');
+    expect(patched?.result).toEqual({ hits: 3, source: 'full-source' });
+    expect(JSON.stringify(recalled.messages)).toContain('"modelOutput":{"type":"text","value":"short"}');
+    result.cleanup();
+  });
+
   it('persists the transform metadata when a deferred provider result is patched (L18b residual)', async () => {
     // Mirrors the same-stream L18b assertions in durable-agent-transform.test.ts,
     // but for the deferred path: the tool-call arrives in step N, the result in

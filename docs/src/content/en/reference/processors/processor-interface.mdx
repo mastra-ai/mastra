@@ -1488,6 +1488,8 @@ It runs once per tool result, after every `processToolResult` rewrite and after 
 
 A background task with the `awaited` disposition is the one exception to once per result. The hook runs when the task result is applied to the message list and again when the awaited result returns to the turn, and each run starts from the tool's `toModelOutput` mapping. Write the hook so running it twice on the same result gives the same output.
 
+The hook doesn't run for client-side tools (tools without `execute`). Their results come back from the client, and only the tool's `toModelOutput` mapping applies.
+
 Return `{ modelOutput }` to replace the model-facing output, or return nothing to keep it.
 
 ```typescript oxfmt:false
@@ -1522,7 +1524,13 @@ processToolModelOutput?(
     description: 'Whether the provider executed the tool.',
     isOptional: true,
   },
-  { name: 'stepNumber', type: 'number', description: 'Current step number (0-indexed).', isOptional: false },
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description:
+      'Current step number (0-indexed). It is `0` in the durable tool-call step and for background task results.',
+    isOptional: false,
+  },
   {
     name: 'abort',
     type: '(reason?: string, options?: { retry?: boolean }) => never',
