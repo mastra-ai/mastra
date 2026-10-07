@@ -516,25 +516,32 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   readonly sessionRepositories = {
     upsert: async (input: UpsertSessionRepositoryInput): Promise<SourceControlSessionRepository> => {
       const now = new Date();
-      const changes = {
-        branch: input.branch,
-        changeRequestId: input.changeRequestId ?? null,
-        changeRequestUrl: input.changeRequestUrl ?? null,
-        pushedAt: input.pushedAt ?? now,
-        updatedAt: now,
-      };
       const existing = this.sessionRepositoriesRows.find(
         row => row.sessionId === input.sessionId && row.projectRepositoryId === input.projectRepositoryId,
       );
       if (existing) {
-        Object.assign(existing, changes);
+        if (input.branch !== undefined) {
+          existing.branch = input.branch;
+          existing.pushedAt = input.pushedAt ?? now;
+        } else if (input.pushedAt) {
+          existing.pushedAt = input.pushedAt;
+        }
+        if (input.changeRequestId !== undefined) existing.changeRequestId = input.changeRequestId;
+        if (input.changeRequestUrl !== undefined) existing.changeRequestUrl = input.changeRequestUrl;
+        existing.updatedAt = now;
         return existing;
       }
+      const branch = input.branch ?? input.fallbackBranch;
+      if (!branch) throw new Error('A session repository row needs a branch when it is first recorded.');
       const created: SourceControlSessionRepository = {
         id: globalThis.crypto.randomUUID(),
         sessionId: input.sessionId,
         projectRepositoryId: input.projectRepositoryId,
-        ...changes,
+        branch,
+        changeRequestId: input.changeRequestId ?? null,
+        changeRequestUrl: input.changeRequestUrl ?? null,
+        pushedAt: input.pushedAt ?? now,
+        updatedAt: now,
         createdAt: now,
       };
       this.sessionRepositoriesRows.push(created);

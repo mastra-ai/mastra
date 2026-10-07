@@ -760,6 +760,41 @@ describe('SourceControlStorage', () => {
       expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(0);
     });
 
+    it('session repository upserts keep every field the input omits', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000142', first.id));
+      const key = { sessionId: session.sessionId, projectRepositoryId: first.id };
+
+      const pushedAt = new Date('2026-10-01T00:00:00.000Z');
+      await github.sessionRepositories.upsert({ ...key, branch: 'feat/x', pushedAt });
+      // A change request recorded without a branch keeps the pushed branch.
+      const withPr = await github.sessionRepositories.upsert({
+        ...key,
+        fallbackBranch: 'ignored-on-update',
+        changeRequestId: '42',
+        changeRequestUrl: 'https://example.test/pr/42',
+      });
+      expect(withPr).toMatchObject({ branch: 'feat/x', changeRequestId: '42', pushedAt });
+      // A later push keeps the change request.
+      const pushedAgain = await github.sessionRepositories.upsert({ ...key, branch: 'feat/x' });
+      expect(pushedAgain).toMatchObject({ changeRequestId: '42', changeRequestUrl: 'https://example.test/pr/42' });
+      expect(pushedAgain.pushedAt.getTime()).toBeGreaterThan(pushedAt.getTime());
+
+      // A first record with no branch uses the fallback; none at all is an error.
+      const fromPr = await github.sessionRepositories.upsert({
+        sessionId: session.sessionId,
+        projectRepositoryId: second.id,
+        fallbackBranch: 'feat/head-ref',
+        changeRequestId: '43',
+        changeRequestUrl: 'https://example.test/pr/43',
+      });
+      expect(fromPr).toMatchObject({ branch: 'feat/head-ref', changeRequestId: '43' });
+      await expect(
+        github.sessionRepositories.upsert({ sessionId: 'other-session', projectRepositoryId: first.id }),
+      ).rejects.toThrow(/needs a branch/);
+    });
+
     it('unlink removes the link sessions and their repository rows', async () => {
       const project = await createProject();
       const { first, second } = await twoLinks(project.id);
@@ -847,11 +882,24 @@ describe('SourceControlStorage', () => {
       const updated = await store.sessionRepositories.upsert({
         sessionId: 's-1',
         projectRepositoryId: second.id,
-        branch: 'feat/x',
         changeRequestId: '7',
       });
       expect(updated.id).toBe(row.id);
-      expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toHaveLength(1);
+      expect(updated).toMatchObject({ branch: 'feat/x', changeRequestId: '7' });
+      expect(
+        await store.sessionRepositories.upsert({ sessionId: 's-1', projectRepositoryId: second.id, branch: 'feat/y' }),
+      ).toMatchObject({ branch: 'feat/y', changeRequestId: '7' });
+      expect(
+        await store.sessionRepositories.upsert({
+          sessionId: 's-1',
+          projectRepositoryId: first.id,
+          fallbackBranch: 'fb',
+        }),
+      ).toMatchObject({ branch: 'fb' });
+      await expect(
+        store.sessionRepositories.upsert({ sessionId: 's-2', projectRepositoryId: first.id }),
+      ).rejects.toThrow(/needs a branch/);
+      expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toHaveLength(2);
       await store.sessions.delete(session.id);
       expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toEqual([]);
     });
