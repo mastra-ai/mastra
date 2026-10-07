@@ -7,17 +7,28 @@ packages:
 
 # Channels
 
-[Channels](/docs/channels) let people talk to your agents from Slack, Telegram, and Discord. Setting one up yourself means creating a bot in the vendor's console and passing its token to a channel package like `@mastra/telegram`. With [`channels()`](/reference/connect/channels), you connect the account to your platform project instead: the platform stores the token, and `channels()` configures the same channel packages with it for you.
+[Channels](/docs/channels) let people talk to your agents from Slack, Telegram, and Discord. Setting one up yourself means creating a bot in the vendor's console and passing its token to a channel package like `@mastra/telegram`. Using Connect, you can link provider accounts to your platform project. The platform stores the token, and [`channels()`](/reference/connect/channels) connects it to your Mastra project.
 
 Each platform's connection holds a different credential:
 
 - **Slack**: An app configuration token, from which Mastra creates a Slack app for each agent. Slack tools use a different kind of credential (a workspace authorization). The platform therefore lists Slack as two providers: **Slack channels** (`slack-channels`) for channels and **Slack** (`slack`) for [tools](/docs/mastra-platform/connect/tools).
-- **Telegram**: A bot token from BotFather.
 - **Discord**: A bot token from a Discord application you create. The same connection also gives agents Discord [tools](/docs/mastra-platform/connect/tools).
+- **Telegram**: A bot token from BotFather.
 
 ## Set up a provider
 
 Create the vendor-side bot or app before adding its connection to your platform project.
+
+### Slack
+
+1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
+1. Generate an app configuration token for the workspace where the agent will run.
+1. Run `mastra connect add slack-channels` and complete the Slack authorization flow. The platform stores and rotates the configuration credential.
+1. Connect the channel to an agent in Studio. Mastra creates an app from a manifest and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
+
+The generated manifest subscribes to channel, group, direct-message, multi-person direct-message, and mention events. Its default bot scopes are `chat:write`, `chat:write.public`, `im:write`, `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `app_mentions:read`, `users:read`, `reactions:write`, `files:read`, and `assistant:write`. Slash commands also add the `commands` scope.
+
+The `slack-channels` connection is only for creating and installing channel apps. To give an agent Slack API tools, add a separate `slack` connection with workspace authorization.
 
 ### Discord
 
@@ -39,17 +50,6 @@ The generated authorization URL requests the `bot` and `applications.commands` s
 - **Use Application Commands**
 
 These permissions let the agent read and reply in channels and threads, send cards and files, add reactions, and register slash commands. They don't grant moderation or channel-management access. See the [Discord permissions reference](https://discord.com/developers/docs/topics/permissions#permissions-bitwise-permission-flags) to review or customize the permission bitfield.
-
-### Slack
-
-1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
-1. Generate an app configuration token for the workspace where the agent will run.
-1. Run `mastra connect add slack-channels` and complete the Slack authorization flow. The platform stores and rotates the configuration credential.
-1. Connect the channel to an agent in Studio. Mastra creates an app from a manifest and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
-
-The generated manifest subscribes to channel, group, direct-message, multi-person direct-message, and mention events. Its default bot scopes are `chat:write`, `chat:write.public`, `im:write`, `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `app_mentions:read`, `users:read`, `reactions:write`, `files:read`, and `assistant:write`. Slash commands also add the `commands` scope.
-
-The `slack-channels` connection is only for creating and installing channel apps. To give an agent Slack API tools, add a separate `slack` connection with workspace authorization.
 
 ### Telegram
 
