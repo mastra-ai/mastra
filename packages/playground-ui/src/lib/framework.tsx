@@ -8,7 +8,8 @@ export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAt
 export type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
-  agentToolLink: (agentId: string, toolId: string) => string;
+  /** Opens the tool's drawer on the agent's chat: over the open thread when given, otherwise a new one. */
+  agentToolLink: (agentId: string, toolId: string, threadId?: string) => string;
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;

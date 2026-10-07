@@ -22,6 +22,7 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
+import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -59,7 +60,6 @@ import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
-import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
 import Resources from './pages/resources';
@@ -69,8 +69,6 @@ import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
-import AgentTool from './pages/tools/agent-tool';
-import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
@@ -121,7 +119,8 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -139,7 +138,8 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -322,10 +322,6 @@ export const routes: RouteObject[] = [
         element: <CmsPromptBlocksEditPage />,
       },
       {
-        path: '/agents/:agentId/tools/:toolId',
-        element: <AgentTool />,
-      },
-      {
         path: '/agents/:agentId',
         element: (
           <AgentLayout>
@@ -355,10 +351,6 @@ export const routes: RouteObject[] = [
       },
 
       { path: '/tools', element: <Tools /> },
-      {
-        path: '/tools/:toolId',
-        element: <Tool />,
-      },
 
       {
         path: '/integrations',
@@ -375,10 +367,6 @@ export const routes: RouteObject[] = [
       {
         path: '/mcps/:serverId',
         element: <McpServerPage />,
-      },
-      {
-        path: '/mcps/:serverId/tools/:toolId',
-        element: <MCPServerToolExecutor />,
       },
 
       { path: '/workspaces', element: <Workspace /> },
