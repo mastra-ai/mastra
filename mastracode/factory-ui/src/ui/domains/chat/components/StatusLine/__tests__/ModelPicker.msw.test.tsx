@@ -181,16 +181,26 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
   });
 
-  it('carries the thinking override onto the new model, lowered when the model cannot run it', async () => {
+  it('keeps the saved thinking choice when switching to a model that cannot run it', async () => {
     const user = userEvent.setup();
-    const { client, modelSwitches } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: 'max' });
+    const { client, modelSwitches, stateUpdates } = renderPicker({
+      modelId: 'anthropic/claude-sonnet-4-5',
+      thinkingLevel: 'max',
+    });
 
     await screen.findByRole('button', { name: 'Thinking: Max' });
     await user.click(screen.getByLabelText('Session model'));
     await user.click(screen.getByRole('option', { name: /gpt-5/i }));
     await waitForMutationsIdle(client);
 
-    expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5', thinkingLevel: 'xhigh' }]);
+    expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5' }]);
+    expect(stateUpdates).toEqual([]);
+  });
+
+  it('shows the level the model runs when the saved choice is above what it supports', async () => {
+    renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max' });
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Extra high' })).toBeEnabled();
   });
 
   it('shows the mode default until the session picks its own level, then saves it', async () => {

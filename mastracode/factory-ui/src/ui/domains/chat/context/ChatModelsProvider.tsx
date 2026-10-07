@@ -9,7 +9,6 @@ import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgen
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { useEffectiveThinkingLevel } from '../hooks/useEffectiveThinkingLevel';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { carryThinkingOverrideToModel } from '../services/thinkingLevels';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
@@ -45,7 +44,6 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
     error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
     setModel: async modelId => {
       setDraftModelId(modelId);
-      setDraftThinkingLevel(level => carryThinkingOverrideToModel(modelId, level));
     },
     setThinkingLevel: async level => {
       setDraftThinkingLevel(level);
@@ -81,7 +79,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     isLoading: false,
     error: undefined,
     setModel: async modelId => {
-      await switchModel({ modelId, thinkingLevel: carryThinkingOverrideToModel(modelId, thinkingLevelOverride) });
+      await switchModel({ modelId });
     },
     setThinkingLevel: async level => {
       await updateSettings({ thinkingLevel: level });

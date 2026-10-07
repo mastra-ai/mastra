@@ -50,10 +50,3 @@ export function resolveEffectiveThinkingLevel({
   return runThinkingLevel(modelId, level);
 }
 
-export function carryThinkingOverrideToModel(
-  modelId: string,
-  override: ThinkingLevelSetting | undefined,
-): ThinkingLevelSetting | undefined {
-  if (!override) return undefined;
-  return runThinkingLevel(modelId, override);
-}
