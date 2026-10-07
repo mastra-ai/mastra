@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import type { TUIState } from '../../state.js';
-import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleAgentError, handleGoalEvaluation } from '../agent-lifecycle.js';
 import type { EventHandlerContext } from '../types.js';
 
 vi.mock('@mastra/code-sdk/utils/project', () => ({
@@ -175,5 +175,45 @@ describe('assistant render ownership at agent terminal paths', () => {
     const output = segment.component.render(80).join('\n');
     expect(output).toContain('Interrupted');
     expect(output).not.toContain('visible output');
+  });
+});
+
+describe('goal judge display at agent_end', () => {
+  function goalContext() {
+    const { ctx, state } = createContext();
+    (state as any).goalManager = {
+      getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'judge' })),
+      applyEvaluation: vi.fn(),
+    };
+    return { ctx, state };
+  }
+
+  it('removes a judge display that never received a verdict', () => {
+    const { ctx, state } = goalContext();
+    handleGoalEvaluation(ctx, { pending: true, iteration: 1, maxRuns: 10 } as any);
+    const component = state.activeGoalJudge!.component;
+    expect(state.chatContainer.children).toContain(component);
+
+    handleAgentEnd(ctx);
+
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.chatContainer.children).not.toContain(component);
+  });
+
+  it('keeps a completed judge display in history', () => {
+    const { ctx, state } = goalContext();
+    handleGoalEvaluation(ctx, { pending: true, iteration: 1, maxRuns: 10 } as any);
+    const component = state.activeGoalJudge!.component;
+    handleGoalEvaluation(ctx, {
+      iteration: 1,
+      maxRuns: 10,
+      status: 'active',
+      decision: 'continue',
+      reason: 'keep going',
+    } as any);
+
+    handleAgentEnd(ctx);
+
+    expect(state.chatContainer.children).toContain(component);
   });
 });
